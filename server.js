@@ -92,7 +92,7 @@ function groupSum(rows, keyFn, metrics) {
   return out;
 }
 
-/** Call the Anthropic Messages API and return the concatenated text output. */
+/** Call the Anthropic Messages API. Returns { text, stopReason }. */
 async function anthropic(prompt, { system, maxTokens = 1500 } = {}) {
   const res = await fetch(ANTHROPIC_BASE, {
     method: "POST",
@@ -113,22 +113,51 @@ async function anthropic(prompt, { system, maxTokens = 1500 } = {}) {
     throw new Error(`Anthropic HTTP ${res.status} ${body.slice(0, 200)}`);
   }
   const json = await res.json();
-  return (json.content || [])
+  const text = (json.content || [])
     .filter((b) => b.type === "text")
     .map((b) => b.text)
     .join("\n");
+  return { text, stopReason: json.stop_reason };
 }
 
-/** Pull a JSON value out of a model response, tolerating prose/fences. */
+/**
+ * Pull a JSON value out of a model response, tolerating prose/fences.
+ * If the JSON is truncated (model hit max_tokens mid-array), salvage what
+ * parsed cleanly by trimming to the last complete element and closing brackets.
+ */
 function extractJson(text) {
   let t = String(text).trim().replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
   const s = t.indexOf("{"), sa = t.indexOf("[");
   const start = sa !== -1 && (sa < s || s === -1) ? sa : s;
-  const openChar = t[start];
-  const closeChar = openChar === "[" ? "]" : "}";
-  const end = t.lastIndexOf(closeChar);
-  if (start === -1 || end === -1) throw new Error("No JSON found in model response");
-  return JSON.parse(t.slice(start, end + 1));
+  if (start === -1) throw new Error("No JSON found in model response");
+  const body = t.slice(start);
+
+  try {
+    return JSON.parse(body);
+  } catch (_) {
+    // Salvage path: walk the string tracking depth, remember the last position
+    // where we were at a clean element boundary, then close what's still open.
+    let depth = 0, inStr = false, esc = false;
+    const stack = [];
+    let lastGood = -1;
+    for (let i = 0; i < body.length; i++) {
+      const c = body[i];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (c === "\\") esc = true;
+        else if (c === '"') inStr = false;
+        continue;
+      }
+      if (c === '"') { inStr = true; continue; }
+      if (c === "{" || c === "[") { stack.push(c === "{" ? "}" : "]"); depth++; continue; }
+      if (c === "}" || c === "]") { stack.pop(); depth--; continue; }
+      // A comma at depth >= 1 outside a string is a safe cut point.
+      if (c === "," && depth >= 1) lastGood = i;
+    }
+    if (lastGood === -1) throw new Error("Model response was truncated and could not be repaired");
+    const repaired = body.slice(0, lastGood) + stack.reverse().join("");
+    return JSON.parse(repaired); // if this throws, the caller reports it
+  }
 }
 
 /** Normalise text for cross-language substring matching. */
@@ -378,15 +407,37 @@ app.post("/api/topic", async (req, res) => {
     }
 
     // --- Step 1: expand the topic across languages (AI) ---
+    // Compact schema: language key -> array of terms. Repeating {"term":..,"lang":..}
+    // for ~100 terms wastes output tokens and caused truncation.
     const expandPrompt =
-      `A hospital marketing team wants every search term related to the clinical topic "${topic}" ` +
-      `that patients might type into Google, across these languages: Arabic, Japanese, Chinese, Burmese, Khmer, Thai, English. ` +
-      `Include the medical name, common lay terms, related conditions and procedures, and frequent misspellings. ` +
-      `Return ONLY minified JSON, no prose, no code fences, shaped exactly as: ` +
-      `{"terms":[{"term":"<search term>","lang":"AR|JA|ZH|MY|KM|TH|EN"}]}. ` +
-      `Aim for 6-15 terms per language. Keep terms short (what a person actually types).`;
-    const expanded = extractJson(await anthropic(expandPrompt, { maxTokens: 2000 }));
-    const terms = (expanded.terms || []).filter((t) => t && t.term).map((t) => ({ term: t.term, lang: t.lang || detectLang(t.term) }));
+      `A hospital marketing team wants the search terms patients type into Google for the clinical topic "${topic}".\n` +
+      `Cover these languages, using each language's own script: AR (Arabic), JA (Japanese), ZH (Chinese), MY (Burmese), KM (Khmer), TH (Thai), EN (English).\n` +
+      `For each language include the medical name, common lay terms, related conditions and procedures, and frequent misspellings. 5-10 terms per language. Keep each term short — what a person actually types.\n` +
+      `Return ONLY minified JSON, no prose, no code fences, exactly this shape:\n` +
+      `{"AR":["term","term"],"JA":["term"],"ZH":["term"],"MY":["term"],"KM":["term"],"TH":["term"],"EN":["term"]}`;
+    const expandRes = await anthropic(expandPrompt, { maxTokens: 8000 });
+    if (expandRes.stopReason === "max_tokens") {
+      logJson("WARNING", "expansion_truncated", { topic });
+    }
+    let expanded;
+    try {
+      expanded = extractJson(expandRes.text);
+    } catch (e) {
+      throw new Error(
+        expandRes.stopReason === "max_tokens"
+          ? "The term-expansion response was cut off before it could be parsed. Try a narrower topic."
+          : `Could not parse the term-expansion response: ${e.message}`
+      );
+    }
+    // Flatten { LANG: [terms] } -> [{term, lang}]
+    const terms = [];
+    for (const [lang, list] of Object.entries(expanded)) {
+      if (!Array.isArray(list)) continue;
+      for (const term of list) {
+        if (typeof term === "string" && term.trim()) terms.push({ term: term.trim(), lang: lang.toUpperCase() });
+      }
+    }
+    if (!terms.length) throw new Error("Term expansion returned no usable terms.");
 
     // --- Step 2: pull real Search Console query data (deterministic) ---
     const scRows = await windsor("searchconsole", ["query", "country", "clicks", "impressions", "position"], from, to);
@@ -433,20 +484,38 @@ app.post("/api/topic", async (req, res) => {
     const gaps = terms.filter((t) => !matchedTermSet.has(t.term));
 
     // --- Step 4: cluster the matched queries into sub-topics (AI) ---
+    // Send a numbered list and ask for indices back. Re-emitting multilingual
+    // query strings verbatim burns output tokens and risks mangling scripts.
     let clusters = [];
+    let clusterNote = "";
     if (matched.length) {
-      const forClustering = matched.slice(0, 120).map((m) => m.query);
+      const pool = matched.slice(0, 100);
+      const numbered = pool.map((m, i) => `${i}: ${m.query}`).join("\n");
       const clusterPrompt =
-        `These are real Google search queries a hospital ranks for, related to "${topic}", across multiple languages:\n` +
-        JSON.stringify(forClustering) +
-        `\nGroup them into 3-7 meaningful clinical sub-topics. Translate/transliterate nothing — keep queries verbatim. ` +
-        `Return ONLY minified JSON, no prose, no fences: {"clusters":[{"label":"<short English label>","queries":["<verbatim query>"]}]}. ` +
-        `Every query must appear in exactly one cluster.`;
+        `Below are numbered Google search queries (multiple languages) that a hospital ranks for, all related to "${topic}".\n\n` +
+        numbered +
+        `\n\nGroup them into 3-7 meaningful clinical sub-topics. Refer to queries ONLY by their number — do not repeat the query text.\n` +
+        `Every number must appear in exactly one cluster.\n` +
+        `Return ONLY minified JSON, no prose, no fences: {"clusters":[{"label":"<short English label>","idx":[0,3,7]}]}`;
       try {
-        const c = extractJson(await anthropic(clusterPrompt, { maxTokens: 2500 }));
-        clusters = (c.clusters || []).filter((x) => x && x.label);
+        const cRes = await anthropic(clusterPrompt, { maxTokens: 4000 });
+        const parsed = extractJson(cRes.text);
+        clusters = (parsed.clusters || [])
+          .filter((c) => c && c.label && Array.isArray(c.idx))
+          .map((c) => ({
+            label: String(c.label),
+            queries: c.idx
+              .map((i) => pool[Number(i)])
+              .filter(Boolean)
+              .map((m) => m.query),
+          }))
+          .filter((c) => c.queries.length);
+        if (cRes.stopReason === "max_tokens") clusterNote = "Clustering was cut short; some queries may be missing from the groups below.";
       } catch (e) {
-        clusters = []; // clustering is a nicety; don't fail the whole request
+        // Clustering is a nicety — never fail the whole request over it.
+        logJson("WARNING", "clustering_failed", { topic, error: String(e.message || e) });
+        clusterNote = "Sub-topic grouping was unavailable for this run; the query table below is complete.";
+        clusters = [];
       }
     }
 
@@ -463,6 +532,7 @@ app.post("/api/topic", async (req, res) => {
       expandedTerms: terms,
       matched: matched.slice(0, 200),
       clusters,
+      clusterNote,
       byLanguage: Object.values(byLang).sort((a, b) => b.impressions - a.impressions),
       byCountry: Object.values(byCountry).sort((a, b) => b.impressions - a.impressions).slice(0, 15),
       gaps,

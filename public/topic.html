@@ -116,7 +116,8 @@ function render(d){
   const s=d.summary||{};
   const langRows=(d.byLanguage||[]).map(l=>`<tr><td>${esc(l.name)} <span class="langtag">${esc(l.lang)}</span></td><td class="num">${numFmt(l.queries)}</td><td class="num">${numFmt(l.clicks)}</td><td class="num">${numFmt(l.impressions)}</td></tr>`).join('')||'<tr><td colspan="4" class="num">no matches</td></tr>';
   const countryRows=(d.byCountry||[]).map(c=>`<tr><td class="mono">${esc(c.country)}</td><td class="num">${numFmt(c.clicks)}</td><td class="num">${numFmt(c.impressions)}</td></tr>`).join('')||'<tr><td colspan="3" class="num">no matches</td></tr>';
-  const clusterHtml=(d.clusters||[]).map(cl=>`<div class="cluster"><h3>${esc(cl.label)}</h3>${(cl.queries||[]).map(q=>`<span class="qtag">${esc(q)}</span>`).join('')}</div>`).join('')||'<div style="color:var(--faint);font-size:12.5px;">No clusters (either no matched queries, or clustering was skipped).</div>';
+  const clusterHtml=(d.clusters||[]).map(cl=>`<div class="cluster"><h3>${esc(cl.label)}</h3>${(cl.queries||[]).map(q=>`<span class="qtag">${esc(q)}</span>`).join('')}</div>`).join('')||'<div style="color:var(--faint);font-size:12.5px;">No sub-topic grouping for this run.</div>';
+  const clusterNoteHtml=d.clusterNote?`<div class="caveat" style="margin-top:12px;">${esc(d.clusterNote)}</div>`:'';
   const gapHtml=(d.gaps||[]).length?`<div class="panel"><h2>Opportunity gaps \u2014 terms with no captured ranking</h2>${d.gaps.map(g=>`<span class="gap-tag">${esc(g.term)} <span class="langtag">${esc(g.lang)}</span></span>`).join('')}<div class="caveat">Search Console only reports queries above Google\u2019s impression threshold, so \u201cno captured ranking\u201d means not captured \u2014 not proof you don\u2019t rank at all. Treat these as content leads to verify, and remember the term list is AI-generated: review before acting.</div></div>`:'';
   const matchedRows=(d.matched||[]).slice(0,40).map(m=>`<tr><td>${esc(m.query)}</td><td class="langtag">${esc(m.lang)}</td><td class="num">${numFmt(m.clicks)}</td><td class="num">${numFmt(m.impressions)}</td><td class="num">${m.position??'\u2014'}</td></tr>`).join('')||'<tr><td colspan="5" class="num">no matched queries in this range</td></tr>';
 
@@ -129,7 +130,7 @@ function render(d){
       <div class="stat"><div class="l">Countries</div><div class="v">${numFmt(s.countries)}</div></div>
       <div class="stat"><div class="l">Terms Generated</div><div class="v">${numFmt(s.termsGenerated)}</div></div>
     </div>
-    <div class="panel"><h2>Sub-topics</h2>${clusterHtml}</div>
+    <div class="panel"><h2>Sub-topics</h2>${clusterHtml}${clusterNoteHtml}</div>
     <div class="grid2">
       <div class="panel"><h2>By language</h2><table><thead><tr><th>Language</th><th style="text-align:right">Queries</th><th style="text-align:right">Clicks</th><th style="text-align:right">Impr</th></tr></thead><tbody>${langRows}</tbody></table></div>
       <div class="panel"><h2>By country</h2><table><thead><tr><th>Country</th><th style="text-align:right">Clicks</th><th style="text-align:right">Impr</th></tr></thead><tbody>${countryRows}</tbody></table></div>

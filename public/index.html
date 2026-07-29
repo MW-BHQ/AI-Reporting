@@ -6,7 +6,7 @@
 <title>Cross-Channel Control Room · Bangkok Hospital</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="/vendor/chart.umd.js"></script>
 <style>
   :root{
     --bg:#0E1417;--surface:#161D21;--surface-2:#1D262B;--line:#2A3439;
@@ -132,6 +132,7 @@ setRangeDays(30);
 
 function setStatus(state,msg){pulseDot.className='pulse '+(state==='idle'?'off':state==='busy'?'busy':'');statusText.textContent=msg;}
 function numFmt(x){if(x===undefined||x===null||isNaN(x))return '\u2014';if(Math.abs(x)>=1e6)return (x/1e6).toFixed(1)+'M';if(Math.abs(x)>=1e3)return (x/1e3).toFixed(1)+'K';return (Math.round(x*10)/10)+'';}
+function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 
 function renderLoading(){content.innerHTML=`<div class="state"><div class="mono" style="font-size:13px;">Querying six channels in parallel\u2026</div><div style="font-size:12px;">Live pull from Windsor.ai \u2014 usually a few seconds.</div></div>`;}
 function renderError(msg){content.innerHTML=`<div class="state error"><div class="mono" style="font-size:13px;">Sync failed</div><div style="font-size:12.5px;max-width:440px;">${msg}</div><button id="retryBtn">Retry</button></div>`;document.getElementById('retryBtn').addEventListener('click',fetchData);}
@@ -167,16 +168,25 @@ function renderDashboard(data){
   `;
   const trend=data.trend||[];
   const ctx=document.getElementById('trendChart');
-  if(chartInstance)chartInstance.destroy();
-  chartInstance=new Chart(ctx,{type:'line',data:{labels:trend.map(t=>t.d),datasets:[
-    {label:'Spend',data:trend.map(t=>t.spend),borderColor:'#5B8DEF',backgroundColor:'rgba(91,141,239,.08)',tension:.3,fill:true,yAxisID:'y'},
-    {label:'Organic Eng.',data:trend.map(t=>t.organicEng),borderColor:'#7FD1AE',tension:.3,fill:false,yAxisID:'y1'},
-    {label:'Search Clicks',data:trend.map(t=>t.scClicks),borderColor:'#E8C15A',tension:.3,fill:false,yAxisID:'y1'}]},
-    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
-    plugins:{legend:{labels:{color:'#8CA0A6',font:{family:'IBM Plex Mono',size:10.5}}}},
-    scales:{x:{ticks:{color:'#5C6E73',font:{family:'IBM Plex Mono',size:9.5},maxRotation:0,autoSkip:true,maxTicksLimit:8},grid:{color:'#2A3439'}},
-    y:{position:'left',ticks:{color:'#5C6E73',font:{size:9.5}},grid:{color:'#2A3439'}},
-    y1:{position:'right',ticks:{color:'#5C6E73',font:{size:9.5}},grid:{display:false}}}}});
+  // Chart rendering must never take down the dashboard: if the library failed
+  // to load or the canvas errors, keep the KPIs and tables and say so.
+  try{
+    if(typeof Chart==='undefined') throw new Error('chart library unavailable');
+    if(chartInstance)chartInstance.destroy();
+    chartInstance=new Chart(ctx,{type:'line',data:{labels:trend.map(t=>t.d),datasets:[
+      {label:'Spend',data:trend.map(t=>t.spend),borderColor:'#5B8DEF',backgroundColor:'rgba(91,141,239,.08)',tension:.3,fill:true,yAxisID:'y'},
+      {label:'Organic Eng.',data:trend.map(t=>t.organicEng),borderColor:'#7FD1AE',tension:.3,fill:false,yAxisID:'y1'},
+      {label:'Search Clicks',data:trend.map(t=>t.scClicks),borderColor:'#E8C15A',tension:.3,fill:false,yAxisID:'y1'}]},
+      options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{labels:{color:'#8CA0A6',font:{family:'IBM Plex Mono',size:10.5}}}},
+      scales:{x:{ticks:{color:'#5C6E73',font:{family:'IBM Plex Mono',size:9.5},maxRotation:0,autoSkip:true,maxTicksLimit:8},grid:{color:'#2A3439'}},
+      y:{position:'left',ticks:{color:'#5C6E73',font:{size:9.5}},grid:{color:'#2A3439'}},
+      y1:{position:'right',ticks:{color:'#5C6E73',font:{size:9.5}},grid:{display:false}}}}});
+  }catch(chartErr){
+    console.error('chart render failed:',chartErr);
+    const box=ctx&&ctx.parentElement;
+    if(box) box.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:12px;text-align:center;padding:0 20px;">Chart unavailable (${esc(chartErr.message)}).<br>The numbers below are still live.</div>`;
+  }
 }
 
 async function fetchData(){
@@ -184,14 +194,30 @@ async function fetchData(){
   if(!from||!to){alert('Pick both dates.');return;}
   refreshBtn.disabled=true;refreshBtn.classList.add('loading');refreshLabel.textContent='Syncing\u2026';
   setStatus('busy',`pulling ${from} \u2192 ${to}\u2026`);renderLoading();
+  let data;
   try{
     const res=await fetch(`/api/sync?from=${from}&to=${to}`);
     if(!res.ok){const t=await res.text();throw new Error(`Server ${res.status}: ${t.slice(0,200)}`);}
-    const data=await res.json();
+    data=await res.json();
+  }catch(err){
+    // Failure talking to our own backend / Windsor.
+    console.error('data fetch failed:',err);
+    setStatus('idle','sync failed');
+    renderError(`Couldn't reach the data API. ${err.message||'Unknown error'}`);
+    refreshBtn.disabled=false;refreshBtn.classList.remove('loading');refreshLabel.textContent='Pull fresh data';
+    return;
+  }
+  try{
     renderDashboard(data);
     setStatus('ok',`synced ${new Date().toLocaleTimeString()}`);
-  }catch(err){console.error(err);setStatus('idle','sync failed');renderError(err.message||'Unknown error');}
-  finally{refreshBtn.disabled=false;refreshBtn.classList.remove('loading');refreshLabel.textContent='Pull fresh data';}
+  }catch(err){
+    // Data arrived fine but the UI blew up — say so, don't blame the sync.
+    console.error('render failed:',err);
+    setStatus('ok',`data ok, render error`);
+    renderError(`Data loaded but the page failed to render it: ${err.message||'Unknown error'}`);
+  }finally{
+    refreshBtn.disabled=false;refreshBtn.classList.remove('loading');refreshLabel.textContent='Pull fresh data';
+  }
 }
 refreshBtn.addEventListener('click',fetchData);
 </script>
