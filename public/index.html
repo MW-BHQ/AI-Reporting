@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cross-Channel Control Room · Bangkok Hospital</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0E1417;--surface:#161D21;--surface-2:#1D262B;--line:#2A3439;
+    --ink:#E9EEEE;--muted:#8CA0A6;--faint:#5C6E73;--amber:#E8A33D;
+    --meta:#5B8DEF;--organic:#7FD1AE;--gmb:#E8746A;--sc:#E8C15A;--line-ch:#6FCB6A;
+    --good:#7FD1AE;--bad:#E8746A;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans',sans-serif;-webkit-font-smoothing:antialiased;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 24px 60px;}
+  .topbar{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-bottom:22px;border-bottom:1px solid var(--line);padding-bottom:18px;}
+  .brand-eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:0 0 6px;}
+  h1{font-size:26px;font-weight:600;margin:0;letter-spacing:-.01em;}
+  .status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
+  .pulse{width:8px;height:8px;border-radius:50%;background:var(--good);position:relative;flex:none;}
+  .pulse::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:1px solid var(--good);opacity:.6;animation:ping 2.2s cubic-bezier(.4,0,.6,1) infinite;}
+  .pulse.off{background:var(--faint);}.pulse.off::after{display:none;}
+  .pulse.busy{background:var(--amber);}.pulse.busy::after{border-color:var(--amber);animation-duration:1s;}
+  @keyframes ping{0%{transform:scale(1);opacity:.6;}80%{transform:scale(2.2);opacity:0;}100%{opacity:0;}}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:24px;}
+  .preset-group{display:flex;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:4px;}
+  .preset{border:none;background:transparent;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:7px 12px;border-radius:6px;cursor:pointer;transition:.15s;}
+  .preset:hover{color:var(--ink);}.preset.active{background:var(--surface-2);color:var(--amber);}
+  .date-inputs{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 10px;}
+  .date-inputs input{background:transparent;border:none;color:var(--ink);font-family:'IBM Plex Mono',monospace;font-size:12px;color-scheme:dark;width:118px;}
+  .date-inputs span{color:var(--faint);font-size:12px;}
+  .refresh-btn{background:var(--amber);color:#1a1305;border:none;border-radius:8px;font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:12px;padding:9px 16px;cursor:pointer;letter-spacing:.03em;transition:.15s;display:flex;align-items:center;gap:8px;}
+  .refresh-btn:hover{filter:brightness(1.08);}.refresh-btn:disabled{opacity:.5;cursor:wait;}
+  .spinner{width:12px;height:12px;border-radius:50%;border:2px solid #1a1305;border-top-color:transparent;animation:spin .7s linear infinite;display:none;}
+  .refresh-btn.loading .spinner{display:inline-block;}
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:20px;}
+  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 14px 12px;}
+  .kpi .label{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin-bottom:8px;}
+  .kpi .value{font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:600;}
+  .kpi .sub{font-size:11px;color:var(--muted);margin-top:4px;min-height:14px;}
+  .kpi .dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;}
+  .grid{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;}
+  .panel h2{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 14px;font-weight:600;}
+  .chart-box{height:260px;}
+  .channel-list{display:flex;flex-direction:column;gap:10px;}
+  .channel{display:flex;align-items:center;justify-content:space-between;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:12px 14px;}
+  .channel .name{display:flex;align-items:center;gap:9px;font-size:13px;}
+  .channel .chip{width:8px;height:8px;border-radius:50%;flex:none;}
+  .channel .metric{font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:600;text-align:right;}
+  .channel .metric small{display:block;font-family:'IBM Plex Sans',sans-serif;font-size:10px;color:var(--faint);font-weight:400;}
+  .sub-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  th{text-align:left;color:var(--faint);font-weight:500;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  td{padding:7px 0;border-bottom:1px solid var(--line);color:var(--ink);}
+  td.num{font-family:'IBM Plex Mono',monospace;text-align:right;color:var(--muted);}
+  tr:last-child td{border-bottom:none;}
+  .state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;color:var(--muted);text-align:center;gap:10px;}
+  .state.error{color:var(--bad);}
+  .state button{margin-top:8px;background:var(--surface-2);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:8px 14px;font-family:'IBM Plex Mono',monospace;font-size:12px;cursor:pointer;}
+  .notes{margin-top:14px;font-size:11.5px;color:var(--faint);border-top:1px solid var(--line);padding-top:10px;}
+  pre.raw{max-width:100%;overflow:auto;font-size:10.5px;color:var(--faint);text-align:left;background:var(--surface-2);padding:10px;border-radius:8px;margin-top:10px;}
+  @media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr);}.grid{grid-template-columns:1fr;}.sub-grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <p class="brand-eyebrow">Bangkok Hospital · Marketing Division</p>
+      <h1>Cross-Channel Control Room</h1>
+      <nav style="margin-top:10px;display:flex;gap:14px;font-family:'IBM Plex Mono',monospace;font-size:12px;">
+        <a href="/" style="color:var(--amber);text-decoration:none;border-bottom:1px solid var(--amber);padding-bottom:2px;">Overview</a>
+        <a href="/topic.html" style="color:var(--muted);text-decoration:none;">Topic Explorer &rarr;</a>
+      </nav>
+    </div>
+    <div class="status">
+      <span class="pulse off" id="pulseDot"></span>
+      <span id="statusText">not synced yet</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="preset-group" id="presets">
+      <button class="preset" data-days="7">7D</button>
+      <button class="preset active" data-days="30">30D</button>
+      <button class="preset" data-days="90">90D</button>
+      <button class="preset" data-month="1">THIS MONTH</button>
+    </div>
+    <div class="date-inputs">
+      <input type="date" id="fromDate">
+      <span>&rarr;</span>
+      <input type="date" id="toDate">
+    </div>
+    <button class="refresh-btn" id="refreshBtn">
+      <span class="spinner"></span>
+      <span id="refreshLabel">Pull fresh data</span>
+    </button>
+  </div>
+
+  <div id="content">
+    <div class="state" id="emptyState">
+      <div class="mono" style="font-size:13px;">Ready.</div>
+      <div style="font-size:12.5px;max-width:380px;">Pick a date range and hit <b style="color:var(--ink)">Pull fresh data</b>. This queries Meta Ads, Facebook &amp; TikTok organic, Google My Business, Search Console and LINE live through Windsor.ai.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const fromInput=document.getElementById('fromDate');
+const toInput=document.getElementById('toDate');
+const presetsEl=document.getElementById('presets');
+const pulseDot=document.getElementById('pulseDot');
+const statusText=document.getElementById('statusText');
+const refreshBtn=document.getElementById('refreshBtn');
+const refreshLabel=document.getElementById('refreshLabel');
+const content=document.getElementById('content');
+let chartInstance=null;
+
+function fmt(d){return d.toISOString().slice(0,10);}
+function setRangeDays(days){const to=new Date();const from=new Date();from.setDate(to.getDate()-(days-1));fromInput.value=fmt(from);toInput.value=fmt(to);}
+function setRangeThisMonth(){const now=new Date();const from=new Date(now.getFullYear(),now.getMonth(),1);fromInput.value=fmt(from);toInput.value=fmt(now);}
+presetsEl.addEventListener('click',e=>{const b=e.target.closest('.preset');if(!b)return;[...presetsEl.children].forEach(x=>x.classList.remove('active'));b.classList.add('active');if(b.dataset.days)setRangeDays(+b.dataset.days);if(b.dataset.month)setRangeThisMonth();});
+[fromInput,toInput].forEach(i=>i.addEventListener('change',()=>[...presetsEl.children].forEach(b=>b.classList.remove('active'))));
+setRangeDays(30);
+
+function setStatus(state,msg){pulseDot.className='pulse '+(state==='idle'?'off':state==='busy'?'busy':'');statusText.textContent=msg;}
+function numFmt(x){if(x===undefined||x===null||isNaN(x))return '\u2014';if(Math.abs(x)>=1e6)return (x/1e6).toFixed(1)+'M';if(Math.abs(x)>=1e3)return (x/1e3).toFixed(1)+'K';return (Math.round(x*10)/10)+'';}
+
+function renderLoading(){content.innerHTML=`<div class="state"><div class="mono" style="font-size:13px;">Querying six channels in parallel\u2026</div><div style="font-size:12px;">Live pull from Windsor.ai \u2014 usually a few seconds.</div></div>`;}
+function renderError(msg){content.innerHTML=`<div class="state error"><div class="mono" style="font-size:13px;">Sync failed</div><div style="font-size:12.5px;max-width:440px;">${msg}</div><button id="retryBtn">Retry</button></div>`;document.getElementById('retryBtn').addEventListener('click',fetchData);}
+
+function renderDashboard(data){
+  const k=data.kpi||{};
+  const ctrTxt=(k.scCtr!=null)?k.scCtr.toFixed(1)+'% CTR':'';
+  content.innerHTML=`
+    <div class="kpis">
+      <div class="kpi"><div class="label"><span class="dot" style="background:var(--meta)"></span>Meta Spend</div><div class="value">\u0e3f${numFmt(k.spend)}</div><div class="sub">${numFmt(k.clicks)} clicks</div></div>
+      <div class="kpi"><div class="label"><span class="dot" style="background:var(--meta)"></span>Impressions</div><div class="value">${numFmt(k.impressions)}</div><div class="sub">Meta paid reach</div></div>
+      <div class="kpi"><div class="label"><span class="dot" style="background:var(--organic)"></span>Organic Reach</div><div class="value">${numFmt(k.organicImpr)}</div><div class="sub">${numFmt(k.organicEng)} engagements</div></div>
+      <div class="kpi"><div class="label"><span class="dot" style="background:var(--gmb)"></span>GMB Views</div><div class="value">${numFmt(k.gmbViews)}</div><div class="sub">${numFmt(k.gmbActions)} actions</div></div>
+      <div class="kpi"><div class="label"><span class="dot" style="background:var(--sc)"></span>Search Clicks</div><div class="value">${numFmt(k.scClicks)}</div><div class="sub">avg pos ${numFmt(k.scPos)}</div></div>
+      <div class="kpi"><div class="label"><span class="dot" style="background:var(--line-ch)"></span>LINE Sends</div><div class="value">${numFmt(k.lineMsgs)}</div><div class="sub">${numFmt(k.lineFollowers)} new friends</div></div>
+    </div>
+    <div class="grid">
+      <div class="panel"><h2>Trend</h2><div class="chart-box"><canvas id="trendChart"></canvas></div></div>
+      <div class="panel"><h2>Channels</h2><div class="channel-list">
+        <div class="channel"><div class="name"><span class="chip" style="background:var(--meta)"></span>Meta Ads</div><div class="metric">\u0e3f${numFmt(k.spend)}<small>${numFmt(k.impressions)} impr</small></div></div>
+        <div class="channel"><div class="name"><span class="chip" style="background:var(--organic)"></span>FB + TikTok Organic</div><div class="metric">${numFmt(k.organicEng)}<small>${numFmt(k.organicImpr)} reach</small></div></div>
+        <div class="channel"><div class="name"><span class="chip" style="background:var(--gmb)"></span>Google My Business</div><div class="metric">${numFmt(k.gmbViews)}<small>${numFmt(k.gmbActions)} actions</small></div></div>
+        <div class="channel"><div class="name"><span class="chip" style="background:var(--sc)"></span>Search Console</div><div class="metric">${numFmt(k.scClicks)}<small>${numFmt(k.scImpr)} impr, ${ctrTxt}</small></div></div>
+        <div class="channel"><div class="name"><span class="chip" style="background:var(--line-ch)"></span>LINE</div><div class="metric">${numFmt(k.lineMsgs)}<small>messages sent</small></div></div>
+      </div></div>
+    </div>
+    <div class="sub-grid">
+      <div class="panel"><h2>Top Meta Ads Accounts</h2><table><thead><tr><th>Account</th><th style="text-align:right">Spend</th><th style="text-align:right">Clicks</th></tr></thead><tbody>${(data.topAccounts||[]).map(a=>`<tr><td>${a.name}</td><td class="num">\u0e3f${numFmt(a.spend)}</td><td class="num">${numFmt(a.clicks)}</td></tr>`).join('')||'<tr><td colspan="3" class="num">no data</td></tr>'}</tbody></table></div>
+      <div class="panel"><h2>Top Search Queries</h2><table><thead><tr><th>Query</th><th>Lang</th><th style="text-align:right">Clicks</th></tr></thead><tbody>${(data.topQueries||[]).map(q=>`<tr><td>${q.q}</td><td class="mono" style="color:var(--faint);font-size:11px;">${q.lang}</td><td class="num">${numFmt(q.clicks)}</td></tr>`).join('')||'<tr><td colspan="3" class="num">no data</td></tr>'}</tbody></table></div>
+    </div>
+    <div class="sub-grid" style="margin-top:0;"><div class="panel" style="grid-column:1/-1;"><h2>Google My Business \u2014 by Location</h2><table><thead><tr><th>Location</th><th style="text-align:right">Views</th><th style="text-align:right">Actions</th></tr></thead><tbody>${(data.gmbByLocation||[]).map(l=>`<tr><td>${l.name}</td><td class="num">${numFmt(l.views)}</td><td class="num">${numFmt(l.actions)}</td></tr>`).join('')||'<tr><td colspan="3" class="num">no data</td></tr>'}</tbody></table></div></div>
+    ${(data.missing&&data.missing.length)||(data.errors&&data.errors.length)?`<div class="notes">${data.missing&&data.missing.length?`No data this range: ${data.missing.join(', ')}. `:''}${data.errors&&data.errors.length?`Errors: ${data.errors.join(' | ')}`:''}</div>`:''}
+  `;
+  const trend=data.trend||[];
+  const ctx=document.getElementById('trendChart');
+  if(chartInstance)chartInstance.destroy();
+  chartInstance=new Chart(ctx,{type:'line',data:{labels:trend.map(t=>t.d),datasets:[
+    {label:'Spend',data:trend.map(t=>t.spend),borderColor:'#5B8DEF',backgroundColor:'rgba(91,141,239,.08)',tension:.3,fill:true,yAxisID:'y'},
+    {label:'Organic Eng.',data:trend.map(t=>t.organicEng),borderColor:'#7FD1AE',tension:.3,fill:false,yAxisID:'y1'},
+    {label:'Search Clicks',data:trend.map(t=>t.scClicks),borderColor:'#E8C15A',tension:.3,fill:false,yAxisID:'y1'}]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+    plugins:{legend:{labels:{color:'#8CA0A6',font:{family:'IBM Plex Mono',size:10.5}}}},
+    scales:{x:{ticks:{color:'#5C6E73',font:{family:'IBM Plex Mono',size:9.5},maxRotation:0,autoSkip:true,maxTicksLimit:8},grid:{color:'#2A3439'}},
+    y:{position:'left',ticks:{color:'#5C6E73',font:{size:9.5}},grid:{color:'#2A3439'}},
+    y1:{position:'right',ticks:{color:'#5C6E73',font:{size:9.5}},grid:{display:false}}}}});
+}
+
+async function fetchData(){
+  const from=fromInput.value,to=toInput.value;
+  if(!from||!to){alert('Pick both dates.');return;}
+  refreshBtn.disabled=true;refreshBtn.classList.add('loading');refreshLabel.textContent='Syncing\u2026';
+  setStatus('busy',`pulling ${from} \u2192 ${to}\u2026`);renderLoading();
+  try{
+    const res=await fetch(`/api/sync?from=${from}&to=${to}`);
+    if(!res.ok){const t=await res.text();throw new Error(`Server ${res.status}: ${t.slice(0,200)}`);}
+    const data=await res.json();
+    renderDashboard(data);
+    setStatus('ok',`synced ${new Date().toLocaleTimeString()}`);
+  }catch(err){console.error(err);setStatus('idle','sync failed');renderError(err.message||'Unknown error');}
+  finally{refreshBtn.disabled=false;refreshBtn.classList.remove('loading');refreshLabel.textContent='Pull fresh data';}
+}
+refreshBtn.addEventListener('click',fetchData);
+</script>
+</body>
+</html>
