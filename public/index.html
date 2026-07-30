@@ -3,223 +3,789 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cross-Channel Control Room · Bangkok Hospital</title>
+<title>Control Room · Bangkok Hospital</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Chart.js stays self-hosted: a blocked CDN here breaks the page, not just the type. -->
 <script src="/vendor/chart.umd.js"></script>
 <style>
+  /* Fonts: Poppins (Latin) + Sarabun (Thai) from Google Fonts CDN.
+     Google's own CSS carries per-subset unicode-range, so Sarabun only claims
+     Thai codepoints and Poppins keeps Latin. If the CDN is ever blocked the
+     page degrades to a system font — cosmetic only, nothing breaks. */
+
   :root{
-    --bg:#0E1417;--surface:#161D21;--surface-2:#1D262B;--line:#2A3439;
-    --ink:#E9EEEE;--muted:#8CA0A6;--faint:#5C6E73;--amber:#E8A33D;
-    --meta:#5B8DEF;--organic:#7FD1AE;--gmb:#E8746A;--sc:#E8C15A;--line-ch:#6FCB6A;
-    --good:#7FD1AE;--bad:#E8746A;
+    --bg:#EEF2FB;
+    --bg-2:#E4EAF7;
+    --glass:rgba(255,255,255,.72);
+    --glass-2:rgba(255,255,255,.55);
+    --stroke:rgba(255,255,255,.85);
+    --line:rgba(90,110,160,.14);
+    --ink:#1B2340;
+    --ink-2:#4C5878;
+    --muted:#8590AC;
+    --faint:#A7B0C7;
+    --violet:#7C6BF5;
+    --violet-soft:#EDEAFE;
+    --blue:#4B8DF8;
+    --teal:#35C3B4;
+    --amber:#F2A93B;
+    --rose:#F2708F;
+    --green:#3BC97F;
+    --shadow:0 8px 30px rgba(43,60,110,.09);
+    --shadow-sm:0 2px 10px rgba(43,60,110,.06);
+    --r:18px;
+    --r-sm:12px;
   }
   *{box-sizing:border-box;}
-  body{margin:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans',sans-serif;-webkit-font-smoothing:antialiased;}
-  .mono{font-family:'IBM Plex Mono',monospace;}
-  .wrap{max-width:1180px;margin:0 auto;padding:28px 24px 60px;}
-  .topbar{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-bottom:22px;border-bottom:1px solid var(--line);padding-bottom:18px;}
-  .brand-eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:0 0 6px;}
-  h1{font-size:26px;font-weight:600;margin:0;letter-spacing:-.01em;}
-  .status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
-  .pulse{width:8px;height:8px;border-radius:50%;background:var(--good);position:relative;flex:none;}
-  .pulse::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:1px solid var(--good);opacity:.6;animation:ping 2.2s cubic-bezier(.4,0,.6,1) infinite;}
-  .pulse.off{background:var(--faint);}.pulse.off::after{display:none;}
-  .pulse.busy{background:var(--amber);}.pulse.busy::after{border-color:var(--amber);animation-duration:1s;}
-  @keyframes ping{0%{transform:scale(1);opacity:.6;}80%{transform:scale(2.2);opacity:0;}100%{opacity:0;}}
-  @keyframes spin{to{transform:rotate(360deg);}}
-  .controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:24px;}
-  .preset-group{display:flex;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:4px;}
-  .preset{border:none;background:transparent;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:7px 12px;border-radius:6px;cursor:pointer;transition:.15s;}
-  .preset:hover{color:var(--ink);}.preset.active{background:var(--surface-2);color:var(--amber);}
-  .date-inputs{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 10px;}
-  .date-inputs input{background:transparent;border:none;color:var(--ink);font-family:'IBM Plex Mono',monospace;font-size:12px;color-scheme:dark;width:118px;}
-  .date-inputs span{color:var(--faint);font-size:12px;}
-  .refresh-btn{background:var(--amber);color:#1a1305;border:none;border-radius:8px;font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:12px;padding:9px 16px;cursor:pointer;letter-spacing:.03em;transition:.15s;display:flex;align-items:center;gap:8px;}
-  .refresh-btn:hover{filter:brightness(1.08);}.refresh-btn:disabled{opacity:.5;cursor:wait;}
-  .spinner{width:12px;height:12px;border-radius:50%;border:2px solid #1a1305;border-top-color:transparent;animation:spin .7s linear infinite;display:none;}
-  .refresh-btn.loading .spinner{display:inline-block;}
-  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:20px;}
-  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 14px 12px;}
-  .kpi .label{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin-bottom:8px;}
-  .kpi .value{font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:600;}
-  .kpi .sub{font-size:11px;color:var(--muted);margin-top:4px;min-height:14px;}
-  .kpi .dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;}
-  .grid{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;}
-  .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;}
-  .panel h2{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 14px;font-weight:600;}
-  .chart-box{height:260px;}
-  .channel-list{display:flex;flex-direction:column;gap:10px;}
-  .channel{display:flex;align-items:center;justify-content:space-between;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:12px 14px;}
-  .channel .name{display:flex;align-items:center;gap:9px;font-size:13px;}
-  .channel .chip{width:8px;height:8px;border-radius:50%;flex:none;}
-  .channel .metric{font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:600;text-align:right;}
-  .channel .metric small{display:block;font-family:'IBM Plex Sans',sans-serif;font-size:10px;color:var(--faint);font-weight:400;}
-  .sub-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1100px 700px at 88% -12%, #DCE6FF 0%, rgba(220,230,255,0) 60%),
+      radial-gradient(900px 600px at -8% 8%, #E8E3FF 0%, rgba(232,227,255,0) 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:'Poppins','Sarabun',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    font-size:14px;
+  }
+  /* Thai and other scripts fall through Poppins to Sarabun, then system */
+  .i18n{font-family:'Poppins','Sarabun',system-ui,'Noto Sans Thai','Noto Sans JP','Noto Sans Arabic','Noto Sans Myanmar','Noto Sans Khmer',sans-serif;}
+
+  .shell{display:flex;min-height:100vh;}
+
+  /* ---------------- left rail ---------------- */
+  .rail{
+    width:236px;flex:none;padding:22px 16px;
+    display:flex;flex-direction:column;gap:26px;
+    background:var(--glass);
+    backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    border-right:1px solid var(--line);
+    position:sticky;top:0;height:100vh;
+  }
+  .brand{display:flex;align-items:center;gap:10px;padding:0 8px;}
+  .brand-mark{
+    width:34px;height:34px;border-radius:11px;flex:none;
+    background:linear-gradient(135deg,var(--violet),var(--blue));
+    display:grid;place-items:center;color:#fff;font-weight:700;font-size:14px;
+    box-shadow:0 4px 14px rgba(124,107,245,.35);
+  }
+  .brand-name{font-weight:600;font-size:14.5px;line-height:1.15;}
+  .brand-sub{font-size:10.5px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;}
+
+  .nav{display:flex;flex-direction:column;gap:4px;}
+  .nav-label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:0 10px 6px;}
+  .nav-item{
+    display:flex;align-items:center;gap:11px;
+    padding:10px 12px;border-radius:var(--r-sm);cursor:pointer;
+    color:var(--ink-2);font-size:13.5px;font-weight:500;
+    border:1px solid transparent;transition:.16s;
+  }
+  .nav-item:hover{background:var(--glass-2);color:var(--ink);}
+  .nav-item.active{
+    background:#fff;color:var(--violet);border-color:var(--stroke);
+    box-shadow:var(--shadow-sm);font-weight:600;
+  }
+  .nav-item svg{width:17px;height:17px;flex:none;}
+
+  .rail-foot{margin-top:auto;padding:12px;border-radius:var(--r-sm);background:var(--glass-2);border:1px solid var(--line);}
+  .rail-foot .k{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);}
+  .rail-foot .v{font-size:12px;color:var(--ink-2);margin-top:3px;}
+
+  /* ---------------- main ---------------- */
+  .main{flex:1;min-width:0;padding:26px 30px 60px;}
+  .head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;margin-bottom:20px;}
+  h1{font-size:25px;font-weight:600;margin:0;letter-spacing:-.02em;}
+  .subtitle{color:var(--muted);font-size:13px;margin-top:3px;}
+
+  .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .seg{display:flex;gap:3px;background:var(--glass);border:1px solid var(--line);border-radius:12px;padding:4px;backdrop-filter:blur(10px);}
+  .seg button{
+    border:none;background:transparent;color:var(--ink-2);font-family:inherit;
+    font-size:12px;font-weight:500;padding:7px 12px;border-radius:9px;cursor:pointer;transition:.15s;
+  }
+  .seg button:hover{color:var(--ink);}
+  .seg button.active{background:#fff;color:var(--violet);font-weight:600;box-shadow:var(--shadow-sm);}
+  .dates{display:flex;align-items:center;gap:6px;background:var(--glass);border:1px solid var(--line);border-radius:12px;padding:7px 11px;}
+  .dates input{background:transparent;border:none;color:var(--ink);font-family:inherit;font-size:12px;width:104px;}
+  .dates input:focus{outline:none;}
+  .dates span{color:var(--faint);}
+  .btn{
+    border:none;border-radius:12px;font-family:inherit;font-size:12.5px;font-weight:600;
+    padding:10px 16px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:.15s;
+  }
+  .btn-primary{background:linear-gradient(135deg,var(--violet),#6A7BF7);color:#fff;box-shadow:0 4px 14px rgba(124,107,245,.32);}
+  .btn-primary:hover{filter:brightness(1.05);}
+  .btn-primary:disabled{opacity:.55;cursor:wait;}
+  .btn-ghost{background:var(--glass);border:1px solid var(--line);color:var(--ink-2);}
+  .spin{width:12px;height:12px;border-radius:50%;border:2px solid rgba(255,255,255,.5);border-top-color:#fff;animation:sp .7s linear infinite;display:none;}
+  @keyframes sp{to{transform:rotate(360deg);}}
+  .btn.loading .spin{display:inline-block;}
+
+  .status{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted);}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex:none;}
+  .dot.idle{background:var(--faint);}
+  .dot.busy{background:var(--amber);}
+  .dot.bad{background:var(--rose);}
+
+  /* ---------------- cards ---------------- */
+  .card{
+    background:var(--glass);border:1px solid var(--stroke);border-radius:var(--r);
+    box-shadow:var(--shadow);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    padding:18px 20px;
+  }
+  .card h2{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 14px;}
+  .grid{display:grid;gap:14px;}
+  .g-4{grid-template-columns:repeat(4,1fr);}
+  .g-5{grid-template-columns:repeat(5,1fr);}
+  .g-3{grid-template-columns:repeat(3,1fr);}
+  .g-2-1{grid-template-columns:1.6fr 1fr;}
+  .mt{margin-top:14px;}
+
+  .stat .lab{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);display:flex;align-items:center;gap:6px;}
+  .stat .val{font-size:23px;font-weight:600;margin-top:7px;letter-spacing:-.02em;}
+  .stat .val.na{color:var(--faint);font-weight:500;font-size:19px;}
+  .stat .sub{font-size:11.5px;color:var(--muted);margin-top:3px;}
+  .chip{width:7px;height:7px;border-radius:50%;display:inline-block;}
+
+  /* ---------------- funnel ---------------- */
+  .stage{margin-bottom:16px;}
+  .stage:last-child{margin-bottom:0;}
+  .stage-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px;}
+  .stage-name{font-size:12.5px;font-weight:600;}
+  .stage-val{font-size:16px;font-weight:600;}
+  .stage-val.na{color:var(--faint);font-size:13px;font-weight:500;}
+  .bar{display:flex;height:30px;border-radius:9px;overflow:hidden;background:rgba(140,155,190,.13);}
+  .bar span{display:block;height:100%;transition:width .5s cubic-bezier(.4,0,.2,1);position:relative;}
+  .bar span:hover{filter:brightness(1.08);}
+  .stage-note{font-size:10.5px;color:var(--faint);margin-top:5px;}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px;padding-top:13px;border-top:1px solid var(--line);}
+  .legend div{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-2);}
+
+  /* ---------------- tables ---------------- */
   table{width:100%;border-collapse:collapse;font-size:12.5px;}
-  th{text-align:left;color:var(--faint);font-weight:500;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;padding-bottom:8px;border-bottom:1px solid var(--line);}
-  td{padding:7px 0;border-bottom:1px solid var(--line);color:var(--ink);}
-  td.num{font-family:'IBM Plex Mono',monospace;text-align:right;color:var(--muted);}
+  th{text-align:left;color:var(--faint);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:0 0 9px;border-bottom:1px solid var(--line);}
+  td{padding:9px 0;border-bottom:1px solid var(--line);color:var(--ink-2);}
+  td.strong{color:var(--ink);font-weight:500;}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;}
   tr:last-child td{border-bottom:none;}
-  .state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;color:var(--muted);text-align:center;gap:10px;}
-  .state.error{color:var(--bad);}
-  .state button{margin-top:8px;background:var(--surface-2);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:8px 14px;font-family:'IBM Plex Mono',monospace;font-size:12px;cursor:pointer;}
-  .notes{margin-top:14px;font-size:11.5px;color:var(--faint);border-top:1px solid var(--line);padding-top:10px;}
-  pre.raw{max-width:100%;overflow:auto;font-size:10.5px;color:var(--faint);text-align:left;background:var(--surface-2);padding:10px;border-radius:8px;margin-top:10px;}
-  @media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr);}.grid{grid-template-columns:1fr;}.sub-grid{grid-template-columns:1fr;}}
+  .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:500;background:var(--violet-soft);color:var(--violet);}
+  .pill.warn{background:#FFF1E6;color:#D97B1F;}
+  .pill.grey{background:rgba(140,155,190,.14);color:var(--muted);}
+
+  /* ---------------- topic / campaign inputs ---------------- */
+  .search{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
+  .search input.text{
+    flex:1;min-width:230px;background:#fff;border:1px solid var(--line);border-radius:13px;
+    padding:12px 15px;color:var(--ink);font-family:inherit;font-size:14px;box-shadow:var(--shadow-sm);
+  }
+  .search input.text:focus{outline:none;border-color:var(--violet);}
+  .hint{font-size:11.5px;color:var(--muted);margin:0 0 14px;}
+  .tags{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px;}
+  .tag{background:var(--glass);border:1px solid var(--line);color:var(--ink-2);border-radius:20px;padding:6px 13px;font-size:12px;cursor:pointer;font-family:inherit;transition:.15s;}
+  .tag:hover{border-color:var(--violet);color:var(--violet);}
+  .qtag{display:inline-block;background:#fff;border:1px solid var(--line);border-radius:8px;padding:5px 10px;margin:0 6px 6px 0;font-size:12px;}
+  .gap-tag{display:inline-block;border:1px dashed var(--rose);color:var(--rose);border-radius:8px;padding:5px 10px;margin:0 6px 6px 0;font-size:12px;background:#FFF7F9;}
+  .cluster{background:var(--glass-2);border:1px solid var(--line);border-radius:14px;padding:15px;margin-bottom:12px;}
+  .cluster h3{margin:0 0 10px;font-size:13px;color:var(--violet);font-weight:600;}
+
+  .state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:64px 20px;gap:9px;text-align:center;color:var(--muted);}
+  .state .big{font-size:14px;font-weight:600;color:var(--ink-2);}
+  .state.bad .big{color:var(--rose);}
+  .note{font-size:11.5px;color:var(--faint);margin-top:12px;padding-top:11px;border-top:1px solid var(--line);}
+  .warnbox{background:#FFF8EC;border:1px solid #FBE3BE;color:#9A6712;border-radius:12px;padding:11px 14px;font-size:12px;margin-bottom:14px;}
+  .chart-wrap{height:250px;}
+  .hidden{display:none!important;}
+
+  @media(max-width:1080px){.g-5,.g-4{grid-template-columns:repeat(2,1fr);}.g-2-1,.g-3{grid-template-columns:1fr;}}
+  @media(max-width:760px){
+    .shell{flex-direction:column;}
+    .rail{width:auto;height:auto;position:static;flex-direction:row;align-items:center;gap:14px;overflow-x:auto;}
+    .nav{flex-direction:row;}.nav-label,.rail-foot{display:none;}
+    .main{padding:18px 16px 40px;}
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="topbar">
-    <div>
-      <p class="brand-eyebrow">Bangkok Hospital · Marketing Division</p>
-      <h1>Cross-Channel Control Room</h1>
-      <nav style="margin-top:10px;display:flex;gap:14px;font-family:'IBM Plex Mono',monospace;font-size:12px;">
-        <a href="/" style="color:var(--amber);text-decoration:none;border-bottom:1px solid var(--amber);padding-bottom:2px;">Overview</a>
-        <a href="/topic.html" style="color:var(--muted);text-decoration:none;">Topic Explorer &rarr;</a>
-      </nav>
+<div class="shell">
+  <!-- ================= left rail ================= -->
+  <aside class="rail">
+    <div class="brand">
+      <div class="brand-mark">BH</div>
+      <div>
+        <div class="brand-name">Control Room</div>
+        <div class="brand-sub">Marketing</div>
+      </div>
     </div>
-    <div class="status">
-      <span class="pulse off" id="pulseDot"></span>
-      <span id="statusText">not synced yet</span>
-    </div>
-  </div>
 
-  <div class="controls">
-    <div class="preset-group" id="presets">
-      <button class="preset" data-days="7">7D</button>
-      <button class="preset active" data-days="30">30D</button>
-      <button class="preset" data-days="90">90D</button>
-      <button class="preset" data-month="1">THIS MONTH</button>
-    </div>
-    <div class="date-inputs">
-      <input type="date" id="fromDate">
-      <span>&rarr;</span>
-      <input type="date" id="toDate">
-    </div>
-    <button class="refresh-btn" id="refreshBtn">
-      <span class="spinner"></span>
-      <span id="refreshLabel">Pull fresh data</span>
-    </button>
-  </div>
+    <nav class="nav">
+      <div class="nav-label">Reporting</div>
+      <div class="nav-item active" data-view="overview">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>
+        Overview
+      </div>
+      <div class="nav-item" data-view="campaigns">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg>
+        Campaigns
+      </div>
+      <div class="nav-item" data-view="topics">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+        Topic Explorer
+      </div>
+    </nav>
 
-  <div id="content">
-    <div class="state" id="emptyState">
-      <div class="mono" style="font-size:13px;">Ready.</div>
-      <div style="font-size:12.5px;max-width:380px;">Pick a date range and hit <b style="color:var(--ink)">Pull fresh data</b>. This queries Meta Ads, Facebook &amp; TikTok organic, Google My Business, Search Console and LINE live through Windsor.ai.</div>
+    <div class="rail-foot">
+      <div class="k">Data source</div>
+      <div class="v">GA4 Group + Windsor.ai</div>
+      <div class="k" style="margin-top:9px;">Build</div>
+      <div class="v" id="verLabel">—</div>
     </div>
-  </div>
+  </aside>
+
+  <!-- ================= main ================= -->
+  <main class="main">
+    <div class="head">
+      <div>
+        <h1 id="viewTitle">Overview</h1>
+        <div class="subtitle" id="viewSub">Impressions → Visits → Key Events across all channels</div>
+      </div>
+      <div class="toolbar">
+        <div class="seg" id="presets">
+          <button data-days="7">7D</button>
+          <button data-days="30" class="active">30D</button>
+          <button data-days="90">90D</button>
+          <button data-month="1">MTD</button>
+        </div>
+        <div class="dates">
+          <input type="date" id="from"><span>→</span><input type="date" id="to">
+        </div>
+        <button class="btn btn-primary" id="loadBtn"><span class="spin"></span><span id="loadLabel">Load</span></button>
+      </div>
+    </div>
+    <div class="status" style="margin-bottom:18px;">
+      <span class="dot idle" id="statusDot"></span><span id="statusText">ready</span>
+    </div>
+
+    <div id="viewRoot"></div>
+  </main>
 </div>
 
 <script>
-const fromInput=document.getElementById('fromDate');
-const toInput=document.getElementById('toDate');
-const presetsEl=document.getElementById('presets');
-const pulseDot=document.getElementById('pulseDot');
-const statusText=document.getElementById('statusText');
-const refreshBtn=document.getElementById('refreshBtn');
-const refreshLabel=document.getElementById('refreshLabel');
-const content=document.getElementById('content');
-let chartInstance=null;
+// ============================================================ state & helpers
+const S = {
+  view: 'overview',
+  from: null, to: null,
+  overview: null,       // cached per range key
+  overviewKey: null,
+  campaign: null, campaignCode: '',
+  campaignList: null, campaignListKey: null,
+  topic: null, topicTerm: '',
+  charts: {},
+};
 
-function fmt(d){return d.toISOString().slice(0,10);}
-function setRangeDays(days){const to=new Date();const from=new Date();from.setDate(to.getDate()-(days-1));fromInput.value=fmt(from);toInput.value=fmt(to);}
-function setRangeThisMonth(){const now=new Date();const from=new Date(now.getFullYear(),now.getMonth(),1);fromInput.value=fmt(from);toInput.value=fmt(now);}
-presetsEl.addEventListener('click',e=>{const b=e.target.closest('.preset');if(!b)return;[...presetsEl.children].forEach(x=>x.classList.remove('active'));b.classList.add('active');if(b.dataset.days)setRangeDays(+b.dataset.days);if(b.dataset.month)setRangeThisMonth();});
-[fromInput,toInput].forEach(i=>i.addEventListener('change',()=>[...presetsEl.children].forEach(b=>b.classList.remove('active'))));
-setRangeDays(30);
+const $ = (id) => document.getElementById(id);
+const fmtISO = (d) => d.toISOString().slice(0, 10);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-function setStatus(state,msg){pulseDot.className='pulse '+(state==='idle'?'off':state==='busy'?'busy':'');statusText.textContent=msg;}
-function numFmt(x){if(x===undefined||x===null||isNaN(x))return '\u2014';if(Math.abs(x)>=1e6)return (x/1e6).toFixed(1)+'M';if(Math.abs(x)>=1e3)return (x/1e3).toFixed(1)+'K';return (Math.round(x*10)/10)+'';}
-function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
-
-function renderLoading(){content.innerHTML=`<div class="state"><div class="mono" style="font-size:13px;">Querying six channels in parallel\u2026</div><div style="font-size:12px;">Live pull from Windsor.ai \u2014 usually a few seconds.</div></div>`;}
-function renderError(msg){content.innerHTML=`<div class="state error"><div class="mono" style="font-size:13px;">Sync failed</div><div style="font-size:12.5px;max-width:440px;">${msg}</div><button id="retryBtn">Retry</button></div>`;document.getElementById('retryBtn').addEventListener('click',fetchData);}
-
-function renderDashboard(data){
-  const k=data.kpi||{};
-  const ctrTxt=(k.scCtr!=null)?k.scCtr.toFixed(1)+'% CTR':'';
-  content.innerHTML=`
-    <div class="kpis">
-      <div class="kpi"><div class="label"><span class="dot" style="background:var(--meta)"></span>Meta Spend</div><div class="value">\u0e3f${numFmt(k.spend)}</div><div class="sub">${numFmt(k.clicks)} clicks</div></div>
-      <div class="kpi"><div class="label"><span class="dot" style="background:var(--meta)"></span>Impressions</div><div class="value">${numFmt(k.impressions)}</div><div class="sub">Meta paid reach</div></div>
-      <div class="kpi"><div class="label"><span class="dot" style="background:var(--organic)"></span>Organic Reach</div><div class="value">${numFmt(k.organicImpr)}</div><div class="sub">${numFmt(k.organicEng)} engagements</div></div>
-      <div class="kpi"><div class="label"><span class="dot" style="background:var(--gmb)"></span>GMB Views</div><div class="value">${numFmt(k.gmbViews)}</div><div class="sub">${numFmt(k.gmbActions)} actions</div></div>
-      <div class="kpi"><div class="label"><span class="dot" style="background:var(--sc)"></span>Search Clicks</div><div class="value">${numFmt(k.scClicks)}</div><div class="sub">avg pos ${numFmt(k.scPos)}</div></div>
-      <div class="kpi"><div class="label"><span class="dot" style="background:var(--line-ch)"></span>LINE Sends</div><div class="value">${numFmt(k.lineMsgs)}</div><div class="sub">${numFmt(k.lineFollowers)} new friends</div></div>
-    </div>
-    <div class="grid">
-      <div class="panel"><h2>Trend</h2><div class="chart-box"><canvas id="trendChart"></canvas></div></div>
-      <div class="panel"><h2>Channels</h2><div class="channel-list">
-        <div class="channel"><div class="name"><span class="chip" style="background:var(--meta)"></span>Meta Ads</div><div class="metric">\u0e3f${numFmt(k.spend)}<small>${numFmt(k.impressions)} impr</small></div></div>
-        <div class="channel"><div class="name"><span class="chip" style="background:var(--organic)"></span>FB + TikTok Organic</div><div class="metric">${numFmt(k.organicEng)}<small>${numFmt(k.organicImpr)} reach</small></div></div>
-        <div class="channel"><div class="name"><span class="chip" style="background:var(--gmb)"></span>Google My Business</div><div class="metric">${numFmt(k.gmbViews)}<small>${numFmt(k.gmbActions)} actions</small></div></div>
-        <div class="channel"><div class="name"><span class="chip" style="background:var(--sc)"></span>Search Console</div><div class="metric">${numFmt(k.scClicks)}<small>${numFmt(k.scImpr)} impr, ${ctrTxt}</small></div></div>
-        <div class="channel"><div class="name"><span class="chip" style="background:var(--line-ch)"></span>LINE</div><div class="metric">${numFmt(k.lineMsgs)}<small>messages sent</small></div></div>
-      </div></div>
-    </div>
-    <div class="sub-grid">
-      <div class="panel"><h2>Top Meta Ads Accounts</h2><table><thead><tr><th>Account</th><th style="text-align:right">Spend</th><th style="text-align:right">Clicks</th></tr></thead><tbody>${(data.topAccounts||[]).map(a=>`<tr><td>${a.name}</td><td class="num">\u0e3f${numFmt(a.spend)}</td><td class="num">${numFmt(a.clicks)}</td></tr>`).join('')||'<tr><td colspan="3" class="num">no data</td></tr>'}</tbody></table></div>
-      <div class="panel"><h2>Top Search Queries</h2><table><thead><tr><th>Query</th><th>Lang</th><th style="text-align:right">Clicks</th></tr></thead><tbody>${(data.topQueries||[]).map(q=>`<tr><td>${q.q}</td><td class="mono" style="color:var(--faint);font-size:11px;">${q.lang}</td><td class="num">${numFmt(q.clicks)}</td></tr>`).join('')||'<tr><td colspan="3" class="num">no data</td></tr>'}</tbody></table></div>
-    </div>
-    <div class="sub-grid" style="margin-top:0;"><div class="panel" style="grid-column:1/-1;"><h2>Google My Business \u2014 by Location</h2><table><thead><tr><th>Location</th><th style="text-align:right">Views</th><th style="text-align:right">Actions</th></tr></thead><tbody>${(data.gmbByLocation||[]).map(l=>`<tr><td>${l.name}</td><td class="num">${numFmt(l.views)}</td><td class="num">${numFmt(l.actions)}</td></tr>`).join('')||'<tr><td colspan="3" class="num">no data</td></tr>'}</tbody></table></div></div>
-    ${(data.missing&&data.missing.length)||(data.errors&&data.errors.length)?`<div class="notes">${data.missing&&data.missing.length?`No data this range: ${data.missing.join(', ')}. `:''}${data.errors&&data.errors.length?`Errors: ${data.errors.join(' | ')}`:''}</div>`:''}
-  `;
-  const trend=data.trend||[];
-  const ctx=document.getElementById('trendChart');
-  // Chart rendering must never take down the dashboard: if the library failed
-  // to load or the canvas errors, keep the KPIs and tables and say so.
-  try{
-    if(typeof Chart==='undefined') throw new Error('chart library unavailable');
-    if(chartInstance)chartInstance.destroy();
-    chartInstance=new Chart(ctx,{type:'line',data:{labels:trend.map(t=>t.d),datasets:[
-      {label:'Spend',data:trend.map(t=>t.spend),borderColor:'#5B8DEF',backgroundColor:'rgba(91,141,239,.08)',tension:.3,fill:true,yAxisID:'y'},
-      {label:'Organic Eng.',data:trend.map(t=>t.organicEng),borderColor:'#7FD1AE',tension:.3,fill:false,yAxisID:'y1'},
-      {label:'Search Clicks',data:trend.map(t=>t.scClicks),borderColor:'#E8C15A',tension:.3,fill:false,yAxisID:'y1'}]},
-      options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
-      plugins:{legend:{labels:{color:'#8CA0A6',font:{family:'IBM Plex Mono',size:10.5}}}},
-      scales:{x:{ticks:{color:'#5C6E73',font:{family:'IBM Plex Mono',size:9.5},maxRotation:0,autoSkip:true,maxTicksLimit:8},grid:{color:'#2A3439'}},
-      y:{position:'left',ticks:{color:'#5C6E73',font:{size:9.5}},grid:{color:'#2A3439'}},
-      y1:{position:'right',ticks:{color:'#5C6E73',font:{size:9.5}},grid:{display:false}}}}});
-  }catch(chartErr){
-    console.error('chart render failed:',chartErr);
-    const box=ctx&&ctx.parentElement;
-    if(box) box.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:12px;text-align:center;padding:0 20px;">Chart unavailable (${esc(chartErr.message)}).<br>The numbers below are still live.</div>`;
+/** null means "we could not measure this" — render as an em dash, never 0. */
+function num(v, opts = {}) {
+  if (v === null || v === undefined || Number.isNaN(v)) return '—';
+  const a = Math.abs(v);
+  if (opts.money) {
+    if (a >= 1e6) return '฿' + (v/1e6).toFixed(2) + 'M';
+    if (a >= 1e3) return '฿' + (v/1e3).toFixed(1) + 'K';
+    return '฿' + v.toFixed(0);
   }
+  if (opts.pct) return v.toFixed(opts.dp ?? 1) + '%';
+  if (opts.dp !== undefined) return v.toFixed(opts.dp);
+  if (a >= 1e6) return (v/1e6).toFixed(1) + 'M';
+  if (a >= 1e3) return (v/1e3).toFixed(1) + 'K';
+  return String(Math.round(v));
+}
+const isNA = (v) => v === null || v === undefined;
+
+const CHANNEL_COLORS = ['#7C6BF5','#4B8DF8','#35C3B4','#F2A93B','#F2708F','#3BC97F','#9B8CEF','#6ECBE0','#E8A0C4','#A8B4D4'];
+const colorFor = (i) => CHANNEL_COLORS[i % CHANNEL_COLORS.length];
+
+function setStatus(kind, text) {
+  $('statusDot').className = 'dot ' + (kind === 'ok' ? '' : kind);
+  $('statusText').textContent = text;
 }
 
-async function fetchData(){
-  const from=fromInput.value,to=toInput.value;
-  if(!from||!to){alert('Pick both dates.');return;}
-  refreshBtn.disabled=true;refreshBtn.classList.add('loading');refreshLabel.textContent='Syncing\u2026';
-  setStatus('busy',`pulling ${from} \u2192 ${to}\u2026`);renderLoading();
-  let data;
-  try{
-    const res=await fetch(`/api/sync?from=${from}&to=${to}`);
-    if(!res.ok){const t=await res.text();throw new Error(`Server ${res.status}: ${t.slice(0,200)}`);}
-    data=await res.json();
-  }catch(err){
-    // Failure talking to our own backend / Windsor.
-    console.error('data fetch failed:',err);
-    setStatus('idle','sync failed');
-    renderError(`Couldn't reach the data API. ${err.message||'Unknown error'}`);
-    refreshBtn.disabled=false;refreshBtn.classList.remove('loading');refreshLabel.textContent='Pull fresh data';
+// ============================================================ date controls
+function setDays(days) {
+  const to = new Date(), from = new Date();
+  from.setDate(to.getDate() - (days - 1));
+  $('from').value = fmtISO(from); $('to').value = fmtISO(to);
+}
+function setMTD() {
+  const now = new Date();
+  $('from').value = fmtISO(new Date(now.getFullYear(), now.getMonth(), 1));
+  $('to').value = fmtISO(now);
+}
+$('presets').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  [...$('presets').children].forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  if (b.dataset.days) setDays(+b.dataset.days); else setMTD();
+});
+['from','to'].forEach(id => $(id).addEventListener('change', () =>
+  [...$('presets').children].forEach(b => b.classList.remove('active'))));
+setDays(30);
+
+// ============================================================ navigation
+// Client-side only: switching tabs never refetches, which was the whole point.
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+    S.view = item.dataset.view;
+    render();
+  });
+});
+
+const TITLES = {
+  overview: ['Overview', 'Impressions → Visits → Key Events across all channels'],
+  campaigns: ['Campaigns', 'Enter a utm_campaign code to see its funnel and every variant'],
+  topics: ['Topic Explorer', 'Multilingual search demand across 10 site languages'],
+};
+
+// ============================================================ fetching
+async function loadOverview(refresh = false) {
+  const key = `${$('from').value}|${$('to').value}`;
+  if (!refresh && S.overviewKey === key && S.overview) return S.overview;
+  setStatus('busy', 'pulling GA4, Meta, Search Console, GMB, LINE…');
+  const url = `/api/overview?from=${$('from').value}&to=${$('to').value}${refresh ? '&refresh=1' : ''}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,200)}`);
+  S.overview = await res.json(); S.overviewKey = key;
+  setStatus('ok', S.overview.cached ? `cached ${S.overview.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.overview;
+}
+
+async function loadCampaign(code, refresh = false) {
+  setStatus('busy', `matching “${code}”…`);
+  const url = `/api/campaign?code=${encodeURIComponent(code)}&from=${$('from').value}&to=${$('to').value}${refresh?'&refresh=1':''}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,200)}`);
+  S.campaign = await res.json(); S.campaignCode = code;
+  setStatus('ok', S.campaign.cached ? `cached ${S.campaign.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.campaign;
+}
+
+async function loadCampaignList() {
+  const key = `${$('from').value}|${$('to').value}`;
+  if (S.campaignListKey === key && S.campaignList) return S.campaignList;
+  const res = await fetch(`/api/campaigns?from=${$('from').value}&to=${$('to').value}`);
+  if (!res.ok) throw new Error(`Server ${res.status}`);
+  S.campaignList = await res.json(); S.campaignListKey = key;
+  return S.campaignList;
+}
+
+async function loadTopic(topic) {
+  setStatus('busy', `expanding “${topic}” across 10 languages…`);
+  const res = await fetch('/api/topic', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ topic, from: $('from').value, to: $('to').value }),
+  });
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,220)}`);
+  S.topic = await res.json(); S.topicTerm = topic;
+  setStatus('ok', S.topic.cached ? `cached ${S.topic.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.topic;
+}
+
+$('loadBtn').addEventListener('click', async () => {
+  const btn = $('loadBtn');
+  btn.disabled = true; btn.classList.add('loading'); $('loadLabel').textContent = 'Loading…';
+  try {
+    if (S.view === 'overview') { await loadOverview(true); }
+    else if (S.view === 'campaigns') {
+      S.campaignList = null; S.campaignListKey = null;
+      if (S.campaignCode) await loadCampaign(S.campaignCode, true);
+    }
+    else if (S.view === 'topics' && S.topicTerm) { await loadTopic(S.topicTerm); }
+    render();
+  } catch (err) {
+    setStatus('bad', 'failed');
+    $('viewRoot').innerHTML = errorState(err.message);
+  } finally {
+    btn.disabled = false; btn.classList.remove('loading'); $('loadLabel').textContent = 'Load';
+  }
+});
+
+const errorState = (msg) => `<div class="card"><div class="state bad"><div class="big">Something went wrong</div>
+  <div style="max-width:460px;font-size:12.5px;">${esc(msg)}</div></div></div>`;
+const loadingState = (msg) => `<div class="card"><div class="state"><div class="big">${esc(msg)}</div>
+  <div style="font-size:12px;">Live pull — a few seconds.</div></div></div>`;
+
+// ============================================================ render: shell
+function render() {
+  const [t, s] = TITLES[S.view];
+  $('viewTitle').textContent = t; $('viewSub').textContent = s;
+  Object.values(S.charts).forEach(c => { try { c.destroy(); } catch(_){} });
+  S.charts = {};
+  if (S.view === 'overview') renderOverview();
+  else if (S.view === 'campaigns') renderCampaigns();
+  else renderTopics();
+}
+
+// ============================================================ OVERVIEW
+function renderOverview() {
+  const d = S.overview;
+  if (!d) {
+    $('viewRoot').innerHTML = `<div class="card"><div class="state">
+      <div class="big">Ready to pull</div>
+      <div style="max-width:400px;font-size:12.5px;">Pick a range and press <b>Load</b>. Sources: GA4 (Group), Meta Ads, Search Console, Google Business Profile, FB &amp; TikTok organic, LINE.</div>
+    </div></div>`;
     return;
   }
-  try{
-    renderDashboard(data);
-    setStatus('ok',`synced ${new Date().toLocaleTimeString()}`);
-  }catch(err){
-    // Data arrived fine but the UI blew up — say so, don't blame the sync.
-    console.error('render failed:',err);
-    setStatus('ok',`data ok, render error`);
-    renderError(`Data loaded but the page failed to render it: ${err.message||'Unknown error'}`);
-  }finally{
-    refreshBtn.disabled=false;refreshBtn.classList.remove('loading');refreshLabel.textContent='Pull fresh data';
+
+  const f = d.funnel || [];
+  const totalVisits = f.reduce((a,c)=>a+c.visits,0) || 1;
+  const impChannels = f.filter(c => !isNA(c.impressions));
+  const totalImp = impChannels.reduce((a,c)=>a+c.impressions,0) || 1;
+  const totalKE = f.reduce((a,c)=>a+c.keyEvents,0) || 1;
+
+  const seg = (chans, total, key) => chans.map((c,i) => {
+    const v = key === 'impressions' ? c.impressions : c[key];
+    const pct = (v/total)*100;
+    if (pct <= 0) return '';
+    return `<span style="width:${pct}%;background:${colorFor(f.indexOf(c))}" title="${esc(c.channel)}: ${num(v)}"></span>`;
+  }).join('');
+
+  const unavail = (d.unavailable||[]).length
+    ? `<div class="warnbox"><b>Unavailable this run:</b> ${d.unavailable.map(esc).join(', ')}. These show as “—”, not zero — the numbers below exclude them.</div>` : '';
+
+  const ec = d.ecommerce, fc = d.forecast;
+
+  $('viewRoot').innerHTML = `
+    ${unavail}
+
+    <!-- funnel -->
+    <div class="card">
+      <h2>Funnel · stacked by channel</h2>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-name">Impressions</span>
+          <span class="stage-val ${isNA(d.totals.impressions)?'na':''}">${num(d.totals.impressions)}</span></div>
+        <div class="bar">${seg(impChannels, totalImp, 'impressions')}</div>
+        <div class="stage-note">Meta Ads + Search Console + organic social. Units differ per platform, so treat this as scale, not a single audited total. GMB and LINE reach are listed separately below.</div>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-name">Visits</span>
+          <span class="stage-val ${isNA(d.totals.visits)?'na':''}">${num(d.totals.visits)}</span></div>
+        <div class="bar">${seg(f, totalVisits, 'visits')}</div>
+        <div class="stage-note">GA4 sessions by default channel group — one consistent source, so channel comparison here is exact.</div>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-name">Key Events</span>
+          <span class="stage-val ${isNA(d.totals.keyEvents)?'na':''}">${num(d.totals.keyEvents)}</span></div>
+        <div class="bar">${seg(f, totalKE, 'keyEvents')}</div>
+        <div class="stage-note">Add to cart, appointments, contact us, find doctors, view cart, view item, purchase.</div>
+      </div>
+      <div class="legend">${f.map((c,i)=>`<div><span class="chip" style="background:${colorFor(i)}"></span>${esc(c.channel)}</div>`).join('')}</div>
+    </div>
+
+    <!-- channel table + reach-only -->
+    <div class="grid g-2-1 mt">
+      <div class="card">
+        <h2>Channel detail</h2>
+        <table><thead><tr><th>Channel</th><th class="num">Impressions</th><th class="num">Visits</th><th class="num">Key events</th><th class="num">KE / visit</th></tr></thead><tbody>
+        ${f.map((c,i)=>`<tr>
+          <td class="strong"><span class="chip" style="background:${colorFor(i)};margin-right:7px;"></span>${esc(c.channel)}</td>
+          <td class="num">${num(c.impressions)}</td>
+          <td class="num">${num(c.visits)}</td>
+          <td class="num">${num(c.keyEvents)}</td>
+          <td class="num">${c.visits?num((c.keyEvents/c.visits)*100,{pct:true}):'—'}</td>
+        </tr>`).join('')||'<tr><td colspan="5" class="num">no data</td></tr>'}
+        </tbody></table>
+      </div>
+      <div class="card">
+        <h2>Reach without site visits</h2>
+        <table><tbody>
+        ${(d.reachOnly||[]).map(r=>`<tr><td class="strong">${esc(r.channel)}<div style="font-size:10.5px;color:var(--faint)">${esc(r.note)}</div></td>
+          <td class="num" style="font-size:15px;font-weight:600;color:${isNA(r.impressions)?'var(--faint)':'var(--ink)'}">${num(r.impressions)}</td></tr>`).join('')}
+        </tbody></table>
+        <div class="note">These platforms drive awareness and offline action (calls, directions) that GA4 can't attribute as sessions, so they sit outside the funnel.</div>
+      </div>
+    </div>
+
+    <!-- ecommerce -->
+    <div class="card mt">
+      <h2>E-commerce</h2>
+      <div class="grid g-5">
+        <div class="stat"><div class="lab"><span class="chip" style="background:var(--blue)"></span>Product views</div>
+          <div class="val ${isNA(ec&&ec.productViews)?'na':''}">${num(ec&&ec.productViews)}</div></div>
+        <div class="stat"><div class="lab"><span class="chip" style="background:var(--teal)"></span>Add to cart</div>
+          <div class="val ${isNA(ec&&ec.addToCarts)?'na':''}">${num(ec&&ec.addToCarts)}</div>
+          <div class="sub">${ec&&ec.cartRate!=null?num(ec.cartRate,{pct:true})+' of views':''}</div></div>
+        <div class="stat"><div class="lab"><span class="chip" style="background:var(--green)"></span>Purchases</div>
+          <div class="val ${isNA(ec&&ec.purchases)?'na':''}">${num(ec&&ec.purchases)}</div>
+          <div class="sub">${ec&&ec.purchaseRate!=null?num(ec.purchaseRate,{pct:true})+' of views':''}</div></div>
+        <div class="stat"><div class="lab"><span class="chip" style="background:var(--amber)"></span>Revenue</div>
+          <div class="val ${isNA(ec&&ec.revenue)?'na':''}">${num(ec&&ec.revenue,{money:true})}</div>
+          <div class="sub">${ec&&ec.aov!=null?'AOV '+num(ec.aov,{money:true}):''}</div></div>
+        <div class="stat"><div class="lab"><span class="chip" style="background:var(--violet)"></span>Month-end forecast</div>
+          <div class="val ${isNA(fc&&fc.projectedMonthEnd)?'na':''}">${num(fc&&fc.projectedMonthEnd,{money:true})}</div>
+          <div class="sub">${fc?`${num(fc.monthToDate,{money:true})} MTD · day ${fc.daysElapsed}/${fc.daysInMonth}`:''}</div></div>
+      </div>
+      <div class="note">Forecast is a straight run-rate (MTD daily average × days in month) — it assumes the rest of the month behaves like the days so far, so it will mislead around campaign bursts or paydays. Revenue is GA4 web only; Shopee and Lazada sales are not included.</div>
+    </div>
+
+    <!-- trend + key events -->
+    <div class="grid g-2-1 mt">
+      <div class="card"><h2>Trend</h2><div class="chart-wrap"><canvas id="trendChart"></canvas></div></div>
+      <div class="card"><h2>Key events</h2>
+        <table><tbody>${(d.keyEventBreakdown||[]).map(k=>`<tr><td class="strong">${esc(k.label)}</td><td class="num">${num(k.value)}</td></tr>`).join('')||'<tr><td class="num">—</td></tr>'}</tbody></table>
+      </div>
+    </div>
+
+    <!-- paid + products -->
+    <div class="grid g-2-1 mt">
+      <div class="card">
+        <h2>Meta Ads by account</h2>
+        <table><thead><tr><th>Account</th><th class="num">Spend</th><th class="num">Impressions</th><th class="num">Clicks</th></tr></thead><tbody>
+        ${(d.topAccounts||[]).map(a=>`<tr><td class="strong">${esc(a.name)}</td><td class="num">${num(a.spend,{money:true})}</td><td class="num">${num(a.impressions)}</td><td class="num">${num(a.clicks)}</td></tr>`).join('')||'<tr><td colspan="4" class="num">unavailable</td></tr>'}
+        </tbody></table>
+      </div>
+      <div class="card">
+        <h2>Top products</h2>
+        <table><thead><tr><th>Item</th><th class="num">Revenue</th></tr></thead><tbody>
+        ${(d.topProducts||[]).slice(0,8).map(p=>`<tr><td class="strong i18n">${esc(p.name)}</td><td class="num">${num(p.revenue,{money:true})}</td></tr>`).join('')||'<tr><td colspan="2" class="num">no item data</td></tr>'}
+        </tbody></table>
+      </div>
+    </div>
+  `;
+
+  drawChart('trendChart', d.trend||[], [
+    { label:'Visits', key:'visits', color:'#4B8DF8', axis:'y' },
+    { label:'Key events', key:'keyEvents', color:'#7C6BF5', axis:'y' },
+    { label:'Spend', key:'spend', color:'#F2A93B', axis:'y1' },
+  ]);
+}
+
+// ============================================================ CAMPAIGNS
+function renderCampaigns() {
+  const d = S.campaign;
+  $('viewRoot').innerHTML = `
+    <div class="search">
+      <input class="text" id="campInput" placeholder="utm_campaign code — e.g. 260501 or 260601-03_bgh" value="${esc(S.campaignCode)}" autocomplete="off">
+      <button class="btn btn-primary" id="campGo"><span class="spin"></span><span>Analyse</span></button>
+      <button class="btn btn-ghost" id="campBrowse">Browse codes</button>
+    </div>
+    <p class="hint">Prefix match, case-insensitive. Type <b>260501</b> to roll up every <b>260501-*</b> variant, or a fuller code to narrow it. Visits and key events come from GA4; impressions are matched from Meta Ads campaign names.</p>
+    <div id="campBody">${d ? '' : `<div class="card"><div class="state"><div class="big">No campaign loaded</div>
+      <div style="max-width:420px;font-size:12.5px;">Enter a code above, or press <b>Browse codes</b> to see what ran in this date range.</div></div></div>`}</div>
+  `;
+  if (d) renderCampaignBody(d);
+
+  $('campGo').addEventListener('click', runCampaign);
+  $('campInput').addEventListener('keydown', e => { if (e.key === 'Enter') runCampaign(); });
+  $('campBrowse').addEventListener('click', browseCampaigns);
+}
+
+async function runCampaign() {
+  const code = $('campInput').value.trim();
+  if (code.length < 2) { $('campInput').focus(); return; }
+  const btn = $('campGo'); btn.disabled = true; btn.classList.add('loading');
+  $('campBody').innerHTML = loadingState(`Matching “${code}”…`);
+  try { renderCampaignBody(await loadCampaign(code)); }
+  catch (err) { setStatus('bad','failed'); $('campBody').innerHTML = errorState(err.message); }
+  finally { btn.disabled = false; btn.classList.remove('loading'); }
+}
+
+async function browseCampaigns() {
+  $('campBody').innerHTML = loadingState('Listing campaign codes…');
+  try {
+    const l = await loadCampaignList();
+    const rows = (l.campaigns||[]).slice(0,60).map(c => `<tr>
+      <td class="strong i18n" style="cursor:pointer" data-code="${esc(c.code)}">${esc(c.code)}
+        ${c.untagged?'<span class="pill warn" style="margin-left:7px;">untagged</span>':''}</td>
+      <td class="num">${num(c.visits)}</td></tr>`).join('');
+    $('campBody').innerHTML = `<div class="card">
+      <h2>Campaign codes in range · ${l.total} total</h2>
+      ${l.untaggedCount ? `<div class="warnbox"><b>${l.untaggedCount} codes look untagged.</b> They are bare numeric platform IDs, which means those ads reached GA4 without a proper utm_campaign — so they can't be grouped with their campaign. Worth fixing at the tagging step.</div>` : ''}
+      <table><thead><tr><th>Code (click to analyse)</th><th class="num">Visits</th></tr></thead><tbody>${rows||'<tr><td colspan="2" class="num">none</td></tr>'}</tbody></table>
+    </div>`;
+    $('campBody').querySelectorAll('td[data-code]').forEach(td => td.addEventListener('click', () => {
+      $('campInput').value = td.dataset.code; runCampaign();
+    }));
+  } catch (err) { $('campBody').innerHTML = errorState(err.message); }
+}
+
+function renderCampaignBody(d) {
+  const t = d.totals;
+  const impPct = 100;
+  const visitPct = t.impressions ? Math.max((t.visits/t.impressions)*100, 0.6) : 100;
+  const kePct = t.impressions ? Math.max((t.keyEvents/t.impressions)*100, 0.4)
+                              : (t.visits ? Math.max((t.keyEvents/t.visits)*100,0.4) : 0);
+
+  $('campBody').innerHTML = `
+    ${d.notes ? `<div class="warnbox">${esc(d.notes)}</div>` : ''}
+    <div class="grid g-5">
+      <div class="stat card"><div class="lab">Variants matched</div><div class="val">${num(d.matchedVariants)}</div></div>
+      <div class="stat card"><div class="lab">Impressions</div><div class="val ${isNA(t.impressions)?'na':''}">${num(t.impressions)}</div></div>
+      <div class="stat card"><div class="lab">Visits</div><div class="val">${num(t.visits)}</div>
+        <div class="sub">${t.visitRate!=null?num(t.visitRate,{pct:true,dp:2})+' of impressions':''}</div></div>
+      <div class="stat card"><div class="lab">Key events</div><div class="val">${num(t.keyEvents)}</div>
+        <div class="sub">${t.keyEventRate!=null?num(t.keyEventRate,{pct:true})+' of visits':''}</div></div>
+      <div class="stat card"><div class="lab">Revenue</div><div class="val">${num(t.revenue,{money:true})}</div>
+        <div class="sub">${t.spend!=null?'spend '+num(t.spend,{money:true}):''}</div></div>
+    </div>
+
+    <div class="card mt">
+      <h2>Campaign funnel · ${esc(d.code)}</h2>
+      <div class="stage"><div class="stage-head"><span class="stage-name">Impressions</span>
+        <span class="stage-val ${isNA(t.impressions)?'na':''}">${num(t.impressions)}</span></div>
+        <div class="bar"><span style="width:${isNA(t.impressions)?0:impPct}%;background:linear-gradient(90deg,#7C6BF5,#4B8DF8)"></span></div></div>
+      <div class="stage"><div class="stage-head"><span class="stage-name">Visits</span><span class="stage-val">${num(t.visits)}</span></div>
+        <div class="bar"><span style="width:${visitPct}%;background:linear-gradient(90deg,#4B8DF8,#35C3B4)"></span></div></div>
+      <div class="stage"><div class="stage-head"><span class="stage-name">Key events</span><span class="stage-val">${num(t.keyEvents)}</span></div>
+        <div class="bar"><span style="width:${kePct}%;background:linear-gradient(90deg,#35C3B4,#3BC97F)"></span></div></div>
+      ${t.costPerKeyEvent!=null?`<div class="note">Cost per key event: <b>${num(t.costPerKeyEvent,{money:true})}</b> · ${num(t.spend,{money:true})} spend ÷ ${num(t.keyEvents)} key events.</div>`:''}
+    </div>
+
+    <div class="grid g-2-1 mt">
+      <div class="card"><h2>Variants</h2>
+        <table><thead><tr><th>Code</th><th>Source / medium</th><th class="num">Impr</th><th class="num">Visits</th><th class="num">Key events</th><th class="num">Revenue</th></tr></thead><tbody>
+        ${(d.variants||[]).map(v=>`<tr>
+          <td class="strong i18n">${esc(v.code)}${v.adOnly?' <span class="pill grey">ads only</span>':''}</td>
+          <td>${esc(v.source||'—')}${v.medium?' / '+esc(v.medium):''}</td>
+          <td class="num">${num(v.impressions)}</td><td class="num">${num(v.visits)}</td>
+          <td class="num">${num(v.keyEvents)}</td><td class="num">${num(v.revenue,{money:true})}</td>
+        </tr>`).join('')||'<tr><td colspan="6" class="num">no variants matched this code</td></tr>'}
+        </tbody></table>
+      </div>
+      <div class="card"><h2>Key events</h2>
+        <table><tbody>${(d.keyEventBreakdown||[]).map(k=>`<tr><td class="strong">${esc(k.label)}</td><td class="num">${num(k.value)}</td></tr>`).join('')}</tbody></table>
+      </div>
+    </div>
+
+    <div class="card mt"><h2>Daily</h2><div class="chart-wrap"><canvas id="campChart"></canvas></div></div>
+  `;
+  drawChart('campChart', d.trend||[], [
+    { label:'Visits', key:'visits', color:'#4B8DF8', axis:'y' },
+    { label:'Key events', key:'keyEvents', color:'#7C6BF5', axis:'y1' },
+  ]);
+}
+
+// ============================================================ TOPICS
+function renderTopics() {
+  const d = S.topic;
+  $('viewRoot').innerHTML = `
+    <div class="search">
+      <input class="text i18n" id="topicInput" placeholder="Clinical topic — e.g. gallbladder" value="${esc(S.topicTerm)}" autocomplete="off">
+      <button class="btn btn-primary" id="topicGo"><span class="spin"></span><span>Explore</span></button>
+    </div>
+    <p class="hint">Claude expands the topic across Thai, English, Chinese, Japanese, Arabic, German, Burmese, Vietnamese, Khmer &amp; Indonesian, then matches it against what the site actually ranks for. Language is read from the ranking page's URL locale, not guessed from the script.</p>
+    <div class="tags">${['gallbladder','heart disease','cancer screening','knee replacement','diabetes'].map(t=>`<button class="tag" data-t="${t}">${t}</button>`).join('')}</div>
+    <div id="topicBody">${d?'':`<div class="card"><div class="state"><div class="big">No topic explored yet</div>
+      <div style="max-width:420px;font-size:12.5px;">Enter a clinical topic to see multilingual search demand and content gaps.</div></div></div>`}</div>
+  `;
+  if (d) renderTopicBody(d);
+  $('topicGo').addEventListener('click', runTopic);
+  $('topicInput').addEventListener('keydown', e => { if (e.key==='Enter') runTopic(); });
+  document.querySelectorAll('.tag').forEach(b => b.addEventListener('click', () => {
+    $('topicInput').value = b.dataset.t; runTopic();
+  }));
+}
+
+async function runTopic() {
+  const topic = $('topicInput').value.trim();
+  if (!topic) { $('topicInput').focus(); return; }
+  const btn = $('topicGo'); btn.disabled = true; btn.classList.add('loading');
+  $('topicBody').innerHTML = loadingState(`Exploring “${topic}” across 10 languages…`);
+  try { renderTopicBody(await loadTopic(topic)); }
+  catch (err) { setStatus('bad','failed'); $('topicBody').innerHTML = errorState(err.message); }
+  finally { btn.disabled = false; btn.classList.remove('loading'); }
+}
+
+function renderTopicBody(d) {
+  const s = d.summary || {};
+  $('topicBody').innerHTML = `
+    <div class="grid g-5">
+      <div class="stat card"><div class="lab">Matched queries</div><div class="val">${num(s.matchedQueries)}</div></div>
+      <div class="stat card"><div class="lab">Clicks</div><div class="val">${num(s.totalClicks)}</div></div>
+      <div class="stat card"><div class="lab">Impressions</div><div class="val">${num(s.totalImpressions)}</div></div>
+      <div class="stat card"><div class="lab">Languages</div><div class="val">${num(s.languages)}</div></div>
+      <div class="stat card"><div class="lab">Terms generated</div><div class="val">${num(s.termsGenerated)}</div></div>
+    </div>
+
+    <div class="card mt"><h2>Sub-topics</h2>
+      ${(d.clusters||[]).map(c=>`<div class="cluster"><h3>${esc(c.label)}</h3>${(c.queries||[]).map(q=>`<span class="qtag i18n">${esc(q)}</span>`).join('')}</div>`).join('')
+        || '<div style="color:var(--faint);font-size:12.5px;">No sub-topic grouping this run.</div>'}
+      ${d.clusterNote?`<div class="note">${esc(d.clusterNote)}</div>`:''}
+    </div>
+
+    <div class="grid g-2-1 mt">
+      <div class="card"><h2>By language</h2>
+        <table><thead><tr><th>Language</th><th class="num">Queries</th><th class="num">Clicks</th><th class="num">Impr</th></tr></thead><tbody>
+        ${(d.byLanguage||[]).map(l=>`<tr><td class="strong">${esc(l.name)} <span class="pill grey">${esc((l.lang||'').toUpperCase())}</span></td>
+          <td class="num">${num(l.queries)}</td><td class="num">${num(l.clicks)}</td><td class="num">${num(l.impressions)}</td></tr>`).join('')||'<tr><td colspan="4" class="num">—</td></tr>'}
+        </tbody></table>
+      </div>
+      <div class="card"><h2>Top countries</h2>
+        <table><tbody>${(d.byCountry||[]).slice(0,10).map(c=>`<tr><td class="strong">${esc(c.country)}</td><td class="num">${num(c.clicks)}</td></tr>`).join('')||'<tr><td class="num">—</td></tr>'}</tbody></table>
+      </div>
+    </div>
+
+    ${(d.gaps||[]).length?`<div class="card mt"><h2>Opportunity gaps</h2>
+      ${d.gaps.slice(0,80).map(g=>`<span class="gap-tag i18n">${esc(g.term)} <span style="opacity:.6">${esc((g.lang||'').toUpperCase())}</span></span>`).join('')}
+      <div class="note">Terms with no captured ranking. Search Console hides queries below Google's impression threshold, so this means <b>not captured</b> — not proof you don't rank. The term list is AI-generated, so review it for clinical accuracy before using it as a content brief.</div>
+    </div>`:''}
+
+    <div class="card mt"><h2>Top matched queries</h2>
+      <table><thead><tr><th>Query</th><th>Lang</th><th class="num">Clicks</th><th class="num">Impr</th><th class="num">Pos</th></tr></thead><tbody>
+      ${(d.matched||[]).slice(0,40).map(m=>`<tr><td class="strong i18n">${esc(m.query)}</td>
+        <td><span class="pill ${m.langSource==='url'?'':'grey'}">${esc((m.lang||'').toUpperCase())}</span></td>
+        <td class="num">${num(m.clicks)}</td><td class="num">${num(m.impressions)}</td><td class="num">${m.position??'—'}</td></tr>`).join('')||'<tr><td colspan="5" class="num">none</td></tr>'}
+      </tbody></table>
+      <div class="note">A coloured language pill means the language was read from the page URL locale (reliable). A grey pill means it was inferred from the query's script, which cannot separate English, German, Vietnamese and Indonesian.</div>
+    </div>
+  `;
+}
+
+// ============================================================ charts
+function drawChart(canvasId, rows, series) {
+  const el = document.getElementById(canvasId);
+  if (!el) return;
+  try {
+    if (typeof Chart === 'undefined') throw new Error('chart library unavailable');
+    S.charts[canvasId] = new Chart(el, {
+      type: 'line',
+      data: {
+        labels: rows.map(r => r.d),
+        datasets: series.map(s => ({
+          label: s.label, data: rows.map(r => r[s.key]),
+          borderColor: s.color, backgroundColor: s.color + '22',
+          tension: .35, fill: s.axis === 'y', yAxisID: s.axis, pointRadius: 0, borderWidth: 2,
+        })),
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { labels: { color:'#4C5878', font:{family:'Poppins',size:11}, usePointStyle:true, boxWidth:7 } } },
+        scales: {
+          x: { ticks:{ color:'#A7B0C7', font:{family:'Poppins',size:10}, maxRotation:0, autoSkip:true, maxTicksLimit:8 }, grid:{ color:'rgba(90,110,160,.09)' } },
+          y: { position:'left', ticks:{ color:'#A7B0C7', font:{size:10} }, grid:{ color:'rgba(90,110,160,.09)' } },
+          y1:{ position:'right', ticks:{ color:'#A7B0C7', font:{size:10} }, grid:{ display:false } },
+        },
+      },
+    });
+  } catch (e) {
+    console.error('chart failed:', e);
+    const box = el.parentElement;
+    if (box) box.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:12px;text-align:center;">Chart unavailable (${esc(e.message)}).<br>Figures above are still live.</div>`;
   }
 }
-refreshBtn.addEventListener('click',fetchData);
+
+// ============================================================ boot
+fetch('/api/version').then(r => r.json()).then(v => {
+  $('verLabel').textContent = 'v' + v.version + (v.modelArmor ? ' · armor on' : '');
+}).catch(() => { $('verLabel').textContent = 'unknown'; });
+
+render();
 </script>
 </body>
 </html>

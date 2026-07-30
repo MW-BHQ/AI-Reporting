@@ -70,7 +70,7 @@ oversight.
   topics weekly and writes a digest, instead of on-demand only.
 - **Cross-channel topic view.** Extend a topic from Search Console into Meta Ads
   interest overlap, closing the loop with the audience-targeting work.
-- **Caching layer.** If topic queries get heavy, cache expansion results per
+- **Cross-channel topic view** — extend a topic into Meta Ads interest overlap.
   topic+language so repeat lookups skip the first AI call.
 
 ## Model configuration
@@ -83,3 +83,48 @@ native Model Armor) instead of the Anthropic API directly, Claude models are als
 available on Vertex AI. That's a drop-in change to the `anthropic()` helper's
 endpoint + auth — worth it only if central GCP governance becomes a requirement;
 the direct API is simpler otherwise.
+
+## v.3 — Funnel, e-commerce, campaigns, light UI  ✅ shipped
+
+Single-page app (left rail, light glass theme, self-hosted Poppins + Sarabun).
+Tab switches are client-side, so they never refetch — the original complaint.
+
+**Caching.** Server-side in-memory TTL cache (default 600s) keyed by
+endpoint+params; `refresh=1` / the Load button bypasses it. Plus SPA state so
+moving between tabs is instant. No Redis/Firestore — per-instance only, which
+means a cold start empties it; set `--min-instances=1` to keep it warm.
+
+**GA4 is the funnel spine** (Group property 484633959). Visits = sessions by
+`session_default_channel_group`; Key Events = 7 configured conversions
+(add_to_cart, appointments, contact_us, find_doctors, view_cart, view_item,
+purchase). Impressions come from Meta / Search Console / organic social mapped
+onto matching channel groups — units differ, and the UI says so. GMB and LINE
+reach sit outside the funnel since they don't produce attributable sessions.
+
+**E-commerce cards**: product views, add to cart, purchases, revenue, plus a
+month-end run-rate forecast and a top-products table. GA4 web only — Shopee and
+Lazada are not included.
+
+**Campaign tab**: case-insensitive *prefix* matching on
+`session_manual_campaign_name`, so `260501`, `260501-11` and `260501-11_bgh` all
+work and every variant becomes a row under one rolled-up funnel. Meta Ads
+campaign names are matched on the same prefix to supply the Impressions stage.
+A "Browse codes" view lists what ran in range and flags bare numeric platform
+IDs as untagged.
+
+**Language attribution rewritten**: read from the page URL locale
+(`/th/ /en/ /zh/ /ja/ /ar/ /de/ /my/ /vn/ /km/ /id/`), because EN/DE/VN/ID share
+Latin script and cannot be separated by characters. Script detection is now only
+a fallback, and the UI distinguishes the two with pill colour.
+
+**Null is not zero.** Any source that fails returns null and renders as "—" with
+an explicit "unavailable this run" banner. This was a real trust bug: a
+rate-limited LINE call was being displayed as a confident 0.
+
+### Known limits of v.3
+- Windsor rate-limits; the cache reduces exposure but a burst of refreshes can
+  still trip it. Failures degrade per-source rather than failing the page.
+- The month-end forecast is a naive run-rate and will mislead around campaign
+  bursts, paydays or seasonality.
+- Impression totals mix platform units by design (accepted trade for a single
+  stacked view).
