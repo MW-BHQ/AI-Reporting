@@ -177,6 +177,20 @@ const KEY_EVENT_LABELS = {
 };
 const sumKeyEvents = (r) => KEY_EVENT_FIELDS.reduce((a, f) => a + n(r[f]), 0);
 
+/**
+ * GA4's Data API rejects any request asking for more than 10 metrics.
+ * This helper makes that limit structural rather than a comment someone can
+ * miss: build every GA4 field list through it and an over-limit request fails
+ * loudly here at build time instead of as an opaque HTTP 400 from Windsor.
+ */
+const GA4_METRIC_LIMIT = 10;
+function ga4Fields(dimensions, metrics) {
+  if (metrics.length > GA4_METRIC_LIMIT) {
+    throw new Error(`GA4 request would ask for ${metrics.length} metrics; the API allows ${GA4_METRIC_LIMIT}. Split it into two calls.`);
+  }
+  return [...dimensions, ...metrics];
+}
+
 // Which platform's impressions map to which GA4 channel group. Units differ
 // across platforms; the UI states this rather than implying one true total.
 const IMPRESSION_SOURCE_BY_CHANNEL = {
@@ -188,11 +202,17 @@ const IMPRESSION_SOURCE_BY_CHANNEL = {
 // ------------------------------------------------------------- /api/overview
 
 async function buildOverview(from, to) {
-  const ga4Fields = [
-    "date", "session_default_channel_group", "sessions", "screen_page_views",
-    ...KEY_EVENT_FIELDS,
-    "items_viewed", "add_to_carts", "ecommerce_purchases", "purchase_revenue", "transactions",
-  ];
+  // GA4 caps a request at 10 metrics, so the pull is split in two and merged.
+  // Funnel call: 9 metrics (sessions, page views, 7 key events).
+  const ga4FunnelFields = ga4Fields(
+    ["date", "session_default_channel_group"],
+    ["sessions", "screen_page_views", ...KEY_EVENT_FIELDS]
+  );
+  // Commerce call: 5 metrics.
+  const ga4EcomFields = ga4Fields(
+    ["date", "session_default_channel_group"],
+    ["items_viewed", "add_to_carts", "ecommerce_purchases", "purchase_revenue", "transactions"]
+  );
 
   // Month-to-date pulled separately so the forecast is stable no matter which
   // range is being viewed.
@@ -203,11 +223,13 @@ async function buildOverview(from, to) {
   const daysElapsed = today.getDate();
 
   const { data, errors } = await runJobs({
-    ga4: windsor("googleanalytics4", ga4Fields, from, to, { accounts: [GA4_ACCOUNT] }),
+    ga4: windsor("googleanalytics4", ga4FunnelFields, from, to, { accounts: [GA4_ACCOUNT] }),
+    ga4Ecom: windsor("googleanalytics4", ga4EcomFields, from, to, { accounts: [GA4_ACCOUNT] }),
     ga4Items: windsor("googleanalytics4",
-      ["item_name", "item_view_events", "items_added_to_cart", "items_purchased", "item_revenue"],
+      ga4Fields(["item_name"], ["item_view_events", "items_added_to_cart", "items_purchased", "item_revenue"]),
       from, to, { accounts: [GA4_ACCOUNT] }),
-    ga4Month: windsor("googleanalytics4", ["date", "purchase_revenue", "ecommerce_purchases"],
+    ga4Month: windsor("googleanalytics4",
+      ga4Fields(["date"], ["purchase_revenue", "ecommerce_purchases"]),
       monthFrom, monthTo, { accounts: [GA4_ACCOUNT] }),
     meta: windsor("facebook", ["date", "account_name", "spend", "impressions", "clicks"], from, to),
     gsc: windsor("searchconsole", ["date", "clicks", "impressions", "position"], from, to),
@@ -220,6 +242,7 @@ async function buildOverview(from, to) {
 
   const ga4 = data.ga4;
   const ga4Available = ga4 !== null;
+  const ecom = data.ga4Ecom;
 
   const impressions = {
     meta: sumOrNull(data.meta, "impressions"),
@@ -268,15 +291,15 @@ async function buildOverview(from, to) {
         .sort((a, b) => b.value - a.value)
     : null;
 
-  // ---- ecommerce ----
+  // ---- ecommerce (from the second GA4 call) ----
   let ecommerce = null;
-  if (ga4Available) {
+  if (ecom !== null) {
     ecommerce = {
-      productViews: ga4.reduce((a, r) => a + n(r.items_viewed), 0),
-      addToCarts: ga4.reduce((a, r) => a + n(r.add_to_carts), 0),
-      purchases: ga4.reduce((a, r) => a + n(r.ecommerce_purchases), 0),
-      revenue: ga4.reduce((a, r) => a + n(r.purchase_revenue), 0),
-      transactions: ga4.reduce((a, r) => a + n(r.transactions), 0),
+      productViews: ecom.reduce((a, r) => a + n(r.items_viewed), 0),
+      addToCarts: ecom.reduce((a, r) => a + n(r.add_to_carts), 0),
+      purchases: ecom.reduce((a, r) => a + n(r.ecommerce_purchases), 0),
+      revenue: ecom.reduce((a, r) => a + n(r.purchase_revenue), 0),
+      transactions: ecom.reduce((a, r) => a + n(r.transactions), 0),
     };
     ecommerce.cartRate = ecommerce.productViews ? (ecommerce.addToCarts / ecommerce.productViews) * 100 : null;
     ecommerce.purchaseRate = ecommerce.productViews ? (ecommerce.purchases / ecommerce.productViews) * 100 : null;
@@ -319,7 +342,10 @@ async function buildOverview(from, to) {
     const t = touch(r.date);
     t.visits += n(r.sessions);
     t.keyEvents += sumKeyEvents(r);
-    t.revenue += n(r.purchase_revenue);
+  }
+  if (ecom !== null) for (const r of ecom) {
+    if (!r.date) continue;
+    touch(r.date).revenue += n(r.purchase_revenue);
   }
   if (data.meta !== null) for (const r of data.meta) {
     if (!r.date) continue;
@@ -419,16 +445,26 @@ app.get("/api/campaigns", async (req, res) => {
 
 async function buildCampaign(code, from, to) {
   const needle = norm(code);
-  const ga4Fields = [
-    "session_manual_campaign_name", "session_manual_source", "session_manual_medium",
-    "sessions", "screen_page_views", ...KEY_EVENT_FIELDS, "purchase_revenue", "ecommerce_purchases",
-  ];
+  // 9 metrics: sessions, page views, 7 key events. Revenue moves to a second
+  // call because 11 metrics in one request is rejected by GA4.
+  const ga4MainFields = ga4Fields(
+    ["session_manual_campaign_name", "session_manual_source", "session_manual_medium"],
+    ["sessions", "screen_page_views", ...KEY_EVENT_FIELDS]
+  );
+  const ga4RevFields = ga4Fields(
+    ["session_manual_campaign_name"],
+    ["purchase_revenue", "ecommerce_purchases"]
+  );
+  const ga4DailyFields = ga4Fields(
+    ["date", "session_manual_campaign_name"],
+    ["sessions", ...KEY_EVENT_FIELDS]
+  );
 
   const { data, errors } = await runJobs({
-    ga4: windsor("googleanalytics4", ga4Fields, from, to, { accounts: [GA4_ACCOUNT] }),
+    ga4: windsor("googleanalytics4", ga4MainFields, from, to, { accounts: [GA4_ACCOUNT] }),
+    ga4Rev: windsor("googleanalytics4", ga4RevFields, from, to, { accounts: [GA4_ACCOUNT] }),
     meta: windsor("facebook", ["campaign", "impressions", "clicks", "spend"], from, to),
-    ga4Daily: windsor("googleanalytics4",
-      ["date", "session_manual_campaign_name", "sessions", ...KEY_EVENT_FIELDS], from, to, { accounts: [GA4_ACCOUNT] }),
+    ga4Daily: windsor("googleanalytics4", ga4DailyFields, from, to, { accounts: [GA4_ACCOUNT] }),
   });
 
   if (data.ga4 === null) {
@@ -438,6 +474,19 @@ async function buildCampaign(code, from, to) {
   }
 
   const matches = data.ga4.filter((r) => norm(r.session_manual_campaign_name).startsWith(needle));
+
+  // Revenue by campaign name, from the second call.
+  const revByCampaign = new Map();
+  if (data.ga4Rev !== null) {
+    for (const r of data.ga4Rev) {
+      const k = r.session_manual_campaign_name;
+      if (!k || !norm(k).startsWith(needle)) continue;
+      if (!revByCampaign.has(k)) revByCampaign.set(k, { revenue: 0, purchases: 0 });
+      const v = revByCampaign.get(k);
+      v.revenue += n(r.purchase_revenue);
+      v.purchases += n(r.ecommerce_purchases);
+    }
+  }
 
   const vMap = new Map();
   for (const r of matches) {
@@ -451,8 +500,10 @@ async function buildCampaign(code, from, to) {
     v.visits += n(r.sessions);
     v.pageViews += n(r.screen_page_views);
     v.keyEvents += sumKeyEvents(r);
-    v.revenue += n(r.purchase_revenue);
-    v.purchases += n(r.ecommerce_purchases);
+  }
+  // Attach revenue after aggregation so it isn't multiplied by source/medium rows.
+  for (const [k, rev] of revByCampaign.entries()) {
+    if (vMap.has(k)) { vMap.get(k).revenue = rev.revenue; vMap.get(k).purchases = rev.purchases; }
   }
 
   let metaMatched = 0;
