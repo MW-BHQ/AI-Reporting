@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Control Room · Bangkok Hospital</title>
+<link rel="icon" type="image/png" href="/brand/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -67,10 +68,9 @@
   }
   .brand{display:flex;align-items:center;gap:10px;padding:0 8px;}
   .brand-mark{
-    width:34px;height:34px;border-radius:11px;flex:none;
-    background:linear-gradient(135deg,var(--violet),var(--blue));
-    display:grid;place-items:center;color:#fff;font-weight:700;font-size:14px;
-    box-shadow:0 4px 14px rgba(124,107,245,.35);
+    width:34px;height:34px;border-radius:9px;flex:none;
+    object-fit:contain;background:#fff;padding:2px;
+    box-shadow:0 2px 8px rgba(43,60,110,.12);
   }
   .brand-name{font-weight:600;font-size:14.5px;line-height:1.15;}
   .brand-sub{font-size:10.5px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;}
@@ -213,7 +213,7 @@
   <!-- ================= left rail ================= -->
   <aside class="rail">
     <div class="brand">
-      <div class="brand-mark">BH</div>
+      <img class="brand-mark" src="/brand/bh-mark.png" alt="Bangkok Hospital" width="34" height="34">
       <div>
         <div class="brand-name">Control Room</div>
         <div class="brand-sub">Marketing</div>
@@ -647,20 +647,51 @@ function renderCampaignBody(d) {
     </div>
 
     <div class="grid g-2-1 mt">
-      <div class="card"><h2>Variants</h2>
-        <table><thead><tr><th>Code</th><th>Source / medium</th><th class="num">Impr</th><th class="num">Visits</th><th class="num">Key events</th><th class="num">Revenue</th></tr></thead><tbody>
-        ${(d.variants||[]).map(v=>`<tr>
-          <td class="strong i18n">${esc(v.code)}${v.adOnly?' <span class="pill grey">ads only</span>':''}</td>
-          <td>${esc(v.source||'—')}${v.medium?' / '+esc(v.medium):''}</td>
-          <td class="num">${num(v.impressions)}</td><td class="num">${num(v.visits)}</td>
-          <td class="num">${num(v.keyEvents)}</td><td class="num">${num(v.revenue,{money:true})}</td>
-        </tr>`).join('')||'<tr><td colspan="6" class="num">no variants matched this code</td></tr>'}
+      <div class="card"><h2>Landing pages &middot; what this campaign pointed at</h2>
+        <table><thead><tr><th>Page</th><th>Locale</th><th class="num">Visits</th></tr></thead><tbody>
+        ${(d.landingPages||[]).map(l=>`<tr>
+          <td class="strong"><a href="${esc(l.page && l.page.startsWith('http') ? l.page : 'https://www.bangkokhospital.com'+(l.page||''))}" target="_blank" rel="noopener" style="color:var(--violet);text-decoration:none;word-break:break-all;">${esc(l.page)}</a></td>
+          <td><span class="pill ${l.locale?'':'grey'}">${esc((l.locale||'—').toUpperCase())}</span></td>
+          <td class="num">${num(l.visits)}</td></tr>`).join('')||'<tr><td colspan="3" class="num">no landing page data</td></tr>'}
         </tbody></table>
+        <div class="note">Top entry pages for this campaign &mdash; the quickest way to recall what actually ran.</div>
       </div>
       <div class="card"><h2>Key events</h2>
         <table><tbody>${(d.keyEventBreakdown||[]).map(k=>`<tr><td class="strong">${esc(k.label)}</td><td class="num">${num(k.value)}</td></tr>`).join('')}</tbody></table>
       </div>
     </div>
+
+    <div class="grid g-2-1 mt">
+      <div class="card"><h2>Site traffic &middot; by utm_campaign variant</h2>
+        <table><thead><tr><th>utm_campaign</th><th>Source / medium</th><th class="num">Visits</th><th class="num">Key events</th><th class="num">Revenue</th></tr></thead><tbody>
+        ${(d.variants||[]).map(v=>`<tr>
+          <td class="strong i18n">${esc(v.code)}</td>
+          <td>${esc(v.source||'—')}${v.medium?' / '+esc(v.medium):''}</td>
+          <td class="num">${num(v.visits)}</td>
+          <td class="num">${num(v.keyEvents)}</td><td class="num">${num(v.revenue,{money:true})}</td>
+        </tr>`).join('')||'<tr><td colspan="5" class="num">no utm variants matched this code</td></tr>'}
+        </tbody></table>
+        <div class="note">GA4, keyed on session_manual_campaign_name. Visits and key events can only come from here &mdash; an ad platform never sees them, because its reporting stops at the click.</div>
+      </div>
+      <div class="card"><h2>Media &middot; by ad platform</h2>
+        <table><thead><tr><th>Platform</th><th class="num">Impr</th><th class="num">Spend</th></tr></thead><tbody>
+        ${(d.byPlatform||[]).map(p=>`<tr>
+          <td class="strong">${esc(p.platform)}${p.connected?'':' <span class="pill warn">not connected</span>'}</td>
+          <td class="num">${num(p.impressions)}</td><td class="num">${num(p.spend,{money:true})}</td>
+        </tr>`).join('')}
+        </tbody></table>
+        <div class="note">Marked <b>not connected</b> means the platform isn't authorised in Windsor &mdash; its spend is absent from the funnel, not zero.</div>
+      </div>
+    </div>
+
+    ${(d.adCampaigns||[]).length?`<div class="card mt"><h2>Ad campaigns matched to this code</h2>
+      <table><thead><tr><th>Ad campaign name</th><th>Platform</th><th class="num">Impr</th><th class="num">Clicks</th><th class="num">Spend</th></tr></thead><tbody>
+      ${d.adCampaigns.slice(0,20).map(c=>`<tr><td class="strong i18n" style="font-size:11.5px;word-break:break-all;">${esc(c.name)}</td>
+        <td>${esc(c.platform)}</td><td class="num">${num(c.impressions)}</td>
+        <td class="num">${num(c.clicks)}</td><td class="num">${num(c.spend,{money:true})}</td></tr>`).join('')}
+      </tbody></table>
+      <div class="note">Ad platform campaign names and utm_campaign values are different strings sharing only the code prefix, so they're listed separately rather than merged into the traffic table. The funnel joins the two by code: impressions and spend from here, visits and key events from GA4.</div>
+    </div>`:''}
 
     <div class="card mt"><h2>Daily</h2><div class="chart-wrap"><canvas id="campChart"></canvas></div></div>
   `;

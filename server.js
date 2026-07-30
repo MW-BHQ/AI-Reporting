@@ -191,13 +191,33 @@ function ga4Fields(dimensions, metrics) {
   return [...dimensions, ...metrics];
 }
 
-// Which platform's impressions map to which GA4 channel group. Units differ
+// Which platform's impressions belong to which GA4 channel group. Units differ
 // across platforms; the UI states this rather than implying one true total.
 const IMPRESSION_SOURCE_BY_CHANNEL = {
   "paid social": "meta",
+  "paid search": "googleAds",
+  "paid other": "otherAds",
   "organic search": "gsc",
   "organic social": "organicSocial",
 };
+
+/**
+ * Ad platforms queried for campaign-level impressions. One utm_campaign code is
+ * used across all of them, so the campaign funnel matches the same prefix
+ * against every platform's campaign name and sums what it finds.
+ *
+ * A platform that isn't authorised in Windsor simply errors, which runJobs turns
+ * into null — so this list can include platforms ahead of them being connected;
+ * they start contributing the moment authorisation happens. `platformStatus` in
+ * the response reports which ones answered, so nothing silently reads as zero.
+ */
+const AD_PLATFORMS = [
+  { id: "facebook",   label: "Meta Ads",   campaignKey: "campaign" },
+  { id: "google_ads", label: "Google Ads", campaignKey: "campaign" },
+  { id: "tiktok",     label: "TikTok Ads", campaignKey: "campaign" },
+  { id: "line_ads",   label: "LINE Ads",   campaignKey: "campaign" },
+];
+const AD_METRIC_FIELDS = ["impressions", "clicks", "spend"];
 
 // ------------------------------------------------------------- /api/overview
 
@@ -232,12 +252,19 @@ async function buildOverview(from, to) {
       ga4Fields(["date"], ["purchase_revenue", "ecommerce_purchases"]),
       monthFrom, monthTo, { accounts: [GA4_ACCOUNT] }),
     meta: windsor("facebook", ["date", "account_name", "spend", "impressions", "clicks"], from, to),
+    googleAds: windsor("google_ads", ["date", "impressions", "clicks", "spend"], from, to),
+    tiktokAds: windsor("tiktok", ["date", "impressions", "clicks", "spend"], from, to),
+    lineAds: windsor("line_ads", ["date", "impressions", "clicks", "spend"], from, to),
     gsc: windsor("searchconsole", ["date", "clicks", "impressions", "position"], from, to),
     gmb: windsor("google_my_business",
       ["date", "location_title", "impressions", "call_clicks", "website_clicks", "direction_requests"], from, to),
     fbOrganic: windsor("facebook_organic", ["date", "page_impressions", "post_engagements"], from, to),
     ttOrganic: windsor("tiktok_organic", ["date", "video_views", "likes", "comments", "shares"], from, to),
     line: windsor("line", ["date", "message__broadcast", "message__targeting", "followers__followers"], from, to),
+    // Separate call: the message-event table carries actual opens/clicks, which
+    // is a real impression rather than a send count. LINE returns null for any
+    // value under 20, so small sends legitimately come back empty.
+    lineEvents: windsor("line", ["date", "message_delivered", "message_unique_impression", "message_unique_click"], from, to),
   });
 
   const ga4 = data.ga4;
@@ -246,13 +273,32 @@ async function buildOverview(from, to) {
 
   const impressions = {
     meta: sumOrNull(data.meta, "impressions"),
+    googleAds: sumOrNull(data.googleAds, "impressions"),
+    otherAds: (data.tiktokAds === null && data.lineAds === null) ? null
+      : n(sumOrNull(data.tiktokAds, "impressions")) + n(sumOrNull(data.lineAds, "impressions")),
     gsc: sumOrNull(data.gsc, "impressions"),
     gmb: sumOrNull(data.gmb, "impressions"),
     organicSocial: (data.fbOrganic === null && data.ttOrganic === null) ? null
       : n(sumOrNull(data.fbOrganic, "page_impressions")) + n(sumOrNull(data.ttOrganic, "video_views")),
-    line: data.line === null ? null
-      : n(sumOrNull(data.line, "message__broadcast")) + n(sumOrNull(data.line, "message__targeting")),
+    line: (() => {
+      // Prefer real opens, then delivered, then sends — whichever is available.
+      const opens = sumOrNull(data.lineEvents, "message_unique_impression");
+      if (opens) return opens;
+      const delivered = sumOrNull(data.lineEvents, "message_delivered");
+      if (delivered) return delivered;
+      if (data.line === null) return null;
+      return n(sumOrNull(data.line, "message__broadcast")) + n(sumOrNull(data.line, "message__targeting"));
+    })(),
   };
+
+  // What LINE metric actually backed the number above, so the UI can label it.
+  const lineBasis = (() => {
+    if (sumOrNull(data.lineEvents, "message_unique_impression")) return "unique opens";
+    if (sumOrNull(data.lineEvents, "message_delivered")) return "messages delivered";
+    if (data.line !== null) return "messages sent";
+    return "unavailable";
+  })();
+  const lineClicks = sumOrNull(data.lineEvents, "message_unique_click");
 
   // ---- funnel by GA4 channel group ----
   const chanMap = new Map();
@@ -274,12 +320,12 @@ async function buildOverview(from, to) {
   // Platform reach with no GA4 channel equivalent.
   const reachOnly = [
     { channel: "Google Business Profile", impressions: impressions.gmb, note: "profile views" },
-    { channel: "LINE", impressions: impressions.line, note: "messages sent" },
+    { channel: "LINE", impressions: impressions.line, note: lineBasis + (lineClicks ? ` · ${lineClicks} link clicks` : "") },
   ];
 
   const totals = {
     impressions: (() => {
-      const vals = [impressions.meta, impressions.gsc, impressions.organicSocial];
+      const vals = [impressions.meta, impressions.googleAds, impressions.otherAds, impressions.gsc, impressions.organicSocial];
       return vals.every((v) => v === null) ? null : vals.reduce((a, v) => a + n(v), 0);
     })(),
     visits: ga4Available ? funnel.reduce((a, c) => a + c.visits, 0) : null,
@@ -460,12 +506,19 @@ async function buildCampaign(code, from, to) {
     ["sessions", ...KEY_EVENT_FIELDS]
   );
 
-  const { data, errors } = await runJobs({
+  const jobs = {
     ga4: windsor("googleanalytics4", ga4MainFields, from, to, { accounts: [GA4_ACCOUNT] }),
     ga4Rev: windsor("googleanalytics4", ga4RevFields, from, to, { accounts: [GA4_ACCOUNT] }),
-    meta: windsor("facebook", ["campaign", "impressions", "clicks", "spend"], from, to),
     ga4Daily: windsor("googleanalytics4", ga4DailyFields, from, to, { accounts: [GA4_ACCOUNT] }),
-  });
+    ga4Landing: windsor("googleanalytics4",
+      ga4Fields(["session_manual_campaign_name", "landing_page"], ["sessions"]),
+      from, to, { accounts: [GA4_ACCOUNT] }),
+  };
+  // One job per ad platform; unconnected ones fail harmlessly into null.
+  for (const p of AD_PLATFORMS) {
+    jobs[`ad_${p.id}`] = windsor(p.id, [p.campaignKey, ...AD_METRIC_FIELDS], from, to);
+  }
+  const { data, errors } = await runJobs(jobs);
 
   if (data.ga4 === null) {
     const e = new Error(`GA4 unavailable: ${errors.ga4}`);
@@ -506,37 +559,68 @@ async function buildCampaign(code, from, to) {
     if (vMap.has(k)) { vMap.get(k).revenue = rev.revenue; vMap.get(k).purchases = rev.purchases; }
   }
 
-  let metaMatched = 0;
-  if (data.meta !== null) {
-    for (const r of data.meta) {
-      const camp = norm(r.campaign);
-      if (!camp || !camp.startsWith(needle)) continue;
-      metaMatched++;
-      let target = [...vMap.values()].find((v) => norm(v.code) === camp);
-      if (!target) {
-        const key = r.campaign;
-        if (!vMap.has(key)) vMap.set(key, {
-          code: key, source: "meta-ads", medium: "paid", visits: 0, pageViews: 0, keyEvents: 0,
-          revenue: 0, purchases: 0, impressions: 0, clicks: 0, spend: 0, adOnly: true,
-        });
-        target = vMap.get(key);
-      }
-      target.impressions = n(target.impressions) + n(r.impressions);
-      target.clicks = n(target.clicks) + n(r.clicks);
-      target.spend = n(target.spend) + n(r.spend);
+  // Ad-platform campaigns are kept SEPARATE from GA4 utm variants on purpose.
+  // Platform campaign names and utm_campaign values are different strings that
+  // only share the prefix (e.g. Meta "260605-01_BIH_DAA_5JUN2026_..._THB8344"
+  // vs utm "260605-01_bih_tra"), so forcing them into one row produced
+  // meaningless zero-visit entries. Media spend and site traffic are two views
+  // of the same campaign, joined by the code — not by an exact name match.
+  const byPlatform = [];
+  const adCampaigns = [];
+  let anyAdMatch = false;
+  for (const p of AD_PLATFORMS) {
+    const rows = data[`ad_${p.id}`];
+    if (rows === null) {
+      byPlatform.push({ platform: p.label, connected: false, impressions: null, clicks: null, spend: null, matched: 0 });
+      continue;
     }
+    const agg = new Map();
+    for (const r of rows) {
+      const name = r[p.campaignKey];
+      const camp = norm(name);
+      if (!camp || !camp.startsWith(needle)) continue;
+      if (!agg.has(name)) agg.set(name, { name, platform: p.label, impressions: 0, clicks: 0, spend: 0 });
+      const a = agg.get(name);
+      a.impressions += n(r.impressions);
+      a.clicks += n(r.clicks);
+      a.spend += n(r.spend);
+    }
+    const list = [...agg.values()].sort((a, b) => b.impressions - a.impressions);
+    adCampaigns.push(...list);
+    if (list.length) anyAdMatch = true;
+    byPlatform.push({
+      platform: p.label, connected: true, matched: list.length,
+      impressions: list.reduce((a, c) => a + c.impressions, 0),
+      clicks: list.reduce((a, c) => a + c.clicks, 0),
+      spend: list.reduce((a, c) => a + c.spend, 0),
+    });
+  }
+  adCampaigns.sort((a, b) => b.impressions - a.impressions);
+
+  // Top landing pages for this campaign, so the team can recall the creative.
+  let landingPages = null;
+  if (data.ga4Landing !== null) {
+    const lp = new Map();
+    for (const r of data.ga4Landing) {
+      if (!norm(r.session_manual_campaign_name).startsWith(needle)) continue;
+      const page = r.landing_page;
+      if (!page) continue;
+      if (!lp.has(page)) lp.set(page, { page, visits: 0, locale: localeFromPath(page) });
+      lp.get(page).visits += n(r.sessions);
+    }
+    landingPages = [...lp.values()].sort((a, b) => b.visits - a.visits).slice(0, 8);
   }
 
   const variants = [...vMap.values()].sort((a, b) => b.visits - a.visits);
-  const anyImpressions = variants.some((v) => v.impressions !== null);
 
   const totals = {
-    impressions: anyImpressions ? variants.reduce((a, v) => a + n(v.impressions), 0) : null,
+    impressions: anyAdMatch ? byPlatform.reduce((a, p) => a + n(p.impressions), 0) : null,
     visits: variants.reduce((a, v) => a + v.visits, 0),
     keyEvents: variants.reduce((a, v) => a + v.keyEvents, 0),
     revenue: variants.reduce((a, v) => a + v.revenue, 0),
     purchases: variants.reduce((a, v) => a + v.purchases, 0),
-    spend: variants.some((v) => v.spend !== null) ? variants.reduce((a, v) => a + n(v.spend), 0) : null,
+    spend: byPlatform.some((p) => p.connected) ? byPlatform.reduce((a, p) => a + n(p.spend), 0) : null,
+    clicks: anyAdMatch ? byPlatform.reduce((a, p) => a + n(p.clicks), 0) : null,
   };
   totals.visitRate = totals.impressions ? (totals.visits / totals.impressions) * 100 : null;
   totals.keyEventRate = totals.visits ? (totals.keyEvents / totals.visits) * 100 : null;
@@ -559,14 +643,24 @@ async function buildCampaign(code, from, to) {
     trend = [...tm.values()].sort((a, b) => a.d.localeCompare(b.d));
   }
 
+  const notConnected = byPlatform.filter((p) => !p.connected).map((p) => p.platform);
+  const matchedNone = byPlatform.filter((p) => p.connected && p.matched === 0).map((p) => p.platform);
+  let notes = "";
+  if (!anyAdMatch) {
+    notes = `No ad platform reported a campaign matching this code, so the Impressions stage is unavailable. GA4 visits and key events are complete.`;
+    if (notConnected.length) notes += ` Not connected to Windsor: ${notConnected.join(", ")}.`;
+  } else if (notConnected.length) {
+    notes = `Impressions cover only connected platforms. Not connected to Windsor: ${notConnected.join(", ")} — any spend there is missing from the Impressions stage.`;
+  }
+
   return {
     code, range: { from, to },
     matchedVariants: variants.length,
     totals, variants, keyEventBreakdown, trend,
-    adImpressionsMatched: metaMatched > 0,
-    notes: metaMatched === 0
-      ? "No Meta Ads campaign names matched this code, so the Impressions stage is unavailable. GA4 visits and key events are complete."
-      : "",
+    byPlatform, adCampaigns, landingPages,
+    adImpressionsMatched: anyAdMatch,
+    notConnected, matchedNone,
+    notes,
     errors,
     syncedAt: new Date().toISOString(),
   };
@@ -700,8 +794,18 @@ async function buildTopic(topic, from, to) {
   }
   if (!terms.length) throw new Error("Term expansion returned no usable terms.");
 
-  const scRows = await windsor("searchconsole",
-    ["query", "page", "country", "clicks", "impressions", "position"], from, to);
+  // Search Console is pulled as TWO narrower requests rather than one
+  // query x page x country cross product. That combination multiplies row count
+  // enormously on a site this size and was large enough to OOM the container
+  // (surfacing as a Cloud Run 503). Each call below is one dimension narrower.
+  const { data: scData, errors: scErrors } = await runJobs({
+    byPage: windsor("searchconsole", ["query", "page", "clicks", "impressions", "position"], from, to),
+    byCountry: windsor("searchconsole", ["query", "country", "clicks", "impressions"], from, to),
+  });
+  if (scData.byPage === null) {
+    throw new Error(`Search Console unavailable: ${scErrors.byPage}`);
+  }
+  const scRows = scData.byPage;
 
   const normTerms = terms.map((t) => ({ ...t, n: norm(t.term) })).filter((t) => t.n.length >= 2);
   const matchedMap = new Map();
@@ -720,20 +824,19 @@ async function buildTopic(topic, from, to) {
         query: q, clicks: 0, impressions: 0, posW: 0,
         lang: guessed || "en",
         langSource: fromUrl ? "url" : (guessed ? "script" : "assumed"),
-        countries: new Set(),
+        topPage: r.page || null,
       });
     }
     const m = matchedMap.get(q);
     m.clicks += n(r.clicks);
     m.impressions += n(r.impressions);
     m.posW += n(r.position) * n(r.impressions);
-    if (r.country) m.countries.add(r.country);
   }
 
   const matched = [...matchedMap.values()].map((m) => ({
     query: m.query, clicks: m.clicks, impressions: m.impressions,
     position: m.impressions ? +(m.posW / m.impressions).toFixed(1) : null,
-    lang: m.lang, langSource: m.langSource, countries: [...m.countries],
+    lang: m.lang, langSource: m.langSource, topPage: m.topPage,
   })).sort((a, b) => b.impressions - a.impressions);
 
   const byLang = {};
@@ -742,12 +845,16 @@ async function buildTopic(topic, from, to) {
     byLang[L] = byLang[L] || { lang: L, name: LOCALES[L] || L, queries: 0, clicks: 0, impressions: 0 };
     byLang[L].queries++; byLang[L].clicks += m.clicks; byLang[L].impressions += m.impressions;
   }
+
+  // Country rollup from the second, narrower call.
   const byCountry = {};
-  for (const r of scRows) {
-    if (!matchedMap.has(r.query || "")) continue;
-    const c = r.country || "??";
-    byCountry[c] = byCountry[c] || { country: c, clicks: 0, impressions: 0 };
-    byCountry[c].clicks += n(r.clicks); byCountry[c].impressions += n(r.impressions);
+  if (scData.byCountry !== null) {
+    for (const r of scData.byCountry) {
+      if (!matchedMap.has(r.query || "")) continue;
+      const c = r.country || "??";
+      byCountry[c] = byCountry[c] || { country: c, clicks: 0, impressions: 0 };
+      byCountry[c].clicks += n(r.clicks); byCountry[c].impressions += n(r.impressions);
+    }
   }
 
   const gaps = terms.filter((t) => !matchedTerms.has(t.term));

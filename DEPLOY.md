@@ -192,3 +192,24 @@ WINDSOR_API_KEY=your_key node server.js
 
 Search-query language tags (AR/JA/ZH/MY/KM/TH/EN) are inferred server-side from
 the query's script in `detectLang()` — adjust there if you want finer buckets.
+
+## Memory: bump to 1Gi (v3.2 requirement)
+
+Topic Explorer pulls large Search Console result sets. At the default 512Mi the
+container could be OOM-killed mid-request, which surfaces in the browser as a
+bare **Cloud Run 503 Service Unavailable** (not a JSON error from the app —
+that's the tell). v3.2 splits the Search Console query into two narrower calls,
+but give it headroom anyway:
+
+Console: Cloud Run → service → **Edit & deploy new revision** → Container →
+set **Memory** to `1 GiB`, **Request timeout** to `300` seconds → Deploy.
+
+CLI equivalent:
+
+```bash
+gcloud run services update control-room --region asia-southeast1 \
+  --memory 1Gi --timeout 300
+```
+
+Optionally add `--min-instances=1` to keep the in-memory cache warm so the first
+load each morning isn't a cold start.
