@@ -66,12 +66,9 @@
     border-right:1px solid var(--line);
     position:sticky;top:0;height:100vh;
   }
-  .brand{display:flex;align-items:center;gap:10px;padding:0 8px;}
-  .brand-mark{
-    width:34px;height:34px;border-radius:9px;flex:none;
-    object-fit:contain;background:#fff;padding:2px;
-    box-shadow:0 2px 8px rgba(43,60,110,.12);
-  }
+  .brand{display:flex;flex-direction:column;gap:12px;padding:2px 8px 0;}
+  .brand-logo{width:150px;height:auto;display:block;}
+  .brand-app{padding-top:11px;border-top:1px solid var(--line);}
   .brand-name{font-weight:600;font-size:14.5px;line-height:1.15;}
   .brand-sub{font-size:10.5px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;}
 
@@ -161,6 +158,11 @@
   .bar span{display:block;height:100%;transition:width .5s cubic-bezier(.4,0,.2,1);position:relative;}
   .bar span:hover{filter:brightness(1.08);}
   .stage-note{font-size:10.5px;color:var(--faint);margin-top:5px;}
+  /* Minor stages read as supporting context, not headline numbers. */
+  .stage.minor{padding-left:16px;border-left:2px solid rgba(140,155,190,.22);margin-bottom:14px;}
+  .stage.minor .stage-name{font-weight:500;font-size:11.5px;color:var(--muted);}
+  .stage.minor .stage-val{font-size:13px;font-weight:500;color:var(--muted);}
+  .stage.minor .bar{height:16px;border-radius:6px;background:rgba(140,155,190,.10);}
   .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px;padding-top:13px;border-top:1px solid var(--line);}
   .legend div{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-2);}
 
@@ -203,7 +205,8 @@
   @media(max-width:760px){
     .shell{flex-direction:column;}
     .rail{width:auto;height:auto;position:static;flex-direction:row;align-items:center;gap:14px;overflow-x:auto;}
-    .nav{flex-direction:row;}.nav-label,.rail-foot{display:none;}
+    .nav{flex-direction:row;}.nav-label,.rail-foot,.brand-app{display:none;}
+    .brand{flex-direction:row;padding:0;}.brand-logo{width:112px;}
     .main{padding:18px 16px 40px;}
   }
 </style>
@@ -213,10 +216,10 @@
   <!-- ================= left rail ================= -->
   <aside class="rail">
     <div class="brand">
-      <img class="brand-mark" src="/brand/bh-mark.png" alt="Bangkok Hospital" width="34" height="34">
-      <div>
+      <img class="brand-logo" src="/brand/bh-wordmark.png" alt="Bangkok Hospital">
+      <div class="brand-app">
         <div class="brand-name">Control Room</div>
-        <div class="brand-sub">Marketing</div>
+        <div class="brand-sub">Marketing Division</div>
       </div>
     </div>
 
@@ -447,9 +450,12 @@ function renderOverview() {
   const impChannels = f.filter(c => !isNA(c.impressions));
   const totalImp = impChannels.reduce((a,c)=>a+c.impressions,0) || 1;
   const totalKE = f.reduce((a,c)=>a+c.keyEvents,0) || 1;
+  const totalEng = f.reduce((a,c)=>a+c.engagement,0) || 1;
+  const clickChannels = f.filter(c => !isNA(c.clicks));
+  const totalClicks = clickChannels.reduce((a,c)=>a+c.clicks,0) || 1;
 
   const seg = (chans, total, key) => chans.map((c,i) => {
-    const v = key === 'impressions' ? c.impressions : c[key];
+    const v = c[key];
     const pct = (v/total)*100;
     if (pct <= 0) return '';
     return `<span style="width:${pct}%;background:${colorFor(f.indexOf(c))}" title="${esc(c.channel)}: ${num(v)}"></span>`;
@@ -465,18 +471,30 @@ function renderOverview() {
 
     <!-- funnel -->
     <div class="card">
-      <h2>Funnel · stacked by channel</h2>
+      <h2>Funnel &middot; stacked by channel</h2>
       <div class="stage">
         <div class="stage-head"><span class="stage-name">Impressions</span>
           <span class="stage-val ${isNA(d.totals.impressions)?'na':''}">${num(d.totals.impressions)}</span></div>
         <div class="bar">${seg(impChannels, totalImp, 'impressions')}</div>
-        <div class="stage-note">Meta Ads + Search Console + organic social. Units differ per platform, so treat this as scale, not a single audited total. GMB and LINE reach are listed separately below.</div>
+        <div class="stage-note">Meta Ads + Search Console + organic social. Units differ per platform, so read this as scale rather than one audited total. GMB and LINE reach are listed separately below.</div>
+      </div>
+      <div class="stage minor">
+        <div class="stage-head"><span class="stage-name">Ad &amp; search clicks</span>
+          <span class="stage-val ${isNA(d.totals.clicks)?'na':''}">${num(d.totals.clicks)}</span></div>
+        <div class="bar">${seg(clickChannels, totalClicks, 'clicks')}</div>
+        <div class="stage-note">Clicks reported by the ad platforms and Search Console. Always higher than visits &mdash; a click that bounces before the tag fires never becomes a session.</div>
       </div>
       <div class="stage">
         <div class="stage-head"><span class="stage-name">Visits</span>
           <span class="stage-val ${isNA(d.totals.visits)?'na':''}">${num(d.totals.visits)}</span></div>
         <div class="bar">${seg(f, totalVisits, 'visits')}</div>
-        <div class="stage-note">GA4 sessions by default channel group — one consistent source, so channel comparison here is exact.</div>
+        <div class="stage-note">GA4 sessions by default channel group &mdash; one consistent source, so channel comparison here is exact.</div>
+      </div>
+      <div class="stage minor">
+        <div class="stage-head"><span class="stage-name">Engagement</span>
+          <span class="stage-val ${isNA(d.totals.engagement)?'na':''}">${num(d.totals.engagement)}${d.totals.visits&&d.totals.engagement?` <span style="font-weight:400;">&middot; ${num(d.totals.engagement/d.totals.visits,{dp:2})} per visit</span>`:''}</span></div>
+        <div class="bar">${seg(f, totalEng, 'engagement')}</div>
+        <div class="stage-note">Your custom GA4 <b>engagement</b> event. This counts <b>events, not sessions</b>, so it can exceed the visit count &mdash; one visit can fire it several times. Read it as depth of interaction, not as a share of visitors.</div>
       </div>
       <div class="stage">
         <div class="stage-head"><span class="stage-name">Key Events</span>
@@ -491,14 +509,16 @@ function renderOverview() {
     <div class="grid g-2-1 mt">
       <div class="card">
         <h2>Channel detail</h2>
-        <table><thead><tr><th>Channel</th><th class="num">Impressions</th><th class="num">Visits</th><th class="num">Key events</th><th class="num">KE / visit</th></tr></thead><tbody>
+        <table><thead><tr><th>Channel</th><th class="num">Impr</th><th class="num">Clicks</th><th class="num">Visits</th><th class="num">Engmt. events</th><th class="num">Key events</th><th class="num">KE / visit</th></tr></thead><tbody>
         ${f.map((c,i)=>`<tr>
           <td class="strong"><span class="chip" style="background:${colorFor(i)};margin-right:7px;"></span>${esc(c.channel)}</td>
           <td class="num">${num(c.impressions)}</td>
+          <td class="num">${num(c.clicks)}</td>
           <td class="num">${num(c.visits)}</td>
+          <td class="num">${num(c.engagement)}</td>
           <td class="num">${num(c.keyEvents)}</td>
           <td class="num">${c.visits?num((c.keyEvents/c.visits)*100,{pct:true}):'—'}</td>
-        </tr>`).join('')||'<tr><td colspan="5" class="num">no data</td></tr>'}
+        </tr>`).join('')||'<tr><td colspan="7" class="num">no data</td></tr>'}
         </tbody></table>
       </div>
       <div class="card">
@@ -508,6 +528,22 @@ function renderOverview() {
           <td class="num" style="font-size:15px;font-weight:600;color:${isNA(r.impressions)?'var(--faint)':'var(--ink)'}">${num(r.impressions)}</td></tr>`).join('')}
         </tbody></table>
         <div class="note">These platforms drive awareness and offline action (calls, directions) that GA4 can't attribute as sessions, so they sit outside the funnel.</div>
+      </div>
+    </div>
+
+    <!-- paid media -->
+    <div class="card mt">
+      <h2>Paid media</h2>
+      <div class="grid g-4">
+        <div class="stat"><div class="lab"><span class="chip" style="background:var(--amber)"></span>Ad spend</div>
+          <div class="val ${isNA(d.paid&&d.paid.spend)?'na':''}">${num(d.paid&&d.paid.spend,{money:true})}</div>
+          <div class="sub">Meta Ads, all accounts</div></div>
+        <div class="stat"><div class="lab"><span class="chip" style="background:var(--blue)"></span>Ad impressions</div>
+          <div class="val ${isNA(d.paid&&d.paid.impressions)?'na':''}">${num(d.paid&&d.paid.impressions)}</div></div>
+        <div class="stat"><div class="lab"><span class="chip" style="background:var(--teal)"></span>Ad clicks</div>
+          <div class="val ${isNA(d.paid&&d.paid.clicks)?'na':''}">${num(d.paid&&d.paid.clicks)}</div></div>
+        <div class="stat"><div class="lab"><span class="chip" style="background:var(--violet)"></span>Cost per click</div>
+          <div class="val ${isNA(d.paid&&d.paid.cpc)?'na':''}">${num(d.paid&&d.paid.cpc,{money:true})}</div></div>
       </div>
     </div>
 
@@ -560,7 +596,8 @@ function renderOverview() {
 
   drawChart('trendChart', d.trend||[], [
     { label:'Visits', key:'visits', color:'#4B8DF8', axis:'y' },
-    { label:'Key events', key:'keyEvents', color:'#7C6BF5', axis:'y' },
+    { label:'Engagement events', key:'engagement', color:'#9FC8C2', axis:'y' },
+    { label:'Key events', key:'keyEvents', color:'#7C6BF5', axis:'y1' },
     { label:'Spend', key:'spend', color:'#F2A93B', axis:'y1' },
   ]);
 }
@@ -620,10 +657,24 @@ function renderCampaignBody(d) {
   const visitPct = t.impressions ? Math.max((t.visits/t.impressions)*100, 0.6) : 100;
   const kePct = t.impressions ? Math.max((t.keyEvents/t.impressions)*100, 0.4)
                               : (t.visits ? Math.max((t.keyEvents/t.visits)*100,0.4) : 0);
+  const clickPct = t.impressions && t.clicks ? Math.max((t.clicks/t.impressions)*100, 0.5) : (t.clicks?100:0);
+  const engPct = Math.min(100, t.impressions ? Math.max((t.engagement/t.impressions)*100, 0.4)
+                               : (t.visits ? Math.max((t.engagement/t.visits)*100,0.4) : 0));
 
   $('campBody').innerHTML = `
     ${d.notes ? `<div class="warnbox">${esc(d.notes)}</div>` : ''}
-    <div class="grid g-5">
+    <div class="grid g-3">
+      <div class="stat card"><div class="lab"><span class="chip" style="background:var(--amber)"></span>Ad spend</div>
+        <div class="val ${isNA(t.spend)?'na':''}">${num(t.spend,{money:true})}</div>
+        <div class="sub">${d.unattributedSpend?num(d.unattributedSpend,{money:true})+' not tied to a utm variant':'across matched ad campaigns'}</div></div>
+      <div class="stat card"><div class="lab">Cost per visit</div>
+        <div class="val ${isNA(t.costPerVisit)?'na':''}">${num(t.costPerVisit,{money:true})}</div>
+        <div class="sub">${t.spend!=null&&t.visits?num(t.spend,{money:true})+' ÷ '+num(t.visits)+' visits':''}</div></div>
+      <div class="stat card"><div class="lab">Cost per contact</div>
+        <div class="val ${isNA(t.costPerContact)?'na':''}">${num(t.costPerContact,{money:true})}</div>
+        <div class="sub">${t.contacts?num(t.contacts)+' contact-us events':'no contact events'}</div></div>
+    </div>
+    <div class="grid g-5 mt">
       <div class="stat card"><div class="lab">Variants matched</div><div class="val">${num(d.matchedVariants)}</div></div>
       <div class="stat card"><div class="lab">Impressions</div><div class="val ${isNA(t.impressions)?'na':''}">${num(t.impressions)}</div></div>
       <div class="stat card"><div class="lab">Visits</div><div class="val">${num(t.visits)}</div>
@@ -631,7 +682,7 @@ function renderCampaignBody(d) {
       <div class="stat card"><div class="lab">Key events</div><div class="val">${num(t.keyEvents)}</div>
         <div class="sub">${t.keyEventRate!=null?num(t.keyEventRate,{pct:true})+' of visits':''}</div></div>
       <div class="stat card"><div class="lab">Revenue</div><div class="val">${num(t.revenue,{money:true})}</div>
-        <div class="sub">${t.spend!=null?'spend '+num(t.spend,{money:true}):''}</div></div>
+        <div class="sub">${t.purchases?num(t.purchases)+' purchases':''}</div></div>
     </div>
 
     <div class="card mt">
@@ -639,8 +690,15 @@ function renderCampaignBody(d) {
       <div class="stage"><div class="stage-head"><span class="stage-name">Impressions</span>
         <span class="stage-val ${isNA(t.impressions)?'na':''}">${num(t.impressions)}</span></div>
         <div class="bar"><span style="width:${isNA(t.impressions)?0:impPct}%;background:linear-gradient(90deg,#7C6BF5,#4B8DF8)"></span></div></div>
+      <div class="stage minor"><div class="stage-head"><span class="stage-name">Ad clicks</span>
+        <span class="stage-val ${isNA(t.clicks)?'na':''}">${num(t.clicks)}</span></div>
+        <div class="bar"><span style="width:${clickPct}%;background:#A9B4CE"></span></div></div>
       <div class="stage"><div class="stage-head"><span class="stage-name">Visits</span><span class="stage-val">${num(t.visits)}</span></div>
         <div class="bar"><span style="width:${visitPct}%;background:linear-gradient(90deg,#4B8DF8,#35C3B4)"></span></div></div>
+      <div class="stage minor"><div class="stage-head"><span class="stage-name">Engagement events</span>
+        <span class="stage-val ${isNA(t.engagement)?'na':''}">${num(t.engagement)}${t.visits&&t.engagement?` <span style="font-weight:400">&middot; ${num(t.engagement/t.visits,{dp:2})} per visit</span>`:''}</span></div>
+        <div class="bar"><span style="width:${engPct}%;background:#9FC8C2"></span></div>
+        <div class="stage-note">Custom GA4 <b>engagement</b> event &mdash; an event count, so it can exceed visits.</div></div>
       <div class="stage"><div class="stage-head"><span class="stage-name">Key events</span><span class="stage-val">${num(t.keyEvents)}</span></div>
         <div class="bar"><span style="width:${kePct}%;background:linear-gradient(90deg,#35C3B4,#3BC97F)"></span></div></div>
       ${t.costPerKeyEvent!=null?`<div class="note">Cost per key event: <b>${num(t.costPerKeyEvent,{money:true})}</b> · ${num(t.spend,{money:true})} spend ÷ ${num(t.keyEvents)} key events.</div>`:''}
@@ -663,15 +721,19 @@ function renderCampaignBody(d) {
 
     <div class="grid g-2-1 mt">
       <div class="card"><h2>Site traffic &middot; by utm_campaign variant</h2>
-        <table><thead><tr><th>utm_campaign</th><th>Source / medium</th><th class="num">Visits</th><th class="num">Key events</th><th class="num">Revenue</th></tr></thead><tbody>
+        <table><thead><tr><th>utm_campaign</th><th>Source / medium</th><th class="num">Ad spend</th><th class="num">Visits</th><th class="num">Key events</th><th class="num">Cost / visit</th><th class="num">Cost / contact</th><th class="num">Revenue</th></tr></thead><tbody>
         ${(d.variants||[]).map(v=>`<tr>
           <td class="strong i18n">${esc(v.code)}</td>
           <td>${esc(v.source||'—')}${v.medium?' / '+esc(v.medium):''}</td>
+          <td class="num">${num(v.spend,{money:true})}${v.spendEstimated?' <span class="pill grey" title="Split across variants by visit share">~</span>':''}</td>
           <td class="num">${num(v.visits)}</td>
-          <td class="num">${num(v.keyEvents)}</td><td class="num">${num(v.revenue,{money:true})}</td>
-        </tr>`).join('')||'<tr><td colspan="5" class="num">no utm variants matched this code</td></tr>'}
+          <td class="num">${num(v.keyEvents)}</td>
+          <td class="num">${num(v.costPerVisit,{money:true})}</td>
+          <td class="num">${num(v.costPerContact,{money:true})}</td>
+          <td class="num">${num(v.revenue,{money:true})}</td>
+        </tr>`).join('')||'<tr><td colspan="8" class="num">no utm variants matched this code</td></tr>'}
         </tbody></table>
-        <div class="note">GA4, keyed on session_manual_campaign_name. Visits and key events can only come from here &mdash; an ad platform never sees them, because its reporting stops at the click.</div>
+        <div class="note">GA4, keyed on session_manual_campaign_name. Visits and key events can only come from here &mdash; an ad platform never sees them, its reporting stops at the click. Ad spend is joined by utm_source, so organic rows are blank rather than zero; a <span class="pill grey">~</span> marks spend split across several variants by visit share. &ldquo;Contact&rdquo; is the contact-us key event.</div>
       </div>
       <div class="card"><h2>Media &middot; by ad platform</h2>
         <table><thead><tr><th>Platform</th><th class="num">Impr</th><th class="num">Spend</th></tr></thead><tbody>

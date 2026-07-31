@@ -40,6 +40,17 @@ const MA_ENABLED = Boolean(MA_LOCATION && MA_TEMPLATE);
 
 const CACHE_TTL_MS = Number(process.env.CACHE_TTL_MS || 10 * 60 * 1000);
 
+/**
+ * The Engagement funnel stage uses a CUSTOM GA4 event named "engagement", not
+ * GA4's built-in `engaged_sessions` or `user_engagement`. Because it isn't
+ * starred as a key event there is no `conversions_engagement` field, so it has
+ * to be counted via the event_name dimension + event_count metric with a
+ * server-side filter. Note this counts EVENTS, so it can legitimately exceed
+ * session count — the UI says so rather than implying a funnel leak.
+ */
+const ENGAGEMENT_EVENT = process.env.ENGAGEMENT_EVENT || "engagement";
+const ENGAGEMENT_FILTER = [["event_name", "eq", ENGAGEMENT_EVENT]];
+
 let VERSION = "unknown";
 try { VERSION = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8")).version; } catch (_) {}
 
@@ -195,29 +206,28 @@ function ga4Fields(dimensions, metrics) {
 // across platforms; the UI states this rather than implying one true total.
 const IMPRESSION_SOURCE_BY_CHANNEL = {
   "paid social": "meta",
-  "paid search": "googleAds",
-  "paid other": "otherAds",
   "organic search": "gsc",
   "organic social": "organicSocial",
 };
 
 /**
- * Ad platforms queried for campaign-level impressions. One utm_campaign code is
- * used across all of them, so the campaign funnel matches the same prefix
- * against every platform's campaign name and sums what it finds.
- *
- * A platform that isn't authorised in Windsor simply errors, which runJobs turns
- * into null — so this list can include platforms ahead of them being connected;
- * they start contributing the moment authorisation happens. `platformStatus` in
- * the response reports which ones answered, so nothing silently reads as zero.
+ * Ad platforms queried for campaign-level impressions, clicks and spend.
+ * ONLY platforms actually authorised in Windsor belong here — querying
+ * unconnected ones just burns requests and litters the UI with "not connected"
+ * rows. To add one later (Google Ads, TikTok Ads, LINE Ads) authorise it in
+ * Windsor and add a single line below; nothing else needs to change.
  */
 const AD_PLATFORMS = [
-  { id: "facebook",   label: "Meta Ads",   campaignKey: "campaign" },
-  { id: "google_ads", label: "Google Ads", campaignKey: "campaign" },
-  { id: "tiktok",     label: "TikTok Ads", campaignKey: "campaign" },
-  { id: "line_ads",   label: "LINE Ads",   campaignKey: "campaign" },
+  { id: "facebook", label: "Meta Ads", campaignKey: "campaign" },
 ];
 const AD_METRIC_FIELDS = ["impressions", "clicks", "spend"];
+
+// utm_source patterns that indicate traffic came from a given ad platform, used
+// to attribute spend to a utm variant. Extend alongside AD_PLATFORMS.
+const PLATFORM_SOURCE_HINTS = {
+  "Meta Ads": [/facebook/i, /meta/i, /(^|[^a-z])fb([^a-z]|$)/i, /instagram/i, /(^|[^a-z])ig([^a-z]|$)/i],
+};
+const PAID_MEDIUM_RE = /(cpc|ppc|paid|display|video|banner)/i;
 
 // ------------------------------------------------------------- /api/overview
 
@@ -226,7 +236,7 @@ async function buildOverview(from, to) {
   // Funnel call: 9 metrics (sessions, page views, 7 key events).
   const ga4FunnelFields = ga4Fields(
     ["date", "session_default_channel_group"],
-    ["sessions", "screen_page_views", ...KEY_EVENT_FIELDS]
+    ["sessions", ...KEY_EVENT_FIELDS]
   );
   // Commerce call: 5 metrics.
   const ga4EcomFields = ga4Fields(
@@ -248,13 +258,13 @@ async function buildOverview(from, to) {
     ga4Items: windsor("googleanalytics4",
       ga4Fields(["item_name"], ["item_view_events", "items_added_to_cart", "items_purchased", "item_revenue"]),
       from, to, { accounts: [GA4_ACCOUNT] }),
+    ga4Engagement: windsor("googleanalytics4",
+      ga4Fields(["date", "session_default_channel_group", "event_name"], ["event_count"]),
+      from, to, { accounts: [GA4_ACCOUNT], filters: ENGAGEMENT_FILTER }),
     ga4Month: windsor("googleanalytics4",
       ga4Fields(["date"], ["purchase_revenue", "ecommerce_purchases"]),
       monthFrom, monthTo, { accounts: [GA4_ACCOUNT] }),
     meta: windsor("facebook", ["date", "account_name", "spend", "impressions", "clicks"], from, to),
-    googleAds: windsor("google_ads", ["date", "impressions", "clicks", "spend"], from, to),
-    tiktokAds: windsor("tiktok", ["date", "impressions", "clicks", "spend"], from, to),
-    lineAds: windsor("line_ads", ["date", "impressions", "clicks", "spend"], from, to),
     gsc: windsor("searchconsole", ["date", "clicks", "impressions", "position"], from, to),
     gmb: windsor("google_my_business",
       ["date", "location_title", "impressions", "call_clicks", "website_clicks", "direction_requests"], from, to),
@@ -273,9 +283,6 @@ async function buildOverview(from, to) {
 
   const impressions = {
     meta: sumOrNull(data.meta, "impressions"),
-    googleAds: sumOrNull(data.googleAds, "impressions"),
-    otherAds: (data.tiktokAds === null && data.lineAds === null) ? null
-      : n(sumOrNull(data.tiktokAds, "impressions")) + n(sumOrNull(data.lineAds, "impressions")),
     gsc: sumOrNull(data.gsc, "impressions"),
     gmb: sumOrNull(data.gmb, "impressions"),
     organicSocial: (data.fbOrganic === null && data.ttOrganic === null) ? null
@@ -305,16 +312,32 @@ async function buildOverview(from, to) {
   if (ga4Available) {
     for (const r of ga4) {
       const label = r.session_default_channel_group || "Unassigned";
-      if (!chanMap.has(label)) chanMap.set(label, { channel: label, visits: 0, pageViews: 0, keyEvents: 0 });
+      if (!chanMap.has(label)) chanMap.set(label, { channel: label, visits: 0, engagement: 0, keyEvents: 0 });
       const c = chanMap.get(label);
       c.visits += n(r.sessions);
-      c.pageViews += n(r.screen_page_views);
       c.keyEvents += sumKeyEvents(r);
     }
   }
+  // Custom "engagement" event counts, folded in by channel.
+  const engagementAvailable = data.ga4Engagement !== null;
+  if (engagementAvailable) {
+    for (const r of data.ga4Engagement) {
+      const label = r.session_default_channel_group || "Unassigned";
+      if (!chanMap.has(label)) chanMap.set(label, { channel: label, visits: 0, engagement: 0, keyEvents: 0 });
+      chanMap.get(label).engagement += n(r.event_count);
+    }
+  }
+
+  // Ad clicks belong to the same channels that have ad impressions.
+  const adClicksByKey = { meta: sumOrNull(data.meta, "clicks"), gsc: sumOrNull(data.gsc, "clicks"), organicSocial: null };
   const funnel = [...chanMap.values()].map((c) => {
     const srcKey = IMPRESSION_SOURCE_BY_CHANNEL[norm(c.channel)];
-    return { ...c, impressions: srcKey ? impressions[srcKey] : null, impressionSource: srcKey || null };
+    return {
+      ...c,
+      impressions: srcKey ? impressions[srcKey] : null,
+      clicks: srcKey ? (adClicksByKey[srcKey] ?? null) : null,
+      impressionSource: srcKey || null,
+    };
   }).sort((a, b) => b.visits - a.visits);
 
   // Platform reach with no GA4 channel equivalent.
@@ -325,10 +348,15 @@ async function buildOverview(from, to) {
 
   const totals = {
     impressions: (() => {
-      const vals = [impressions.meta, impressions.googleAds, impressions.otherAds, impressions.gsc, impressions.organicSocial];
+      const vals = [impressions.meta, impressions.gsc, impressions.organicSocial];
+      return vals.every((v) => v === null) ? null : vals.reduce((a, v) => a + n(v), 0);
+    })(),
+    clicks: (() => {
+      const vals = [adClicksByKey.meta, adClicksByKey.gsc];
       return vals.every((v) => v === null) ? null : vals.reduce((a, v) => a + n(v), 0);
     })(),
     visits: ga4Available ? funnel.reduce((a, c) => a + c.visits, 0) : null,
+    engagement: engagementAvailable ? funnel.reduce((a, c) => a + c.engagement, 0) : null,
     keyEvents: ga4Available ? funnel.reduce((a, c) => a + c.keyEvents, 0) : null,
   };
 
@@ -380,7 +408,7 @@ async function buildOverview(from, to) {
   // ---- trend ----
   const trendMap = new Map();
   const touch = (d) => {
-    if (!trendMap.has(d)) trendMap.set(d, { d, visits: 0, keyEvents: 0, revenue: 0, spend: 0, impressions: 0 });
+    if (!trendMap.has(d)) trendMap.set(d, { d, visits: 0, engagement: 0, keyEvents: 0, revenue: 0, spend: 0, impressions: 0 });
     return trendMap.get(d);
   };
   if (ga4Available) for (const r of ga4) {
@@ -392,6 +420,10 @@ async function buildOverview(from, to) {
   if (ecom !== null) for (const r of ecom) {
     if (!r.date) continue;
     touch(r.date).revenue += n(r.purchase_revenue);
+  }
+  if (engagementAvailable) for (const r of data.ga4Engagement) {
+    if (!r.date) continue;
+    touch(r.date).engagement = n(touch(r.date).engagement) + n(r.event_count);
   }
   if (data.meta !== null) for (const r of data.meta) {
     if (!r.date) continue;
@@ -434,6 +466,7 @@ async function buildOverview(from, to) {
     unavailable: Object.keys(errors),
     errors,
     ga4Property: GA4_ACCOUNT,
+    engagementEvent: ENGAGEMENT_EVENT,
     syncedAt: new Date().toISOString(),
   };
 }
@@ -495,7 +528,7 @@ async function buildCampaign(code, from, to) {
   // call because 11 metrics in one request is rejected by GA4.
   const ga4MainFields = ga4Fields(
     ["session_manual_campaign_name", "session_manual_source", "session_manual_medium"],
-    ["sessions", "screen_page_views", ...KEY_EVENT_FIELDS]
+    ["sessions", ...KEY_EVENT_FIELDS]
   );
   const ga4RevFields = ga4Fields(
     ["session_manual_campaign_name"],
@@ -513,6 +546,9 @@ async function buildCampaign(code, from, to) {
     ga4Landing: windsor("googleanalytics4",
       ga4Fields(["session_manual_campaign_name", "landing_page"], ["sessions"]),
       from, to, { accounts: [GA4_ACCOUNT] }),
+    ga4Engagement: windsor("googleanalytics4",
+      ga4Fields(["session_manual_campaign_name", "event_name"], ["event_count"]),
+      from, to, { accounts: [GA4_ACCOUNT], filters: ENGAGEMENT_FILTER }),
   };
   // One job per ad platform; unconnected ones fail harmlessly into null.
   for (const p of AD_PLATFORMS) {
@@ -546,13 +582,13 @@ async function buildCampaign(code, from, to) {
     const k = r.session_manual_campaign_name;
     if (!vMap.has(k)) vMap.set(k, {
       code: k, source: r.session_manual_source || "", medium: r.session_manual_medium || "",
-      visits: 0, pageViews: 0, keyEvents: 0, revenue: 0, purchases: 0,
-      impressions: null, clicks: null, spend: null,
+      visits: 0, engagement: 0, keyEvents: 0, contacts: 0, revenue: 0, purchases: 0,
+      spend: null, spendEstimated: false, costPerVisit: null, costPerContact: null,
     });
     const v = vMap.get(k);
     v.visits += n(r.sessions);
-    v.pageViews += n(r.screen_page_views);
     v.keyEvents += sumKeyEvents(r);
+    v.contacts += n(r.conversions_contact_us);
   }
   // Attach revenue after aggregation so it isn't multiplied by source/medium rows.
   for (const [k, rev] of revByCampaign.entries()) {
@@ -611,17 +647,66 @@ async function buildCampaign(code, from, to) {
     landingPages = [...lp.values()].sort((a, b) => b.visits - a.visits).slice(0, 8);
   }
 
+  // Custom "engagement" event counts per utm variant.
+  if (data.ga4Engagement !== null) {
+    for (const r of data.ga4Engagement) {
+      const k = r.session_manual_campaign_name;
+      if (!k || !norm(k).startsWith(needle)) continue;
+      if (!vMap.has(k)) vMap.set(k, {
+        code: k, source: "", medium: "", visits: 0, engagement: 0, keyEvents: 0, contacts: 0,
+        revenue: 0, purchases: 0, spend: null, spendEstimated: false, costPerVisit: null, costPerContact: null,
+      });
+      vMap.get(k).engagement += n(r.event_count);
+    }
+  }
+
   const variants = [...vMap.values()].sort((a, b) => b.visits - a.visits);
+
+  /**
+   * Attribute each platform's spend to the utm variants that came from it.
+   * The join is utm_source -> platform (names can't be matched directly, see
+   * above). Where one paid variant matches a platform the figure is exact; where
+   * several do, spend is split by visit share and flagged `spendEstimated` so
+   * the UI can mark it. Organic variants keep spend = null, not 0.
+   */
+  for (const p of byPlatform) {
+    if (!p.connected || !p.spend) continue;
+    const hints = PLATFORM_SOURCE_HINTS[p.platform] || [];
+    const owned = variants.filter((v) =>
+      hints.some((re) => re.test(v.source)) && (PAID_MEDIUM_RE.test(v.medium) || PAID_MEDIUM_RE.test(v.source))
+    );
+    if (!owned.length) continue;
+    const totalVisits = owned.reduce((a, v) => a + v.visits, 0);
+    for (const v of owned) {
+      const share = owned.length === 1 ? 1 : (totalVisits ? v.visits / totalVisits : 1 / owned.length);
+      v.spend = n(v.spend) + p.spend * share;
+      if (owned.length > 1) v.spendEstimated = true;
+    }
+  }
+  // Spend that belongs to the campaign but couldn't be tied to a utm variant.
+  const attributedSpend = variants.reduce((a, v) => a + n(v.spend), 0);
+  const platformSpend = byPlatform.reduce((a, p) => a + n(p.spend), 0);
+  const unattributedSpend = Math.max(0, platformSpend - attributedSpend);
+
+  for (const v of variants) {
+    v.costPerVisit = v.spend && v.visits ? v.spend / v.visits : null;
+    v.costPerContact = v.spend && v.contacts ? v.spend / v.contacts : null;
+  }
 
   const totals = {
     impressions: anyAdMatch ? byPlatform.reduce((a, p) => a + n(p.impressions), 0) : null,
     visits: variants.reduce((a, v) => a + v.visits, 0),
+    engagement: variants.reduce((a, v) => a + v.engagement, 0),
     keyEvents: variants.reduce((a, v) => a + v.keyEvents, 0),
+    contacts: variants.reduce((a, v) => a + v.contacts, 0),
     revenue: variants.reduce((a, v) => a + v.revenue, 0),
     purchases: variants.reduce((a, v) => a + v.purchases, 0),
-    spend: byPlatform.some((p) => p.connected) ? byPlatform.reduce((a, p) => a + n(p.spend), 0) : null,
+    spend: byPlatform.some((p) => p.connected && p.spend) ? platformSpend : null,
     clicks: anyAdMatch ? byPlatform.reduce((a, p) => a + n(p.clicks), 0) : null,
   };
+  totals.costPerVisit = totals.spend && totals.visits ? totals.spend / totals.visits : null;
+  totals.costPerContact = totals.spend && totals.contacts ? totals.spend / totals.contacts : null;
+  totals.unattributedSpend = unattributedSpend;
   totals.visitRate = totals.impressions ? (totals.visits / totals.impressions) * 100 : null;
   totals.keyEventRate = totals.visits ? (totals.keyEvents / totals.visits) * 100 : null;
   totals.costPerKeyEvent = totals.spend && totals.keyEvents ? totals.spend / totals.keyEvents : null;
@@ -658,6 +743,8 @@ async function buildCampaign(code, from, to) {
     matchedVariants: variants.length,
     totals, variants, keyEventBreakdown, trend,
     byPlatform, adCampaigns, landingPages,
+    unattributedSpend,
+    engagementEvent: ENGAGEMENT_EVENT,
     adImpressionsMatched: anyAdMatch,
     notConnected, matchedNone,
     notes,
