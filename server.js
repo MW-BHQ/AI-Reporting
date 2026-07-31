@@ -285,25 +285,28 @@ async function buildOverview(from, to) {
     gmb: sumOrNull(data.gmb, "impressions"),
     organicSocial: (data.fbOrganic === null && data.ttOrganic === null) ? null
       : n(sumOrNull(data.fbOrganic, "page_impressions")) + n(sumOrNull(data.ttOrganic, "video_views")),
+    /**
+     * LINE reach. The connector's message-EVENT metrics (message_delivered,
+     * message_unique_impression, message_unique_click) return 0 for every date:
+     * they are keyed per broadcast request, not per day, so they don't aggregate
+     * on a date dimension. The message-DELIVERY table is the reliable one, so
+     * reach = broadcast + targeted + API push sends. Opens are preferred if they
+     * ever start reporting.
+     */
     line: (() => {
-      // Prefer real opens, then delivered, then sends — whichever is available.
       const opens = sumOrNull(data.lineEvents, "message_unique_impression");
       if (opens) return opens;
-      const delivered = sumOrNull(data.lineEvents, "message_delivered");
-      if (delivered) return delivered;
       if (data.line === null) return null;
-      return n(sumOrNull(data.line, "message__broadcast")) + n(sumOrNull(data.line, "message__targeting"));
+      return n(sumOrNull(data.line, "message__broadcast"))
+        + n(sumOrNull(data.line, "message__targeting"))
+        + n(sumOrNull(data.line, "message__api_push"));
     })(),
   };
 
-  // What LINE metric actually backed the number above, so the UI can label it.
-  const lineBasis = (() => {
-    if (sumOrNull(data.lineEvents, "message_unique_impression")) return "unique opens";
-    if (sumOrNull(data.lineEvents, "message_delivered")) return "messages delivered";
-    if (data.line !== null) return "messages sent";
-    return "unavailable";
-  })();
-  const lineClicks = sumOrNull(data.lineEvents, "message_unique_click");
+  const lineOpens = sumOrNull(data.lineEvents, "message_unique_impression");
+  const lineBasis = lineOpens ? "unique opens"
+    : (data.line !== null ? "messages sent · opens not reported by connector" : "unavailable");
+  const lineFollowers = data.line === null ? null : Math.max(0, ...data.line.map((r) => n(r.followers__followers)));
 
   // ---- funnel by GA4 channel group ----
   const chanMap = new Map();
@@ -332,7 +335,7 @@ async function buildOverview(from, to) {
   // Platform reach with no GA4 channel equivalent.
   const reachOnly = [
     { channel: "Google Business Profile", impressions: impressions.gmb, note: "profile views" },
-    { channel: "LINE", impressions: impressions.line, note: lineBasis + (lineClicks ? ` · ${lineClicks} link clicks` : "") },
+    { channel: "LINE", impressions: impressions.line, note: lineBasis, sub: lineFollowers ? `${lineFollowers.toLocaleString()} followers` : null },
   ];
 
   const totals = {
@@ -534,7 +537,7 @@ async function buildCampaign(code, from, to) {
     ["sessions", "engaged_sessions", ...KEY_EVENT_FIELDS]
   );
   const ga4RevFields = ga4Fields(
-    ["session_manual_campaign_name"],
+    ["session_manual_campaign_name", "session_manual_source", "session_manual_medium"],
     ["purchase_revenue", "ecommerce_purchases"]
   );
   const ga4DailyFields = ga4Fields(
@@ -564,24 +567,22 @@ async function buildCampaign(code, from, to) {
 
   const matches = data.ga4.filter((r) => norm(r.session_manual_campaign_name).startsWith(needle));
 
-  // Revenue by campaign name, from the second call.
-  const revByCampaign = new Map();
-  if (data.ga4Rev !== null) {
-    for (const r of data.ga4Rev) {
-      const k = r.session_manual_campaign_name;
-      if (!k || !norm(k).startsWith(needle)) continue;
-      if (!revByCampaign.has(k)) revByCampaign.set(k, { revenue: 0, purchases: 0 });
-      const v = revByCampaign.get(k);
-      v.revenue += n(r.purchase_revenue);
-      v.purchases += n(r.ecommerce_purchases);
-    }
-  }
+  /**
+   * Variants are keyed by campaign + source + medium, NOT campaign alone.
+   * One utm_campaign routinely carries several sources (e.g. facebook/paid for
+   * the ad flight plus line/social for the broadcast). Collapsing them into one
+   * row summed the traffic correctly but labelled it with whichever source
+   * happened to be read first — which both misrepresented the channel mix and
+   * broke spend attribution, since the source no longer matched the platform.
+   */
+  const vkey = (r) => `${r.session_manual_campaign_name}\u0000${r.session_manual_source || ""}\u0000${r.session_manual_medium || ""}`;
 
   const vMap = new Map();
   for (const r of matches) {
-    const k = r.session_manual_campaign_name;
+    const k = vkey(r);
     if (!vMap.has(k)) vMap.set(k, {
-      code: k, source: r.session_manual_source || "", medium: r.session_manual_medium || "",
+      code: r.session_manual_campaign_name,
+      source: r.session_manual_source || "", medium: r.session_manual_medium || "",
       visits: 0, engagement: 0, keyEvents: 0, contacts: 0, revenue: 0, purchases: 0,
       spend: null, spendEstimated: false, costPerVisit: null, costPerContact: null,
     });
@@ -591,9 +592,22 @@ async function buildCampaign(code, from, to) {
     v.keyEvents += sumKeyEvents(r);
     v.contacts += n(r.conversions_contact_us);
   }
-  // Attach revenue after aggregation so it isn't multiplied by source/medium rows.
-  for (const [k, rev] of revByCampaign.entries()) {
-    if (vMap.has(k)) { vMap.get(k).revenue = rev.revenue; vMap.get(k).purchases = rev.purchases; }
+
+  // Revenue keyed identically, so no allocation guesswork is needed.
+  if (data.ga4Rev !== null) {
+    for (const r of data.ga4Rev) {
+      const name = r.session_manual_campaign_name;
+      if (!name || !norm(name).startsWith(needle)) continue;
+      const k = vkey(r);
+      if (!vMap.has(k)) vMap.set(k, {
+        code: name, source: r.session_manual_source || "", medium: r.session_manual_medium || "",
+        visits: 0, engagement: 0, keyEvents: 0, contacts: 0, revenue: 0, purchases: 0,
+        spend: null, spendEstimated: false, costPerVisit: null, costPerContact: null,
+      });
+      const v = vMap.get(k);
+      v.revenue += n(r.purchase_revenue);
+      v.purchases += n(r.ecommerce_purchases);
+    }
   }
 
   // Ad-platform campaigns are kept SEPARATE from GA4 utm variants on purpose.

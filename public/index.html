@@ -531,10 +531,10 @@ function renderOverview() {
       <div class="card">
         <h2>Reach without site visits</h2>
         <table><tbody>
-        ${(d.reachOnly||[]).map(r=>`<tr><td class="strong">${esc(r.channel)}<div style="font-size:10.5px;color:var(--faint)">${esc(r.note)}</div></td>
+        ${(d.reachOnly||[]).map(r=>`<tr><td class="strong">${esc(r.channel)}<div style="font-size:10.5px;color:var(--faint)">${esc(r.note)}${r.sub?' · '+esc(r.sub):''}</div></td>
           <td class="num" style="font-size:15px;font-weight:600;color:${isNA(r.impressions)?'var(--faint)':'var(--ink)'}">${num(r.impressions)}</td></tr>`).join('')}
         </tbody></table>
-        <div class="note">These platforms drive awareness and offline action (calls, directions) that GA4 can't attribute as sessions, so they sit outside the funnel.</div>
+        <div class="note">These platforms drive awareness and offline action (calls, directions) GA4 can't attribute as sessions, so they sit outside the funnel. LINE counts <b>messages sent</b>, which exceeds follower count because each follower receives several messages in a period &mdash; it is not unique people reached.</div>
       </div>
     </div>
 
