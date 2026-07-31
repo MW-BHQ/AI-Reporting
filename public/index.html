@@ -173,6 +173,13 @@
   td.strong{color:var(--ink);font-weight:500;}
   td.num{text-align:right;font-variant-numeric:tabular-nums;}
   tr:last-child td{border-bottom:none;}
+  tr.grp td{
+    background:rgba(124,107,245,.05);color:var(--muted);
+    font-size:10px;text-transform:uppercase;letter-spacing:.09em;font-weight:600;
+    padding:8px 0 8px 10px;border-bottom:1px solid var(--line);
+  }
+  tr.tot td{font-weight:600;color:var(--ink);border-top:2px solid var(--line);background:rgba(140,155,190,.05);}
+  td.dim{color:var(--faint);opacity:.5;}
   .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:500;background:var(--violet-soft);color:var(--violet);}
   .pill.warn{background:#FFF1E6;color:#D97B1F;}
   .pill.grey{background:rgba(140,155,190,.14);color:var(--muted);}
@@ -492,9 +499,9 @@ function renderOverview() {
       </div>
       <div class="stage minor">
         <div class="stage-head"><span class="stage-name">Engagement</span>
-          <span class="stage-val ${isNA(d.totals.engagement)?'na':''}">${num(d.totals.engagement)}${d.totals.visits&&d.totals.engagement?` <span style="font-weight:400;">&middot; ${num(d.totals.engagement/d.totals.visits,{dp:2})} per visit</span>`:''}</span></div>
+          <span class="stage-val ${isNA(d.totals.engagement)?'na':''}">${num(d.totals.engagement)}${d.totals.visits&&d.totals.engagement?` <span style="font-weight:400;">&middot; ${num((d.totals.engagement/d.totals.visits)*100,{pct:true})} of visits</span>`:''}</span></div>
         <div class="bar">${seg(f, totalEng, 'engagement')}</div>
-        <div class="stage-note">Your custom GA4 <b>engagement</b> event. This counts <b>events, not sessions</b>, so it can exceed the visit count &mdash; one visit can fire it several times. Read it as depth of interaction, not as a share of visitors.</div>
+        <div class="stage-note">GA4 engaged sessions: over 10 seconds, or 2+ screen views, or containing a key event. A subset of visits, so the funnel narrows properly. Not a key event itself &mdash; a quality signal between arriving and acting.</div>
       </div>
       <div class="stage">
         <div class="stage-head"><span class="stage-name">Key Events</span>
@@ -509,7 +516,7 @@ function renderOverview() {
     <div class="grid g-2-1 mt">
       <div class="card">
         <h2>Channel detail</h2>
-        <table><thead><tr><th>Channel</th><th class="num">Impr</th><th class="num">Clicks</th><th class="num">Visits</th><th class="num">Engmt. events</th><th class="num">Key events</th><th class="num">KE / visit</th></tr></thead><tbody>
+        <table><thead><tr><th>Channel</th><th class="num">Impr</th><th class="num">Clicks</th><th class="num">Visits</th><th class="num">Engaged</th><th class="num">Key events</th><th class="num">KE / visit</th></tr></thead><tbody>
         ${f.map((c,i)=>`<tr>
           <td class="strong"><span class="chip" style="background:${colorFor(i)};margin-right:7px;"></span>${esc(c.channel)}</td>
           <td class="num">${num(c.impressions)}</td>
@@ -596,7 +603,7 @@ function renderOverview() {
 
   drawChart('trendChart', d.trend||[], [
     { label:'Visits', key:'visits', color:'#4B8DF8', axis:'y' },
-    { label:'Engagement events', key:'engagement', color:'#9FC8C2', axis:'y' },
+    { label:'Engaged sessions', key:'engagement', color:'#9FC8C2', axis:'y' },
     { label:'Key events', key:'keyEvents', color:'#7C6BF5', axis:'y1' },
     { label:'Spend', key:'spend', color:'#F2A93B', axis:'y1' },
   ]);
@@ -723,10 +730,9 @@ function renderCampaignBody(d) {
         <div class="bar"><span style="width:${clickPct}%;background:#A9B4CE"></span></div></div>
       <div class="stage"><div class="stage-head"><span class="stage-name">Visits</span><span class="stage-val">${num(t.visits)}</span></div>
         <div class="bar"><span style="width:${visitPct}%;background:linear-gradient(90deg,#4B8DF8,#35C3B4)"></span></div></div>
-      <div class="stage minor"><div class="stage-head"><span class="stage-name">Engagement events</span>
-        <span class="stage-val ${isNA(t.engagement)?'na':''}">${num(t.engagement)}${t.visits&&t.engagement?` <span style="font-weight:400">&middot; ${num(t.engagement/t.visits,{dp:2})} per visit</span>`:''}</span></div>
-        <div class="bar"><span style="width:${engPct}%;background:#9FC8C2"></span></div>
-        <div class="stage-note">Custom GA4 <b>engagement</b> event &mdash; an event count, so it can exceed visits.</div></div>
+      <div class="stage minor"><div class="stage-head"><span class="stage-name">Engaged sessions</span>
+        <span class="stage-val ${isNA(t.engagement)?'na':''}">${num(t.engagement)}${t.visits&&t.engagement?` <span style="font-weight:400">&middot; ${num((t.engagement/t.visits)*100,{pct:true})} of visits</span>`:''}</span></div>
+        <div class="bar"><span style="width:${engPct}%;background:#9FC8C2"></span></div></div>
       <div class="stage"><div class="stage-head"><span class="stage-name">Key events</span><span class="stage-val">${num(t.keyEvents)}</span></div>
         <div class="bar"><span style="width:${kePct}%;background:linear-gradient(90deg,#35C3B4,#3BC97F)"></span></div></div>
       ${t.costPerKeyEvent!=null?`<div class="note">Cost per key event: <b>${num(t.costPerKeyEvent,{money:true})}</b> · ${num(t.spend,{money:true})} spend ÷ ${num(t.keyEvents)} key events.</div>`:''}
@@ -747,41 +753,53 @@ function renderCampaignBody(d) {
       </div>
     </div>
 
-    <div class="grid g-2-1 mt">
-      <div class="card"><h2>Site traffic &middot; by utm_campaign variant</h2>
-        <table><thead><tr><th>utm_campaign</th><th>Source / medium</th><th class="num">Ad spend</th><th class="num">Visits</th><th class="num">Key events</th><th class="num">Cost / visit</th><th class="num">Cost / contact</th><th class="num">Revenue</th></tr></thead><tbody>
-        ${(d.variants||[]).map(v=>`<tr>
-          <td class="strong i18n">${esc(v.code)}</td>
-          <td>${esc(v.source||'—')}${v.medium?' / '+esc(v.medium):''}</td>
-          <td class="num">${num(v.spend,{money:true})}${v.spendEstimated?' <span class="pill grey" title="Split across variants by visit share">~</span>':''}</td>
-          <td class="num">${num(v.visits)}</td>
-          <td class="num">${num(v.keyEvents)}</td>
-          <td class="num">${num(v.costPerVisit,{money:true})}</td>
-          <td class="num">${num(v.costPerContact,{money:true})}</td>
-          <td class="num">${num(v.revenue,{money:true})}</td>
-        </tr>`).join('')||'<tr><td colspan="8" class="num">no utm variants matched this code</td></tr>'}
-        </tbody></table>
-        <div class="note">GA4, keyed on session_manual_campaign_name. Visits and key events can only come from here &mdash; an ad platform never sees them, its reporting stops at the click. Ad spend is joined by utm_source, so organic rows are blank rather than zero; a <span class="pill grey">~</span> marks spend split across several variants by visit share. &ldquo;Contact&rdquo; is the contact-us key event.</div>
-      </div>
-      <div class="card"><h2>Media &middot; by ad platform</h2>
-        <table><thead><tr><th>Platform</th><th class="num">Impr</th><th class="num">Spend</th></tr></thead><tbody>
-        ${(d.byPlatform||[]).map(p=>`<tr>
-          <td class="strong">${esc(p.platform)}${p.connected?'':' <span class="pill warn">not connected</span>'}</td>
-          <td class="num">${num(p.impressions)}</td><td class="num">${num(p.spend,{money:true})}</td>
-        </tr>`).join('')}
-        </tbody></table>
-        <div class="note">Marked <b>not connected</b> means the platform isn't authorised in Windsor &mdash; its spend is absent from the funnel, not zero.</div>
-      </div>
-    </div>
+    <div class="card mt">
+      <h2>Campaign detail</h2>
+      <table>
+        <thead><tr>
+          <th>Name</th><th>Source</th>
+          <th class="num">Impr</th><th class="num">Clicks</th><th class="num">Ad spend</th>
+          <th class="num">Visits</th><th class="num">Engaged</th><th class="num">Key events</th>
+          <th class="num">Cost / visit</th><th class="num">Cost / contact</th><th class="num">Revenue</th>
+        </tr></thead>
+        <tbody>
+          ${(d.adCampaigns||[]).length?`<tr class="grp"><td colspan="11">Media &mdash; ad platform campaigns</td></tr>` + d.adCampaigns.slice(0,20).map(c=>`<tr>
+            <td class="strong i18n" style="font-size:11.5px;word-break:break-all;">${esc(c.name)}</td>
+            <td><span class="pill">${esc(c.platform)}</span></td>
+            <td class="num">${num(c.impressions)}</td>
+            <td class="num">${num(c.clicks)}</td>
+            <td class="num">${num(c.spend,{money:true})}</td>
+            <td class="num dim">&mdash;</td><td class="num dim">&mdash;</td><td class="num dim">&mdash;</td>
+            <td class="num dim">&mdash;</td><td class="num dim">&mdash;</td><td class="num dim">&mdash;</td>
+          </tr>`).join(''):''}
 
-    ${(d.adCampaigns||[]).length?`<div class="card mt"><h2>Ad campaigns matched to this code</h2>
-      <table><thead><tr><th>Ad campaign name</th><th>Platform</th><th class="num">Impr</th><th class="num">Clicks</th><th class="num">Spend</th></tr></thead><tbody>
-      ${d.adCampaigns.slice(0,20).map(c=>`<tr><td class="strong i18n" style="font-size:11.5px;word-break:break-all;">${esc(c.name)}</td>
-        <td>${esc(c.platform)}</td><td class="num">${num(c.impressions)}</td>
-        <td class="num">${num(c.clicks)}</td><td class="num">${num(c.spend,{money:true})}</td></tr>`).join('')}
-      </tbody></table>
-      <div class="note">Ad platform campaign names and utm_campaign values are different strings sharing only the code prefix, so they're listed separately rather than merged into the traffic table. The funnel joins the two by code: impressions and spend from here, visits and key events from GA4.</div>
-    </div>`:''}
+          ${(d.variants||[]).length?`<tr class="grp"><td colspan="11">Traffic &mdash; utm_campaign variants</td></tr>` + d.variants.map(v=>`<tr>
+            <td class="strong i18n">${esc(v.code)}</td>
+            <td>${esc(v.source||'—')}${v.medium?' <span style="color:var(--faint)">/ '+esc(v.medium)+'</span>':''}</td>
+            <td class="num dim">&mdash;</td><td class="num dim">&mdash;</td>
+            <td class="num">${num(v.spend,{money:true})}${v.spendEstimated?' <span class="pill grey" title="Split across variants by visit share">~</span>':''}</td>
+            <td class="num">${num(v.visits)}</td>
+            <td class="num">${num(v.engagement)}</td>
+            <td class="num">${num(v.keyEvents)}</td>
+            <td class="num">${num(v.costPerVisit,{money:true})}</td>
+            <td class="num">${num(v.costPerContact,{money:true})}</td>
+            <td class="num">${num(v.revenue,{money:true})}</td>
+          </tr>`).join(''):''}
+
+          <tr class="tot">
+            <td class="strong">Total</td><td></td>
+            <td class="num">${num(t.impressions)}</td><td class="num">${num(t.clicks)}</td>
+            <td class="num">${num(t.spend,{money:true})}</td>
+            <td class="num">${num(t.visits)}</td><td class="num">${num(t.engagement)}</td>
+            <td class="num">${num(t.keyEvents)}</td>
+            <td class="num">${num(t.costPerVisit,{money:true})}</td>
+            <td class="num">${num(t.costPerContact,{money:true})}</td>
+            <td class="num">${num(t.revenue,{money:true})}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note">Two sides of one campaign, joined by the code. <b>Media</b> rows are ad platform campaigns &mdash; they report impressions, clicks and spend, but never visits or key events, because platform reporting stops at the click. <b>Traffic</b> rows are utm_campaign values in GA4 &mdash; the only place visits, engaged sessions and key events exist. Names differ between the two because they're separate strings sharing only the code prefix. Ad spend on a traffic row is attributed via utm_source, so organic rows are blank rather than zero, and a <span class="pill grey">~</span> marks spend split across several variants by visit share. The total row takes impressions and spend from Media, and visits, engagement and key events from Traffic &mdash; no double counting. &ldquo;Contact&rdquo; is the contact-us key event.${d.notConnected&&d.notConnected.length?` Not authorised in Windsor: ${d.notConnected.map(esc).join(', ')} &mdash; any spend there is absent, not zero.`:''}</div>
+    </div>
 
     <div class="card mt"><h2>Daily</h2><div class="chart-wrap"><canvas id="campChart"></canvas></div></div>
   `;

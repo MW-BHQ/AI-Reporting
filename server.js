@@ -41,15 +41,16 @@ const MA_ENABLED = Boolean(MA_LOCATION && MA_TEMPLATE);
 const CACHE_TTL_MS = Number(process.env.CACHE_TTL_MS || 10 * 60 * 1000);
 
 /**
- * The Engagement funnel stage uses a CUSTOM GA4 event named "engagement", not
- * GA4's built-in `engaged_sessions` or `user_engagement`. Because it isn't
- * starred as a key event there is no `conversions_engagement` field, so it has
- * to be counted via the event_name dimension + event_count metric with a
- * server-side filter. Note this counts EVENTS, so it can legitimately exceed
- * session count — the UI says so rather than implying a funnel leak.
+ * The Engagement funnel stage uses GA4's `engaged_sessions`: sessions over 10
+ * seconds, or with 2+ screen views, or containing a key event.
+ *
+ * An earlier build counted a custom "engagement" EVENT instead. That was
+ * abandoned deliberately: an event count is unbounded, so it exceeded the visit
+ * count above it and read like a broken funnel. engaged_sessions is a subset of
+ * sessions, so the stage always narrows as a funnel should. (GA4 exposes no
+ * "engaged users" metric — only engaged sessions and active users — so the
+ * label says sessions.)
  */
-const ENGAGEMENT_EVENT = process.env.ENGAGEMENT_EVENT || "engagement";
-const ENGAGEMENT_FILTER = [["event_name", "eq", ENGAGEMENT_EVENT]];
 
 let VERSION = "unknown";
 try { VERSION = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8")).version; } catch (_) {}
@@ -236,7 +237,7 @@ async function buildOverview(from, to) {
   // Funnel call: 9 metrics (sessions, page views, 7 key events).
   const ga4FunnelFields = ga4Fields(
     ["date", "session_default_channel_group"],
-    ["sessions", ...KEY_EVENT_FIELDS]
+    ["sessions", "engaged_sessions", ...KEY_EVENT_FIELDS]
   );
   // Commerce call: 5 metrics.
   const ga4EcomFields = ga4Fields(
@@ -258,9 +259,6 @@ async function buildOverview(from, to) {
     ga4Items: windsor("googleanalytics4",
       ga4Fields(["item_name"], ["item_view_events", "items_added_to_cart", "items_purchased", "item_revenue"]),
       from, to, { accounts: [GA4_ACCOUNT] }),
-    ga4Engagement: windsor("googleanalytics4",
-      ga4Fields(["date", "session_default_channel_group", "event_name"], ["event_count"]),
-      from, to, { accounts: [GA4_ACCOUNT], filters: ENGAGEMENT_FILTER }),
     ga4Month: windsor("googleanalytics4",
       ga4Fields(["date"], ["purchase_revenue", "ecommerce_purchases"]),
       monthFrom, monthTo, { accounts: [GA4_ACCOUNT] }),
@@ -315,19 +313,10 @@ async function buildOverview(from, to) {
       if (!chanMap.has(label)) chanMap.set(label, { channel: label, visits: 0, engagement: 0, keyEvents: 0 });
       const c = chanMap.get(label);
       c.visits += n(r.sessions);
+      c.engagement += n(r.engaged_sessions);
       c.keyEvents += sumKeyEvents(r);
     }
   }
-  // Custom "engagement" event counts, folded in by channel.
-  const engagementAvailable = data.ga4Engagement !== null;
-  if (engagementAvailable) {
-    for (const r of data.ga4Engagement) {
-      const label = r.session_default_channel_group || "Unassigned";
-      if (!chanMap.has(label)) chanMap.set(label, { channel: label, visits: 0, engagement: 0, keyEvents: 0 });
-      chanMap.get(label).engagement += n(r.event_count);
-    }
-  }
-
   // Ad clicks belong to the same channels that have ad impressions.
   const adClicksByKey = { meta: sumOrNull(data.meta, "clicks"), gsc: sumOrNull(data.gsc, "clicks"), organicSocial: null };
   const funnel = [...chanMap.values()].map((c) => {
@@ -356,7 +345,7 @@ async function buildOverview(from, to) {
       return vals.every((v) => v === null) ? null : vals.reduce((a, v) => a + n(v), 0);
     })(),
     visits: ga4Available ? funnel.reduce((a, c) => a + c.visits, 0) : null,
-    engagement: engagementAvailable ? funnel.reduce((a, c) => a + c.engagement, 0) : null,
+    engagement: ga4Available ? funnel.reduce((a, c) => a + c.engagement, 0) : null,
     keyEvents: ga4Available ? funnel.reduce((a, c) => a + c.keyEvents, 0) : null,
   };
 
@@ -421,9 +410,9 @@ async function buildOverview(from, to) {
     if (!r.date) continue;
     touch(r.date).revenue += n(r.purchase_revenue);
   }
-  if (engagementAvailable) for (const r of data.ga4Engagement) {
+  if (ga4Available) for (const r of ga4) {
     if (!r.date) continue;
-    touch(r.date).engagement = n(touch(r.date).engagement) + n(r.event_count);
+    touch(r.date).engagement += n(r.engaged_sessions);
   }
   if (data.meta !== null) for (const r of data.meta) {
     if (!r.date) continue;
@@ -466,7 +455,6 @@ async function buildOverview(from, to) {
     unavailable: Object.keys(errors),
     errors,
     ga4Property: GA4_ACCOUNT,
-    engagementEvent: ENGAGEMENT_EVENT,
     syncedAt: new Date().toISOString(),
   };
 }
@@ -543,7 +531,7 @@ async function buildCampaign(code, from, to) {
   // call because 11 metrics in one request is rejected by GA4.
   const ga4MainFields = ga4Fields(
     ["session_manual_campaign_name", "session_manual_source", "session_manual_medium"],
-    ["sessions", ...KEY_EVENT_FIELDS]
+    ["sessions", "engaged_sessions", ...KEY_EVENT_FIELDS]
   );
   const ga4RevFields = ga4Fields(
     ["session_manual_campaign_name"],
@@ -561,9 +549,6 @@ async function buildCampaign(code, from, to) {
     ga4Landing: windsor("googleanalytics4",
       ga4Fields(["session_manual_campaign_name", "landing_page"], ["sessions"]),
       from, to, { accounts: [GA4_ACCOUNT] }),
-    ga4Engagement: windsor("googleanalytics4",
-      ga4Fields(["session_manual_campaign_name", "event_name"], ["event_count"]),
-      from, to, { accounts: [GA4_ACCOUNT], filters: ENGAGEMENT_FILTER }),
   };
   // One job per ad platform; unconnected ones fail harmlessly into null.
   for (const p of AD_PLATFORMS) {
@@ -602,6 +587,7 @@ async function buildCampaign(code, from, to) {
     });
     const v = vMap.get(k);
     v.visits += n(r.sessions);
+    v.engagement += n(r.engaged_sessions);
     v.keyEvents += sumKeyEvents(r);
     v.contacts += n(r.conversions_contact_us);
   }
@@ -660,19 +646,6 @@ async function buildCampaign(code, from, to) {
       lp.get(page).visits += n(r.sessions);
     }
     landingPages = [...lp.values()].sort((a, b) => b.visits - a.visits).slice(0, 8);
-  }
-
-  // Custom "engagement" event counts per utm variant.
-  if (data.ga4Engagement !== null) {
-    for (const r of data.ga4Engagement) {
-      const k = r.session_manual_campaign_name;
-      if (!k || !norm(k).startsWith(needle)) continue;
-      if (!vMap.has(k)) vMap.set(k, {
-        code: k, source: "", medium: "", visits: 0, engagement: 0, keyEvents: 0, contacts: 0,
-        revenue: 0, purchases: 0, spend: null, spendEstimated: false, costPerVisit: null, costPerContact: null,
-      });
-      vMap.get(k).engagement += n(r.event_count);
-    }
   }
 
   const variants = [...vMap.values()].sort((a, b) => b.visits - a.visits);
@@ -781,7 +754,6 @@ async function buildCampaign(code, from, to) {
     totals, variants, keyEventBreakdown, trend,
     byPlatform, adCampaigns, landingPages,
     unattributedSpend,
-    engagementEvent: ENGAGEMENT_EVENT,
     emptyResult, dateHint, launchDate: launch,
     adImpressionsMatched: anyAdMatch,
     notConnected, matchedNone,
