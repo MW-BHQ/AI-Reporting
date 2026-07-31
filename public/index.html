@@ -653,12 +653,40 @@ async function browseCampaigns() {
 
 function renderCampaignBody(d) {
   const t = d.totals;
-  const impPct = 100;
-  const visitPct = t.impressions ? Math.max((t.visits/t.impressions)*100, 0.6) : 100;
-  const kePct = t.impressions ? Math.max((t.keyEvents/t.impressions)*100, 0.4)
-                              : (t.visits ? Math.max((t.keyEvents/t.visits)*100,0.4) : 0);
-  const clickPct = t.impressions && t.clicks ? Math.max((t.clicks/t.impressions)*100, 0.5) : (t.clicks?100:0);
-  const engPct = Math.min(100, t.impressions ? Math.max((t.engagement/t.impressions)*100, 0.4)
+
+  // Nothing matched: an explanation beats a funnel full of zeros.
+  if (d.emptyResult) {
+    const hint = d.dateHint;
+    $('campBody').innerHTML = `<div class="card"><div class="state">
+      <div class="big">No data for &ldquo;${esc(d.code)}&rdquo; in this date range</div>
+      ${hint ? `<div class="warnbox" style="max-width:560px;margin-top:6px;text-align:left;">
+          <b>Likely the date range.</b> ${esc(hint.message)}
+        </div>
+        <button class="btn btn-primary" id="fixRange" data-launch="${esc(hint.launch)}">Widen range to include ${esc(hint.launch)}</button>`
+        : `<div style="max-width:480px;font-size:12.5px;">No GA4 traffic and no ad campaigns carry this prefix between ${esc(d.range.from)} and ${esc(d.range.to)}. Check the spelling, try a shorter prefix, or browse the codes that did run.</div>`}
+      <button class="btn btn-ghost" id="emptyBrowse" style="margin-top:4px;">Browse codes that ran in this range</button>
+    </div></div>`;
+    const fix = document.getElementById('fixRange');
+    if (fix) fix.addEventListener('click', () => {
+      // Start a fortnight before launch, run to today — enough to catch the flight.
+      const l = new Date(fix.dataset.launch);
+      l.setDate(l.getDate() - 14);
+      $('from').value = fmtISO(l);
+      $('to').value = fmtISO(new Date());
+      [...$('presets').children].forEach(b => b.classList.remove('active'));
+      runCampaign();
+    });
+    const eb = document.getElementById('emptyBrowse');
+    if (eb) eb.addEventListener('click', browseCampaigns);
+    return;
+  }
+  const impPct = t.impressions ? 100 : 0;
+  // Without an impressions baseline, scale the lower stages against visits.
+  const visitPct = !t.visits ? 0 : (t.impressions ? Math.max((t.visits/t.impressions)*100, 0.6) : 100);
+  const kePct = !t.keyEvents ? 0 : (t.impressions ? Math.max((t.keyEvents/t.impressions)*100, 0.4)
+                              : (t.visits ? Math.max((t.keyEvents/t.visits)*100,0.4) : 0));
+  const clickPct = !t.clicks ? 0 : (t.impressions ? Math.max((t.clicks/t.impressions)*100, 0.5) : 100);
+  const engPct = !t.engagement ? 0 : Math.min(100, t.impressions ? Math.max((t.engagement/t.impressions)*100, 0.4)
                                : (t.visits ? Math.max((t.engagement/t.visits)*100,0.4) : 0));
 
   $('campBody').innerHTML = `
@@ -686,7 +714,7 @@ function renderCampaignBody(d) {
     </div>
 
     <div class="card mt">
-      <h2>Campaign funnel · ${esc(d.code)}</h2>
+      <h2>Campaign funnel · ${esc(d.code)}${d.launchDate?` <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--faint);">· code dates to ${esc(d.launchDate)}</span>`:''}</h2>
       <div class="stage"><div class="stage-head"><span class="stage-name">Impressions</span>
         <span class="stage-val ${isNA(t.impressions)?'na':''}">${num(t.impressions)}</span></div>
         <div class="bar"><span style="width:${isNA(t.impressions)?0:impPct}%;background:linear-gradient(90deg,#7C6BF5,#4B8DF8)"></span></div></div>

@@ -486,6 +486,21 @@ app.get("/api/overview", async (req, res) => {
 
 // ------------------------------------------------------------ /api/campaigns
 
+/**
+ * Campaign codes follow YYMMDD-NN_brand_objective, so the first six digits are
+ * the launch date. Decoding it lets the tool explain an empty result ("this
+ * campaign started before your date range") instead of just showing zeros.
+ * Returns null for codes that don't follow the convention.
+ */
+function codeLaunchDate(code) {
+  const m = String(code || "").match(/^(\d{2})(\d{2})(\d{2})/);
+  if (!m) return null;
+  const y = 2000 + Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const iso = `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  return Number.isNaN(new Date(iso).getTime()) ? null : iso;
+}
+
 const NON_CAMPAIGN = new Set(["(organic)", "(not set)", "(referral)", "(direct)", "(ai-assistant)", "(none)"]);
 const isPlatformId = (s) => /^\d{6,}$/.test(String(s || "").trim());
 
@@ -730,8 +745,30 @@ async function buildCampaign(code, from, to) {
 
   const notConnected = byPlatform.filter((p) => !p.connected).map((p) => p.platform);
   const matchedNone = byPlatform.filter((p) => p.connected && p.matched === 0).map((p) => p.platform);
+
+  // Nothing at all matched: most often the date range, since the code encodes
+  // its own launch date. Say that plainly instead of rendering a zeroed funnel.
+  const launch = codeLaunchDate(code);
+  const emptyResult = variants.length === 0 && !anyAdMatch;
+  let dateHint = null;
+  if (emptyResult && launch) {
+    if (launch < from) {
+      dateHint = {
+        launch,
+        message: `This code decodes to a launch date of ${launch}, which is before your selected range starts (${from}). The campaign most likely ran earlier — widen the range to cover ${launch}.`,
+      };
+    } else if (launch > to) {
+      dateHint = {
+        launch,
+        message: `This code decodes to a launch date of ${launch}, which is after your selected range ends (${to}). Extend the range to include it.`,
+      };
+    }
+  }
+
   let notes = "";
-  if (!anyAdMatch) {
+  if (emptyResult) {
+    notes = `Nothing matched "${code}" in ${from} to ${to} — no GA4 traffic and no ad campaigns.`;
+  } else if (!anyAdMatch) {
     notes = `No ad platform reported a campaign matching this code, so the Impressions stage is unavailable. GA4 visits and key events are complete.`;
     if (notConnected.length) notes += ` Not connected to Windsor: ${notConnected.join(", ")}.`;
   } else if (notConnected.length) {
@@ -745,6 +782,7 @@ async function buildCampaign(code, from, to) {
     byPlatform, adCampaigns, landingPages,
     unattributedSpend,
     engagementEvent: ENGAGEMENT_EVENT,
+    emptyResult, dateHint, launchDate: launch,
     adImpressionsMatched: anyAdMatch,
     notConnected, matchedNone,
     notes,
