@@ -168,7 +168,11 @@
 
   /* ---------------- tables ---------------- */
   table{width:100%;border-collapse:collapse;font-size:12.5px;}
-  th{text-align:left;color:var(--faint);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:0 0 9px;border-bottom:1px solid var(--line);}
+  th{text-align:left;color:var(--muted);font-weight:500;font-size:11.5px;letter-spacing:0;padding:0 8px 9px 0;border-bottom:1px solid var(--line);white-space:nowrap;}
+  th.num{text-align:right;padding-right:0;}
+  /* Long ad/campaign names truncate; the full string is on hover. */
+  td.trunc{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  td.trunc:hover{cursor:help;}
   td{padding:9px 0;border-bottom:1px solid var(--line);color:var(--ink-2);}
   td.strong{color:var(--ink);font-weight:500;}
   td.num{text-align:right;font-variant-numeric:tabular-nums;}
@@ -644,13 +648,14 @@ async function browseCampaigns() {
   try {
     const l = await loadCampaignList();
     const rows = (l.campaigns||[]).slice(0,60).map(c => `<tr>
-      <td class="strong i18n" style="cursor:pointer" data-code="${esc(c.code)}">${esc(c.code)}
+      <td class="strong i18n" style="cursor:pointer" data-code="${esc(c.code)}">
+        ${c.topic?`${esc(c.topic)}<div style="font-size:10.5px;color:var(--faint);font-weight:400;">${esc(c.code)}</div>`:esc(c.code)}
         ${c.untagged?'<span class="pill warn" style="margin-left:7px;">untagged</span>':''}</td>
       <td class="num">${num(c.visits)}</td></tr>`).join('');
     $('campBody').innerHTML = `<div class="card">
       <h2>Campaign codes in range · ${l.total} total</h2>
       ${l.untaggedCount ? `<div class="warnbox"><b>${l.untaggedCount} codes look untagged.</b> They are bare numeric platform IDs, which means those ads reached GA4 without a proper utm_campaign — so they can't be grouped with their campaign. Worth fixing at the tagging step.</div>` : ''}
-      <table><thead><tr><th>Code (click to analyse)</th><th class="num">Visits</th></tr></thead><tbody>${rows||'<tr><td colspan="2" class="num">none</td></tr>'}</tbody></table>
+      <table><thead><tr><th>Campaign (click to analyse)</th><th class="num">Visits</th></tr></thead><tbody>${rows||'<tr><td colspan="2" class="num">none</td></tr>'}</tbody></table>
     </div>`;
     $('campBody').querySelectorAll('td[data-code]').forEach(td => td.addEventListener('click', () => {
       $('campInput').value = td.dataset.code; runCampaign();
@@ -711,7 +716,8 @@ function renderCampaignBody(d) {
     </div>
     <div class="grid g-5 mt">
       <div class="stat card"><div class="lab">Variants matched</div><div class="val">${num(d.matchedVariants)}</div></div>
-      <div class="stat card"><div class="lab">Impressions</div><div class="val ${isNA(t.impressions)?'na':''}">${num(t.impressions)}</div></div>
+      <div class="stat card"><div class="lab">Impressions</div><div class="val ${isNA(t.impressions)?'na':''}">${num(t.impressions)}</div>
+        <div class="sub">${!isNA(t.paidImpressions)||!isNA(t.organicImpressions)?`${num(t.paidImpressions)} paid · ${num(t.organicImpressions)} organic`:''}</div></div>
       <div class="stat card"><div class="lab">Visits</div><div class="val">${num(t.visits)}</div>
         <div class="sub">${t.visitRate!=null?num(t.visitRate,{pct:true,dp:2})+' of impressions':''}</div></div>
       <div class="stat card"><div class="lab">Key events</div><div class="val">${num(t.keyEvents)}</div>
@@ -721,7 +727,7 @@ function renderCampaignBody(d) {
     </div>
 
     <div class="card mt">
-      <h2>Campaign funnel · ${esc(d.code)}${d.launchDate?` <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--faint);">· code dates to ${esc(d.launchDate)}</span>`:''}</h2>
+      <h2>${d.topic?esc(d.topic):'Campaign funnel'} <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--faint);">· ${esc(d.code)}${d.launchDate?` · dated ${esc(d.launchDate)}`:''}</span></h2>
       <div class="stage"><div class="stage-head"><span class="stage-name">Impressions</span>
         <span class="stage-val ${isNA(t.impressions)?'na':''}">${num(t.impressions)}</span></div>
         <div class="bar"><span style="width:${isNA(t.impressions)?0:impPct}%;background:linear-gradient(90deg,#7C6BF5,#4B8DF8)"></span></div></div>
@@ -753,30 +759,45 @@ function renderCampaignBody(d) {
       </div>
     </div>
 
+    ${(d.organicPosts&&d.organicPosts.length)||(d.shortLinks&&d.shortLinks.length)?`<div class="card mt">
+      <h2>Organic reach · matched by short link</h2>
+      ${d.organicTotals&&d.organicTotals.posts?`<div class="grid g-3" style="margin-bottom:14px;">
+        <div class="stat"><div class="lab">Posts found</div><div class="val">${num(d.organicTotals.posts)}</div></div>
+        <div class="stat"><div class="lab">Post impressions</div><div class="val">${num(d.organicTotals.impressions)}</div></div>
+        <div class="stat"><div class="lab">Post engagements</div><div class="val">${num(d.organicTotals.engagements)}</div></div>
+      </div>`:''}
+      ${(d.organicPosts||[]).length?`<table><thead><tr><th>Post</th><th class="num">Impr</th><th class="num">Engmt</th></tr></thead><tbody>
+      ${d.organicPosts.slice(0,10).map(o=>`<tr>
+        <td class="strong i18n trunc" title="${esc(o.excerpt)}">${o.permalink?`<a href="${esc(o.permalink)}" target="_blank" rel="noopener" style="color:var(--violet);text-decoration:none;">${esc(o.excerpt)}</a>`:esc(o.excerpt)}</td>
+        <td class="num">${num(o.impressions)}</td><td class="num">${num(o.engagements)}</td></tr>`).join('')}
+      </tbody></table>`:`<div style="font-size:12.5px;color:var(--muted);">No organic posts carried this campaign's short links in this date range.</div>`}
+      ${d.lineMessages&&d.lineMessages.messages.length?`<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:10px;">LINE broadcasts · ${d.lineMessages.messages.length} message(s)</div>
+        <div class="grid g-3">
+          <div class="stat"><div class="lab">Delivered</div><div class="val">${num(d.lineMessages.delivered)}</div></div>
+          <div class="stat"><div class="lab">Opened</div><div class="val">${num(d.lineMessages.opens)}</div></div>
+          <div class="stat"><div class="lab">Link clicks</div><div class="val">${num(d.lineMessages.clicks)}</div></div>
+        </div></div>`:''}
+      ${(d.shortLinks||[]).length?`<div class="note"><b>Registered short links:</b> ${d.shortLinks.slice(0,8).map(l=>`<code style="font-size:11px;">${esc(l)}</code>`).join(' &middot; ')}${d.shortLinks.length>8?` +${d.shortLinks.length-8} more`:''}<br>Organic posts are found by searching post text for these links, so a post only appears here if it used a link registered in UTM Builder 2026. LINE broadcasts and EDM can't be matched this way &mdash; those platforms don't expose message content.</div>`:'<div class="note">No short links are registered against this code in UTM Builder 2026, so organic posts can\'t be matched.</div>'}
+    </div>`:''}
+
+    ${(d.sheetErrors&&d.sheetErrors.length)?`<div class="warnbox">Internal sheets unavailable: ${d.sheetErrors.map(esc).join(' | ')} &mdash; campaign names and organic matching are degraded. Check <code>/api/sheets-check</code>.</div>`:''}
+
     <div class="card mt">
       <h2>Campaign detail</h2>
       <table>
         <thead><tr>
-          <th>Name</th><th>Source</th>
-          <th class="num">Impr</th><th class="num">Clicks</th><th class="num">Ad spend</th>
-          <th class="num">Visits</th><th class="num">Engaged</th><th class="num">Key events</th>
-          <th class="num">Cost / visit</th><th class="num">Cost / contact</th><th class="num">Revenue</th>
+          <th>Campaign</th><th>Source</th>
+          <th class="num">Impr</th><th class="num">Clicks</th><th class="num">Spend</th>
+          <th class="num">Visits</th><th class="num">Engaged</th><th class="num">Key ev.</th>
+          <th class="num">฿/visit</th><th class="num">฿/contact</th><th class="num">Revenue</th>
         </tr></thead>
         <tbody>
-          ${(d.adCampaigns||[]).length?`<tr class="grp"><td colspan="11">Media &mdash; ad platform campaigns</td></tr>` + d.adCampaigns.slice(0,20).map(c=>`<tr>
-            <td class="strong i18n" style="font-size:11.5px;word-break:break-all;">${esc(c.name)}</td>
-            <td><span class="pill">${esc(c.platform)}</span></td>
-            <td class="num">${num(c.impressions)}</td>
-            <td class="num">${num(c.clicks)}</td>
-            <td class="num">${num(c.spend,{money:true})}</td>
-            <td class="num dim">&mdash;</td><td class="num dim">&mdash;</td><td class="num dim">&mdash;</td>
-            <td class="num dim">&mdash;</td><td class="num dim">&mdash;</td><td class="num dim">&mdash;</td>
-          </tr>`).join(''):''}
-
-          ${(d.variants||[]).length?`<tr class="grp"><td colspan="11">Traffic &mdash; utm_campaign variants</td></tr>` + d.variants.map(v=>`<tr>
-            <td class="strong i18n">${esc(v.code)}</td>
+          ${(d.variants||[]).map(v=>`<tr>
+            <td class="strong i18n trunc" title="${esc(v.code)}${v.adNames&&v.adNames.length?' \u2014 ad campaigns: '+esc(v.adNames.join(' | ')):''}">${esc(v.code)}</td>
             <td>${esc(v.source||'—')}${v.medium?' <span style="color:var(--faint)">/ '+esc(v.medium)+'</span>':''}</td>
-            <td class="num dim">&mdash;</td><td class="num dim">&mdash;</td>
+            <td class="num">${num(v.impressions)}</td>
+            <td class="num">${num(v.clicks)}</td>
             <td class="num">${num(v.spend,{money:true})}${v.spendEstimated?' <span class="pill grey" title="Split across variants by visit share">~</span>':''}</td>
             <td class="num">${num(v.visits)}</td>
             <td class="num">${num(v.engagement)}</td>
@@ -784,7 +805,16 @@ function renderCampaignBody(d) {
             <td class="num">${num(v.costPerVisit,{money:true})}</td>
             <td class="num">${num(v.costPerContact,{money:true})}</td>
             <td class="num">${num(v.revenue,{money:true})}</td>
-          </tr>`).join(''):''}
+          </tr>`).join('')||'<tr><td colspan="11" class="num">no traffic matched this code</td></tr>'}
+
+          ${(d.orphanAdCampaigns||[]).map(c=>`<tr>
+            <td class="strong i18n trunc" title="${esc(c.name)}">${esc(c.name)}</td>
+            <td><span class="pill warn">${esc(c.platform)} · no GA4 match</span></td>
+            <td class="num">${num(c.impressions)}</td><td class="num">${num(c.clicks)}</td>
+            <td class="num">${num(c.spend,{money:true})}</td>
+            <td class="num dim">—</td><td class="num dim">—</td><td class="num dim">—</td>
+            <td class="num dim">—</td><td class="num dim">—</td><td class="num dim">—</td>
+          </tr>`).join('')}
 
           <tr class="tot">
             <td class="strong">Total</td><td></td>
@@ -798,7 +828,7 @@ function renderCampaignBody(d) {
           </tr>
         </tbody>
       </table>
-      <div class="note">Two sides of one campaign, joined by the code. <b>Media</b> rows are ad platform campaigns &mdash; they report impressions, clicks and spend, but never visits or key events, because platform reporting stops at the click. <b>Traffic</b> rows are utm_campaign values in GA4 &mdash; the only place visits, engaged sessions and key events exist. Names differ between the two because they're separate strings sharing only the code prefix. Ad spend on a traffic row is attributed via utm_source, so organic rows are blank rather than zero, and a <span class="pill grey">~</span> marks spend split across several variants by visit share. The total row takes impressions and spend from Media, and visits, engagement and key events from Traffic &mdash; no double counting. &ldquo;Contact&rdquo; is the contact-us key event.${d.notConnected&&d.notConnected.length?` Not authorised in Windsor: ${d.notConnected.map(esc).join(', ')} &mdash; any spend there is absent, not zero.`:''}</div>
+      <div class="note">One row per utm_campaign + source. Ad impressions, clicks and spend are folded onto the matching paid row via utm_source, so organic rows are blank rather than zero; a <span class="pill grey">~</span> means spend was split across variants by visit share. Hover a campaign name for the full string and its underlying ad campaign names. A row marked <b>no GA4 match</b> is ad spend with no matching tagged traffic &mdash; usually a tagging gap worth fixing.${d.notConnected&&d.notConnected.length?` Not authorised in Windsor: ${d.notConnected.map(esc).join(', ')}.`:''}</div>
     </div>
 
     <div class="card mt"><h2>Daily</h2><div class="chart-wrap"><canvas id="campChart"></canvas></div></div>

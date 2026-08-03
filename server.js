@@ -19,6 +19,7 @@
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
+const { GoogleAuth } = require("google-auth-library");
 
 const app = express();
 app.use(express.json({ limit: "256kb" }));
@@ -58,6 +59,147 @@ try { VERSION = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"),
 if (!WINDSOR_API_KEY) console.warn("[warn] WINDSOR_API_KEY not set — data endpoints will fail.");
 if (!ANTHROPIC_API_KEY) console.warn("[warn] ANTHROPIC_API_KEY not set — /api/topic will fail.");
 console.log(`[init] v${VERSION} | GA4=${GA4_ACCOUNT} | cache=${CACHE_TTL_MS / 1000}s | ModelArmor=${MA_ENABLED ? "on" : "off"}`);
+
+// ------------------------------------------------------- Google Sheets layer
+/**
+ * Two internal sheets provide context Windsor can't:
+ *   UTM Builder 2026  - column L utm_campaign, column M short link
+ *   Content Plan 2026 - column C topic (the human campaign name)
+ * Both have one tab per month.
+ *
+ * Read with the Cloud Run runtime service account via ADC; the sheets are
+ * shared read-only with that identity, so nothing is published and no key file
+ * exists. If the scope is refused the error is surfaced verbatim by
+ * /api/sheets-check rather than being swallowed into an empty result.
+ */
+const SHEET_UTM = process.env.SHEET_UTM_ID || "13QuzSmYP-XA1kFX9_voVFB492x6327RGJIu4kvrTGwE";
+const SHEET_PLAN = process.env.SHEET_PLAN_ID || "1ClBR81GbG-QSKuj4f24-8M_4Gjmoz3i2gPZfd1mpjok";
+const MONTH_TABS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly";
+const SHEET_CACHE_TTL_MS = Number(process.env.SHEET_CACHE_TTL_MS || 30 * 60 * 1000);
+
+let _sheetsAuth = null;
+async function sheetsToken() {
+  if (!_sheetsAuth) _sheetsAuth = new GoogleAuth({ scopes: [SHEETS_SCOPE] });
+  const client = await _sheetsAuth.getClient();
+  const t = await client.getAccessToken();
+  const token = typeof t === "string" ? t : t && t.token;
+  if (!token) throw new Error("Could not obtain an access token for the Sheets API");
+  return token;
+}
+
+/** batchGet several ranges in one request. Missing tabs are skipped, not fatal. */
+async function sheetBatchGet(spreadsheetId, ranges) {
+  const token = await sheetsToken();
+  const qs = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join("&");
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchGet?${qs}&majorDimension=ROWS`;
+  const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Sheets API ${res.status}: ${body.slice(0, 300)}`);
+  }
+  const json = await res.json();
+  return json.valueRanges || [];
+}
+
+const CODE_RE = /^\d{6}-\d{1,3}/;   // 260605-01...
+const looksLikeCode = (v) => CODE_RE.test(String(v || "").trim());
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * utm_campaign -> { links, lineRequestIds, months } from UTM Builder.
+ * Column L is the campaign code, M the short link. Columns N-P are scanned for
+ * anything shaped like a LINE message request ID (a UUID). LINE only reports
+ * per-message delivered/opens/clicks when those IDs are supplied, and they can't
+ * be discovered from the API — so if the team starts logging them in this sheet,
+ * they are picked up automatically with no code change.
+ */
+async function loadUtmLinks() {
+  const ranges = MONTH_TABS.map((m) => `${m}!L:P`);
+  const got = await sheetBatchGet(SHEET_UTM, ranges);
+  const map = new Map();
+  got.forEach((vr, i) => {
+    for (const row of vr.values || []) {
+      const code = String(row[0] || "").trim();
+      const link = String(row[1] || "").trim();
+      if (!code || !looksLikeCode(code)) continue;
+      if (!map.has(code)) map.set(code, { code, links: [], lineRequestIds: [], months: [] });
+      const e = map.get(code);
+      if (link && !e.links.includes(link)) e.links.push(link);
+      for (let c = 2; c <= 4; c++) {
+        const v = String(row[c] || "").trim();
+        if (UUID_RE.test(v) && !e.lineRequestIds.includes(v)) e.lineRequestIds.push(v);
+      }
+      if (!e.months.includes(MONTH_TABS[i])) e.months.push(MONTH_TABS[i]);
+    }
+  });
+  return map;
+}
+
+/**
+ * campaign code -> human topic, from Content Plan.
+ * Layout is A Launch Date, B Campaign Code, C Topic. Column B is used directly,
+ * but if it stops holding codes (a column gets inserted) the scan below picks
+ * whichever of A:H matches the code pattern most often, so a layout change
+ * degrades instead of silently returning nothing.
+ */
+async function loadCampaignTopics() {
+  const ranges = MONTH_TABS.map((m) => `${m}!A:H`);
+  const got = await sheetBatchGet(SHEET_PLAN, ranges);
+  const hits = new Array(8).fill(0);
+  for (const vr of got) for (const row of vr.values || []) {
+    for (let c = 0; c < 8; c++) if (looksLikeCode(row[c])) hits[c]++;
+  }
+  const PLAN_CODE_COL = 1; // column B
+  const codeCol = hits[PLAN_CODE_COL] > 0 ? PLAN_CODE_COL : hits.indexOf(Math.max(...hits));
+  const map = new Map();
+  if (Math.max(...hits) === 0) return { map, codeCol: null, rows: 0 };
+  let rows = 0;
+  for (const vr of got) for (const row of vr.values || []) {
+    const code = String(row[codeCol] || "").trim();
+    if (!looksLikeCode(code)) continue;
+    const topic = String(row[2] || "").trim(); // column C
+    if (!topic) continue;
+    if (!map.has(code)) { map.set(code, topic); rows++; }
+  }
+  return { map, codeCol, rows };
+}
+
+/** Both sheets, cached — they change far less often than the metrics. */
+let _sheetCache = { at: 0, value: null };
+async function loadSheetContext(refresh = false) {
+  if (!refresh && _sheetCache.value && Date.now() - _sheetCache.at < SHEET_CACHE_TTL_MS) {
+    return _sheetCache.value;
+  }
+  const [links, topics] = await Promise.allSettled([loadUtmLinks(), loadCampaignTopics()]);
+  const value = {
+    links: links.status === "fulfilled" ? links.value : new Map(),
+    topics: topics.status === "fulfilled" ? topics.value.map : new Map(),
+    codeCol: topics.status === "fulfilled" ? topics.value.codeCol : null,
+    errors: [
+      ...(links.status === "rejected" ? [`UTM Builder: ${links.reason.message}`] : []),
+      ...(topics.status === "rejected" ? [`Content Plan: ${topics.reason.message}`] : []),
+    ],
+  };
+  _sheetCache = { at: Date.now(), value };
+  return value;
+}
+
+/** Longest-prefix topic lookup: exact code first, then the code's stem. */
+function topicFor(code, topics) {
+  if (!code) return null;
+  if (topics.has(code)) return topics.get(code);
+  const nc = norm(code);
+  let best = null;
+  for (const [k, v] of topics.entries()) {
+    const nk = norm(k);
+    if (nc.startsWith(nk) || nk.startsWith(nc)) {
+      if (!best || nk.length > best.len) best = { topic: v, len: nk.length };
+    }
+  }
+  return best ? best.topic : null;
+}
 
 // ---------------------------------------------------------------- utilities
 
@@ -129,7 +271,7 @@ async function withCache(key, refresh, producer) {
 
 // ------------------------------------------------------------------ windsor
 
-async function windsor(connector, fields, from, to, { accounts, filters } = {}) {
+async function windsor(connector, fields, from, to, { accounts, filters, options } = {}) {
   const params = new URLSearchParams();
   params.set("api_key", WINDSOR_API_KEY);
   params.set("fields", fields.join(","));
@@ -137,6 +279,8 @@ async function windsor(connector, fields, from, to, { accounts, filters } = {}) 
   params.set("date_to", to);
   if (accounts) params.set("accounts", Array.isArray(accounts) ? accounts.join(",") : accounts);
   if (filters) params.set("filters", JSON.stringify(filters));
+  // Connector-specific read options, e.g. LINE's message_request_ids.
+  if (options) for (const [k, v] of Object.entries(options)) if (v != null && v !== "") params.set(k, String(v));
 
   const res = await fetch(`${WINDSOR_BASE}/${connector}?${params.toString()}`, {
     headers: { Accept: "application/json" },
@@ -268,7 +412,9 @@ async function buildOverview(from, to) {
       ["date", "location_title", "impressions", "call_clicks", "website_clicks", "direction_requests"], from, to),
     fbOrganic: windsor("facebook_organic", ["date", "page_impressions", "post_engagements"], from, to),
     ttOrganic: windsor("tiktok_organic", ["date", "video_views", "likes", "comments", "shares"], from, to),
-    line: windsor("line", ["date", "message__broadcast", "message__targeting", "followers__followers"], from, to),
+    line: windsor("line", ["date", "message__broadcast", "message__targeting", "message__api_broadcast",
+      "message__api_narrowcast", "message__api_multicast", "message__api_push",
+      "followers__followers", "followers__targeted_reaches"], from, to),
     // Separate call: the message-event table carries actual opens/clicks, which
     // is a real impression rather than a send count. LINE returns null for any
     // value under 20, so small sends legitimately come back empty.
@@ -297,16 +443,19 @@ async function buildOverview(from, to) {
       const opens = sumOrNull(data.lineEvents, "message_unique_impression");
       if (opens) return opens;
       if (data.line === null) return null;
-      return n(sumOrNull(data.line, "message__broadcast"))
-        + n(sumOrNull(data.line, "message__targeting"))
-        + n(sumOrNull(data.line, "message__api_push"));
+      // Every outbound send type LINE reports. Reply/greeting/chat/auto-response
+      // are excluded on purpose: they're conversational, not campaign reach.
+      return ["message__broadcast", "message__targeting", "message__api_broadcast",
+        "message__api_narrowcast", "message__api_multicast", "message__api_push"]
+        .reduce((a, f) => a + n(sumOrNull(data.line, f)), 0);
     })(),
   };
 
   const lineOpens = sumOrNull(data.lineEvents, "message_unique_impression");
   const lineBasis = lineOpens ? "unique opens"
-    : (data.line !== null ? "messages sent · opens not reported by connector" : "unavailable");
+    : (data.line !== null ? "messages sent · per-message opens need request IDs" : "unavailable");
   const lineFollowers = data.line === null ? null : Math.max(0, ...data.line.map((r) => n(r.followers__followers)));
+  const lineReachable = data.line === null ? null : Math.max(0, ...data.line.map((r) => n(r.followers__targeted_reaches)));
 
   // ---- funnel by GA4 channel group ----
   const chanMap = new Map();
@@ -335,7 +484,8 @@ async function buildOverview(from, to) {
   // Platform reach with no GA4 channel equivalent.
   const reachOnly = [
     { channel: "Google Business Profile", impressions: impressions.gmb, note: "profile views" },
-    { channel: "LINE", impressions: impressions.line, note: lineBasis, sub: lineFollowers ? `${lineFollowers.toLocaleString()} followers` : null },
+    { channel: "LINE", impressions: impressions.line, note: lineBasis,
+      sub: lineFollowers ? `${lineFollowers.toLocaleString()} followers${lineReachable ? ` · ${lineReachable.toLocaleString()} targetable` : ""}` : null },
   ];
 
   const totals = {
@@ -496,12 +646,14 @@ const NON_CAMPAIGN = new Set(["(organic)", "(not set)", "(referral)", "(direct)"
 const isPlatformId = (s) => /^\d{6,}$/.test(String(s || "").trim());
 
 async function buildCampaignList(from, to) {
-  const rows = await windsor("googleanalytics4",
-    ["session_manual_campaign_name", "sessions"], from, to, { accounts: [GA4_ACCOUNT] });
+  const [rows, sheets] = await Promise.all([
+    windsor("googleanalytics4", ["session_manual_campaign_name", "sessions"], from, to, { accounts: [GA4_ACCOUNT] }),
+    loadSheetContext().catch(() => ({ topics: new Map(), errors: [] })),
+  ]);
   const list = rows
     .map((r) => ({ code: r.session_manual_campaign_name, visits: n(r.sessions) }))
     .filter((c) => c.code && !NON_CAMPAIGN.has(norm(c.code)))
-    .map((c) => ({ ...c, untagged: isPlatformId(c.code) }))
+    .map((c) => ({ ...c, untagged: isPlatformId(c.code), topic: topicFor(c.code, sheets.topics) }))
     .sort((a, b) => b.visits - a.visits);
   return {
     range: { from, to },
@@ -552,6 +704,9 @@ async function buildCampaign(code, from, to) {
     ga4Landing: windsor("googleanalytics4",
       ga4Fields(["session_manual_campaign_name", "landing_page"], ["sessions"]),
       from, to, { accounts: [GA4_ACCOUNT] }),
+    // Organic posts, matched to the campaign by the short link in their text.
+    fbPosts: windsor("facebook_organic",
+      ["post_id", "post_message", "permalink_url", "post_impressions", "post_engagements"], from, to),
   };
   // One job per ad platform; unconnected ones fail harmlessly into null.
   for (const p of AD_PLATFORMS) {
@@ -584,7 +739,8 @@ async function buildCampaign(code, from, to) {
       code: r.session_manual_campaign_name,
       source: r.session_manual_source || "", medium: r.session_manual_medium || "",
       visits: 0, engagement: 0, keyEvents: 0, contacts: 0, revenue: 0, purchases: 0,
-      spend: null, spendEstimated: false, costPerVisit: null, costPerContact: null,
+      impressions: null, clicks: null, spend: null, spendEstimated: false,
+      adNames: [], costPerVisit: null, costPerContact: null,
     });
     const v = vMap.get(k);
     v.visits += n(r.sessions);
@@ -602,7 +758,8 @@ async function buildCampaign(code, from, to) {
       if (!vMap.has(k)) vMap.set(k, {
         code: name, source: r.session_manual_source || "", medium: r.session_manual_medium || "",
         visits: 0, engagement: 0, keyEvents: 0, contacts: 0, revenue: 0, purchases: 0,
-        spend: null, spendEstimated: false, costPerVisit: null, costPerContact: null,
+        impressions: null, clicks: null, spend: null, spendEstimated: false,
+        adNames: [], costPerVisit: null, costPerContact: null,
       });
       const v = vMap.get(k);
       v.revenue += n(r.purchase_revenue);
@@ -648,6 +805,87 @@ async function buildCampaign(code, from, to) {
   }
   adCampaigns.sort((a, b) => b.impressions - a.impressions);
 
+  // ---- internal sheet context: human name + the short links we published ----
+  const sheets = await loadSheetContext().catch((e) => ({ links: new Map(), topics: new Map(), errors: [e.message] }));
+  const topic = topicFor(code, sheets.topics);
+
+  // Every short link registered against this code (prefix match, same as GA4).
+  const shortLinks = [];
+  for (const [c, entry] of sheets.links.entries()) {
+    if (norm(c).startsWith(needle)) shortLinks.push(...entry.links);
+  }
+  const uniqueLinks = [...new Set(shortLinks)];
+
+  // LINE per-message insights, only possible when request IDs were logged.
+  const lineReqIds = [];
+  for (const [c, entry] of sheets.links.entries()) {
+    if (norm(c).startsWith(needle)) lineReqIds.push(...(entry.lineRequestIds || []));
+  }
+  let lineMessages = null;
+  if (lineReqIds.length) {
+    try {
+      const rows = await windsor("line",
+        ["message_request_id", "message_send_time", "message_delivered", "message_unique_impression", "message_unique_click"],
+        from, to, { options: { message_request_ids: [...new Set(lineReqIds)].join(",") } });
+      const list = (rows || []).filter((r) => r.message_request_id).map((r) => ({
+        requestId: r.message_request_id,
+        sentAt: r.message_send_time || null,
+        delivered: n(r.message_delivered),
+        opens: n(r.message_unique_impression),
+        clicks: n(r.message_unique_click),
+      }));
+      lineMessages = {
+        messages: list,
+        delivered: list.reduce((a, m) => a + m.delivered, 0),
+        opens: list.reduce((a, m) => a + m.opens, 0),
+        clicks: list.reduce((a, m) => a + m.clicks, 0),
+      };
+    } catch (e) {
+      logJson("WARNING", "line_message_insights_failed", { error: String(e.message || e) });
+    }
+  }
+
+  /**
+   * Organic reach for the campaign. Ad platforms report their own impressions,
+   * but an organic Facebook post carrying the campaign's short link is invisible
+   * to both GA4 (which only sees the resulting session) and the ads API. The
+   * bridge is the link: find posts whose text contains one of the campaign's
+   * short links, then read that post's impressions and engagement.
+   *
+   * Link matching ignores scheme and trailing slash, since sheets and posts
+   * rarely store a URL identically.
+   */
+  const linkKeys = uniqueLinks.map((l) => norm(l).replace(/^https?:\/\//, "").replace(/\/+$/, "")).filter((l) => l.length > 5);
+  let organicPosts = null;
+  if (data.fbPosts !== null && linkKeys.length) {
+    const seen = new Set();
+    organicPosts = [];
+    for (const r of data.fbPosts) {
+      const msg = norm(r.post_message);
+      if (!msg) continue;
+      const hit = linkKeys.find((k) => msg.includes(k));
+      if (!hit) continue;
+      const id = r.post_id || r.permalink_url || msg.slice(0, 40);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      organicPosts.push({
+        postId: r.post_id || null,
+        permalink: r.permalink_url || null,
+        excerpt: String(r.post_message || "").slice(0, 140),
+        impressions: n(r.post_impressions),
+        engagements: n(r.post_engagements),
+        matchedLink: hit,
+        platform: "Facebook organic",
+      });
+    }
+    organicPosts.sort((a, b) => b.impressions - a.impressions);
+  }
+  const organicTotals = organicPosts ? {
+    posts: organicPosts.length,
+    impressions: organicPosts.reduce((a, p) => a + p.impressions, 0),
+    engagements: organicPosts.reduce((a, p) => a + p.engagements, 0),
+  } : null;
+
   // Top landing pages for this campaign, so the team can recall the creative.
   let landingPages = null;
   if (data.ga4Landing !== null) {
@@ -671,17 +909,28 @@ async function buildCampaign(code, from, to) {
    * several do, spend is split by visit share and flagged `spendEstimated` so
    * the UI can mark it. Organic variants keep spend = null, not 0.
    */
+  const orphanAdCampaigns = [];
   for (const p of byPlatform) {
-    if (!p.connected || !p.spend) continue;
+    if (!p.connected || !(p.spend || p.impressions)) continue;
     const hints = PLATFORM_SOURCE_HINTS[p.platform] || [];
     const owned = variants.filter((v) =>
       hints.some((re) => re.test(v.source)) && (PAID_MEDIUM_RE.test(v.medium) || PAID_MEDIUM_RE.test(v.source))
     );
-    if (!owned.length) continue;
+    const names = adCampaigns.filter((c) => c.platform === p.platform).map((c) => c.name);
+    if (!owned.length) {
+      // Nothing in GA4 carries this platform's source, so the media can't fold
+      // into a traffic row. Keep it visible rather than silently dropping spend.
+      orphanAdCampaigns.push(...adCampaigns.filter((c) => c.platform === p.platform));
+      continue;
+    }
     const totalVisits = owned.reduce((a, v) => a + v.visits, 0);
     for (const v of owned) {
       const share = owned.length === 1 ? 1 : (totalVisits ? v.visits / totalVisits : 1 / owned.length);
       v.spend = n(v.spend) + p.spend * share;
+      v.impressions = n(v.impressions) + p.impressions * share;
+      v.clicks = n(v.clicks) + p.clicks * share;
+      v.adNames = [...v.adNames, ...names];
+      v.platform = p.platform;
       if (owned.length > 1) v.spendEstimated = true;
     }
   }
@@ -695,8 +944,12 @@ async function buildCampaign(code, from, to) {
     v.costPerContact = v.spend && v.contacts ? v.spend / v.contacts : null;
   }
 
+  const paidImpressions = anyAdMatch ? byPlatform.reduce((a, p) => a + n(p.impressions), 0) : null;
   const totals = {
-    impressions: anyAdMatch ? byPlatform.reduce((a, p) => a + n(p.impressions), 0) : null,
+    paidImpressions,
+    organicImpressions: organicTotals ? organicTotals.impressions : null,
+    impressions: (paidImpressions === null && !organicTotals) ? null
+      : n(paidImpressions) + (organicTotals ? organicTotals.impressions : 0),
     visits: variants.reduce((a, v) => a + v.visits, 0),
     engagement: variants.reduce((a, v) => a + v.engagement, 0),
     keyEvents: variants.reduce((a, v) => a + v.keyEvents, 0),
@@ -766,7 +1019,10 @@ async function buildCampaign(code, from, to) {
     code, range: { from, to },
     matchedVariants: variants.length,
     totals, variants, keyEventBreakdown, trend,
-    byPlatform, adCampaigns, landingPages,
+    byPlatform, adCampaigns, orphanAdCampaigns, landingPages,
+    topic, shortLinks: uniqueLinks, organicPosts, organicTotals,
+    lineMessages, lineRequestIdsFound: lineReqIds.length,
+    sheetErrors: sheets.errors,
     unattributedSpend,
     emptyResult, dateHint, launchDate: launch,
     adImpressionsMatched: anyAdMatch,
@@ -1037,6 +1293,50 @@ app.get("/api/version", (_req, res) => res.json({
   cacheTtlSec: CACHE_TTL_MS / 1000, cacheEntries: cache.size,
   modelArmor: MA_ENABLED, locales: LOCALES,
 }));
+
+/**
+ * Sheets access self-check. Reports exactly what failed and what to do about it,
+ * so a permissions problem is one request away from a diagnosis instead of
+ * showing up as mysteriously empty campaign names.
+ */
+app.get("/api/sheets-check", async (_req, res) => {
+  const out = { scope: SHEETS_SCOPE, utmSheet: SHEET_UTM, planSheet: SHEET_PLAN, steps: [] };
+  try {
+    await sheetsToken();
+    out.steps.push({ step: "obtain access token", ok: true });
+  } catch (e) {
+    out.steps.push({ step: "obtain access token", ok: false, error: e.message,
+      fix: "Cloud Run couldn't mint a Sheets-scoped token. Confirm the service is running as a service account and that the Google Sheets API is enabled in this project." });
+    return res.status(500).json(out);
+  }
+  for (const [label, id, range] of [["UTM Builder 2026", SHEET_UTM, "Jul!L1:M5"], ["Content Plan 2026", SHEET_PLAN, "Jul!A1:H3"]]) {
+    try {
+      const vr = await sheetBatchGet(id, [range]);
+      const rows = (vr[0] && vr[0].values) || [];
+      out.steps.push({ step: `read ${label}`, ok: true, sampleRows: rows.length, firstRow: rows[0] || null });
+    } catch (e) {
+      out.steps.push({ step: `read ${label}`, ok: false, error: e.message,
+        fix: e.message.includes("403")
+          ? `Share the sheet with the Cloud Run service account (Viewer). If your Workspace blocks external sharing, an admin must allowlist that address.`
+          : e.message.includes("404")
+            ? `Spreadsheet not found — check the ID, and that a tab named "Jul" exists.`
+            : "See the error text above." });
+    }
+  }
+  try {
+    const ctx = await loadSheetContext(true);
+    out.parsed = {
+      utmCodesWithLinks: ctx.links.size,
+      campaignTopics: ctx.topics.size,
+      detectedCodeColumn: ctx.codeCol === null ? null : String.fromCharCode(65 + ctx.codeCol),
+      errors: ctx.errors,
+    };
+  } catch (e) {
+    out.parsed = { error: e.message };
+  }
+  const ok = out.steps.every((s) => s.ok);
+  res.status(ok ? 200 : 500).json(out);
+});
 
 app.get("/healthz", (_req, res) => res.send("ok"));
 
