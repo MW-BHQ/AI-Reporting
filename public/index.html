@@ -213,13 +213,24 @@
   .hidden{display:none!important;}
 
   /* ---------------- print / PDF: 16:9 presentation ---------------- */
+  .acct-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px;padding-bottom:2px;}
+  .acct-tab{
+    background:var(--glass);border:1px solid var(--line);color:var(--ink-2);
+    border-radius:11px;padding:8px 13px;font-family:inherit;font-size:12px;cursor:pointer;transition:.15s;
+    display:flex;align-items:baseline;gap:7px;
+  }
+  .acct-tab:hover{border-color:var(--violet);}
+  .acct-tab.active{background:#fff;color:var(--violet);font-weight:600;border-color:var(--stroke);box-shadow:var(--shadow-sm);}
+  .acct-tab small{font-size:10.5px;color:var(--faint);font-weight:400;}
+  .acct-tab.active small{color:var(--violet);opacity:.75;}
+
   .print-head{display:none;}
   @media print{
     /* 13.333in x 7.5in is the standard 16:9 slide canvas. */
     @page{size:13.333in 7.5in;margin:0.45in;}
     *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
     body{background:#fff!important;font-size:11px;}
-    .rail,.toolbar,.status,.search,.tags,.btn,#loadBtn{display:none!important;}
+    .rail,.toolbar,.status,.search,.tags,.btn,#loadBtn,.no-print,.acct-tabs{display:none!important;}
     .shell{display:block;}
     .main{padding:0!important;}
     .head{margin-bottom:10px;border-bottom:1px solid #d8dfee;padding-bottom:8px;}
@@ -238,7 +249,11 @@
     .grid{gap:10px;break-inside:avoid;page-break-inside:avoid;}
     .mt{margin-top:10px;}
     .stat .val{font-size:17px;}
-    .chart-wrap{height:190px;}
+    .chart-wrap{height:150px;}
+    /* Keep a campaign report to a single slide. */
+    .card h2{font-size:10.5px;margin-bottom:8px;}
+    .stat .lab{font-size:8.5px;}
+    .stat .sub{font-size:8px;}
     table{font-size:10px;}
     td,th{padding:5px 0;}
     td.trunc{max-width:200px;}
@@ -349,7 +364,7 @@ const S = {
   campaignList: null, campaignListKey: null,
   topic: null, topicTerm: '',
   audit: null, auditKey: null,
-  bench: null, benchKey: null,
+  bench: null, benchKey: null, benchTab: null,
   charts: {},
 };
 
@@ -413,6 +428,9 @@ document.querySelectorAll('.nav-item').forEach(item => {
     render();
   });
 });
+
+// Views where the toolbar date range has no meaning.
+const NO_DATE_VIEWS = new Set(['benchmark']);
 
 const TITLES = {
   overview: ['Overview', 'Impressions → Visits → Key Events across all channels'],
@@ -518,6 +536,10 @@ const loadingState = (msg) => `<div class="card"><div class="state"><div class="
 function render() {
   const [t, s] = TITLES[S.view];
   $('viewTitle').textContent = t; $('viewSub').textContent = s;
+  // The benchmark is inherently trailing, so a range picker would only mislead.
+  const hideDates = NO_DATE_VIEWS.has(S.view);
+  document.querySelector('.dates').classList.toggle('hidden', hideDates);
+  $('presets').classList.toggle('hidden', hideDates);
   Object.values(S.charts).forEach(c => { try { c.destroy(); } catch(_){} });
   S.charts = {};
   if (S.view === 'overview') renderOverview();
@@ -808,25 +830,18 @@ function renderCampaignBody(d) {
         <div class="sub">${t.purchases?num(t.purchases)+' purchases':''}</div></div>
     </div>
 
-    <div class="card mt">
-      <h2>${d.topic?esc(d.topic):'Campaign funnel'} <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--faint);">· ${esc(d.code)}${d.launchDate?` · dated ${esc(d.launchDate)}`:''}</span></h2>
-      <div class="stage"><div class="stage-head"><span class="stage-name">Impressions</span>
-        <span class="stage-val ${isNA(t.impressions)?'na':''}">${num(t.impressions)}</span></div>
-        <div class="bar"><span style="width:${isNA(t.impressions)?0:impPct}%;background:linear-gradient(90deg,#7C6BF5,#4B8DF8)"></span></div></div>
-      <div class="stage minor"><div class="stage-head"><span class="stage-name">Ad clicks</span>
-        <span class="stage-val ${isNA(t.clicks)?'na':''}">${num(t.clicks)}</span></div>
-        <div class="bar"><span style="width:${clickPct}%;background:#A9B4CE"></span></div></div>
-      <div class="stage"><div class="stage-head"><span class="stage-name">Visits</span><span class="stage-val">${num(t.visits)}</span></div>
-        <div class="bar"><span style="width:${visitPct}%;background:linear-gradient(90deg,#4B8DF8,#35C3B4)"></span></div></div>
-      <div class="stage minor"><div class="stage-head"><span class="stage-name">Engaged sessions</span>
-        <span class="stage-val ${isNA(t.engagement)?'na':''}">${num(t.engagement)}${t.visits&&t.engagement?` <span style="font-weight:400">&middot; ${num((t.engagement/t.visits)*100,{pct:true})} of visits</span>`:''}</span></div>
-        <div class="bar"><span style="width:${engPct}%;background:#9FC8C2"></span></div></div>
-      <div class="stage"><div class="stage-head"><span class="stage-name">Key events</span><span class="stage-val">${num(t.keyEvents)}</span></div>
-        <div class="bar"><span style="width:${kePct}%;background:linear-gradient(90deg,#35C3B4,#3BC97F)"></span></div></div>
-      ${t.costPerKeyEvent!=null?`<div class="note">Cost per key event: <b>${num(t.costPerKeyEvent,{money:true})}</b> · ${num(t.spend,{money:true})} spend ÷ ${num(t.keyEvents)} key events.</div>`:''}
+    <div class="grid g-2-1 mt">
+      <div class="card">
+        <h2>${d.topic?esc(d.topic):'Campaign funnel'} <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--faint);">· ${esc(d.code)}${d.launchDate?` · dated ${esc(d.launchDate)}`:''}</span></h2>
+        <div style="height:230px;"><canvas id="funnelChart"></canvas></div>
+        ${t.costPerKeyEvent!=null?`<div class="note">Cost per key event: <b>${num(t.costPerKeyEvent,{money:true})}</b> · ${num(t.spend,{money:true})} ÷ ${num(t.keyEvents)} key events.</div>`:''}
+      </div>
+      <div class="card"><h2>Key events</h2>
+        <table><tbody>${(d.keyEventBreakdown||[]).map(k=>`<tr><td class="strong">${esc(k.label)}</td><td class="num">${num(k.value)}</td></tr>`).join('')}</tbody></table>
+      </div>
     </div>
 
-    <div class="grid g-2-1 mt">
+    <div class="grid g-2-1 mt no-print">
       <div class="card"><h2>Landing pages &middot; what this campaign pointed at</h2>
         <table><thead><tr><th>Page</th><th>Locale</th><th class="num">Visits</th></tr></thead><tbody>
         ${(d.landingPages||[]).map(l=>`<tr>
@@ -913,8 +928,15 @@ function renderCampaignBody(d) {
       <div class="note">One row per utm_campaign + source. Ad impressions, clicks and spend are folded onto the matching paid row via utm_source, so organic rows are blank rather than zero; a <span class="pill grey">~</span> means spend was split across variants by visit share. Hover a campaign name for the full string and its underlying ad campaign names. A row marked <b>no GA4 match</b> is ad spend with no matching tagged traffic &mdash; usually a tagging gap worth fixing.${d.notConnected&&d.notConnected.length?` Not authorised in Windsor: ${d.notConnected.map(esc).join(', ')}.`:''}</div>
     </div>
 
-    <div class="card mt"><h2>Daily</h2><div class="chart-wrap"><canvas id="campChart"></canvas></div></div>
+    <div class="card mt no-print"><h2>Daily</h2><div class="chart-wrap"><canvas id="campChart"></canvas></div></div>
   `;
+  drawFunnelChart('funnelChart', [
+    { label:'Impressions', value:t.impressions, color:'#7C6BF5' },
+    { label:'Ad clicks',   value:t.clicks,      color:'#A9B4CE' },
+    { label:'Visits',      value:t.visits,      color:'#4B8DF8' },
+    { label:'Engaged',     value:t.engagement,  color:'#9FC8C2' },
+    { label:'Key events',  value:t.keyEvents,   color:'#3BC97F' },
+  ]);
   drawChart('campChart', d.trend||[], [
     { label:'Visits', key:'visits', color:'#4B8DF8', axis:'y' },
     { label:'Key events', key:'keyEvents', color:'#7C6BF5', axis:'y1' },
@@ -1003,98 +1025,127 @@ function renderBenchmark() {
   if (!d) {
     $('viewRoot').innerHTML = `<div class="card"><div class="state">
       <div class="big">Ready to benchmark</div>
-      <div style="max-width:480px;font-size:12.5px;">Press <b>Load</b>. This view ignores the date range except as an end anchor — it always reads the last 12 <b>complete</b> calendar months, so partial months can't flatter the comparison.</div>
+      <div style="max-width:500px;font-size:12.5px;">Press <b>Load</b>. This always reads the last 12 <b>complete</b> calendar months, so a partial month can't flatter the comparison. Results are stored and reused until the month rolls over.</div>
     </div></div>`;
     return;
   }
-  const cov = d.coverage, w = d.windows;
+  const tabs = [d.all, ...(d.accounts || [])];
+  if (!S.benchTab || !tabs.some(t => t.id === S.benchTab)) S.benchTab = d.all.id;
+  const a = tabs.find(t => t.id === S.benchTab) || d.all;
+  const isAll = a.id === '__all__';
 
-  // Delta chip: colour reflects whether the movement is good, not its sign.
+  const tabStrip = `<div class="acct-tabs">${tabs.map(t => `
+    <button class="acct-tab ${t.id===S.benchTab?'active':''}" data-tab="${esc(t.id)}">
+      ${esc(t.account)}<small>${num(t.spend3m,{money:true})}</small>
+    </button>`).join('')}</div>`;
+
   const chip = (cell, lowerIsBetter) => {
     if (!cell) return '<span style="color:var(--faint)">—</span>';
     const p = cell.deltaPct;
     const good = lowerIsBetter ? p < 0 : p > 0;
     const flat = Math.abs(p) < 2;
     const col = flat ? 'var(--muted)' : (good ? 'var(--green)' : 'var(--rose)');
-    const arrow = flat ? '' : (p > 0 ? '▲' : '▼');
-    return `<span style="color:${col};font-weight:600;">${arrow} ${Math.abs(p).toFixed(0)}%</span>`;
+    return `<span style="color:${col};font-weight:600;">${flat?'':(p>0?'▲':'▼')} ${Math.abs(p).toFixed(0)}%</span>`;
   };
-  const fmtMetric = (v, money) => v == null ? '—' : (money ? num(v,{money:true}) : num(v,{dp:2}));
-
-  const shortMonths = w.m3 && w.m3.months < 3;
+  const fmt = (v, money) => v == null ? '—' : (money ? num(v,{money:true}) : num(v,{dp:2}));
+  const w = a.windows;
 
   $('viewRoot').innerHTML = `
-    ${cov.monthsWithData < cov.completeMonths ? `<div class="warnbox">Only <b>${cov.monthsWithData}</b> of the last ${cov.completeMonths} complete months have data in Windsor, so the 12-month window covers less than a year. Months with no spend and no visits are treated as missing history rather than as genuine zeros — averaging them in would understate every figure.</div>` : ''}
-    ${shortMonths ? `<div class="warnbox">Fewer than 3 complete months of history are available, so these windows overlap heavily and the comparison is weak.</div>` : ''}
+    ${tabStrip}
+    ${d.coverage.monthsWithData < d.coverage.completeMonths ? `<div class="warnbox">Only <b>${d.coverage.monthsWithData}</b> of the last ${d.coverage.completeMonths} complete months have data, so the 12-month window covers less than a year. Empty months are treated as missing history, not as zeros.</div>` : ''}
 
     <div class="grid g-4">
       <div class="stat card"><div class="lab">Latest complete month</div>
-        <div class="val">${esc(d.latestMonth?d.latestMonth.label:'—')}</div>
-        <div class="sub">the row everything is compared against</div></div>
+        <div class="val">${esc(a.latestMonth?a.latestMonth.label:'—')}</div>
+        <div class="sub">compared against below</div></div>
       <div class="stat card"><div class="lab">Avg monthly spend · 3M</div>
         <div class="val">${w.m3?num(w.m3.avgMonthlySpend,{money:true}):'—'}</div>
-        <div class="sub">${w.m3?`over ${w.m3.months} month${w.m3.months>1?'s':''}`:''}</div></div>
+        <div class="sub">${w.m3?`${w.m3.months} month${w.m3.months>1?'s':''} with data`:''}</div></div>
       <div class="stat card"><div class="lab">Avg monthly spend · 6M</div>
         <div class="val">${w.m6?num(w.m6.avgMonthlySpend,{money:true}):'—'}</div>
-        <div class="sub">${w.m6?`over ${w.m6.months} months`:''}</div></div>
+        <div class="sub">${w.m6?`${w.m6.months} months`:''}</div></div>
       <div class="stat card"><div class="lab">Avg monthly spend · 12M</div>
         <div class="val">${w.m12?num(w.m12.avgMonthlySpend,{money:true}):'—'}</div>
-        <div class="sub">${w.m12?`over ${w.m12.months} months`:''}</div></div>
+        <div class="sub">${w.m12?`${w.m12.months} months`:''}</div></div>
     </div>
 
+    ${(a.goals||[]).length?`<div class="card mt">
+      <h2>Efficiency by campaign objective · last 12 months</h2>
+      <table><thead><tr><th>Objective</th><th class="num">Spend</th><th class="num">Results</th>
+        <th class="num">Cost per result</th><th class="num">Results / ฿1k</th><th class="num">CPM</th></tr></thead><tbody>
+      ${a.goals.map(g=>`<tr>
+        <td class="strong">${esc(g.label)}<div style="font-size:10.5px;color:var(--faint);font-weight:400;">per ${esc(g.resultLabel)} · from ${esc(g.source)}</div></td>
+        <td class="num">${num(g.spend,{money:true})}</td>
+        <td class="num">${num(g.resultCount)}</td>
+        <td class="num" style="font-weight:600;color:var(--ink)">${num(g.costPerResult,{money:true})}</td>
+        <td class="num">${g.resultsPerK!=null?num(g.resultsPerK,{dp:1}):'—'}</td>
+        <td class="num">${num(g.cpm,{money:true})}</td>
+      </tr>`).join('')}
+      </tbody></table>
+      <div class="note">Each objective is judged on its own result, because a shared metric would be meaningless across them: a lead-form ad never sends anyone to the site, so cost per visit doesn't apply, and a message ad's outcome is a conversation. Results marked <b>from Meta</b> are counted by the platform and survive missing utm tags; results <b>from GA4</b> depend on correct tagging. Objective comes from Meta's own <code>campaign_objective</code>, falling back to the campaign name only when that's blank.</div>
+    </div>`:''}
+
     <div class="card mt">
-      <h2>${esc(d.latestMonth?d.latestMonth.label:'Latest month')} vs trailing norms</h2>
+      <h2>${esc(a.latestMonth?a.latestMonth.label:'Latest month')} vs trailing norms${isAll?'':' · '+esc(a.account)}</h2>
       <table><thead><tr>
-        <th>Metric</th><th class="num">Latest month</th>
-        <th class="num">3M norm</th><th class="num">vs 3M</th>
-        <th class="num">6M norm</th><th class="num">vs 6M</th>
-        <th class="num">12M norm</th><th class="num">vs 12M</th>
+        <th>Metric</th><th class="num">Latest</th>
+        <th class="num">3M</th><th class="num">vs</th>
+        <th class="num">6M</th><th class="num">vs</th>
+        <th class="num">12M</th><th class="num">vs</th>
       </tr></thead><tbody>
-      ${(d.comparison||[]).map(m=>`<tr>
+      ${(a.comparison||[]).map(m=>`<tr>
         <td class="strong">${esc(m.label)}</td>
-        <td class="num" style="font-weight:600;color:var(--ink)">${fmtMetric(m.current,m.money)}</td>
-        <td class="num">${fmtMetric(m.vs.m3?m.vs.m3.base:null,m.money)}</td><td class="num">${chip(m.vs.m3,m.lowerIsBetter)}</td>
-        <td class="num">${fmtMetric(m.vs.m6?m.vs.m6.base:null,m.money)}</td><td class="num">${chip(m.vs.m6,m.lowerIsBetter)}</td>
-        <td class="num">${fmtMetric(m.vs.m12?m.vs.m12.base:null,m.money)}</td><td class="num">${chip(m.vs.m12,m.lowerIsBetter)}</td>
+        <td class="num" style="font-weight:600;color:var(--ink)">${fmt(m.current,m.money)}</td>
+        <td class="num">${fmt(m.vs.m3?m.vs.m3.base:null,m.money)}</td><td class="num">${chip(m.vs.m3,m.lowerIsBetter)}</td>
+        <td class="num">${fmt(m.vs.m6?m.vs.m6.base:null,m.money)}</td><td class="num">${chip(m.vs.m6,m.lowerIsBetter)}</td>
+        <td class="num">${fmt(m.vs.m12?m.vs.m12.base:null,m.money)}</td><td class="num">${chip(m.vs.m12,m.lowerIsBetter)}</td>
       </tr>`).join('')||'<tr><td colspan="8" class="num">no comparable months</td></tr>'}
       </tbody></table>
-      <div class="note">Green means the movement is favourable, not that the number rose — a fall in cost per contact is green, a fall in key events per ฿1,000 is red. Window figures are derived from summed totals across the window, not averaged from each month's ratio, so a quiet month can't swing the norm as hard as a heavy one. Deltas under 2% show without an arrow, since that's noise at this granularity. All spend is Meta Ads only, so any channel not connected to Windsor is absent from every cost figure here.</div>
+      <div class="note">Green means favourable, not upward — a fall in cost per contact is green, a fall in results per ฿1,000 is red. Window figures derive from summed totals across the window, so a quiet month can't swing the norm as hard as a heavy one. Deltas under 2% show without an arrow.${isAll?'':' Site metrics for a single account are attributed by matching the campaign code in its ad names against tagged utm_campaign values, so untagged campaigns in this account are absent from visit-based rows.'}</div>
     </div>
 
     <div class="card mt">
-      <h2>Monthly trend</h2>
+      <h2>Monthly trend${isAll?'':' · '+esc(a.account)}</h2>
       <div class="chart-wrap"><canvas id="benchChart"></canvas></div>
     </div>
 
-    <div class="card mt slide-break">
+    <div class="card mt slide-break no-print">
       <h2>Month by month</h2>
       <table><thead><tr>
-        <th>Month</th><th class="num">Spend</th><th class="num">Visits</th><th class="num">Key ev.</th>
-        <th class="num">Contacts</th><th class="num">฿/visit</th><th class="num">฿/contact</th>
-        <th class="num">Key ev. / ฿1k</th><th class="num">Revenue</th>
+        <th>Month</th><th class="num">Spend</th><th class="num">Impr</th><th class="num">Clicks</th>
+        <th class="num">Leads</th><th class="num">Conv.</th>${isAll?'<th class="num">Visits</th><th class="num">Key ev.</th>':''}
+        <th class="num">CPM</th><th class="num">CPC</th>
       </tr></thead><tbody>
-      ${(d.series||[]).slice().reverse().map(m=>{
-        const empty = !m.spend && !m.visits;
+      ${(a.series||[]).slice().reverse().map(m=>{
+        const empty=!m.spend&&!m.visits;
         return `<tr${empty?' style="opacity:.45"':''}>
         <td class="strong">${esc(m.label)}${empty?' <span class="pill grey">no data</span>':''}</td>
         <td class="num">${num(m.spend,{money:true})}</td>
-        <td class="num">${num(m.visits)}</td>
-        <td class="num">${num(m.keyEvents)}</td>
-        <td class="num">${num(m.contacts)}</td>
-        <td class="num">${m.costPerVisit!=null?num(m.costPerVisit,{money:true}):'—'}</td>
-        <td class="num">${m.costPerContact!=null?num(m.costPerContact,{money:true}):'—'}</td>
-        <td class="num">${m.keyEventsPerK!=null?num(m.keyEventsPerK,{dp:1}):'—'}</td>
-        <td class="num">${num(m.revenue,{money:true})}</td>
+        <td class="num">${num(m.impressions)}</td>
+        <td class="num">${num(m.clicks)}</td>
+        <td class="num">${num(m.leads)}</td>
+        <td class="num">${num(m.messages)}</td>
+        ${isAll?`<td class="num">${num(m.visits)}</td><td class="num">${num(m.keyEvents)}</td>`:''}
+        <td class="num">${num(m.cpm,{money:true})}</td>
+        <td class="num">${num(m.cpc,{money:true})}</td>
       </tr>`}).join('')}
       </tbody></table>
     </div>
+
+    <div class="note" style="margin-top:12px;">Computed ${esc((d.computedAt||'').slice(0,16).replace('T',' '))} · stored for ${esc(d.storedFor||'')} (${esc(d.store||'memory')}) · reused until the month rolls over. Press Load to force a recompute.</div>
   `;
 
-  const rows = (d.series||[]).filter(m=>m.spend||m.visits).map(m=>({ d:m.label, spend:m.spend, costPerContact:m.costPerContact, keyEventsPerK:m.keyEventsPerK }));
+  document.querySelectorAll('.acct-tab').forEach(b => b.addEventListener('click', () => {
+    S.benchTab = b.dataset.tab; renderBenchmark();
+  }));
+
+  const rows = (a.series||[]).filter(m=>m.spend||m.visits).map(m=>({
+    d:m.label, spend:m.spend, cpm:m.cpm, cpc:m.cpc,
+  }));
   drawChart('benchChart', rows, [
     { label:'Spend', key:'spend', color:'#F2A93B', axis:'y' },
-    { label:'฿ per contact', key:'costPerContact', color:'#F2708F', axis:'y1' },
-    { label:'Key events per ฿1k', key:'keyEventsPerK', color:'#35C3B4', axis:'y1' },
+    { label:'CPM', key:'cpm', color:'#F2708F', axis:'y1' },
+    { label:'CPC', key:'cpc', color:'#35C3B4', axis:'y1' },
   ]);
 }
 
@@ -1164,6 +1215,50 @@ function renderAudit() {
 }
 
 // ============================================================ charts
+/**
+ * Funnel as a log-scale bar chart. On a linear axis, 2.5K key events beside
+ * 344.8K impressions is a bar one pixel tall; a log axis makes every stage
+ * readable at once. Zero and null are dropped because log(0) is undefined.
+ */
+function drawFunnelChart(canvasId, stages) {
+  const el = document.getElementById(canvasId);
+  if (!el) return;
+  const usable = stages.filter(s => s.value != null && s.value > 0);
+  if (!usable.length) {
+    const box = el.parentElement;
+    if (box) box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:12px;">No funnel data for this campaign.</div>';
+    return;
+  }
+  try {
+    if (typeof Chart === 'undefined') throw new Error('chart library unavailable');
+    S.charts[canvasId] = new Chart(el, {
+      type: 'bar',
+      data: { labels: usable.map(s=>s.label), datasets: [{
+        data: usable.map(s=>s.value),
+        backgroundColor: usable.map(s=>s.color),
+        borderRadius: 6, borderSkipped: false, barPercentage: .72,
+      }]},
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (c) => ` ${c.parsed.x.toLocaleString()}` } },
+        },
+        scales: {
+          x: { type: 'logarithmic', ticks: { color:'#A7B0C7', font:{family:'Poppins',size:10},
+                 callback: (v) => { const l=Math.log10(v); return Number.isInteger(l) ? (v>=1000?(v/1000)+'k':v) : ''; } },
+               grid: { color:'rgba(90,110,160,.09)' } },
+          y: { ticks: { color:'#4C5878', font:{family:'Poppins',size:11} }, grid: { display:false } },
+        },
+      },
+    });
+  } catch (e) {
+    console.error('funnel chart failed:', e);
+    const box = el.parentElement;
+    if (box) box.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:12px;">Chart unavailable. Figures are in the table below.</div>`;
+  }
+}
+
 function drawChart(canvasId, rows, series) {
   const el = document.getElementById(canvasId);
   if (!el) return;

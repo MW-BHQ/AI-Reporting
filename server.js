@@ -252,20 +252,20 @@ function cacheGet(key) {
   if (Date.now() > hit.expires) { cache.delete(key); return null; }
   return hit;
 }
-function cacheSet(key, value) {
-  cache.set(key, { value, expires: Date.now() + CACHE_TTL_MS, storedAt: Date.now() });
+function cacheSet(key, value, ttlMs) {
+  cache.set(key, { value, expires: Date.now() + (ttlMs || CACHE_TTL_MS), storedAt: Date.now() });
   if (cache.size > 200) {
     const oldest = [...cache.entries()].sort((a, b) => a[1].storedAt - b[1].storedAt)[0];
     if (oldest) cache.delete(oldest[0]);
   }
 }
-async function withCache(key, refresh, producer) {
+async function withCache(key, refresh, producer, ttlMs) {
   if (!refresh) {
     const hit = cacheGet(key);
     if (hit) return { value: hit.value, cached: true, ageSec: Math.round((Date.now() - hit.storedAt) / 1000) };
   }
   const value = await producer();
-  cacheSet(key, value);
+  cacheSet(key, value, ttlMs);
   return { value, cached: false, ageSec: 0 };
 }
 
@@ -1047,6 +1047,84 @@ app.get("/api/campaign", async (req, res) => {
   }
 });
 
+// ----------------------------------------------- ad objective classification
+/**
+ * A campaign's efficiency can only be judged against its own goal: cost per
+ * visit is meaningless for a lead form that never sends anyone to the site, and
+ * a message ad's result is a conversation, not a session.
+ *
+ * Meta's own `campaign_objective` is authoritative, so it's read first. Campaign
+ * names are only a fallback for rows where the objective is missing.
+ */
+const OBJECTIVE_GOALS = {
+  OUTCOME_TRAFFIC: "traffic", LINK_CLICKS: "traffic", TRAFFIC: "traffic",
+  OUTCOME_LEADS: "leads", LEAD_GENERATION: "leads",
+  OUTCOME_SALES: "sales", CONVERSIONS: "sales", PRODUCT_CATALOG_SALES: "sales",
+  MESSAGES: "messages", OUTCOME_MESSAGES: "messages",
+  OUTCOME_ENGAGEMENT: "engagement", POST_ENGAGEMENT: "engagement", PAGE_LIKES: "engagement",
+  OUTCOME_AWARENESS: "awareness", BRAND_AWARENESS: "awareness", REACH: "awareness", VIDEO_VIEWS: "awareness",
+  OUTCOME_APP_PROMOTION: "app",
+};
+
+function goalOf(objective, campaignName) {
+  const o = String(objective || "").trim().toUpperCase();
+  if (OBJECTIVE_GOALS[o]) return OBJECTIVE_GOALS[o];
+  const nm = String(campaignName || "");
+  if (/lead\s*form|leadform|_lead/i.test(nm)) return "leads";
+  if (/message|whatsapp|chat/i.test(nm)) return "messages";
+  if (/traffic/i.test(nm)) return "traffic";
+  if (/awareness|reach|video/i.test(nm)) return "awareness";
+  if (/conversion|purchase|sale/i.test(nm)) return "sales";
+  return "unclassified";
+}
+
+/**
+ * Each goal's "result" — the denominator for cost-per and result-per-baht.
+ * `source` records whether the count comes from the ad platform or the site, so
+ * the UI never implies a lead was measured on the website.
+ */
+const GOAL_DEFS = {
+  traffic:      { label: "Traffic",      result: "visits",   resultLabel: "visit",        source: "GA4" },
+  leads:        { label: "Lead gen",     result: "leads",    resultLabel: "lead",         source: "Meta" },
+  messages:     { label: "Messaging",    result: "messages", resultLabel: "conversation", source: "Meta" },
+  sales:        { label: "Sales",        result: "purchases",resultLabel: "purchase",     source: "GA4" },
+  engagement:   { label: "Engagement",   result: "clicks",   resultLabel: "click",        source: "Meta" },
+  awareness:    { label: "Awareness",    result: "impressions", resultLabel: "1k impressions", source: "Meta", perThousand: true },
+  app:          { label: "App",          result: "clicks",   resultLabel: "click",        source: "Meta" },
+  unclassified: { label: "Unclassified", result: "clicks",   resultLabel: "click",        source: "Meta" },
+};
+
+// ---------------------------------------------------- durable benchmark store
+/**
+ * Benchmark output only changes when a month ends, so it is written to Cloud
+ * Storage keyed by the last complete month and read back on later requests.
+ * Without a bucket configured it falls back to the in-memory cache with a long
+ * TTL — correct, just re-computed after each cold start.
+ */
+const BENCH_BUCKET = process.env.BENCHMARK_BUCKET || "";
+
+async function gcsRead(objectName) {
+  if (!BENCH_BUCKET) return null;
+  const token = await gcpAccessToken();
+  const url = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(BENCH_BUCKET)}/o/${encodeURIComponent(objectName)}?alt=media`;
+  const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`GCS read ${res.status}`);
+  return res.json();
+}
+
+async function gcsWrite(objectName, value) {
+  if (!BENCH_BUCKET) return false;
+  const token = await gcpAccessToken();
+  const url = `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(BENCH_BUCKET)}/o?uploadType=media&name=${encodeURIComponent(objectName)}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify(value),
+  });
+  return res.ok;
+}
+
 // ------------------------------------------------------------- /api/benchmark
 /**
  * Rolling efficiency benchmarks.
@@ -1083,105 +1161,257 @@ function completeMonthsBack(anchorISO, count) {
   return months;
 }
 
-const derive = (t) => ({
-  ...t,
-  costPerVisit: t.spend && t.visits ? t.spend / t.visits : null,
-  costPerKeyEvent: t.spend && t.keyEvents ? t.spend / t.keyEvents : null,
-  costPerContact: t.spend && t.contacts ? t.spend / t.contacts : null,
-  visitsPerK: t.spend ? t.visits / (t.spend / 1000) : null,
-  keyEventsPerK: t.spend ? t.keyEvents / (t.spend / 1000) : null,
-  roas: t.spend ? t.revenue / t.spend : null,
+const derive = (t) => {
+  const o = { ...t };
+  o.costPerVisit    = t.spend && t.visits    ? t.spend / t.visits    : null;
+  o.costPerKeyEvent = t.spend && t.keyEvents ? t.spend / t.keyEvents : null;
+  o.costPerContact  = t.spend && t.contacts  ? t.spend / t.contacts  : null;
+  o.costPerLead     = t.spend && t.leads     ? t.spend / t.leads     : null;
+  o.costPerMessage  = t.spend && t.messages  ? t.spend / t.messages  : null;
+  o.cpm             = t.impressions ? (t.spend / t.impressions) * 1000 : null;
+  o.cpc             = t.spend && t.clicks    ? t.spend / t.clicks    : null;
+  o.visitsPerK      = t.spend ? t.visits    / (t.spend / 1000) : null;
+  o.keyEventsPerK   = t.spend ? t.keyEvents / (t.spend / 1000) : null;
+  o.leadsPerK       = t.spend ? t.leads     / (t.spend / 1000) : null;
+  o.messagesPerK    = t.spend ? t.messages  / (t.spend / 1000) : null;
+  o.roas            = t.spend ? t.revenue   / t.spend : null;
+  return o;
+};
+
+const BLANK = () => ({
+  spend: 0, impressions: 0, clicks: 0, landingPageViews: 0, leads: 0, messages: 0,
+  visits: 0, keyEvents: 0, contacts: 0, revenue: 0, purchases: 0,
 });
+
+const META_MONTHLY_FIELDS = [
+  "date", "account_name", "spend", "impressions", "clicks",
+  "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d", "actions_landing_page_view",
+];
+const META_CAMPAIGN_FIELDS = [
+  "account_name", "campaign", "campaign_objective", "spend", "impressions", "clicks",
+  "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d",
+];
+const leadsOf = (r) => n(r.actions_lead);
+const msgsOf = (r) => n(r.actions_onsite_conversion_messaging_conversation_started_7d);
+
+/** Leading YYMMDD-NN code in a campaign name, or null. */
+const codeStem = (name) => {
+  const m = String(name || "").match(/^(\d{6}-\d{1,3})/);
+  return m ? m[1].toLowerCase() : null;
+};
 
 async function buildBenchmark(anchorISO) {
   const months = completeMonthsBack(anchorISO, 12);
   if (!months.length) throw new Error("No complete months available before the anchor date.");
   const from = months[0].from, to = months[months.length - 1].to;
+  const win = (count) => {
+    const slice = months.slice(-count);
+    return { from: slice[0].from, to: slice[slice.length - 1].to, months: slice.length };
+  };
+  const W = { m3: win(3), m6: win(6), m12: win(12) };
 
   const { data, errors } = await runJobs({
-    ga4: windsor("googleanalytics4",
-      ga4Fields(["date"], ["sessions", ...KEY_EVENT_FIELDS]), from, to, { accounts: [GA4_ACCOUNT] }),
-    ga4Rev: windsor("googleanalytics4",
-      ga4Fields(["date"], ["purchase_revenue", "ecommerce_purchases"]), from, to, { accounts: [GA4_ACCOUNT] }),
-    meta: windsor("facebook", ["date", "spend", "impressions", "clicks"], from, to),
+    metaMonthly: windsor("facebook", META_MONTHLY_FIELDS, from, to),
+    metaCampaigns: windsor("facebook", META_CAMPAIGN_FIELDS, from, to),
+    ga4m3: windsor("googleanalytics4",
+      ga4Fields(["session_manual_campaign_name"], ["sessions", ...KEY_EVENT_FIELDS, "purchase_revenue"]),
+      W.m3.from, W.m3.to, { accounts: [GA4_ACCOUNT] }),
+    ga4m6: windsor("googleanalytics4",
+      ga4Fields(["session_manual_campaign_name"], ["sessions", ...KEY_EVENT_FIELDS, "purchase_revenue"]),
+      W.m6.from, W.m6.to, { accounts: [GA4_ACCOUNT] }),
+    ga4m12: windsor("googleanalytics4",
+      ga4Fields(["session_manual_campaign_name"], ["sessions", ...KEY_EVENT_FIELDS, "purchase_revenue"]),
+      W.m12.from, W.m12.to, { accounts: [GA4_ACCOUNT] }),
+    ga4Monthly: windsor("googleanalytics4",
+      ga4Fields(["date"], ["sessions", ...KEY_EVENT_FIELDS, "purchase_revenue"]),
+      from, to, { accounts: [GA4_ACCOUNT] }),
   });
 
-  const blank = () => ({ spend: 0, impressions: 0, clicks: 0, visits: 0, keyEvents: 0, contacts: 0, revenue: 0, purchases: 0 });
-  const byMonth = new Map(months.map((m) => [m.key, { ...m, ...blank() }]));
-  const put = (dateStr, fn) => {
-    if (!dateStr) return;
-    const k = String(dateStr).slice(0, 7);
-    if (byMonth.has(k)) fn(byMonth.get(k));
+  if (data.metaMonthly === null) {
+    const e = new Error(`Meta Ads unavailable: ${errors.metaMonthly}`);
+    e.status = 502; throw e;
+  }
+
+  // ---- campaign -> account + goal, and each account's code stems ----
+  const campaignInfo = new Map();
+  const accountGoals = new Map();   // account -> goal -> totals
+  const accountStems = new Map();   // account -> Set(code stem)
+  for (const r of data.metaCampaigns || []) {
+    const acct = r.account_name || "Unknown";
+    const goal = goalOf(r.campaign_objective, r.campaign);
+    campaignInfo.set(r.campaign, { account: acct, goal, objective: r.campaign_objective || null });
+    if (!accountGoals.has(acct)) accountGoals.set(acct, new Map());
+    const gm = accountGoals.get(acct);
+    if (!gm.has(goal)) gm.set(goal, { goal, ...BLANK() });
+    const g = gm.get(goal);
+    g.spend += n(r.spend); g.impressions += n(r.impressions); g.clicks += n(r.clicks);
+    g.leads += leadsOf(r); g.messages += msgsOf(r);
+    const stem = codeStem(r.campaign);
+    if (stem) {
+      if (!accountStems.has(acct)) accountStems.set(acct, new Set());
+      accountStems.get(acct).add(stem);
+    }
+  }
+
+  // ---- monthly series per account, plus an "all" roll-up ----
+  const monthIndex = new Map(months.map((m) => [m.key, m]));
+  const seriesByAccount = new Map();
+  const ensure = (acct) => {
+    if (!seriesByAccount.has(acct)) {
+      seriesByAccount.set(acct, new Map(months.map((m) => [m.key, { ...m, ...BLANK() }])));
+    }
+    return seriesByAccount.get(acct);
+  };
+  for (const r of data.metaMonthly) {
+    const k = String(r.date || "").slice(0, 7);
+    if (!monthIndex.has(k)) continue;
+    for (const acct of [r.account_name || "Unknown", "__all__"]) {
+      const m = ensure(acct).get(k);
+      m.spend += n(r.spend); m.impressions += n(r.impressions); m.clicks += n(r.clicks);
+      m.leads += leadsOf(r); m.messages += msgsOf(r);
+      m.landingPageViews += n(r.actions_landing_page_view);
+    }
+  }
+  // Site-side metrics exist only in total, so they're attached to the roll-up.
+  if (data.ga4Monthly !== null) for (const r of data.ga4Monthly) {
+    const k = String(r.date || "").slice(0, 7);
+    if (!monthIndex.has(k)) continue;
+    const m = ensure("__all__").get(k);
+    m.visits += n(r.sessions); m.keyEvents += sumKeyEvents(r);
+    m.contacts += n(r.conversions_contact_us); m.revenue += n(r.purchase_revenue);
+  }
+
+  /** GA4 rows for a window, attributed to an account via campaign code stems. */
+  const ga4ForAccount = (rows, stems) => {
+    const t = BLANK();
+    if (rows === null) return t;
+    for (const r of rows) {
+      const name = norm(r.session_manual_campaign_name);
+      if (!name) continue;
+      if (stems && ![...stems].some((st) => name.startsWith(st))) continue;
+      t.visits += n(r.sessions); t.keyEvents += sumKeyEvents(r);
+      t.contacts += n(r.conversions_contact_us); t.revenue += n(r.purchase_revenue);
+    }
+    return t;
   };
 
-  if (data.ga4 !== null) for (const r of data.ga4) put(r.date, (m) => {
-    m.visits += n(r.sessions);
-    m.keyEvents += sumKeyEvents(r);
-    m.contacts += n(r.conversions_contact_us);
-  });
-  if (data.ga4Rev !== null) for (const r of data.ga4Rev) put(r.date, (m) => {
-    m.revenue += n(r.purchase_revenue);
-    m.purchases += n(r.ecommerce_purchases);
-  });
-  if (data.meta !== null) for (const r of data.meta) put(r.date, (m) => {
-    m.spend += n(r.spend);
-    m.impressions += n(r.impressions);
-    m.clicks += n(r.clicks);
-  });
+  const windowRows = { m3: data.ga4m3, m6: data.ga4m6, m12: data.ga4m12 };
 
-  const series = months.map((m) => derive(byMonth.get(m.key)));
-  // Months with no activity at all are almost certainly outside the connector's
-  // history rather than genuinely zero, so they're excluded from the windows.
-  const active = series.filter((m) => m.spend > 0 || m.visits > 0);
+  function buildAccount(acct) {
+    const isAll = acct === "__all__";
+    const series = months.map((m) => derive(ensure(acct).get(m.key)));
+    const active = series.filter((m) => m.spend > 0 || m.visits > 0);
+    const stems = isAll ? null : (accountStems.get(acct) || new Set());
 
-  const windowFor = (count) => {
-    const slice = active.slice(-count);
-    if (!slice.length) return null;
-    const t = slice.reduce((a, m) => {
-      for (const k of Object.keys(blank())) a[k] += m[k];
-      return a;
-    }, blank());
-    return { months: slice.length, requested: count, avgMonthlySpend: t.spend / slice.length, ...derive(t) };
-  };
+    const windows = {};
+    for (const [key, wdef] of Object.entries(W)) {
+      const slice = series.slice(-wdef.months).filter((m) => m.spend > 0 || m.visits > 0);
+      if (!slice.length) { windows[key] = null; continue; }
+      const t = slice.reduce((a, m) => {
+        for (const f of Object.keys(BLANK())) a[f] += m[f];
+        return a;
+      }, BLANK());
+      // Site metrics for a single account come from the code-matched window pull,
+      // not from the monthly series (which only carries them in the roll-up).
+      if (!isAll) {
+        const g = ga4ForAccount(windowRows[key], stems);
+        t.visits = g.visits; t.keyEvents = g.keyEvents; t.contacts = g.contacts; t.revenue = g.revenue;
+      }
+      windows[key] = { months: slice.length, requested: wdef.months, avgMonthlySpend: t.spend / slice.length, ...derive(t) };
+    }
 
-  const windows = { m3: windowFor(3), m6: windowFor(6), m12: windowFor(12) };
-  const latest = active.length ? active[active.length - 1] : null;
+    const latest = active.length ? active[active.length - 1] : null;
+    const goals = isAll
+      ? [...[...accountGoals.values()].reduce((acc, gm) => {
+          for (const [g, v] of gm.entries()) {
+            if (!acc.has(g)) acc.set(g, { goal: g, ...BLANK() });
+            const t = acc.get(g);
+            for (const f of Object.keys(BLANK())) t[f] += v[f];
+          }
+          return acc;
+        }, new Map()).values()]
+      : [...(accountGoals.get(acct) || new Map()).values()];
 
-  // Signed deltas, with direction so the UI knows which way is good.
+    return {
+      account: isAll ? "All accounts" : acct,
+      id: acct,
+      series, windows, latestMonth: latest ? { key: latest.key, label: latest.label } : null,
+      spend3m: windows.m3 ? windows.m3.spend : 0,
+      spend12m: windows.m12 ? windows.m12.spend : 0,
+      goals: goals.map((g) => {
+        const def = GOAL_DEFS[g.goal] || GOAL_DEFS.unclassified;
+        const d2 = derive(g);
+        const resultCount = g[def.result] || 0;
+        const per = def.perThousand ? resultCount / 1000 : resultCount;
+        return {
+          goal: g.goal, label: def.label, resultLabel: def.resultLabel, source: def.source,
+          spend: g.spend, impressions: g.impressions, clicks: g.clicks,
+          leads: g.leads, messages: g.messages,
+          resultCount, costPerResult: g.spend && per ? g.spend / per : null,
+          resultsPerK: g.spend ? per / (g.spend / 1000) : null,
+          cpm: d2.cpm, cpc: d2.cpc,
+        };
+      }).sort((a, b) => b.spend - a.spend),
+    };
+  }
+
+  // Accounts with any spend in the 12 months, busiest 3 months first.
+  const accountNames = [...seriesByAccount.keys()].filter((a) => a !== "__all__");
+  const accounts = accountNames.map(buildAccount)
+    .filter((a) => a.spend12m > 0)
+    .sort((a, b) => b.spend3m - a.spend3m);
+  const all = buildAccount("__all__");
+
   const METRICS = [
     { id: "costPerVisit", label: "Cost per visit", money: true, lowerIsBetter: true },
     { id: "costPerContact", label: "Cost per contact", money: true, lowerIsBetter: true },
-    { id: "costPerKeyEvent", label: "Cost per key event", money: true, lowerIsBetter: true },
+    { id: "costPerLead", label: "Cost per lead", money: true, lowerIsBetter: true },
+    { id: "costPerMessage", label: "Cost per conversation", money: true, lowerIsBetter: true },
+    { id: "cpm", label: "CPM", money: true, lowerIsBetter: true },
     { id: "keyEventsPerK", label: "Key events per ฿1,000", money: false, lowerIsBetter: false },
-    { id: "visitsPerK", label: "Visits per ฿1,000", money: false, lowerIsBetter: false },
     { id: "roas", label: "Revenue per ฿1 spend", money: false, lowerIsBetter: false },
   ];
-  const comparison = !latest ? null : METRICS.map((mt) => {
-    const cur = latest[mt.id];
-    const vs = {};
-    for (const [k, w] of Object.entries(windows)) {
-      const base = w ? w[mt.id] : null;
-      vs[k] = (cur == null || base == null || base === 0) ? null
-        : { base, deltaPct: ((cur - base) / base) * 100 };
-    }
-    return { ...mt, current: cur, vs };
-  });
+  const comparisonFor = (a) => {
+    const latest = a.series.filter((m) => m.spend > 0 || m.visits > 0).slice(-1)[0];
+    if (!latest) return null;
+    return METRICS.map((mt) => {
+      const cur = latest[mt.id];
+      const vs = {};
+      for (const [k, w] of Object.entries(a.windows)) {
+        const base = w ? w[mt.id] : null;
+        vs[k] = (cur == null || base == null || base === 0) ? null : { base, deltaPct: ((cur - base) / base) * 100 };
+      }
+      return { ...mt, current: cur, vs };
+    }).filter((m) => m.current != null || Object.values(m.vs).some((v) => v));
+  };
+
+  all.comparison = comparisonFor(all);
+  for (const a of accounts) a.comparison = comparisonFor(a);
 
   return {
     anchor: anchorISO,
-    coverage: { from, to, completeMonths: months.length, monthsWithData: active.length },
-    latestMonth: latest ? { key: latest.key, label: latest.label } : null,
-    series, windows, comparison,
+    coverage: { from, to, completeMonths: months.length, monthsWithData: all.series.filter((m) => m.spend > 0 || m.visits > 0).length },
+    all, accounts,
     unavailable: Object.keys(errors), errors,
-    syncedAt: new Date().toISOString(),
+    computedAt: new Date().toISOString(),
   };
 }
 
 app.get("/api/benchmark", async (req, res) => {
   const anchor = isoDate(req.query.to) ? req.query.to : new Date().toISOString().slice(0, 10);
+  const refresh = req.query.refresh === "1";
+  const months = completeMonthsBack(anchor, 1);
+  const stamp = months.length ? months[0].key : anchor;
+  const objectName = `benchmark/${stamp}.json`;
   try {
-    const out = await withCache(`benchmark:${anchor}`, req.query.refresh === "1", () => buildBenchmark(anchor));
-    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+    if (!refresh) {
+      const stored = await gcsRead(objectName).catch(() => null);
+      if (stored) return res.json({ ...stored, cached: true, storedFor: stamp, store: "gcs" });
+    }
+    // Long TTL: the answer can't change until the month rolls over.
+    const out = await withCache(`benchmark:${stamp}`, refresh, () => buildBenchmark(anchor), 7 * 24 * 3600 * 1000);
+    gcsWrite(objectName, out.value).catch((e) => logJson("WARNING", "benchmark_store_failed", { error: String(e.message || e) }));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec, storedFor: stamp, store: BENCH_BUCKET ? "gcs" : "memory" });
   } catch (err) {
     logJson("ERROR", "benchmark_failed", { error: String(err.message || err) });
     res.status(err.status || 500).json({ error: err.message || "Benchmark failed" });
@@ -1229,7 +1459,8 @@ async function buildUntagged(from, to) {
       ga4Fields(["session_manual_campaign_name", "session_manual_source", "session_manual_medium"],
         ["sessions", ...KEY_EVENT_FIELDS]),
       from, to, { accounts: [GA4_ACCOUNT] }),
-    meta: windsor("facebook", ["campaign", "account_name", "impressions", "clicks", "spend"], from, to),
+    meta: windsor("facebook", ["campaign", "account_name", "campaign_objective", "impressions", "clicks", "spend",
+      "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d"], from, to),
   });
 
   if (data.ga4 === null) {
@@ -1263,15 +1494,21 @@ async function buildUntagged(from, to) {
   const untaggedKeyEvents = issues.reduce((a, b) => a + b.keyEvents, 0);
 
   // ---- spend side ----
-  let spendTotal = null, spendUnmatched = null, unmatchedCampaigns = null;
+  let spendTotal = null, spendUnmatched = null, unmatchedCampaigns = null, spendUnmatchedSiteOutcome = 0;
   if (data.meta !== null) {
     const agg = new Map();
     for (const r of data.meta) {
       const name = r.campaign;
       if (!name) continue;
-      if (!agg.has(name)) agg.set(name, { name, account: r.account_name || "", impressions: 0, clicks: 0, spend: 0 });
+      if (!agg.has(name)) agg.set(name, {
+        name, account: r.account_name || "", objective: r.campaign_objective || null,
+        goal: goalOf(r.campaign_objective, name),
+        impressions: 0, clicks: 0, spend: 0, leads: 0, messages: 0,
+      });
       const a = agg.get(name);
       a.impressions += n(r.impressions); a.clicks += n(r.clicks); a.spend += n(r.spend);
+      a.leads += n(r.actions_lead);
+      a.messages += n(r.actions_onsite_conversion_messaging_conversation_started_7d);
     }
     const all = [...agg.values()];
     spendTotal = all.reduce((a, c) => a + c.spend, 0);
@@ -1284,7 +1521,24 @@ async function buildUntagged(from, to) {
       return true;
     });
     spendUnmatched = unmatched.reduce((a, c) => a + c.spend, 0);
-    unmatchedCampaigns = unmatched.sort((a, b) => b.spend - a.spend).slice(0, 25);
+    /**
+     * Attach each campaign's own result metric. Untagged spend on a lead form or
+     * message ad is NOT lost measurement — Meta counts those results itself. Only
+     * traffic-objective campaigns genuinely lose their outcome when the utm is
+     * missing, because the outcome happens on the website.
+     */
+    unmatchedCampaigns = unmatched.map((c) => {
+      const def = GOAL_DEFS[c.goal] || GOAL_DEFS.unclassified;
+      const raw = c[def.result] || 0;
+      const per = def.perThousand ? raw / 1000 : raw;
+      return {
+        ...c, goalLabel: def.label, resultLabel: def.resultLabel, resultSource: def.source,
+        resultCount: raw, costPerResult: c.spend && per ? c.spend / per : null,
+        measurableWithoutUtm: def.source === "Meta",
+      };
+    }).sort((a, b) => b.spend - a.spend).slice(0, 30);
+    const siteOutcome = unmatchedCampaigns.filter((c) => !c.measurableWithoutUtm);
+    spendUnmatchedSiteOutcome = siteOutcome.reduce((a, c) => a + c.spend, 0);
   }
 
   return {
@@ -1298,6 +1552,9 @@ async function buildUntagged(from, to) {
     spend: {
       total: spendTotal, unmatched: spendUnmatched,
       unmatchedShare: spendTotal ? (spendUnmatched / spendTotal) * 100 : null,
+      // The subset that actually loses its outcome: site-measured goals only.
+      unmatchedSiteOutcome: spendUnmatchedSiteOutcome,
+      unmatchedSiteOutcomeShare: spendTotal ? (spendUnmatchedSiteOutcome / spendTotal) * 100 : null,
       unmatchedCampaigns,
     },
     taggedCodes: codesSeen.size,
