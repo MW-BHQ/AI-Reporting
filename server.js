@@ -1047,6 +1047,277 @@ app.get("/api/campaign", async (req, res) => {
   }
 });
 
+// ------------------------------------------------------------- /api/benchmark
+/**
+ * Rolling efficiency benchmarks.
+ *
+ * A benchmark is only meaningful as a comparison, so this returns the last 12
+ * COMPLETE calendar months plus trailing 3/6/12-month windows, and compares the
+ * most recent complete month against each. Partial months are excluded on both
+ * sides — comparing 3 days of August against a full-month average would make
+ * every metric look spectacular.
+ *
+ * Window ratios are derived from summed totals, not averaged from monthly
+ * ratios: averaging ratios lets a tiny month distort the figure as much as a
+ * large one.
+ */
+function monthKey(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; }
+
+function completeMonthsBack(anchorISO, count) {
+  const a = new Date(anchorISO + "T00:00:00Z");
+  // The anchor's own month is treated as incomplete unless the anchor is its last day.
+  const lastOfAnchorMonth = new Date(Date.UTC(a.getUTCFullYear(), a.getUTCMonth() + 1, 0));
+  const anchorMonthComplete = a.getUTCDate() === lastOfAnchorMonth.getUTCDate();
+  const end = new Date(Date.UTC(a.getUTCFullYear(), a.getUTCMonth() + (anchorMonthComplete ? 1 : 0), 0));
+  const months = [];
+  for (let i = count - 1; i >= 0; i--) {
+    const first = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - i, 1));
+    const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0));
+    months.push({
+      key: monthKey(first),
+      label: first.toLocaleString("en", { month: "short", year: "2-digit", timeZone: "UTC" }),
+      from: first.toISOString().slice(0, 10),
+      to: last.toISOString().slice(0, 10),
+    });
+  }
+  return months;
+}
+
+const derive = (t) => ({
+  ...t,
+  costPerVisit: t.spend && t.visits ? t.spend / t.visits : null,
+  costPerKeyEvent: t.spend && t.keyEvents ? t.spend / t.keyEvents : null,
+  costPerContact: t.spend && t.contacts ? t.spend / t.contacts : null,
+  visitsPerK: t.spend ? t.visits / (t.spend / 1000) : null,
+  keyEventsPerK: t.spend ? t.keyEvents / (t.spend / 1000) : null,
+  roas: t.spend ? t.revenue / t.spend : null,
+});
+
+async function buildBenchmark(anchorISO) {
+  const months = completeMonthsBack(anchorISO, 12);
+  if (!months.length) throw new Error("No complete months available before the anchor date.");
+  const from = months[0].from, to = months[months.length - 1].to;
+
+  const { data, errors } = await runJobs({
+    ga4: windsor("googleanalytics4",
+      ga4Fields(["date"], ["sessions", ...KEY_EVENT_FIELDS]), from, to, { accounts: [GA4_ACCOUNT] }),
+    ga4Rev: windsor("googleanalytics4",
+      ga4Fields(["date"], ["purchase_revenue", "ecommerce_purchases"]), from, to, { accounts: [GA4_ACCOUNT] }),
+    meta: windsor("facebook", ["date", "spend", "impressions", "clicks"], from, to),
+  });
+
+  const blank = () => ({ spend: 0, impressions: 0, clicks: 0, visits: 0, keyEvents: 0, contacts: 0, revenue: 0, purchases: 0 });
+  const byMonth = new Map(months.map((m) => [m.key, { ...m, ...blank() }]));
+  const put = (dateStr, fn) => {
+    if (!dateStr) return;
+    const k = String(dateStr).slice(0, 7);
+    if (byMonth.has(k)) fn(byMonth.get(k));
+  };
+
+  if (data.ga4 !== null) for (const r of data.ga4) put(r.date, (m) => {
+    m.visits += n(r.sessions);
+    m.keyEvents += sumKeyEvents(r);
+    m.contacts += n(r.conversions_contact_us);
+  });
+  if (data.ga4Rev !== null) for (const r of data.ga4Rev) put(r.date, (m) => {
+    m.revenue += n(r.purchase_revenue);
+    m.purchases += n(r.ecommerce_purchases);
+  });
+  if (data.meta !== null) for (const r of data.meta) put(r.date, (m) => {
+    m.spend += n(r.spend);
+    m.impressions += n(r.impressions);
+    m.clicks += n(r.clicks);
+  });
+
+  const series = months.map((m) => derive(byMonth.get(m.key)));
+  // Months with no activity at all are almost certainly outside the connector's
+  // history rather than genuinely zero, so they're excluded from the windows.
+  const active = series.filter((m) => m.spend > 0 || m.visits > 0);
+
+  const windowFor = (count) => {
+    const slice = active.slice(-count);
+    if (!slice.length) return null;
+    const t = slice.reduce((a, m) => {
+      for (const k of Object.keys(blank())) a[k] += m[k];
+      return a;
+    }, blank());
+    return { months: slice.length, requested: count, avgMonthlySpend: t.spend / slice.length, ...derive(t) };
+  };
+
+  const windows = { m3: windowFor(3), m6: windowFor(6), m12: windowFor(12) };
+  const latest = active.length ? active[active.length - 1] : null;
+
+  // Signed deltas, with direction so the UI knows which way is good.
+  const METRICS = [
+    { id: "costPerVisit", label: "Cost per visit", money: true, lowerIsBetter: true },
+    { id: "costPerContact", label: "Cost per contact", money: true, lowerIsBetter: true },
+    { id: "costPerKeyEvent", label: "Cost per key event", money: true, lowerIsBetter: true },
+    { id: "keyEventsPerK", label: "Key events per ฿1,000", money: false, lowerIsBetter: false },
+    { id: "visitsPerK", label: "Visits per ฿1,000", money: false, lowerIsBetter: false },
+    { id: "roas", label: "Revenue per ฿1 spend", money: false, lowerIsBetter: false },
+  ];
+  const comparison = !latest ? null : METRICS.map((mt) => {
+    const cur = latest[mt.id];
+    const vs = {};
+    for (const [k, w] of Object.entries(windows)) {
+      const base = w ? w[mt.id] : null;
+      vs[k] = (cur == null || base == null || base === 0) ? null
+        : { base, deltaPct: ((cur - base) / base) * 100 };
+    }
+    return { ...mt, current: cur, vs };
+  });
+
+  return {
+    anchor: anchorISO,
+    coverage: { from, to, completeMonths: months.length, monthsWithData: active.length },
+    latestMonth: latest ? { key: latest.key, label: latest.label } : null,
+    series, windows, comparison,
+    unavailable: Object.keys(errors), errors,
+    syncedAt: new Date().toISOString(),
+  };
+}
+
+app.get("/api/benchmark", async (req, res) => {
+  const anchor = isoDate(req.query.to) ? req.query.to : new Date().toISOString().slice(0, 10);
+  try {
+    const out = await withCache(`benchmark:${anchor}`, req.query.refresh === "1", () => buildBenchmark(anchor));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "benchmark_failed", { error: String(err.message || err) });
+    res.status(err.status || 500).json({ error: err.message || "Benchmark failed" });
+  }
+});
+
+// -------------------------------------------------------------- /api/untagged
+/**
+ * Tagging audit. Quantifies what the campaign view cannot see:
+ *
+ *  - traffic arriving with a campaign value that isn't a usable code, split by
+ *    cause (a bare platform ID means the ad link carried no utm_campaign; a
+ *    placeholder means a template variable was never substituted);
+ *  - ad spend on campaigns whose names carry no code that matches any tagged
+ *    utm_campaign, i.e. money that can never be joined to an outcome.
+ *
+ * The point is to turn "tagging is a bit messy" into a figure someone can act on.
+ */
+const PLACEHOLDER_RE = /(__|\{\{|\}\}|%%|\[\[)/;
+const PAID_MEDIUM_AUDIT_RE = /(cpc|ppc|paid|display|banner|video)/i;
+
+function classifyCampaignValue(code, medium) {
+  const c = String(code || "").trim();
+  const lc = c.toLowerCase();
+  if (!c || lc === "(not set)" || lc === "(none)") {
+    return PAID_MEDIUM_AUDIT_RE.test(String(medium || "")) ? "paid_untagged" : null;
+  }
+  if (NON_CAMPAIGN.has(lc)) return null;              // organic/referral: fine
+  if (isPlatformId(c)) return "platform_id";
+  if (PLACEHOLDER_RE.test(c)) return "placeholder";
+  if (looksLikeCode(c)) return null;                   // properly coded
+  return "no_code";                                    // named, but not to convention
+}
+
+const AUDIT_LABELS = {
+  platform_id: "Bare platform ID — the ad link had no utm_campaign, so GA4 fell back to the platform's internal campaign ID",
+  placeholder: "Unsubstituted placeholder — a template variable reached production without being replaced",
+  paid_untagged: "Paid traffic with no campaign at all",
+  no_code: "Named campaign that doesn't follow the YYMMDD-NN convention, so it can't be matched or dated",
+};
+
+async function buildUntagged(from, to) {
+  const { data, errors } = await runJobs({
+    ga4: windsor("googleanalytics4",
+      ga4Fields(["session_manual_campaign_name", "session_manual_source", "session_manual_medium"],
+        ["sessions", ...KEY_EVENT_FIELDS]),
+      from, to, { accounts: [GA4_ACCOUNT] }),
+    meta: windsor("facebook", ["campaign", "account_name", "impressions", "clicks", "spend"], from, to),
+  });
+
+  if (data.ga4 === null) {
+    const e = new Error(`GA4 unavailable: ${errors.ga4}`);
+    e.status = 502; throw e;
+  }
+
+  // ---- traffic side ----
+  let taggedVisits = 0, taggedKeyEvents = 0;
+  const buckets = new Map();
+  const codesSeen = new Set();
+  for (const r of data.ga4) {
+    const visits = n(r.sessions);
+    const ke = sumKeyEvents(r);
+    const kind = classifyCampaignValue(r.session_manual_campaign_name, r.session_manual_medium);
+    if (kind === null) {
+      if (looksLikeCode(r.session_manual_campaign_name)) {
+        taggedVisits += visits; taggedKeyEvents += ke;
+        codesSeen.add(norm(r.session_manual_campaign_name));
+      }
+      continue;
+    }
+    if (!buckets.has(kind)) buckets.set(kind, { kind, label: AUDIT_LABELS[kind], visits: 0, keyEvents: 0, examples: [] });
+    const b = buckets.get(kind);
+    b.visits += visits; b.keyEvents += ke;
+    const ex = String(r.session_manual_campaign_name || "(not set)");
+    if (b.examples.length < 6 && !b.examples.includes(ex)) b.examples.push(ex);
+  }
+  const issues = [...buckets.values()].sort((a, b) => b.visits - a.visits);
+  const untaggedVisits = issues.reduce((a, b) => a + b.visits, 0);
+  const untaggedKeyEvents = issues.reduce((a, b) => a + b.keyEvents, 0);
+
+  // ---- spend side ----
+  let spendTotal = null, spendUnmatched = null, unmatchedCampaigns = null;
+  if (data.meta !== null) {
+    const agg = new Map();
+    for (const r of data.meta) {
+      const name = r.campaign;
+      if (!name) continue;
+      if (!agg.has(name)) agg.set(name, { name, account: r.account_name || "", impressions: 0, clicks: 0, spend: 0 });
+      const a = agg.get(name);
+      a.impressions += n(r.impressions); a.clicks += n(r.clicks); a.spend += n(r.spend);
+    }
+    const all = [...agg.values()];
+    spendTotal = all.reduce((a, c) => a + c.spend, 0);
+    // A Meta campaign is joinable if its leading code prefixes a tagged utm value.
+    const unmatched = all.filter((c) => {
+      const m = String(c.name).match(/^(\d{6}-\d{1,3})/);
+      if (!m) return true;                                  // no code in the name at all
+      const stem = norm(m[1]);
+      for (const code of codesSeen) if (code.startsWith(stem)) return false;
+      return true;
+    });
+    spendUnmatched = unmatched.reduce((a, c) => a + c.spend, 0);
+    unmatchedCampaigns = unmatched.sort((a, b) => b.spend - a.spend).slice(0, 25);
+  }
+
+  return {
+    range: { from, to },
+    traffic: {
+      taggedVisits, untaggedVisits,
+      taggedKeyEvents, untaggedKeyEvents,
+      untaggedShare: (taggedVisits + untaggedVisits) ? (untaggedVisits / (taggedVisits + untaggedVisits)) * 100 : null,
+      issues,
+    },
+    spend: {
+      total: spendTotal, unmatched: spendUnmatched,
+      unmatchedShare: spendTotal ? (spendUnmatched / spendTotal) * 100 : null,
+      unmatchedCampaigns,
+    },
+    taggedCodes: codesSeen.size,
+    errors,
+    syncedAt: new Date().toISOString(),
+  };
+}
+
+app.get("/api/untagged", async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  try {
+    const out = await withCache(`untagged:${from}:${to}`, req.query.refresh === "1", () => buildUntagged(from, to));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "untagged_failed", { error: String(err.message || err) });
+    res.status(err.status || 500).json({ error: err.message || "Tagging audit failed" });
+  }
+});
+
 // ------------------------------------------------------------------ AI (v2)
 
 async function anthropic(prompt, { system, maxTokens = 1500 } = {}) {

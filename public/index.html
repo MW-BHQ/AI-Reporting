@@ -212,6 +212,42 @@
   .chart-wrap{height:250px;}
   .hidden{display:none!important;}
 
+  /* ---------------- print / PDF: 16:9 presentation ---------------- */
+  .print-head{display:none;}
+  @media print{
+    /* 13.333in x 7.5in is the standard 16:9 slide canvas. */
+    @page{size:13.333in 7.5in;margin:0.45in;}
+    *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
+    body{background:#fff!important;font-size:11px;}
+    .rail,.toolbar,.status,.search,.tags,.btn,#loadBtn{display:none!important;}
+    .shell{display:block;}
+    .main{padding:0!important;}
+    .head{margin-bottom:10px;border-bottom:1px solid #d8dfee;padding-bottom:8px;}
+    h1{font-size:20px;}
+    .print-head{
+      display:flex!important;align-items:center;justify-content:space-between;
+      gap:14px;margin-bottom:12px;padding-bottom:10px;border-bottom:2px solid #1B2340;
+    }
+    .print-head img{width:132px;height:auto;}
+    .print-head .pmeta{text-align:right;font-size:10.5px;color:#4C5878;line-height:1.5;}
+    .card{
+      background:#fff!important;box-shadow:none!important;backdrop-filter:none!important;
+      border:1px solid #dde3f0!important;border-radius:10px;padding:12px 14px;
+      break-inside:avoid;page-break-inside:avoid;
+    }
+    .grid{gap:10px;break-inside:avoid;page-break-inside:avoid;}
+    .mt{margin-top:10px;}
+    .stat .val{font-size:17px;}
+    .chart-wrap{height:190px;}
+    table{font-size:10px;}
+    td,th{padding:5px 0;}
+    td.trunc{max-width:200px;}
+    .note,.stage-note{font-size:9px;}
+    /* Force a new slide before these blocks so sections don't split awkwardly. */
+    .slide-break{break-before:page;page-break-before:always;}
+    a{color:#1B2340!important;text-decoration:none!important;}
+  }
+
   @media(max-width:1080px){.g-5,.g-4{grid-template-columns:repeat(2,1fr);}.g-2-1,.g-3{grid-template-columns:1fr;}}
   @media(max-width:760px){
     .shell{flex-direction:column;}
@@ -244,6 +280,14 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg>
         Campaigns
       </div>
+      <div class="nav-item" data-view="benchmark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+        Benchmarks
+      </div>
+      <div class="nav-item" data-view="audit">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h9"/></svg>
+        Tagging audit
+      </div>
       <div class="nav-item" data-view="topics">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
         Topic Explorer
@@ -260,6 +304,13 @@
 
   <!-- ================= main ================= -->
   <main class="main">
+    <div class="print-head">
+      <img src="/brand/bh-wordmark.png" alt="Bangkok Hospital">
+      <div class="pmeta">
+        <div><b id="printTitle">Control Room</b></div>
+        <div id="printRange"></div>
+      </div>
+    </div>
     <div class="head">
       <div>
         <h1 id="viewTitle">Overview</h1>
@@ -276,6 +327,7 @@
           <input type="date" id="from"><span>→</span><input type="date" id="to">
         </div>
         <button class="btn btn-primary" id="loadBtn"><span class="spin"></span><span id="loadLabel">Load</span></button>
+        <button class="btn btn-ghost" id="printBtn" title="Print or save as PDF at 16:9 slide size">PDF</button>
       </div>
     </div>
     <div class="status" style="margin-bottom:18px;">
@@ -296,6 +348,8 @@ const S = {
   campaign: null, campaignCode: '',
   campaignList: null, campaignListKey: null,
   topic: null, topicTerm: '',
+  audit: null, auditKey: null,
+  bench: null, benchKey: null,
   charts: {},
 };
 
@@ -364,6 +418,8 @@ const TITLES = {
   overview: ['Overview', 'Impressions → Visits → Key Events across all channels'],
   campaigns: ['Campaigns', 'Enter a utm_campaign code to see its funnel and every variant'],
   topics: ['Topic Explorer', 'Multilingual search demand across 10 site languages'],
+  audit: ['Tagging audit', 'How much traffic and spend the campaign view cannot attribute'],
+  benchmark: ['Benchmarks', 'Latest complete month against trailing 3, 6 and 12-month norms'],
 };
 
 // ============================================================ fetching
@@ -398,6 +454,28 @@ async function loadCampaignList() {
   return S.campaignList;
 }
 
+async function loadBenchmark(refresh = false) {
+  const key = $('to').value;
+  if (!refresh && S.benchKey === key && S.bench) return S.bench;
+  setStatus('busy', 'building 12-month benchmark…');
+  const res = await fetch(`/api/benchmark?to=${$('to').value}${refresh?'&refresh=1':''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,200)}`);
+  S.bench = await res.json(); S.benchKey = key;
+  setStatus('ok', S.bench.cached ? `cached ${S.bench.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.bench;
+}
+
+async function loadAudit(refresh = false) {
+  const key = `${$('from').value}|${$('to').value}`;
+  if (!refresh && S.auditKey === key && S.audit) return S.audit;
+  setStatus('busy', 'auditing campaign tagging…');
+  const res = await fetch(`/api/untagged?from=${$('from').value}&to=${$('to').value}${refresh?'&refresh=1':''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,200)}`);
+  S.audit = await res.json(); S.auditKey = key;
+  setStatus('ok', S.audit.cached ? `cached ${S.audit.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.audit;
+}
+
 async function loadTopic(topic) {
   setStatus('busy', `expanding “${topic}” across 10 languages…`);
   const res = await fetch('/api/topic', {
@@ -419,6 +497,8 @@ $('loadBtn').addEventListener('click', async () => {
       S.campaignList = null; S.campaignListKey = null;
       if (S.campaignCode) await loadCampaign(S.campaignCode, true);
     }
+    else if (S.view === 'audit') { await loadAudit(true); }
+    else if (S.view === 'benchmark') { await loadBenchmark(true); }
     else if (S.view === 'topics' && S.topicTerm) { await loadTopic(S.topicTerm); }
     render();
   } catch (err) {
@@ -442,6 +522,8 @@ function render() {
   S.charts = {};
   if (S.view === 'overview') renderOverview();
   else if (S.view === 'campaigns') renderCampaigns();
+  else if (S.view === 'audit') renderAudit();
+  else if (S.view === 'benchmark') renderBenchmark();
   else renderTopics();
 }
 
@@ -915,6 +997,172 @@ function renderTopicBody(d) {
   `;
 }
 
+// ============================================================ BENCHMARK
+function renderBenchmark() {
+  const d = S.bench;
+  if (!d) {
+    $('viewRoot').innerHTML = `<div class="card"><div class="state">
+      <div class="big">Ready to benchmark</div>
+      <div style="max-width:480px;font-size:12.5px;">Press <b>Load</b>. This view ignores the date range except as an end anchor — it always reads the last 12 <b>complete</b> calendar months, so partial months can't flatter the comparison.</div>
+    </div></div>`;
+    return;
+  }
+  const cov = d.coverage, w = d.windows;
+
+  // Delta chip: colour reflects whether the movement is good, not its sign.
+  const chip = (cell, lowerIsBetter) => {
+    if (!cell) return '<span style="color:var(--faint)">—</span>';
+    const p = cell.deltaPct;
+    const good = lowerIsBetter ? p < 0 : p > 0;
+    const flat = Math.abs(p) < 2;
+    const col = flat ? 'var(--muted)' : (good ? 'var(--green)' : 'var(--rose)');
+    const arrow = flat ? '' : (p > 0 ? '▲' : '▼');
+    return `<span style="color:${col};font-weight:600;">${arrow} ${Math.abs(p).toFixed(0)}%</span>`;
+  };
+  const fmtMetric = (v, money) => v == null ? '—' : (money ? num(v,{money:true}) : num(v,{dp:2}));
+
+  const shortMonths = w.m3 && w.m3.months < 3;
+
+  $('viewRoot').innerHTML = `
+    ${cov.monthsWithData < cov.completeMonths ? `<div class="warnbox">Only <b>${cov.monthsWithData}</b> of the last ${cov.completeMonths} complete months have data in Windsor, so the 12-month window covers less than a year. Months with no spend and no visits are treated as missing history rather than as genuine zeros — averaging them in would understate every figure.</div>` : ''}
+    ${shortMonths ? `<div class="warnbox">Fewer than 3 complete months of history are available, so these windows overlap heavily and the comparison is weak.</div>` : ''}
+
+    <div class="grid g-4">
+      <div class="stat card"><div class="lab">Latest complete month</div>
+        <div class="val">${esc(d.latestMonth?d.latestMonth.label:'—')}</div>
+        <div class="sub">the row everything is compared against</div></div>
+      <div class="stat card"><div class="lab">Avg monthly spend · 3M</div>
+        <div class="val">${w.m3?num(w.m3.avgMonthlySpend,{money:true}):'—'}</div>
+        <div class="sub">${w.m3?`over ${w.m3.months} month${w.m3.months>1?'s':''}`:''}</div></div>
+      <div class="stat card"><div class="lab">Avg monthly spend · 6M</div>
+        <div class="val">${w.m6?num(w.m6.avgMonthlySpend,{money:true}):'—'}</div>
+        <div class="sub">${w.m6?`over ${w.m6.months} months`:''}</div></div>
+      <div class="stat card"><div class="lab">Avg monthly spend · 12M</div>
+        <div class="val">${w.m12?num(w.m12.avgMonthlySpend,{money:true}):'—'}</div>
+        <div class="sub">${w.m12?`over ${w.m12.months} months`:''}</div></div>
+    </div>
+
+    <div class="card mt">
+      <h2>${esc(d.latestMonth?d.latestMonth.label:'Latest month')} vs trailing norms</h2>
+      <table><thead><tr>
+        <th>Metric</th><th class="num">Latest month</th>
+        <th class="num">3M norm</th><th class="num">vs 3M</th>
+        <th class="num">6M norm</th><th class="num">vs 6M</th>
+        <th class="num">12M norm</th><th class="num">vs 12M</th>
+      </tr></thead><tbody>
+      ${(d.comparison||[]).map(m=>`<tr>
+        <td class="strong">${esc(m.label)}</td>
+        <td class="num" style="font-weight:600;color:var(--ink)">${fmtMetric(m.current,m.money)}</td>
+        <td class="num">${fmtMetric(m.vs.m3?m.vs.m3.base:null,m.money)}</td><td class="num">${chip(m.vs.m3,m.lowerIsBetter)}</td>
+        <td class="num">${fmtMetric(m.vs.m6?m.vs.m6.base:null,m.money)}</td><td class="num">${chip(m.vs.m6,m.lowerIsBetter)}</td>
+        <td class="num">${fmtMetric(m.vs.m12?m.vs.m12.base:null,m.money)}</td><td class="num">${chip(m.vs.m12,m.lowerIsBetter)}</td>
+      </tr>`).join('')||'<tr><td colspan="8" class="num">no comparable months</td></tr>'}
+      </tbody></table>
+      <div class="note">Green means the movement is favourable, not that the number rose — a fall in cost per contact is green, a fall in key events per ฿1,000 is red. Window figures are derived from summed totals across the window, not averaged from each month's ratio, so a quiet month can't swing the norm as hard as a heavy one. Deltas under 2% show without an arrow, since that's noise at this granularity. All spend is Meta Ads only, so any channel not connected to Windsor is absent from every cost figure here.</div>
+    </div>
+
+    <div class="card mt">
+      <h2>Monthly trend</h2>
+      <div class="chart-wrap"><canvas id="benchChart"></canvas></div>
+    </div>
+
+    <div class="card mt slide-break">
+      <h2>Month by month</h2>
+      <table><thead><tr>
+        <th>Month</th><th class="num">Spend</th><th class="num">Visits</th><th class="num">Key ev.</th>
+        <th class="num">Contacts</th><th class="num">฿/visit</th><th class="num">฿/contact</th>
+        <th class="num">Key ev. / ฿1k</th><th class="num">Revenue</th>
+      </tr></thead><tbody>
+      ${(d.series||[]).slice().reverse().map(m=>{
+        const empty = !m.spend && !m.visits;
+        return `<tr${empty?' style="opacity:.45"':''}>
+        <td class="strong">${esc(m.label)}${empty?' <span class="pill grey">no data</span>':''}</td>
+        <td class="num">${num(m.spend,{money:true})}</td>
+        <td class="num">${num(m.visits)}</td>
+        <td class="num">${num(m.keyEvents)}</td>
+        <td class="num">${num(m.contacts)}</td>
+        <td class="num">${m.costPerVisit!=null?num(m.costPerVisit,{money:true}):'—'}</td>
+        <td class="num">${m.costPerContact!=null?num(m.costPerContact,{money:true}):'—'}</td>
+        <td class="num">${m.keyEventsPerK!=null?num(m.keyEventsPerK,{dp:1}):'—'}</td>
+        <td class="num">${num(m.revenue,{money:true})}</td>
+      </tr>`}).join('')}
+      </tbody></table>
+    </div>
+  `;
+
+  const rows = (d.series||[]).filter(m=>m.spend||m.visits).map(m=>({ d:m.label, spend:m.spend, costPerContact:m.costPerContact, keyEventsPerK:m.keyEventsPerK }));
+  drawChart('benchChart', rows, [
+    { label:'Spend', key:'spend', color:'#F2A93B', axis:'y' },
+    { label:'฿ per contact', key:'costPerContact', color:'#F2708F', axis:'y1' },
+    { label:'Key events per ฿1k', key:'keyEventsPerK', color:'#35C3B4', axis:'y1' },
+  ]);
+}
+
+// ============================================================ AUDIT
+function renderAudit() {
+  const d = S.audit;
+  if (!d) {
+    $('viewRoot').innerHTML = `<div class="card"><div class="state">
+      <div class="big">Ready to audit</div>
+      <div style="max-width:460px;font-size:12.5px;">Press <b>Load</b> to measure how much traffic and ad spend can't be tied to a campaign code — the blind spot in the Campaigns view.</div>
+    </div></div>`;
+    return;
+  }
+  const tr = d.traffic, sp = d.spend;
+  const shareBad = tr.untaggedShare != null && tr.untaggedShare >= 10;
+
+  $('viewRoot').innerHTML = `
+    <div class="grid g-4">
+      <div class="stat card"><div class="lab">Untagged visits</div>
+        <div class="val" style="${shareBad?'color:var(--rose)':''}">${num(tr.untaggedVisits)}</div>
+        <div class="sub">${tr.untaggedShare!=null?num(tr.untaggedShare,{pct:true})+' of all campaign traffic':''}</div></div>
+      <div class="stat card"><div class="lab">Key events lost to it</div>
+        <div class="val">${num(tr.untaggedKeyEvents)}</div>
+        <div class="sub">can't be credited to any campaign</div></div>
+      <div class="stat card"><div class="lab">Unattributable ad spend</div>
+        <div class="val ${isNA(sp.unmatched)?'na':''}" style="${sp.unmatchedShare>=10?'color:var(--rose)':''}">${num(sp.unmatched,{money:true})}</div>
+        <div class="sub">${sp.unmatchedShare!=null?num(sp.unmatchedShare,{pct:true})+' of '+num(sp.total,{money:true}):''}</div></div>
+      <div class="stat card"><div class="lab">Codes tracking properly</div>
+        <div class="val">${num(d.taggedCodes)}</div>
+        <div class="sub">${num(tr.taggedVisits)} visits</div></div>
+    </div>
+
+    <div class="card mt">
+      <h2>Traffic that can't be attributed</h2>
+      <table><thead><tr><th>Cause</th><th class="num">Visits</th><th class="num">Key events</th><th>Examples</th></tr></thead><tbody>
+      ${(tr.issues||[]).map(i=>`<tr>
+        <td class="strong" style="max-width:330px;white-space:normal;">${esc(i.label)}</td>
+        <td class="num">${num(i.visits)}</td><td class="num">${num(i.keyEvents)}</td>
+        <td class="i18n" style="font-size:11px;color:var(--muted);max-width:300px;white-space:normal;">${i.examples.map(e=>`<code>${esc(e)}</code>`).join(', ')}</td>
+      </tr>`).join('')||'<tr><td colspan="4" class="num">Nothing untagged in this range — tagging is clean.</td></tr>'}
+      </tbody></table>
+      <div class="note">Each row is a distinct failure mode, not a severity ranking. A bare platform ID means the ad's destination URL carried no <code>utm_campaign</code>, so GA4 recorded the platform's own campaign ID instead — those sessions are real, they just can't be grouped with the campaign they belong to.</div>
+    </div>
+
+    ${(sp.unmatchedCampaigns||[]).length?`<div class="card mt slide-break">
+      <h2>Ad spend with no matching tagged campaign</h2>
+      <table><thead><tr><th>Ad campaign</th><th>Account</th><th class="num">Impr</th><th class="num">Clicks</th><th class="num">Spend</th></tr></thead><tbody>
+      ${sp.unmatchedCampaigns.map(c=>`<tr>
+        <td class="strong i18n trunc" title="${esc(c.name)}">${esc(c.name)}</td>
+        <td style="font-size:11px;color:var(--muted)">${esc(c.account)}</td>
+        <td class="num">${num(c.impressions)}</td><td class="num">${num(c.clicks)}</td>
+        <td class="num">${num(c.spend,{money:true})}</td>
+      </tr>`).join('')}
+      </tbody></table>
+      <div class="note">These ad campaigns either carry no <code>YYMMDD-NN</code> code in their name, or carry one that no tagged utm_campaign matches. Their spend can be totalled but never linked to visits, key events or revenue — so it sits outside every efficiency figure in this dashboard.</div>
+    </div>`:''}
+
+    <div class="card mt">
+      <h2>How to fix it</h2>
+      <div style="font-size:12.5px;color:var(--ink-2);line-height:1.75;">
+        <b>Bare platform IDs</b> — the ad's destination URL is missing <code>utm_campaign</code>. Add the code to the link when the ad is built; Meta won't backfill it, so historic sessions stay unattributable.<br>
+        <b>Placeholders</b> — a template variable reached production unsubstituted. Worth a pre-launch check on the link, since it silently costs the whole campaign's attribution.<br>
+        <b>Names without a code</b> — the ad ran with a name that doesn't follow <code>YYMMDD-NN</code>, so it can't be searched or dated here. Renaming in the platform fixes future reporting.
+      </div>
+    </div>
+  `;
+}
+
 // ============================================================ charts
 function drawChart(canvasId, rows, series) {
   const el = document.getElementById(canvasId);
@@ -950,6 +1198,14 @@ function drawChart(canvasId, rows, series) {
 }
 
 // ============================================================ boot
+$('printBtn').addEventListener('click', () => {
+  const [t] = TITLES[S.view];
+  const extra = S.view === 'campaigns' && S.campaign ? ` — ${S.campaign.topic || S.campaign.code}` : '';
+  $('printTitle').textContent = t + extra;
+  $('printRange').textContent = `${$('from').value} to ${$('to').value} · generated ${new Date().toLocaleString()}`;
+  window.print();
+});
+
 fetch('/api/version').then(r => r.json()).then(v => {
   $('verLabel').textContent = 'v' + v.version + (v.modelArmor ? ' · armor on' : '');
 }).catch(() => { $('verLabel').textContent = 'unknown'; });
