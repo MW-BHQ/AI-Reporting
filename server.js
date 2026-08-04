@@ -1260,6 +1260,35 @@ async function buildGbp(from, to) {
   const out = listings.map((l) => {
     const L = per.get(l.title);
     const series = months.map((m) => L.months.get(m.key));
+
+    /**
+     * Running all-time rating at the END of each month — the number that shows
+     * whether the profile is improving, unlike a per-month average which swings
+     * on a single bad review.
+     *
+     * Reviews predating the selected range still count toward it, so the opening
+     * balance is back-solved from the all-time figures: the star-points and count
+     * that must have existed before the range = all-time totals minus what the
+     * range contains. Google reports the all-time average rounded to one decimal,
+     * so the opening balance carries a little imprecision; it shifts the whole
+     * line by a fraction of a star and never changes its shape.
+     */
+    const rangeCount = L.periodCount;
+    const rangeSum = L.periodRatingSum;
+    const haveAllTime = L.allTimeCount != null && L.allTimeRating != null && L.allTimeCount > 0;
+    let priorCount = 0, priorSum = 0, cumulativeBasis = "range-only";
+    if (haveAllTime) {
+      priorCount = Math.max(0, L.allTimeCount - rangeCount);
+      priorSum = Math.max(0, L.allTimeCount * L.allTimeRating - rangeSum);
+      cumulativeBasis = priorCount > 0 ? "all-time" : "range-covers-all";
+    }
+    let runCount = priorCount, runSum = priorSum;
+    for (const m of series) {
+      runCount += m.count;
+      runSum += m.ratingSum;
+      m.cumRating = runCount ? +(runSum / runCount).toFixed(3) : null;
+      m.cumCount = runCount;
+    }
     const recent = L.recent.sort((a, b) => String(b.at).localeCompare(String(a.at)));
     const negatives = recent.filter((r) => r.star && r.star <= 3);
     return {
@@ -1269,6 +1298,7 @@ async function buildGbp(from, to) {
       periodRating: L.periodCount ? L.periodRatingSum / L.periodCount : null,
       stars: L.stars,
       series,
+      cumulativeBasis, priorCount,
       impressions: L.impressions, calls: L.calls,
       websiteClicks: L.websiteClicks, directions: L.directions,
       recent: recent.slice(0, 25),

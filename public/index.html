@@ -1048,6 +1048,51 @@ function renderTopicBody(d) {
 
 // ============================================================ GBP
 const STAR_COLORS = { s5:'#3BC97F', s4:'#9FD98C', s3:'#F2C94C', s2:'#F0A45C', s1:'#F2708F' };
+const RATING_LINE = '#5B57E8';   // purple-blue: reads clearly over the greens
+
+/**
+ * Total-count labels above each stacked bar. Chart.js has no built-in data
+ * labels and the datalabels plugin isn't vendored, so this draws them directly.
+ * Labels are skipped when bars get too narrow to hold a number without
+ * colliding — better absent than overlapping.
+ */
+const stackTotalLabels = {
+  id: 'stackTotalLabels',
+  afterDatasetsDraw(chart) {
+    const { ctx } = chart;
+    const barSets = chart.data.datasets
+      .map((ds, i) => ({ ds, i }))
+      .filter(({ ds, i }) => (ds.type || chart.config.type) === 'bar' && chart.isDatasetVisible(i));
+    if (!barSets.length) return;
+
+    const first = chart.getDatasetMeta(barSets[0].i);
+    const barW = first.data.length > 1
+      ? Math.abs(first.data[1].x - first.data[0].x)
+      : (first.data[0] ? first.data[0].width || 40 : 40);
+    if (barW < 22) return;
+
+    ctx.save();
+    ctx.font = '600 9.5px Poppins, sans-serif';
+    ctx.fillStyle = '#4C5878';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    const n0 = first.data.length;
+    for (let i = 0; i < n0; i++) {
+      let total = 0, topY = Infinity, x = null;
+      for (const { i: di } of barSets) {
+        const meta = chart.getDatasetMeta(di);
+        const el = meta.data[i];
+        if (!el) continue;
+        total += Number(chart.data.datasets[di].data[i]) || 0;
+        if (el.y < topY) topY = el.y;
+        x = el.x;
+      }
+      if (!total || x == null) continue;
+      ctx.fillText(total.toLocaleString(), x, topY - 4);
+    }
+    ctx.restore();
+  },
+};
 
 function renderGbp() {
   const d = S.gbp;
@@ -1147,29 +1192,48 @@ function renderGbp() {
     if (typeof Chart === 'undefined') throw new Error('chart library unavailable');
     const series = L.series || [];
     S.charts.gbpChart = new Chart(el, {
+      plugins: [stackTotalLabels],
       data: {
         labels: series.map(m=>m.label),
+        // 5★ first puts it at the base of the stack, so the low ratings sit on
+        // top where they're actually visible instead of buried under the green.
         datasets: [
-          ...['s1','s2','s3','s4','s5'].map(k=>({
+          { type:'line', label:'Rating (all-time, at month end)', yAxisID:'y1',
+            data: series.map(m=>m.cumRating),
+            borderColor:RATING_LINE, backgroundColor:RATING_LINE, borderWidth:2.5, tension:.35,
+            pointRadius:2.2, pointBackgroundColor:RATING_LINE, spanGaps:true, order:0 },
+          ...['s5','s4','s3','s2','s1'].map(k=>({
             type:'bar', label:`${k.slice(1)}★`, data:series.map(m=>m[k]),
-            backgroundColor:STAR_COLORS[k], stack:'stars', borderRadius:2, borderSkipped:false,
+            backgroundColor:STAR_COLORS[k], stack:'stars',
+            borderWidth:0, borderColor:'transparent', borderRadius:0, borderSkipped:false,
           })),
-          { type:'line', label:'Avg rating', yAxisID:'y1',
-            data: series.map(m=>m.count?+(m.ratingSum/m.count).toFixed(2):null),
-            borderColor:'#1B2340', backgroundColor:'#1B2340', borderWidth:2, tension:.3,
-            pointRadius:2.5, spanGaps:true, order:0 },
         ],
       },
       options: {
         responsive:true, maintainAspectRatio:false,
+        layout:{ padding:{ top:16 } },
         interaction:{mode:'index', intersect:false},
-        plugins:{ legend:{ labels:{ color:'#4C5878', font:{family:'Poppins',size:10.5}, usePointStyle:true, boxWidth:8 } } },
+        plugins:{
+          legend:{ labels:{ color:'#4C5878', font:{family:'Poppins',size:10.5}, usePointStyle:true, boxWidth:8 } },
+          tooltip:{ callbacks:{
+            label:(c)=> c.dataset.type==='line'
+              ? ` ${c.dataset.label}: ${c.parsed.y!=null?c.parsed.y.toFixed(2)+' ★':'—'}`
+              : ` ${c.dataset.label}: ${c.parsed.y}`,
+          } },
+        },
         scales:{
           x:{ stacked:true, ticks:{ color:'#A7B0C7', font:{family:'Poppins',size:10} }, grid:{ display:false } },
           y:{ stacked:true, beginAtZero:true, title:{display:true,text:'Reviews',color:'#A7B0C7',font:{size:10}},
               ticks:{ color:'#A7B0C7', font:{size:10}, precision:0 }, grid:{ color:'rgba(90,110,160,.09)' } },
-          y1:{ position:'right', min:1, max:5, title:{display:true,text:'Avg rating',color:'#A7B0C7',font:{size:10}},
-               ticks:{ color:'#A7B0C7', font:{size:10}, stepSize:1 }, grid:{ display:false } },
+          y1:{ position:'right',
+               // The running all-time score moves in hundredths, so a full 1-5
+               // axis would flatten it into a straight line. Padded around the
+               // observed range instead, with the floor never above 4.
+               min: (()=>{ const v=series.map(m=>m.cumRating).filter(x=>x!=null); if(!v.length) return 1;
+                           return Math.max(1, Math.min(4, Math.floor((Math.min(...v)-0.15)*10)/10)); })(),
+               max: 5,
+               title:{display:true,text:'Rating (all-time)',color:'#A7B0C7',font:{size:10}},
+               ticks:{ color:'#A7B0C7', font:{size:10} }, grid:{ display:false } },
         },
       },
     });
