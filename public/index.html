@@ -295,6 +295,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg>
         Campaigns
       </div>
+      <div class="nav-item" data-view="gbp">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l2.6 5.6 6 .8-4.4 4.2 1.1 6-5.3-3-5.3 3 1.1-6L3.4 9.4l6-.8z"/></svg>
+        Google Profile
+      </div>
       <div class="nav-item" data-view="benchmark">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
         Benchmarks
@@ -365,6 +369,7 @@ const S = {
   topic: null, topicTerm: '',
   audit: null, auditKey: null,
   bench: null, benchKey: null, benchTab: null,
+  gbp: null, gbpKey: null, gbpTab: null, gbpInit: false,
   charts: {},
 };
 
@@ -425,6 +430,14 @@ document.querySelectorAll('.nav-item').forEach(item => {
     document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
     item.classList.add('active');
     S.view = item.dataset.view;
+    if (S.view === 'gbp' && !S.gbpInit) {
+      // Reviews accumulate slowly, so a year is the useful default window.
+      const y = new Date(); y.setDate(y.getDate() - 1);
+      const start = new Date(y); start.setFullYear(start.getFullYear() - 1); start.setDate(start.getDate() + 1);
+      $('from').value = fmtISO(start); $('to').value = fmtISO(y);
+      [...$('presets').children].forEach(b => b.classList.remove('active'));
+      S.gbpInit = true;
+    }
     render();
   });
 });
@@ -438,6 +451,7 @@ const TITLES = {
   topics: ['Topic Explorer', 'Multilingual search demand across 10 site languages'],
   audit: ['Tagging audit', 'How much traffic and spend the campaign view cannot attribute'],
   benchmark: ['Benchmarks', 'Latest complete month against trailing 3, 6 and 12-month norms'],
+  gbp: ['Google Business Profile', 'Reviews and ratings by listing'],
 };
 
 // ============================================================ fetching
@@ -470,6 +484,17 @@ async function loadCampaignList() {
   if (!res.ok) throw new Error(`Server ${res.status}`);
   S.campaignList = await res.json(); S.campaignListKey = key;
   return S.campaignList;
+}
+
+async function loadGbp(refresh = false) {
+  const key = `${$('from').value}|${$('to').value}`;
+  if (!refresh && S.gbpKey === key && S.gbp) return S.gbp;
+  setStatus('busy', 'pulling reviews for all listings…');
+  const res = await fetch(`/api/gbp?from=${$('from').value}&to=${$('to').value}${refresh?'&refresh=1':''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,200)}`);
+  S.gbp = await res.json(); S.gbpKey = key;
+  setStatus('ok', S.gbp.cached ? `cached ${S.gbp.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.gbp;
 }
 
 async function loadBenchmark(refresh = false) {
@@ -517,6 +542,7 @@ $('loadBtn').addEventListener('click', async () => {
     }
     else if (S.view === 'audit') { await loadAudit(true); }
     else if (S.view === 'benchmark') { await loadBenchmark(true); }
+    else if (S.view === 'gbp') { await loadGbp(true); }
     else if (S.view === 'topics' && S.topicTerm) { await loadTopic(S.topicTerm); }
     render();
   } catch (err) {
@@ -546,6 +572,7 @@ function render() {
   else if (S.view === 'campaigns') renderCampaigns();
   else if (S.view === 'audit') renderAudit();
   else if (S.view === 'benchmark') renderBenchmark();
+  else if (S.view === 'gbp') renderGbp();
   else renderTopics();
 }
 
@@ -1017,6 +1044,140 @@ function renderTopicBody(d) {
       <div class="note">A coloured language pill means the language was read from the page URL locale (reliable). A grey pill means it was inferred from the query's script, which cannot separate English, German, Vietnamese and Indonesian.</div>
     </div>
   `;
+}
+
+// ============================================================ GBP
+const STAR_COLORS = { s5:'#3BC97F', s4:'#9FD98C', s3:'#F2C94C', s2:'#F0A45C', s1:'#F2708F' };
+
+function renderGbp() {
+  const d = S.gbp;
+  if (!d) {
+    $('viewRoot').innerHTML = `<div class="card"><div class="state">
+      <div class="big">Ready to load reviews</div>
+      <div style="max-width:470px;font-size:12.5px;">The range defaults to the last 12 months ending yesterday. Press <b>Load</b>.</div>
+    </div></div>`;
+    return;
+  }
+  const list = d.listings || [];
+  if (!list.length) { $('viewRoot').innerHTML = errorState('No listings returned for this range.'); return; }
+  if (!S.gbpTab || !list.some(l => l.key === S.gbpTab)) S.gbpTab = list[0].key;
+  const L = list.find(l => l.key === S.gbpTab);
+
+  const tabStrip = `<div class="acct-tabs">${list.map(l=>`
+    <button class="acct-tab ${l.key===S.gbpTab?'active':''}" data-gtab="${esc(l.key)}" title="${esc(l.title)}">
+      ${esc(l.key)}<small>${l.allTimeRating!=null?l.allTimeRating.toFixed(1)+'★':''} ${num(l.allTimeCount)}</small>
+    </button>`).join('')}</div>`;
+
+  const totalStars = ['s1','s2','s3','s4','s5'].reduce((a,k)=>a+L.stars[k],0);
+  const starRow = (k, n_) => {
+    const pct = totalStars ? (n_/totalStars)*100 : 0;
+    return `<tr>
+      <td class="strong" style="width:70px;">${k.slice(1)} ★</td>
+      <td style="width:100%"><div style="background:rgba(140,155,190,.13);border-radius:5px;height:9px;overflow:hidden;">
+        <div style="width:${pct}%;height:100%;background:${STAR_COLORS[k]};"></div></div></td>
+      <td class="num" style="width:70px;">${num(n_)}</td>
+      <td class="num" style="width:60px;color:var(--muted)">${totalStars?pct.toFixed(1)+'%':'—'}</td>
+    </tr>`;
+  };
+
+  $('viewRoot').innerHTML = `
+    ${tabStrip}
+    ${d.unparsedStars?`<div class="warnbox">${d.unparsedStars} review(s) had a star rating this build couldn't read, so they're excluded from the breakdown.</div>`:''}
+    ${L.unlisted?`<div class="warnbox">This listing wasn't in the five you specified, but the account returns it — showing it rather than dropping data.</div>`:''}
+
+    <div class="grid g-5">
+      <div class="stat card"><div class="lab">All-time rating</div>
+        <div class="val" style="color:${L.allTimeRating>=4.5?'var(--green)':(L.allTimeRating>=4?'var(--amber)':'var(--rose)')}">${L.allTimeRating!=null?L.allTimeRating.toFixed(1)+' ★':'—'}</div>
+        <div class="sub">${num(L.allTimeCount)} reviews total</div></div>
+      <div class="stat card"><div class="lab">Reviews in period</div>
+        <div class="val">${num(L.periodCount)}</div>
+        <div class="sub">${esc(d.range.from)} → ${esc(d.range.to)}</div></div>
+      <div class="stat card"><div class="lab">Rating in period</div>
+        <div class="val">${L.periodRating!=null?L.periodRating.toFixed(2)+' ★':'—'}</div>
+        <div class="sub">${L.allTimeRating!=null&&L.periodRating!=null?(L.periodRating>=L.allTimeRating?'at or above':'below')+' all-time':''}</div></div>
+      <div class="stat card"><div class="lab">Profile views</div>
+        <div class="val ${isNA(L.impressions)?'na':''}">${num(L.impressions)}</div>
+        <div class="sub">${num(L.calls)} calls · ${num(L.directions)} directions</div></div>
+      <div class="stat card"><div class="lab">1–3★ recently</div>
+        <div class="val" style="${L.recentNegatives?'color:var(--rose)':''}">${num(L.recentNegatives)}</div>
+        <div class="sub">since ${esc(d.recentFrom)}</div></div>
+    </div>
+
+    <div class="card mt">
+      <h2>Reviews by month &middot; stars stacked, rating overlaid</h2>
+      <div style="height:300px;"><canvas id="gbpChart"></canvas></div>
+      <div class="note">Bars stack the count of 1–5★ reviews received each month; the line is that month's average rating on the right axis, fixed to a 1–5 scale so movement isn't exaggerated. A month with no bar received no reviews. Ratings shown here are the average of reviews <b>received in that month</b>, which moves far more than the all-time score above — a single 1★ in a quiet month drops it sharply.</div>
+    </div>
+
+    <div class="grid g-2-1 mt">
+      <div class="card"><h2>Star distribution &middot; period</h2>
+        <table><tbody>${['s5','s4','s3','s2','s1'].map(k=>starRow(k,L.stars[k])).join('')}</tbody></table>
+        <div class="note">${num(totalStars)} reviews in the selected range.</div>
+      </div>
+      <div class="card"><h2>All listings</h2>
+        <table><thead><tr><th>Listing</th><th class="num">Rating</th><th class="num">Total</th></tr></thead><tbody>
+        ${list.map(l=>`<tr style="${l.key===S.gbpTab?'background:rgba(124,107,245,.05)':''}">
+          <td class="strong" style="cursor:pointer" data-gtab2="${esc(l.key)}">${esc(l.key)}<div style="font-size:10px;color:var(--faint);font-weight:400;">${esc(l.title.slice(0,32))}</div></td>
+          <td class="num" style="color:${l.allTimeRating>=4.5?'var(--green)':(l.allTimeRating>=4?'var(--amber)':'var(--rose)')};font-weight:600;">${l.allTimeRating!=null?l.allTimeRating.toFixed(1):'—'}</td>
+          <td class="num">${num(l.allTimeCount)}</td></tr>`).join('')}
+        </tbody></table>
+      </div>
+    </div>
+
+    ${(L.recent||[]).length?`<div class="card mt no-print">
+      <h2>Recent reviews &middot; since ${esc(d.recentFrom)}${L.recentUnreplied?` &middot; ${L.recentUnreplied} without a reply`:''}</h2>
+      <table><thead><tr><th style="width:52px;">Stars</th><th>Review</th><th style="width:92px;">Date</th><th style="width:66px;">Replied</th></tr></thead><tbody>
+      ${L.recent.map(r=>`<tr>
+        <td class="strong" style="color:${r.star>=4?'var(--green)':(r.star==3?'var(--amber)':'var(--rose)')};">${r.star?r.star+' ★':'—'}</td>
+        <td class="i18n" style="white-space:normal;font-size:12px;">${r.comment?esc(r.comment):'<span style="color:var(--faint)">rating only, no comment</span>'}
+          ${r.reviewer?`<div style="font-size:10.5px;color:var(--faint);margin-top:3px;">${esc(r.reviewer)}</div>`:''}</td>
+        <td style="font-size:11px;color:var(--muted)">${esc(String(r.at||'').slice(0,10))}</td>
+        <td>${r.replied?'<span class="pill">yes</span>':'<span class="pill warn">no</span>'}</td>
+      </tr>`).join('')}
+      </tbody></table>
+    </div>`:''}
+  `;
+
+  document.querySelectorAll('[data-gtab]').forEach(b=>b.addEventListener('click',()=>{ S.gbpTab=b.dataset.gtab; renderGbp(); }));
+  document.querySelectorAll('[data-gtab2]').forEach(b=>b.addEventListener('click',()=>{ S.gbpTab=b.dataset.gtab2; renderGbp(); }));
+
+  // stacked stars + rating line
+  const el = document.getElementById('gbpChart');
+  try {
+    if (typeof Chart === 'undefined') throw new Error('chart library unavailable');
+    const series = L.series || [];
+    S.charts.gbpChart = new Chart(el, {
+      data: {
+        labels: series.map(m=>m.label),
+        datasets: [
+          ...['s1','s2','s3','s4','s5'].map(k=>({
+            type:'bar', label:`${k.slice(1)}★`, data:series.map(m=>m[k]),
+            backgroundColor:STAR_COLORS[k], stack:'stars', borderRadius:2, borderSkipped:false,
+          })),
+          { type:'line', label:'Avg rating', yAxisID:'y1',
+            data: series.map(m=>m.count?+(m.ratingSum/m.count).toFixed(2):null),
+            borderColor:'#1B2340', backgroundColor:'#1B2340', borderWidth:2, tension:.3,
+            pointRadius:2.5, spanGaps:true, order:0 },
+        ],
+      },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        interaction:{mode:'index', intersect:false},
+        plugins:{ legend:{ labels:{ color:'#4C5878', font:{family:'Poppins',size:10.5}, usePointStyle:true, boxWidth:8 } } },
+        scales:{
+          x:{ stacked:true, ticks:{ color:'#A7B0C7', font:{family:'Poppins',size:10} }, grid:{ display:false } },
+          y:{ stacked:true, beginAtZero:true, title:{display:true,text:'Reviews',color:'#A7B0C7',font:{size:10}},
+              ticks:{ color:'#A7B0C7', font:{size:10}, precision:0 }, grid:{ color:'rgba(90,110,160,.09)' } },
+          y1:{ position:'right', min:1, max:5, title:{display:true,text:'Avg rating',color:'#A7B0C7',font:{size:10}},
+               ticks:{ color:'#A7B0C7', font:{size:10}, stepSize:1 }, grid:{ display:false } },
+        },
+      },
+    });
+  } catch (e) {
+    console.error('gbp chart failed:', e);
+    const box = el && el.parentElement;
+    if (box) box.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:12px;">Chart unavailable. The distribution table below still shows the breakdown.</div>`;
+  }
 }
 
 // ============================================================ BENCHMARK

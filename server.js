@@ -1125,6 +1125,180 @@ async function gcsWrite(objectName, value) {
   return res.ok;
 }
 
+// -------------------------------------------------------------------- /api/gbp
+/**
+ * Google Business Profile reviews per listing.
+ *
+ * Star rating arrives as an enum string (FIVE/FOUR/...), not a number, so it is
+ * mapped explicitly; numeric forms are accepted too in case the connector
+ * changes. Reviews are bucketed by review_create_time rather than the generic
+ * date field, because a review's own timestamp is what belongs on the timeline.
+ */
+const GBP_LISTINGS = [
+  { key: "BGH",    title: "Bangkok Hospital" },
+  { key: "BIH",    title: "Bangkok International Hospital (Brain x Bone)" },
+  { key: "BHT",    title: "Bangkok Heart Hospital" },
+  { key: "WSH",    title: "Bangkok Cancer Hospital Wattanosoth" },
+  { key: "Dental", title: "Dental Center | Bangkok Hospital" },
+  { key: "JMS",    title: "Japanese Medical Services (JMS) バンコク病院日本人専門クリニック" },
+];
+
+const STAR_MAP = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5, "1": 1, "2": 2, "3": 3, "4": 4, "5": 5 };
+const starOf = (v) => {
+  const raw = String(v || "").trim().toUpperCase();
+  return STAR_MAP[raw] || null;
+};
+
+function monthsBetween(fromISO, toISO) {
+  const out = [];
+  const a = new Date(fromISO + "T00:00:00Z");
+  const b = new Date(toISO + "T00:00:00Z");
+  let cur = new Date(Date.UTC(a.getUTCFullYear(), a.getUTCMonth(), 1));
+  while (cur <= b) {
+    out.push({
+      key: `${cur.getUTCFullYear()}-${String(cur.getUTCMonth() + 1).padStart(2, "0")}`,
+      label: cur.toLocaleString("en", { month: "short", year: "2-digit", timeZone: "UTC" }),
+    });
+    cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 1));
+  }
+  return out;
+}
+
+async function buildGbp(from, to) {
+  const recentFrom = (() => {
+    const d = new Date(to + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() - 60);
+    const f = d.toISOString().slice(0, 10);
+    return f > from ? f : from;
+  })();
+
+  const { data, errors } = await runJobs({
+    reviews: windsor("google_my_business",
+      ["review_create_time", "location_title", "review_star_rating"], from, to),
+    totals: windsor("google_my_business",
+      ["location_title", "review_total_count", "review_average_rating_total"], from, to),
+    profile: windsor("google_my_business",
+      ["location_title", "impressions", "call_clicks", "website_clicks", "direction_requests"], from, to),
+    recent: windsor("google_my_business",
+      ["review_create_time", "location_title", "review_star_rating", "review_comment", "review_reviewer", "review_reply_comment"],
+      recentFrom, to),
+  });
+
+  if (data.reviews === null) {
+    const e = new Error(`Google Business Profile unavailable: ${errors.reviews}`);
+    e.status = 502; throw e;
+  }
+
+  const months = monthsBetween(from, to);
+  const titleToKey = new Map(GBP_LISTINGS.map((l) => [l.title, l.key]));
+
+  // Any listing the account returns that isn't in the configured list still gets
+  // a tab, so a newly added profile can't silently vanish from the report.
+  const seenTitles = new Set();
+  for (const r of data.reviews) if (r.location_title) seenTitles.add(r.location_title);
+  for (const r of data.totals || []) if (r.location_title) seenTitles.add(r.location_title);
+  const listings = [
+    ...GBP_LISTINGS.filter((l) => seenTitles.has(l.title)),
+    ...[...seenTitles].filter((t) => !titleToKey.has(t)).map((t) => ({ key: t.slice(0, 14), title: t, unlisted: true })),
+  ];
+
+  const blankMonth = () => ({ s1: 0, s2: 0, s3: 0, s4: 0, s5: 0, count: 0, ratingSum: 0 });
+  const per = new Map(listings.map((l) => [l.title, {
+    ...l,
+    months: new Map(months.map((m) => [m.key, { ...m, ...blankMonth() }])),
+    periodCount: 0, periodRatingSum: 0,
+    stars: { s1: 0, s2: 0, s3: 0, s4: 0, s5: 0 },
+    allTimeCount: null, allTimeRating: null,
+    impressions: null, calls: null, websiteClicks: null, directions: null,
+    recent: [],
+  }]));
+
+  let unparsedStars = 0;
+  for (const r of data.reviews) {
+    const L = per.get(r.location_title);
+    if (!L) continue;
+    const star = starOf(r.review_star_rating);
+    if (!star) { unparsedStars++; continue; }
+    const mk = String(r.review_create_time || "").slice(0, 7);
+    const bucket = L.months.get(mk);
+    if (bucket) {
+      bucket[`s${star}`] += 1;
+      bucket.count += 1;
+      bucket.ratingSum += star;
+    }
+    L.stars[`s${star}`] += 1;
+    L.periodCount += 1;
+    L.periodRatingSum += star;
+  }
+
+  for (const r of data.totals || []) {
+    const L = per.get(r.location_title);
+    if (!L) continue;
+    L.allTimeCount = n(r.review_total_count);
+    L.allTimeRating = n(r.review_average_rating_total);
+  }
+  for (const r of data.profile || []) {
+    const L = per.get(r.location_title);
+    if (!L) continue;
+    L.impressions = n(r.impressions);
+    L.calls = n(r.call_clicks);
+    L.websiteClicks = n(r.website_clicks);
+    L.directions = n(r.direction_requests);
+  }
+  for (const r of data.recent || []) {
+    const L = per.get(r.location_title);
+    if (!L) continue;
+    L.recent.push({
+      at: r.review_create_time || null,
+      star: starOf(r.review_star_rating),
+      comment: String(r.review_comment || "").slice(0, 400),
+      reviewer: r.review_reviewer || null,
+      replied: Boolean(String(r.review_reply_comment || "").trim()),
+    });
+  }
+
+  const out = listings.map((l) => {
+    const L = per.get(l.title);
+    const series = months.map((m) => L.months.get(m.key));
+    const recent = L.recent.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    const negatives = recent.filter((r) => r.star && r.star <= 3);
+    return {
+      key: l.key, title: l.title, unlisted: Boolean(l.unlisted),
+      allTimeCount: L.allTimeCount, allTimeRating: L.allTimeRating,
+      periodCount: L.periodCount,
+      periodRating: L.periodCount ? L.periodRatingSum / L.periodCount : null,
+      stars: L.stars,
+      series,
+      impressions: L.impressions, calls: L.calls,
+      websiteClicks: L.websiteClicks, directions: L.directions,
+      recent: recent.slice(0, 25),
+      recentNegatives: negatives.length,
+      recentUnreplied: recent.filter((r) => !r.replied).length,
+    };
+  }).sort((a, b) => n(b.allTimeCount) - n(a.allTimeCount));
+
+  return {
+    range: { from, to }, recentFrom,
+    listings: out,
+    months,
+    unparsedStars,
+    unavailable: Object.keys(errors), errors,
+    syncedAt: new Date().toISOString(),
+  };
+}
+
+app.get("/api/gbp", async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  try {
+    const out = await withCache(`gbp:${from}:${to}`, req.query.refresh === "1", () => buildGbp(from, to));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "gbp_failed", { error: String(err.message || err) });
+    res.status(err.status || 500).json({ error: err.message || "GBP report failed" });
+  }
+});
+
 // ------------------------------------------------------------- /api/benchmark
 /**
  * Rolling efficiency benchmarks.
