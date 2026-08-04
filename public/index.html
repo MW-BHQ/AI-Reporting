@@ -1056,6 +1056,38 @@ const RATING_LINE = '#5B57E8';   // purple-blue: reads clearly over the greens
  * Labels are skipped when bars get too narrow to hold a number without
  * colliding — better absent than overlapping.
  */
+const ratingDotLabels = {
+  id: 'ratingDotLabels',
+  afterDatasetsDraw(chart) {
+    const idx = chart.data.datasets.findIndex((ds) => ds.type === 'line' && ds._showPointLabels);
+    if (idx === -1 || !chart.isDatasetVisible(idx)) return;
+    const meta = chart.getDatasetMeta(idx);
+    const pts = meta.data || [];
+    if (!pts.length) return;
+    const step = pts.length > 1 ? Math.abs(pts[1].x - pts[0].x) : 40;
+    if (step < 20) return;
+    const every = step < 34 ? 2 : 1;   // thin the labels out when space is tight
+    const { ctx } = chart;
+    ctx.save();
+    ctx.font = '600 9.5px Poppins, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(255,255,255,.95)';
+    pts.forEach((pt, i) => {
+      if (i % every !== 0 && i !== pts.length - 1) return;
+      const v = chart.data.datasets[idx].data[i];
+      if (v == null) return;
+      const txt = Number(v).toFixed(2);
+      // Halo first so the number stays legible wherever it lands.
+      ctx.strokeText(txt, pt.x, pt.y - 7);
+      ctx.fillStyle = RATING_LINE;
+      ctx.fillText(txt, pt.x, pt.y - 7);
+    });
+    ctx.restore();
+  },
+};
+
 const stackTotalLabels = {
   id: 'stackTotalLabels',
   afterDatasetsDraw(chart) {
@@ -1151,7 +1183,7 @@ function renderGbp() {
     <div class="card mt">
       <h2>Reviews by month &middot; stars stacked, rating overlaid</h2>
       <div style="height:300px;"><canvas id="gbpChart"></canvas></div>
-      <div class="note">Bars stack the count of 1–5★ reviews received each month; the line is that month's average rating on the right axis, fixed to a 1–5 scale so movement isn't exaggerated. A month with no bar received no reviews. Ratings shown here are the average of reviews <b>received in that month</b>, which moves far more than the all-time score above — a single 1★ in a quiet month drops it sharply.</div>
+      <div class="note">Bars stack the count of 1–5★ reviews received each month, 5★ at the base so low ratings stay visible on top; the number above each bar is that month's total. The purple line is the <b>all-time rating as it stood at the end of each month</b> — the score a patient would have seen on Google at that moment — with its value printed above each dot. Hover a month to see that month's own average instead. Reviews predating this range still count toward the line: the opening balance is derived from the listing's all-time total, which Google publishes rounded to one decimal, so the line can sit a fraction of a star off in absolute terms while its trend is exact.${L.cumulativeBasis==='range-only'?' <b>All-time totals were unavailable for this listing, so the line accumulates only from reviews in this range and reads low at the start.</b>':''}</div>
     </div>
 
     <div class="grid g-2-1 mt">
@@ -1192,16 +1224,17 @@ function renderGbp() {
     if (typeof Chart === 'undefined') throw new Error('chart library unavailable');
     const series = L.series || [];
     S.charts.gbpChart = new Chart(el, {
-      plugins: [stackTotalLabels],
+      plugins: [stackTotalLabels, ratingDotLabels],
       data: {
         labels: series.map(m=>m.label),
         // 5★ first puts it at the base of the stack, so the low ratings sit on
         // top where they're actually visible instead of buried under the green.
         datasets: [
-          { type:'line', label:'Rating (all-time, at month end)', yAxisID:'y1',
+          { type:'line', label:'All-time rating', yAxisID:'y1', _showPointLabels:true,
             data: series.map(m=>m.cumRating),
             borderColor:RATING_LINE, backgroundColor:RATING_LINE, borderWidth:2.5, tension:.35,
-            pointRadius:2.2, pointBackgroundColor:RATING_LINE, spanGaps:true, order:0 },
+            pointRadius:3, pointBackgroundColor:RATING_LINE, pointBorderColor:'#fff', pointBorderWidth:1.5,
+            spanGaps:true, order:0 },
           ...['s5','s4','s3','s2','s1'].map(k=>({
             type:'bar', label:`${k.slice(1)}★`, data:series.map(m=>m[k]),
             backgroundColor:STAR_COLORS[k], stack:'stars',
@@ -1216,9 +1249,18 @@ function renderGbp() {
         plugins:{
           legend:{ labels:{ color:'#4C5878', font:{family:'Poppins',size:10.5}, usePointStyle:true, boxWidth:8 } },
           tooltip:{ callbacks:{
-            label:(c)=> c.dataset.type==='line'
-              ? ` ${c.dataset.label}: ${c.parsed.y!=null?c.parsed.y.toFixed(2)+' ★':'—'}`
-              : ` ${c.dataset.label}: ${c.parsed.y}`,
+            // The dot already carries the all-time figure, so the tooltip is
+            // free to answer the other question: how did THIS month do?
+            label:(c)=>{
+              if (c.dataset.type !== 'line') return ` ${c.dataset.label}: ${c.parsed.y}`;
+              const m = series[c.dataIndex];
+              if (!m || !m.count) return ' This month: no reviews';
+              return ` This month: ${(m.ratingSum/m.count).toFixed(2)} ★ from ${m.count} review${m.count>1?'s':''}`;
+            },
+            footer:(items)=>{
+              const m = series[items[0].dataIndex];
+              return m && m.cumRating != null ? `All-time after this month: ${m.cumRating.toFixed(2)} ★` : '';
+            },
           } },
         },
         scales:{
@@ -1525,6 +1567,27 @@ $('printBtn').addEventListener('click', () => {
   $('printRange').textContent = `${$('from').value} to ${$('to').value} · generated ${new Date().toLocaleString()}`;
   window.print();
 });
+
+// Light tooltips across every chart — the default dark panel reads as harsh
+// against a clinical light theme.
+if (typeof Chart !== 'undefined') {
+  Chart.defaults.font.family = 'Poppins, sans-serif';
+  Object.assign(Chart.defaults.plugins.tooltip, {
+    backgroundColor: 'rgba(255,255,255,.97)',
+    titleColor: '#1B2340',
+    bodyColor: '#4C5878',
+    footerColor: '#8590AC',
+    borderColor: 'rgba(90,110,160,.20)',
+    borderWidth: 1,
+    cornerRadius: 10,
+    padding: 11,
+    boxPadding: 5,
+    usePointStyle: true,
+    titleFont: { family: 'Poppins', size: 12, weight: '600' },
+    bodyFont: { family: 'Poppins', size: 11.5 },
+    footerFont: { family: 'Poppins', size: 10.5, weight: '400' },
+  });
+}
 
 fetch('/api/version').then(r => r.json()).then(v => {
   $('verLabel').textContent = 'v' + v.version + (v.modelArmor ? ' · armor on' : '');
