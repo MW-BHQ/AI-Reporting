@@ -204,6 +204,8 @@ function topicFor(code, topics) {
 // ---------------------------------------------------------------- utilities
 
 const n = (v) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
+const num0 = (v) => Number(v || 0).toLocaleString("en-US");
+const totals0Spend = (byPlatform) => byPlatform.reduce((a, p) => a + n(p.spend), 0);
 const norm = (s) => String(s || "").toLowerCase().trim();
 const isoDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
 
@@ -710,7 +712,10 @@ async function buildCampaign(code, from, to) {
   };
   // One job per ad platform; unconnected ones fail harmlessly into null.
   for (const p of AD_PLATFORMS) {
-    jobs[`ad_${p.id}`] = windsor(p.id, [p.campaignKey, ...AD_METRIC_FIELDS], from, to);
+    // Objective and its matching result metrics come along, so a campaign is
+    // judged on what it was actually built to do.
+    jobs[`ad_${p.id}`] = windsor(p.id, [p.campaignKey, "campaign_objective", ...AD_METRIC_FIELDS,
+      "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d"], from, to);
   }
   const { data, errors } = await runJobs(jobs);
 
@@ -787,11 +792,17 @@ async function buildCampaign(code, from, to) {
       const name = r[p.campaignKey];
       const camp = norm(name);
       if (!camp || !camp.startsWith(needle)) continue;
-      if (!agg.has(name)) agg.set(name, { name, platform: p.label, impressions: 0, clicks: 0, spend: 0 });
+      if (!agg.has(name)) agg.set(name, {
+        name, platform: p.label, objective: r.campaign_objective || null,
+        goal: goalOf(r.campaign_objective, name),
+        impressions: 0, clicks: 0, spend: 0, leads: 0, messages: 0,
+      });
       const a = agg.get(name);
       a.impressions += n(r.impressions);
       a.clicks += n(r.clicks);
       a.spend += n(r.spend);
+      a.leads += n(r.actions_lead);
+      a.messages += n(r.actions_onsite_conversion_messaging_conversation_started_7d);
     }
     const list = [...agg.values()].sort((a, b) => b.impressions - a.impressions);
     adCampaigns.push(...list);
@@ -801,6 +812,8 @@ async function buildCampaign(code, from, to) {
       impressions: list.reduce((a, c) => a + c.impressions, 0),
       clicks: list.reduce((a, c) => a + c.clicks, 0),
       spend: list.reduce((a, c) => a + c.spend, 0),
+      leads: list.reduce((a, c) => a + c.leads, 0),
+      messages: list.reduce((a, c) => a + c.messages, 0),
     });
   }
   adCampaigns.sort((a, b) => b.impressions - a.impressions);
@@ -983,6 +996,34 @@ async function buildCampaign(code, from, to) {
     trend = [...tm.values()].sort((a, b) => a.d.localeCompare(b.d));
   }
 
+  /**
+   * What was this campaign actually for?
+   *
+   * A lead-form or Messenger campaign never sends anyone to the website, so
+   * zero sessions is the expected result, not a failure and not a tagging bug.
+   * Reporting "0 visits" without that context makes a working campaign look
+   * broken, so the goal is resolved from the ad platform and carried into the
+   * headline metrics.
+   */
+  const goalSpend = new Map();
+  for (const c of adCampaigns) {
+    if (!goalSpend.has(c.goal)) goalSpend.set(c.goal, 0);
+    goalSpend.set(c.goal, goalSpend.get(c.goal) + c.spend);
+  }
+  const primaryGoal = [...goalSpend.entries()].sort((a, b) => b[1] - a[1])[0];
+  const goal = primaryGoal ? primaryGoal[0] : null;
+  const goalDef = goal ? (GOAL_DEFS[goal] || GOAL_DEFS.unclassified) : null;
+  const adLeads = byPlatform.reduce((a, p) => a + n(p.leads), 0);
+  const adMessages = byPlatform.reduce((a, p) => a + n(p.messages), 0);
+  const goalResults = goalDef
+    ? (goalDef.result === "leads" ? adLeads
+      : goalDef.result === "messages" ? adMessages
+      : goalDef.result === "clicks" ? byPlatform.reduce((a, p) => a + n(p.clicks), 0)
+      : goalDef.result === "impressions" ? byPlatform.reduce((a, p) => a + n(p.impressions), 0)
+      : null)
+    : null;
+  const offSiteGoal = Boolean(goalDef && goalDef.source === "Meta" && ["leads", "messages"].includes(goal));
+
   const notConnected = byPlatform.filter((p) => !p.connected).map((p) => p.platform);
   const matchedNone = byPlatform.filter((p) => p.connected && p.matched === 0).map((p) => p.platform);
 
@@ -1006,7 +1047,11 @@ async function buildCampaign(code, from, to) {
   }
 
   let notes = "";
-  if (emptyResult) {
+  if (variants.length === 0 && anyAdMatch && offSiteGoal) {
+    notes = `This is a ${goalDef.label.toLowerCase()} campaign — its clicks open a ${goal === "leads" ? "lead form" : "chat"} on Meta rather than your website, so zero website visits is expected and not a tagging problem. Judge it on ${goalResults != null ? `the ${num0(goalResults)} ${goalDef.resultLabel}${goalResults === 1 ? "" : "s"} Meta recorded` : "its platform results"}.`;
+  } else if (variants.length === 0 && anyAdMatch) {
+    notes = `Meta reports spend and clicks for this code, but no website session carries utm_campaign "${code}". For a traffic campaign that points to a missing utm tag on the ad's destination URL.`;
+  } else if (emptyResult) {
     notes = `Nothing matched "${code}" in ${from} to ${to} — no GA4 traffic and no ad campaigns.`;
   } else if (!anyAdMatch) {
     notes = `No ad platform reported a campaign matching this code, so the Impressions stage is unavailable. GA4 visits and key events are complete.`;
@@ -1021,6 +1066,10 @@ async function buildCampaign(code, from, to) {
     totals, variants, keyEventBreakdown, trend,
     byPlatform, adCampaigns, orphanAdCampaigns, landingPages,
     topic, shortLinks: uniqueLinks, organicPosts, organicTotals,
+    goal, goalLabel: goalDef ? goalDef.label : null,
+    goalResultLabel: goalDef ? goalDef.resultLabel : null,
+    goalResults, goalCostPerResult: goalResults && totals0Spend(byPlatform) ? totals0Spend(byPlatform) / goalResults : null,
+    offSiteGoal, adLeads, adMessages,
     lineMessages, lineRequestIdsFound: lineReqIds.length,
     sheetErrors: sheets.errors,
     unattributedSpend,

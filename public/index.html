@@ -833,17 +833,26 @@ function renderCampaignBody(d) {
                                : (t.visits ? Math.max((t.engagement/t.visits)*100,0.4) : 0));
 
   $('campBody').innerHTML = `
-    ${d.notes ? `<div class="warnbox">${esc(d.notes)}</div>` : ''}
+    ${d.notes ? `<div class="warnbox">${d.offSiteGoal?'<b>This campaign doesn\'t send traffic to the website.</b> ':''}${esc(d.notes)}</div>` : ''}
     <div class="grid g-3">
       <div class="stat card"><div class="lab"><span class="chip" style="background:var(--amber)"></span>Ad spend</div>
         <div class="val ${isNA(t.spend)?'na':''}">${num(t.spend,{money:true})}</div>
         <div class="sub">${d.unattributedSpend?num(d.unattributedSpend,{money:true})+' not tied to a utm variant':'across matched ad campaigns'}</div></div>
+      ${d.offSiteGoal?`
+      <div class="stat card"><div class="lab">${esc(d.goalResultLabel||'result')}s <span class="pill">${esc(d.goalLabel||'')}</span></div>
+        <div class="val">${num(d.goalResults)}</div>
+        <div class="sub">counted by Meta, not the website</div></div>
+      <div class="stat card"><div class="lab">Cost per ${esc(d.goalResultLabel||'result')}</div>
+        <div class="val ${isNA(d.goalCostPerResult)?'na':''}">${num(d.goalCostPerResult,{money:true})}</div>
+        <div class="sub">${d.goalResults?num(t.spend,{money:true})+' ÷ '+num(d.goalResults):''}</div></div>
+      `:`
       <div class="stat card"><div class="lab">Cost per visit</div>
         <div class="val ${isNA(t.costPerVisit)?'na':''}">${num(t.costPerVisit,{money:true})}</div>
         <div class="sub">${t.spend!=null&&t.visits?num(t.spend,{money:true})+' ÷ '+num(t.visits)+' visits':''}</div></div>
       <div class="stat card"><div class="lab">Cost per contact</div>
         <div class="val ${isNA(t.costPerContact)?'na':''}">${num(t.costPerContact,{money:true})}</div>
         <div class="sub">${t.contacts?num(t.contacts)+' contact-us events':'no contact events'}</div></div>
+      `}
     </div>
     <div class="grid g-5 mt">
       <div class="stat card"><div class="lab">Variants matched</div><div class="val">${num(d.matchedVariants)}</div></div>
@@ -861,7 +870,9 @@ function renderCampaignBody(d) {
       <div class="card">
         <h2>${d.topic?esc(d.topic):'Campaign funnel'} <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--faint);">· ${esc(d.code)}${d.launchDate?` · dated ${esc(d.launchDate)}`:''}</span></h2>
         <div style="height:230px;"><canvas id="funnelChart"></canvas></div>
-        ${t.costPerKeyEvent!=null?`<div class="note">Cost per key event: <b>${num(t.costPerKeyEvent,{money:true})}</b> · ${num(t.spend,{money:true})} ÷ ${num(t.keyEvents)} key events.</div>`:''}
+        ${d.offSiteGoal?`<div class="note">Only the ad-platform stages appear: a ${esc((d.goalLabel||'').toLowerCase())} campaign's clicks open a ${d.goal==='leads'?'lead form':'chat'} on Meta, so no website stages follow. A logarithmic axis is used so stages of very different size stay readable.</div>`
+          :t.costPerKeyEvent!=null?`<div class="note">Cost per key event: <b>${num(t.costPerKeyEvent,{money:true})}</b> · ${num(t.spend,{money:true})} ÷ ${num(t.keyEvents)} key events. A logarithmic axis keeps impressions and key events readable together.</div>`
+          :`<div class="note">Stages with no data are omitted — a logarithmic axis can't plot zero. ${t.visits?'':'No website visits carry this code.'}</div>`}
       </div>
       <div class="card"><h2>Key events</h2>
         <table><tbody>${(d.keyEventBreakdown||[]).map(k=>`<tr><td class="strong">${esc(k.label)}</td><td class="num">${num(k.value)}</td></tr>`).join('')}</tbody></table>
@@ -878,8 +889,8 @@ function renderCampaignBody(d) {
         </tbody></table>
         <div class="note">Top entry pages for this campaign &mdash; the quickest way to recall what actually ran.</div>
       </div>
-      <div class="card"><h2>Key events</h2>
-        <table><tbody>${(d.keyEventBreakdown||[]).map(k=>`<tr><td class="strong">${esc(k.label)}</td><td class="num">${num(k.value)}</td></tr>`).join('')}</tbody></table>
+      <div class="card"><h2>Registered short links</h2>
+        <div style="font-size:12px;color:var(--ink-2);line-height:2;">${(d.shortLinks||[]).length?d.shortLinks.slice(0,10).map(l=>`<code>${esc(l)}</code>`).join('<br>'):'<span style="color:var(--faint)">none registered in UTM Builder</span>'}</div>
       </div>
     </div>
 
@@ -929,7 +940,7 @@ function renderCampaignBody(d) {
             <td class="num">${num(v.costPerVisit,{money:true})}</td>
             <td class="num">${num(v.costPerContact,{money:true})}</td>
             <td class="num">${num(v.revenue,{money:true})}</td>
-          </tr>`).join('')||'<tr><td colspan="11" class="num">no traffic matched this code</td></tr>'}
+          </tr>`).join('')||((d.orphanAdCampaigns||[]).length?'':'<tr><td colspan="11" class="num">no traffic matched this code</td></tr>')}
 
           ${(d.orphanAdCampaigns||[]).map(c=>`<tr>
             <td class="strong i18n trunc" title="${esc(c.name)}">${esc(c.name)}</td>
@@ -955,7 +966,11 @@ function renderCampaignBody(d) {
       <div class="note">One row per utm_campaign + source. Ad impressions, clicks and spend are folded onto the matching paid row via utm_source, so organic rows are blank rather than zero; a <span class="pill grey">~</span> means spend was split across variants by visit share. Hover a campaign name for the full string and its underlying ad campaign names. A row marked <b>no GA4 match</b> is ad spend with no matching tagged traffic &mdash; usually a tagging gap worth fixing.${d.notConnected&&d.notConnected.length?` Not authorised in Windsor: ${d.notConnected.map(esc).join(', ')}.`:''}</div>
     </div>
 
-    <div class="card mt no-print"><h2>Daily</h2><div class="chart-wrap"><canvas id="campChart"></canvas></div></div>
+    ${(d.trend||[]).length?`<div class="card mt no-print"><h2>Daily</h2><div class="chart-wrap"><canvas id="campChart"></canvas></div></div>`
+      :`<div class="card mt no-print"><h2>Daily</h2><div class="state" style="padding:34px 20px;">
+        <div class="big">No daily website activity</div>
+        <div style="max-width:420px;font-size:12.5px;">${d.offSiteGoal?'Expected for this campaign type — the results happen on Meta, so there is no day-by-day site traffic to plot.':'No sessions carry this campaign code, so there is nothing to chart.'}</div>
+      </div></div>`}
   `;
   drawFunnelChart('funnelChart', [
     { label:'Impressions', value:t.impressions, color:'#7C6BF5' },
@@ -964,7 +979,7 @@ function renderCampaignBody(d) {
     { label:'Engaged',     value:t.engagement,  color:'#9FC8C2' },
     { label:'Key events',  value:t.keyEvents,   color:'#3BC97F' },
   ]);
-  drawChart('campChart', d.trend||[], [
+  if ((d.trend||[]).length) drawChart('campChart', d.trend, [
     { label:'Visits', key:'visits', color:'#4B8DF8', axis:'y' },
     { label:'Key events', key:'keyEvents', color:'#7C6BF5', axis:'y1' },
   ]);
