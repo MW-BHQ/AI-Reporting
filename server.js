@@ -1059,6 +1059,34 @@ async function buildCampaign(code, from, to) {
     v.costPerContact = v.spend && v.contacts ? v.spend / v.contacts : null;
   }
 
+  /**
+   * What was this campaign actually for?
+   *
+   * A lead-form or Messenger campaign never sends anyone to the website, so
+   * zero sessions is the expected result, not a failure and not a tagging bug.
+   * Reporting "0 visits" without that context makes a working campaign look
+   * broken, so the goal is resolved from the ad platform and carried into the
+   * headline metrics.
+   */
+  const goalSpend = new Map();
+  for (const c of adCampaigns) {
+    if (!goalSpend.has(c.goal)) goalSpend.set(c.goal, 0);
+    goalSpend.set(c.goal, goalSpend.get(c.goal) + c.spend);
+  }
+  const primaryGoal = [...goalSpend.entries()].sort((a, b) => b[1] - a[1])[0];
+  const goal = primaryGoal ? primaryGoal[0] : null;
+  const goalDef = goal ? (GOAL_DEFS[goal] || GOAL_DEFS.unclassified) : null;
+  const adLeads = byPlatform.reduce((a, p) => a + n(p.leads), 0);
+  const adMessages = byPlatform.reduce((a, p) => a + n(p.messages), 0);
+  const goalResults = goalDef
+    ? (goalDef.result === "leads" ? adLeads
+      : goalDef.result === "messages" ? adMessages
+      : goalDef.result === "clicks" ? byPlatform.reduce((a, p) => a + n(p.clicks), 0)
+      : goalDef.result === "impressions" ? byPlatform.reduce((a, p) => a + n(p.impressions), 0)
+      : null)
+    : null;
+  const offSiteGoal = Boolean(goalDef && goalDef.source === "Meta" && ["leads", "messages"].includes(goal));
+
   const paidImpressions = anyAdMatch ? byPlatform.reduce((a, p) => a + n(p.impressions), 0) : null;
   const totals = {
     paidImpressions,
@@ -1114,34 +1142,6 @@ async function buildCampaign(code, from, to) {
     }
     trend = [...tm.values()].sort((a, b) => a.d.localeCompare(b.d));
   }
-
-  /**
-   * What was this campaign actually for?
-   *
-   * A lead-form or Messenger campaign never sends anyone to the website, so
-   * zero sessions is the expected result, not a failure and not a tagging bug.
-   * Reporting "0 visits" without that context makes a working campaign look
-   * broken, so the goal is resolved from the ad platform and carried into the
-   * headline metrics.
-   */
-  const goalSpend = new Map();
-  for (const c of adCampaigns) {
-    if (!goalSpend.has(c.goal)) goalSpend.set(c.goal, 0);
-    goalSpend.set(c.goal, goalSpend.get(c.goal) + c.spend);
-  }
-  const primaryGoal = [...goalSpend.entries()].sort((a, b) => b[1] - a[1])[0];
-  const goal = primaryGoal ? primaryGoal[0] : null;
-  const goalDef = goal ? (GOAL_DEFS[goal] || GOAL_DEFS.unclassified) : null;
-  const adLeads = byPlatform.reduce((a, p) => a + n(p.leads), 0);
-  const adMessages = byPlatform.reduce((a, p) => a + n(p.messages), 0);
-  const goalResults = goalDef
-    ? (goalDef.result === "leads" ? adLeads
-      : goalDef.result === "messages" ? adMessages
-      : goalDef.result === "clicks" ? byPlatform.reduce((a, p) => a + n(p.clicks), 0)
-      : goalDef.result === "impressions" ? byPlatform.reduce((a, p) => a + n(p.impressions), 0)
-      : null)
-    : null;
-  const offSiteGoal = Boolean(goalDef && goalDef.source === "Meta" && ["leads", "messages"].includes(goal));
 
   const notConnected = byPlatform.filter((p) => !p.connected).map((p) => p.platform);
   const matchedNone = byPlatform.filter((p) => p.connected && p.matched === 0).map((p) => p.platform);

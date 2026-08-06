@@ -263,3 +263,19 @@ Permissions are enforced on the API, not just in the sidebar: a user without the
 Each tab now has its own URL fragment — `…/#campaigns`, `…/#gbp` — so a view can
 be bookmarked or sent to a colleague, and the browser back button works. A link
 to a tab the recipient lacks access to falls back to their first allowed tab.
+
+## Before shipping a change: run the smoke test
+
+```bash
+npm install
+npm test          # or: bash test/smoke.sh
+```
+
+It boots the server with all outbound HTTP stubbed and executes every endpoint,
+failing on any 5xx. It also re-runs two endpoints with a connector forced to fail,
+to confirm a single dead source degrades instead of taking the page down.
+
+This exists because `node -c` only proves the file parses. It cannot catch a
+variable used before its declaration, a mistyped field name, or a null deref —
+all of which reach the browser as a 500. A v3.12.1 change shipped exactly that
+bug; the smoke test reproduces it in two seconds.
