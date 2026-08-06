@@ -311,6 +311,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
         Topic Explorer
       </div>
+      <div class="nav-item" data-view="users" data-admin="1">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.2 2.7-5 6-5s6 1.8 6 5"/><path d="M17 11h4M19 9v4"/></svg>
+        Users
+      </div>
     </nav>
 
     <div class="rail-foot">
@@ -370,6 +374,7 @@ const S = {
   audit: null, auditKey: null,
   bench: null, benchKey: null, benchTab: null,
   gbp: null, gbpKey: null, gbpTab: null, gbpInit: false,
+  me: null, users: null,
   charts: {},
 };
 
@@ -425,11 +430,23 @@ setDays(30);
 
 // ============================================================ navigation
 // Client-side only: switching tabs never refetches, which was the whole point.
+function goTo(view, { push = true } = {}) {
+  if (!S.me || !S.me.tabs.includes(view)) return;
+  S.view = view;
+  document.querySelectorAll('.nav-item').forEach(i => i.classList.toggle('active', i.dataset.view === view));
+  // Tabs are addressable, so a view can be bookmarked or sent to a colleague.
+  if (push && location.hash.slice(1) !== view) location.hash = view;
+}
+
+window.addEventListener('hashchange', () => {
+  const v = location.hash.slice(1);
+  if (v && v !== S.view && S.me && S.me.tabs.includes(v)) { goTo(v, { push:false }); render(); }
+});
+
 document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => {
-    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-    item.classList.add('active');
-    S.view = item.dataset.view;
+    if (!S.me || !S.me.tabs.includes(item.dataset.view)) return;
+    goTo(item.dataset.view);
     if (S.view === 'gbp' && !S.gbpInit) {
       // Reviews accumulate slowly, so a year is the useful default window.
       const y = new Date(); y.setDate(y.getDate() - 1);
@@ -443,12 +460,13 @@ document.querySelectorAll('.nav-item').forEach(item => {
 });
 
 // Views where the toolbar date range has no meaning.
-const NO_DATE_VIEWS = new Set(['benchmark']);
+const NO_DATE_VIEWS = new Set(['benchmark', 'users']);
 
 const TITLES = {
   overview: ['Overview', 'Impressions → Visits → Key Events across all channels'],
   campaigns: ['Campaigns', 'Enter a utm_campaign code to see its funnel and every variant'],
   topics: ['Topic Explorer', 'Multilingual search demand across 10 site languages'],
+  users: ['Users', 'Who can see which tab'],
   audit: ['Tagging audit', 'How much traffic and spend the campaign view cannot attribute'],
   benchmark: ['Benchmarks', 'Latest complete month against trailing 3, 6 and 12-month norms'],
   gbp: ['Google Business Profile', 'Reviews and ratings by listing'],
@@ -543,6 +561,7 @@ $('loadBtn').addEventListener('click', async () => {
     else if (S.view === 'audit') { await loadAudit(true); }
     else if (S.view === 'benchmark') { await loadBenchmark(true); }
     else if (S.view === 'gbp') { await loadGbp(true); }
+    else if (S.view === 'users') { S.users = null; await loadUsers(); }
     else if (S.view === 'topics' && S.topicTerm) { await loadTopic(S.topicTerm); }
     render();
   } catch (err) {
@@ -573,6 +592,7 @@ function render() {
   else if (S.view === 'audit') renderAudit();
   else if (S.view === 'benchmark') renderBenchmark();
   else if (S.view === 'gbp') renderGbp();
+  else if (S.view === 'users') renderUsers();
   else renderTopics();
 }
 
@@ -918,6 +938,29 @@ function renderCampaignBody(d) {
 
     ${(d.sheetErrors&&d.sheetErrors.length)?`<div class="warnbox">Internal sheets unavailable: ${d.sheetErrors.map(esc).join(' | ')} &mdash; campaign names and organic matching are degraded. Check <code>/api/sheets-check</code>.</div>`:''}
 
+    ${t.impressions?`<div class="card mt">
+      <h2>Ad platform performance${d.objectives&&d.objectives.length?` <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--faint);">· objective: ${d.objectives.map(esc).join(', ')}</span>`:''}</h2>
+      <div class="grid g-4">
+        <div class="stat"><div class="lab">CTR</div><div class="val">${num(t.ctr,{pct:true,dp:2})}</div>
+          <div class="sub">${num(t.clicks)} clicks ÷ ${num(t.impressions)} impr</div></div>
+        <div class="stat"><div class="lab">Cost per click</div><div class="val">${num(t.cpc,{money:true})}</div>
+          <div class="sub">CPM ${num(t.cpm,{money:true})}</div></div>
+        <div class="stat"><div class="lab">Click → visit</div>
+          <div class="val" style="${t.clickToVisit!=null&&t.clickToVisit<5?'color:var(--rose)':''}">${t.clickToVisit!=null?num(t.clickToVisit,{pct:true,dp:1}):'—'}</div>
+          <div class="sub">${num(t.visits)} sessions from ${num(t.clicks)} clicks</div></div>
+        <div class="stat"><div class="lab">${t.leads?'Leads':(t.messages?'Conversations':'Platform results')}</div>
+          <div class="val ${(!t.leads&&!t.messages)?'na':''}">${t.leads?num(t.leads):(t.messages?num(t.messages):'—')}</div>
+          <div class="sub">${t.costPerLead!=null?num(t.costPerLead,{money:true})+' per lead':(t.costPerMessage!=null?num(t.costPerMessage,{money:true})+' per conversation':'none reported by Meta')}</div></div>
+      </div>
+      ${(t.leads||t.messages)?`<div class="grid g-3 mt">
+        ${t.leads?`<div class="stat"><div class="lab">Cost per lead</div><div class="val">${num(t.costPerLead,{money:true})}</div>
+          <div class="sub">lead rate ${num(t.leadRate,{pct:true,dp:2})} of clicks</div></div>`:''}
+        ${t.messages?`<div class="stat"><div class="lab">Cost per conversation</div><div class="val">${num(t.costPerMessage,{money:true})}</div>
+          <div class="sub">${num(t.messageRate,{pct:true,dp:2})} of clicks</div></div>`:''}
+      </div>`:''}
+      <div class="note">Measured by the ad platform, so these hold regardless of website tagging. <b>Click → visit</b> is the tagging health check: a campaign sending real clicks should convert most of them into sessions, so a figure near zero means the destination URL is missing its <code>utm_campaign</code> — or that the click never goes to the website at all, which is normal for lead-form and Messenger ads. ${(!t.leads&&!t.messages)?'Meta reported no leads or conversations for this code, so the clicks were expected to land on the site.':''}</div>
+    </div>`:''}
+
     <div class="card mt">
       <h2>Campaign detail</h2>
       <table>
@@ -1059,6 +1102,107 @@ function renderTopicBody(d) {
       <div class="note">A coloured language pill means the language was read from the page URL locale (reliable). A grey pill means it was inferred from the query's script, which cannot separate English, German, Vietnamese and Indonesian.</div>
     </div>
   `;
+}
+
+// ============================================================ USERS
+async function loadUsers() {
+  if (S.users) return S.users;
+  setStatus('busy', 'loading access list…');
+  const res = await fetch('/api/users');
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,180)}`);
+  S.users = await res.json();
+  setStatus('ok', `${S.users.users.length} user(s) configured`);
+  return S.users;
+}
+
+function renderUsers() {
+  const d = S.users;
+  if (!d) {
+    $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">Loading access list…</div></div></div>`;
+    loadUsers().then(render).catch(e => { $('viewRoot').innerHTML = errorState(e.message); });
+    return;
+  }
+  const tabs = (d.allTabs || []).filter(t => !t.adminOnly);
+
+  const row = (u) => `<tr data-email="${esc(u.email)}">
+    <td class="strong">${esc(u.email)}${u.note?`<div style="font-size:10.5px;color:var(--faint);font-weight:400;">${esc(u.note)}</div>`:''}</td>
+    ${tabs.map(t=>`<td class="num"><input type="checkbox" data-tab="${esc(t.id)}" ${(u.tabs||[]).includes(t.id)?'checked':''}></td>`).join('')}
+    <td class="num"><button class="btn btn-ghost" data-save="${esc(u.email)}" style="padding:5px 10px;font-size:11px;">Save</button></td>
+    <td class="num"><button class="btn btn-ghost" data-del="${esc(u.email)}" style="padding:5px 10px;font-size:11px;color:var(--rose);">Remove</button></td>
+  </tr>`;
+
+  $('viewRoot').innerHTML = `
+    ${d.persistence!=='gcs'?`<div class="warnbox"><b>Changes won't survive a restart.</b> No storage bucket is configured, so the access list is held in memory only and resets whenever Cloud Run cold-starts. Set <code>ACCESS_BUCKET</code> to a Cloud Storage bucket to make it durable.</div>`:''}
+
+    <div class="card">
+      <h2>Permanent admins</h2>
+      <div style="font-size:12.5px;color:var(--ink-2);line-height:1.9;">
+        ${(d.admins||[]).map(a=>`<code>${esc(a)}</code>`).join(' · ')}
+      </div>
+      <div class="note">Set by deployment config (<code>ADMIN_EMAILS</code>), not editable here — that's deliberate, so a mistake in the list below can never lock everyone out. Admins always see every tab.</div>
+    </div>
+
+    <div class="card mt">
+      <h2>Add or update a user</h2>
+      <div class="search">
+        <input class="text" id="newEmail" placeholder="name@bangkokhospital.com" autocomplete="off">
+        <input class="text" id="newNote" placeholder="Role or note (optional)" style="max-width:220px;min-width:160px;">
+        <button class="btn btn-primary" id="addUser">Add</button>
+      </div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;">
+        ${tabs.map(t=>`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="checkbox" class="newTab" value="${esc(t.id)}" ${d.defaultTabs.includes(t.id)?'checked':''}> ${esc(t.label)}
+        </label>`).join('')}
+      </div>
+      <div class="note">Adding someone here shapes what they see. It does <b>not</b> let them in — they must also be granted IAP access in Google Cloud, which is the actual gate. Someone with IAP access but no entry below sees only: ${d.defaultTabs.length?d.defaultTabs.map(esc).join(', '):'nothing'}.</div>
+    </div>
+
+    <div class="card mt">
+      <h2>Configured users · ${(d.users||[]).length}</h2>
+      <table><thead><tr><th>User</th>${tabs.map(t=>`<th class="num">${esc(t.label)}</th>`).join('')}<th></th><th></th></tr></thead>
+      <tbody>${(d.users||[]).map(row).join('')||`<tr><td colspan="${tabs.length+3}" class="num">No users configured yet — everyone with IAP access sees the default tabs.</td></tr>`}</tbody></table>
+      <div class="note">Tick the tabs a person should see, then Save that row. Tabs they lack are hidden from their sidebar, and the matching API refuses their requests too — the hiding isn't the only barrier.</div>
+    </div>
+  `;
+
+  const collect = (email) => {
+    const tr = document.querySelector(`tr[data-email="${CSS.escape(email)}"]`);
+    return [...tr.querySelectorAll('input[data-tab]')].filter(i=>i.checked).map(i=>i.dataset.tab);
+  };
+  const post = async (body) => {
+    const res = await fetch('/api/users', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(body) });
+    if (!res.ok) throw new Error(`${res.status}: ${(await res.text()).slice(0,160)}`);
+    return res.json();
+  };
+
+  document.querySelectorAll('[data-save]').forEach(b => b.addEventListener('click', async () => {
+    b.disabled = true; b.textContent = 'Saving…';
+    try {
+      const email = b.dataset.save;
+      const r = await post({ email, tabs: collect(email) });
+      S.users.users = r.users; setStatus('ok', r.persisted ? 'saved' : 'saved in memory only'); render();
+    } catch (e) { setStatus('bad','save failed'); alert(e.message); b.disabled = false; b.textContent = 'Save'; }
+  }));
+
+  document.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm(`Remove ${b.dataset.del}? They'll fall back to the default tabs.`)) return;
+    b.disabled = true;
+    try {
+      const res = await fetch(`/api/users?email=${encodeURIComponent(b.dataset.del)}`, { method:'DELETE' });
+      if (!res.ok) throw new Error(`${res.status}: ${(await res.text()).slice(0,160)}`);
+      const r = await res.json(); S.users.users = r.users; render();
+    } catch (e) { alert(e.message); b.disabled = false; }
+  }));
+
+  $('addUser').addEventListener('click', async () => {
+    const email = $('newEmail').value.trim();
+    if (!email) { $('newEmail').focus(); return; }
+    const tabs2 = [...document.querySelectorAll('.newTab')].filter(i=>i.checked).map(i=>i.value);
+    try {
+      const r = await post({ email, tabs: tabs2, note: $('newNote').value.trim() });
+      S.users.users = r.users; setStatus('ok', r.persisted?'added':'added in memory only'); render();
+    } catch (e) { alert(e.message); }
+  });
 }
 
 // ============================================================ GBP
@@ -1608,7 +1752,34 @@ fetch('/api/version').then(r => r.json()).then(v => {
   $('verLabel').textContent = 'v' + v.version + (v.modelArmor ? ' · armor on' : '');
 }).catch(() => { $('verLabel').textContent = 'unknown'; });
 
-render();
+// Identity decides the nav before anything renders, so a user never glimpses a
+// tab they can't open.
+fetch('/api/me').then(r => r.json()).then(me => {
+  S.me = me;
+  document.querySelectorAll('.nav-item').forEach(item => {
+    const allowed = me.tabs.includes(item.dataset.view);
+    item.classList.toggle('hidden', !allowed);
+  });
+  if (me.email) {
+    const foot = document.querySelector('.rail-foot');
+    if (foot) foot.insertAdjacentHTML('afterbegin',
+      `<div class="k">Signed in</div><div class="v" style="word-break:break-all;">${esc(me.email)}${me.isAdmin?' <span class="pill">admin</span>':''}</div>`);
+  }
+  const wanted = location.hash.slice(1);
+  const start = (wanted && me.tabs.includes(wanted)) ? wanted : (me.tabs.find(t => t !== 'users') || me.tabs[0]);
+  if (!start) {
+    $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No tabs assigned</div>
+      <div style="max-width:420px;font-size:12.5px;">Your account is signed in${me.email?` as ${esc(me.email)}`:''} but hasn't been granted any views yet. Ask an admin to grant access.</div></div></div>`;
+    return;
+  }
+  goTo(start, { push: !location.hash });
+  render();
+}).catch(() => {
+  // Identity unavailable (local dev, or IAP not in front): show everything.
+  S.me = { email: null, isAdmin: true, tabs: ['overview','campaigns','gbp','benchmark','audit','topics','users'], allTabs: [] };
+  goTo(location.hash.slice(1) || 'overview', { push: false });
+  render();
+});
 </script>
 </body>
 </html>
