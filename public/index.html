@@ -940,25 +940,38 @@ function renderCampaignBody(d) {
 
     ${t.impressions?`<div class="card mt">
       <h2>Ad platform performance${d.objectives&&d.objectives.length?` <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--faint);">· objective: ${d.objectives.map(esc).join(', ')}</span>`:''}</h2>
+
       <div class="grid g-4">
-        <div class="stat"><div class="lab">CTR</div><div class="val">${num(t.ctr,{pct:true,dp:2})}</div>
-          <div class="sub">${num(t.clicks)} clicks ÷ ${num(t.impressions)} impr</div></div>
-        <div class="stat"><div class="lab">Cost per click</div><div class="val">${num(t.cpc,{money:true})}</div>
+        <div class="stat"><div class="lab">Link CTR</div><div class="val">${num(t.ctr,{pct:true,dp:2})}</div>
+          <div class="sub">${num(t.linkClicks)} link clicks ÷ ${num(t.impressions)} impr</div></div>
+        <div class="stat"><div class="lab">Cost per link click</div><div class="val">${num(t.cpc,{money:true})}</div>
           <div class="sub">CPM ${num(t.cpm,{money:true})}</div></div>
-        <div class="stat"><div class="lab">Click → visit</div>
-          <div class="val" style="${t.clickToVisit!=null&&t.clickToVisit<5?'color:var(--rose)':''}">${t.clickToVisit!=null?num(t.clickToVisit,{pct:true,dp:1}):'—'}</div>
-          <div class="sub">${num(t.visits)} sessions from ${num(t.clicks)} clicks</div></div>
-        <div class="stat"><div class="lab">${t.leads?'Leads':(t.messages?'Conversations':'Platform results')}</div>
-          <div class="val ${(!t.leads&&!t.messages)?'na':''}">${t.leads?num(t.leads):(t.messages?num(t.messages):'—')}</div>
-          <div class="sub">${t.costPerLead!=null?num(t.costPerLead,{money:true})+' per lead':(t.costPerMessage!=null?num(t.costPerMessage,{money:true})+' per conversation':'none reported by Meta')}</div></div>
+        <div class="stat"><div class="lab">Landing page views</div><div class="val ${isNA(t.landingPageViews)?'na':''}">${num(t.landingPageViews)}</div>
+          <div class="sub">${t.costPerLpv!=null?num(t.costPerLpv,{money:true})+' each':'reported by Meta'}</div></div>
+        <div class="stat"><div class="lab">Page view → session</div>
+          <div class="val" style="${t.lpvToVisit!=null&&t.lpvToVisit<50?'color:var(--rose)':''}">${t.lpvToVisit!=null?num(t.lpvToVisit,{pct:true,dp:1}):'—'}</div>
+          <div class="sub">${num(t.visits)} sessions from ${num(t.landingPageViews)} page views</div></div>
       </div>
-      ${(t.leads||t.messages)?`<div class="grid g-3 mt">
-        ${t.leads?`<div class="stat"><div class="lab">Cost per lead</div><div class="val">${num(t.costPerLead,{money:true})}</div>
-          <div class="sub">lead rate ${num(t.leadRate,{pct:true,dp:2})} of clicks</div></div>`:''}
-        ${t.messages?`<div class="stat"><div class="lab">Cost per conversation</div><div class="val">${num(t.costPerMessage,{money:true})}</div>
-          <div class="sub">${num(t.messageRate,{pct:true,dp:2})} of clicks</div></div>`:''}
+
+      <div class="grid g-4 mt">
+        <div class="stat"><div class="lab">Clicks (all)</div><div class="val" style="color:var(--muted)">${num(t.clicks)}</div>
+          <div class="sub">incl. reactions &amp; expands · ${num(t.ctrAll,{pct:true,dp:2})} of impr</div></div>
+        <div class="stat"><div class="lab">Leads</div>
+          <div class="val ${!t.leads?'na':''}">${t.leads?num(t.leads):'0'}</div>
+          <div class="sub">${t.costPerLead!=null?num(t.costPerLead,{money:true})+' per lead':'no lead-objective campaign here'}</div></div>
+        <div class="stat"><div class="lab">Conversations</div>
+          <div class="val ${!t.messages?'na':''}">${t.messages?num(t.messages):'0'}</div>
+          <div class="sub">${t.costPerMessage!=null?num(t.costPerMessage,{money:true})+' each':'none started'}</div></div>
+        <div class="stat"><div class="lab">Sessions not recorded</div>
+          <div class="val" style="${t.lostSessions?'color:var(--rose)':''}">${t.lostSessions!=null?num(t.lostSessions):'—'}</div>
+          <div class="sub">page views with no tagged session</div></div>
+      </div>
+
+      ${t.lpvToVisit!=null&&t.lpvToVisit<50?`<div class="warnbox" style="margin-top:14px;">
+        <b>Tagging gap, quantified.</b> Meta recorded ${num(t.landingPageViews)} landing page views &mdash; browsers that actually rendered your page &mdash; but only ${num(t.visits)} sessions carry this campaign code. Around ${num(t.lostSessions)} visits arrived and were credited elsewhere, so ${num(t.spend,{money:true})} of spend can't be tied to any outcome. The destination URL is missing its <code>utm_campaign</code>, or carries a different one.
       </div>`:''}
-      <div class="note">Measured by the ad platform, so these hold regardless of website tagging. <b>Click → visit</b> is the tagging health check: a campaign sending real clicks should convert most of them into sessions, so a figure near zero means the destination URL is missing its <code>utm_campaign</code> — or that the click never goes to the website at all, which is normal for lead-form and Messenger ads. ${(!t.leads&&!t.messages)?'Meta reported no leads or conversations for this code, so the clicks were expected to land on the site.':''}</div>
+
+      <div class="note"><b>Link CTR and cost per link click use link clicks, not Meta's "clicks (all)"</b>, which also counts reactions, photo expands and profile taps and so overstates traffic intent &mdash; often by half. <b>Page view → session</b> is the tagging health check and the only fair comparison available: Meta's landing page view means the browser rendered your page, so it should closely match a GA4 session. A large shortfall is a measurement failure, not lost interest. Leads and conversations show as 0 rather than being hidden, so you can see the objective produced none.</div>
     </div>`:''}
 
     <div class="card mt">

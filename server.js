@@ -816,7 +816,16 @@ async function buildCampaign(code, from, to) {
   for (const p of AD_PLATFORMS) {
     // Objective and its matching result metrics come along, so a campaign is
     // judged on what it was actually built to do.
+    /**
+     * `clicks` is Meta's "clicks (all)" — it includes reactions, expands and
+     * profile taps, so it badly overstates traffic intent. `actions_link_click`
+     * is the click on the link, and `actions_landing_page_view` is Meta's count
+     * of people whose browser actually rendered the destination. That last one is
+     * the only fair comparison against GA4 sessions, and the gap between them is
+     * what exposes a missing utm tag.
+     */
     jobs[`ad_${p.id}`] = windsor(p.id, [p.campaignKey, "campaign_objective", ...AD_METRIC_FIELDS,
+      "actions_link_click", "actions_landing_page_view",
       "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d"], from, to);
   }
   const { data, errors } = await runJobs(jobs);
@@ -897,11 +906,13 @@ async function buildCampaign(code, from, to) {
       if (!agg.has(name)) agg.set(name, {
         name, platform: p.label, objective: r.campaign_objective || null,
         goal: goalOf(r.campaign_objective, name),
-        impressions: 0, clicks: 0, spend: 0, leads: 0, messages: 0,
+        impressions: 0, clicks: 0, linkClicks: 0, landingPageViews: 0, spend: 0, leads: 0, messages: 0,
       });
       const a = agg.get(name);
       a.impressions += n(r.impressions);
       a.clicks += n(r.clicks);
+      a.linkClicks += n(r.actions_link_click);
+      a.landingPageViews += n(r.actions_landing_page_view);
       a.spend += n(r.spend);
       a.leads += n(r.actions_lead);
       a.messages += n(r.actions_onsite_conversion_messaging_conversation_started_7d);
@@ -913,6 +924,8 @@ async function buildCampaign(code, from, to) {
       platform: p.label, connected: true, matched: list.length,
       impressions: list.reduce((a, c) => a + c.impressions, 0),
       clicks: list.reduce((a, c) => a + c.clicks, 0),
+      linkClicks: list.reduce((a, c) => a + c.linkClicks, 0),
+      landingPageViews: list.reduce((a, c) => a + c.landingPageViews, 0),
       spend: list.reduce((a, c) => a + c.spend, 0),
       leads: list.reduce((a, c) => a + c.leads, 0),
       messages: list.reduce((a, c) => a + c.messages, 0),
@@ -1109,10 +1122,21 @@ async function buildCampaign(code, from, to) {
    * clickToVisit is the diagnostic that matters most: clicks arriving with no
    * session is the signature of a broken or missing utm tag.
    */
-  totals.ctr = totals.impressions ? (totals.clicks / totals.impressions) * 100 : null;
-  totals.cpc = totals.spend && totals.clicks ? totals.spend / totals.clicks : null;
+  const adLinkClicks = byPlatform.reduce((a, p) => a + n(p.linkClicks), 0);
+  const adLpv = byPlatform.reduce((a, p) => a + n(p.landingPageViews), 0);
+  totals.linkClicks = adLinkClicks || null;
+  totals.landingPageViews = adLpv || null;
+  // CTR on link clicks, since that's the click that expresses intent.
+  totals.ctr = totals.impressions && adLinkClicks ? (adLinkClicks / totals.impressions) * 100 : null;
+  totals.ctrAll = totals.impressions ? (totals.clicks / totals.impressions) * 100 : null;
+  totals.cpc = totals.spend && adLinkClicks ? totals.spend / adLinkClicks : null;
   totals.cpm = totals.impressions ? (totals.spend / totals.impressions) * 1000 : null;
-  totals.clickToVisit = totals.clicks ? (totals.visits / totals.clicks) * 100 : null;
+  totals.costPerLpv = totals.spend && adLpv ? totals.spend / adLpv : null;
+  // The tagging check: Meta says this many browsers rendered the page; GA4 says
+  // this many sessions carried the code. A wide gap means the tag is missing.
+  totals.lpvToVisit = adLpv ? (totals.visits / adLpv) * 100 : null;
+  totals.clickToVisit = adLinkClicks ? (totals.visits / adLinkClicks) * 100 : null;
+  totals.lostSessions = adLpv ? Math.max(0, adLpv - totals.visits) : null;
   totals.leads = adLeads;
   totals.messages = adMessages;
   totals.costPerLead = totals.spend && adLeads ? totals.spend / adLeads : null;
