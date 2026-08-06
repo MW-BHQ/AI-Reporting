@@ -201,6 +201,108 @@ function topicFor(code, topics) {
   return best ? best.topic : null;
 }
 
+// --------------------------------------------------------- access control
+/**
+ * Per-tab permissions on top of IAP.
+ *
+ * IAP decides WHO can open the app at all; this decides WHAT they see inside.
+ * Removing somebody from IAP remains the real off-switch — this layer is for
+ * shaping the view, not for keeping a determined person out.
+ *
+ * Identity comes from the header IAP injects. That header is only trustworthy
+ * because the service refuses unauthenticated traffic, so IAP is the sole way in.
+ * If the service is ever set to allow-unauthenticated, this becomes spoofable —
+ * DEPLOY.md says so.
+ */
+const TABS = [
+  { id: "overview",  label: "Overview" },
+  { id: "campaigns", label: "Campaigns" },
+  { id: "gbp",       label: "Google Profile" },
+  { id: "benchmark", label: "Benchmarks" },
+  { id: "audit",     label: "Tagging audit" },
+  { id: "topics",    label: "Topic Explorer" },
+  { id: "users",     label: "Users", adminOnly: true },
+];
+const TAB_IDS = TABS.filter((t) => !t.adminOnly).map((t) => t.id);
+
+const ADMIN_EMAILS = String(process.env.ADMIN_EMAILS || "mongkhon.oo@bangkokhospital.com")
+  .split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
+// What a newly-admitted user sees before an admin grants anything. Deliberately
+// minimal, but not empty — an empty app looks broken rather than restricted.
+const DEFAULT_TABS = String(process.env.DEFAULT_TABS || "overview")
+  .split(",").map((t) => t.trim()).filter((t) => TAB_IDS.includes(t));
+const ACCESS_BUCKET = process.env.ACCESS_BUCKET || process.env.BENCHMARK_BUCKET || "";
+const ACCESS_OBJECT = "access/users.json";
+const DEV_USER = process.env.DEV_USER || "";
+
+function callerEmail(req) {
+  const raw = req.header("X-Goog-Authenticated-User-Email") || "";
+  // IAP formats this as "accounts.google.com:someone@example.com".
+  const email = raw.includes(":") ? raw.split(":").pop() : raw;
+  return (email || DEV_USER || "").trim().toLowerCase();
+}
+const isAdmin = (email) => ADMIN_EMAILS.includes(String(email || "").toLowerCase());
+
+// In-memory mirror so a GCS outage doesn't take the app down mid-session.
+let _access = { at: 0, users: null };
+
+async function readAccess() {
+  if (_access.users && Date.now() - _access.at < 60 * 1000) return _access.users;
+  let users = [];
+  if (ACCESS_BUCKET) {
+    try {
+      const stored = await gcsRead(ACCESS_OBJECT);
+      if (stored && Array.isArray(stored.users)) users = stored.users;
+    } catch (e) {
+      logJson("WARNING", "access_read_failed", { error: String(e.message || e) });
+      if (_access.users) return _access.users;   // keep serving the last good copy
+    }
+  } else if (_access.users) {
+    return _access.users;
+  }
+  _access = { at: Date.now(), users };
+  return users;
+}
+
+async function writeAccess(users) {
+  _access = { at: Date.now(), users };
+  if (!ACCESS_BUCKET) return { persisted: false };
+  const ok = await gcsWrite(ACCESS_OBJECT, { users, updatedAt: new Date().toISOString() });
+  return { persisted: Boolean(ok) };
+}
+
+async function tabsFor(email) {
+  if (!email) return [];
+  if (isAdmin(email)) return TABS.map((t) => t.id);
+  const users = await readAccess();
+  const rec = users.find((u) => String(u.email || "").toLowerCase() === email);
+  if (!rec) return DEFAULT_TABS.slice();
+  return (rec.tabs || []).filter((t) => TAB_IDS.includes(t));
+}
+
+/** Gate a data endpoint on the tab it belongs to. Client-side hiding is cosmetic. */
+function requireTab(tabId) {
+  return async (req, res, next) => {
+    const email = callerEmail(req);
+    if (!email) {
+      // No identity at all: IAP isn't in front, or this is local dev.
+      if (!ACCESS_BUCKET && !process.env.ADMIN_EMAILS) return next();
+      return res.status(401).json({ error: "Not signed in" });
+    }
+    const allowed = await tabsFor(email);
+    if (!allowed.includes(tabId)) {
+      return res.status(403).json({ error: `You don't have access to ${tabId}. Ask an admin to grant it.` });
+    }
+    next();
+  };
+}
+
+function requireAdmin(req, res, next) {
+  const email = callerEmail(req);
+  if (!isAdmin(email)) return res.status(403).json({ error: "Admins only" });
+  next();
+}
+
 // ---------------------------------------------------------------- utilities
 
 const n = (v) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
@@ -614,7 +716,7 @@ async function buildOverview(from, to) {
   };
 }
 
-app.get("/api/overview", async (req, res) => {
+app.get("/api/overview", requireTab("overview"), async (req, res) => {
   const { from, to } = req.query;
   if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
   if (!WINDSOR_API_KEY) return res.status(500).json({ error: "Server missing WINDSOR_API_KEY" });
@@ -666,7 +768,7 @@ async function buildCampaignList(from, to) {
   };
 }
 
-app.get("/api/campaigns", async (req, res) => {
+app.get("/api/campaigns", requireTab("campaigns"), async (req, res) => {
   const { from, to } = req.query;
   if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
   try {
@@ -972,6 +1074,23 @@ async function buildCampaign(code, from, to) {
     spend: byPlatform.some((p) => p.connected && p.spend) ? platformSpend : null,
     clicks: anyAdMatch ? byPlatform.reduce((a, p) => a + n(p.clicks), 0) : null,
   };
+  /**
+   * Ad-platform ratios are computed unconditionally. They're measured by Meta
+   * and are meaningful whatever the objective — withholding them because a
+   * campaign was classified as "traffic" hid the very numbers needed to judge it.
+   * clickToVisit is the diagnostic that matters most: clicks arriving with no
+   * session is the signature of a broken or missing utm tag.
+   */
+  totals.ctr = totals.impressions ? (totals.clicks / totals.impressions) * 100 : null;
+  totals.cpc = totals.spend && totals.clicks ? totals.spend / totals.clicks : null;
+  totals.cpm = totals.impressions ? (totals.spend / totals.impressions) * 1000 : null;
+  totals.clickToVisit = totals.clicks ? (totals.visits / totals.clicks) * 100 : null;
+  totals.leads = adLeads;
+  totals.messages = adMessages;
+  totals.costPerLead = totals.spend && adLeads ? totals.spend / adLeads : null;
+  totals.costPerMessage = totals.spend && adMessages ? totals.spend / adMessages : null;
+  totals.leadRate = totals.clicks && adLeads ? (adLeads / totals.clicks) * 100 : null;
+  totals.messageRate = totals.clicks && adMessages ? (adMessages / totals.clicks) * 100 : null;
   totals.costPerVisit = totals.spend && totals.visits ? totals.spend / totals.visits : null;
   totals.costPerContact = totals.spend && totals.contacts ? totals.spend / totals.contacts : null;
   totals.unattributedSpend = unattributedSpend;
@@ -1067,6 +1186,7 @@ async function buildCampaign(code, from, to) {
     byPlatform, adCampaigns, orphanAdCampaigns, landingPages,
     topic, shortLinks: uniqueLinks, organicPosts, organicTotals,
     goal, goalLabel: goalDef ? goalDef.label : null,
+    objectives: [...new Set(adCampaigns.map((c) => c.objective).filter(Boolean))],
     goalResultLabel: goalDef ? goalDef.resultLabel : null,
     goalResults, goalCostPerResult: goalResults && totals0Spend(byPlatform) ? totals0Spend(byPlatform) / goalResults : null,
     offSiteGoal, adLeads, adMessages,
@@ -1082,7 +1202,7 @@ async function buildCampaign(code, from, to) {
   };
 }
 
-app.get("/api/campaign", async (req, res) => {
+app.get("/api/campaign", requireTab("campaigns"), async (req, res) => {
   const { code, from, to } = req.query;
   if (!code || String(code).trim().length < 2) return res.status(400).json({ error: "code (min 2 chars) required" });
   if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
@@ -1366,7 +1486,7 @@ async function buildGbp(from, to) {
   };
 }
 
-app.get("/api/gbp", async (req, res) => {
+app.get("/api/gbp", requireTab("gbp"), async (req, res) => {
   const { from, to } = req.query;
   if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
   try {
@@ -1650,7 +1770,7 @@ async function buildBenchmark(anchorISO) {
   };
 }
 
-app.get("/api/benchmark", async (req, res) => {
+app.get("/api/benchmark", requireTab("benchmark"), async (req, res) => {
   const anchor = isoDate(req.query.to) ? req.query.to : new Date().toISOString().slice(0, 10);
   const refresh = req.query.refresh === "1";
   const months = completeMonthsBack(anchor, 1);
@@ -1816,7 +1936,7 @@ async function buildUntagged(from, to) {
   };
 }
 
-app.get("/api/untagged", async (req, res) => {
+app.get("/api/untagged", requireTab("audit"), async (req, res) => {
   const { from, to } = req.query;
   if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
   try {
@@ -2047,7 +2167,7 @@ async function buildTopic(topic, from, to) {
   };
 }
 
-app.post("/api/topic", async (req, res) => {
+app.post("/api/topic", requireTab("topics"), async (req, res) => {
   const { topic, from, to } = req.body || {};
   if (!topic || typeof topic !== "string") return res.status(400).json({ error: "topic (string) required" });
   if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
@@ -2069,10 +2189,60 @@ app.post("/api/topic", async (req, res) => {
 
 // ---------------------------------------------------------------- meta/infra
 
+/** Who am I, and what may I see? The client builds its nav from this. */
+app.get("/api/me", async (req, res) => {
+  const email = callerEmail(req);
+  const admin = isAdmin(email);
+  const allowed = await tabsFor(email);
+  const users = admin ? await readAccess() : null;
+  res.json({
+    email: email || null,
+    isAdmin: admin,
+    tabs: allowed,
+    allTabs: TABS,
+    configured: email ? (admin || (users || await readAccess()).some((u) => String(u.email||"").toLowerCase() === email)) : false,
+    identitySource: req.header("X-Goog-Authenticated-User-Email") ? "iap" : (DEV_USER ? "dev" : "none"),
+    persistence: ACCESS_BUCKET ? "gcs" : "memory-only",
+  });
+});
+
+app.get("/api/users", requireAdmin, async (_req, res) => {
+  const users = await readAccess();
+  res.json({
+    users, admins: ADMIN_EMAILS, allTabs: TABS, defaultTabs: DEFAULT_TABS,
+    persistence: ACCESS_BUCKET ? "gcs" : "memory-only",
+  });
+});
+
+app.post("/api/users", requireAdmin, async (req, res) => {
+  const email = String(req.body && req.body.email || "").trim().toLowerCase();
+  const tabs = Array.isArray(req.body && req.body.tabs) ? req.body.tabs.filter((t) => TAB_IDS.includes(t)) : [];
+  const note = String(req.body && req.body.note || "").slice(0, 120);
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: "A valid email is required" });
+  const users = (await readAccess()).slice();
+  const i = users.findIndex((u) => String(u.email || "").toLowerCase() === email);
+  const rec = { email, tabs, note, updatedAt: new Date().toISOString(), updatedBy: callerEmail(req) };
+  if (i === -1) users.push(rec); else users[i] = { ...users[i], ...rec };
+  const { persisted } = await writeAccess(users);
+  logJson("INFO", "access_updated", { target: email, tabs, by: rec.updatedBy, persisted });
+  res.json({ ok: true, persisted, users });
+});
+
+app.delete("/api/users", requireAdmin, async (req, res) => {
+  const email = String(req.query.email || "").trim().toLowerCase();
+  if (!email) return res.status(400).json({ error: "email required" });
+  if (isAdmin(email)) return res.status(400).json({ error: "Permanent admins are set by deployment config and can't be removed here." });
+  const users = (await readAccess()).filter((u) => String(u.email || "").toLowerCase() !== email);
+  const { persisted } = await writeAccess(users);
+  logJson("INFO", "access_removed", { target: email, by: callerEmail(req), persisted });
+  res.json({ ok: true, persisted, users });
+});
+
 app.get("/api/version", (_req, res) => res.json({
   version: VERSION, ga4Property: GA4_ACCOUNT,
   cacheTtlSec: CACHE_TTL_MS / 1000, cacheEntries: cache.size,
   modelArmor: MA_ENABLED, locales: LOCALES,
+  accessPersistence: ACCESS_BUCKET ? "gcs" : "memory-only",
 }));
 
 /**

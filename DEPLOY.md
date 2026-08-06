@@ -213,3 +213,53 @@ gcloud run services update control-room --region asia-southeast1 \
 
 Optionally add `--min-instances=1` to keep the in-memory cache warm so the first
 load each morning isn't a cold start.
+
+## User management (v3.13)
+
+Per-tab permissions layered on top of IAP. IAP decides **who can open the app**;
+this decides **what they see inside**. Removing someone from IAP is still the
+real off-switch.
+
+### 1. A bucket to store the access list
+
+The list is edited in the Users tab, so the app needs somewhere writable.
+
+```bash
+gcloud storage buckets create gs://YOUR_PROJECT-control-room --location=asia-southeast1
+```
+
+Grant the runtime service account object access (Console: bucket → Permissions →
+Grant access → the `…-compute@developer.gserviceaccount.com` principal → role
+**Storage Object Admin**).
+
+### 2. Deploy with the access env vars
+
+```bash
+gcloud run services update control-room --region asia-southeast1 \
+  --set-env-vars ACCESS_BUCKET=YOUR_PROJECT-control-room,\
+ADMIN_EMAILS=you@bangkokhospital.com,colleague@bangkokhospital.com,\
+DEFAULT_TABS=overview
+```
+
+- `ADMIN_EMAILS` — permanent admins. Set here, not in the UI, so a mistake in
+  the access list can never lock everyone out. Admins always see every tab.
+- `DEFAULT_TABS` — what someone with IAP access but no entry in the list sees.
+  Keep it minimal; empty makes the app look broken rather than restricted.
+- `ACCESS_BUCKET` — omit it and the app still works, but the list lives in memory
+  and resets on every cold start. The Users tab warns when this is the case.
+
+### Why the identity header can be trusted
+
+Identity comes from the `X-Goog-Authenticated-User-Email` header IAP injects.
+That is only trustworthy because the service refuses unauthenticated traffic, so
+IAP is the sole route in. **Do not set the service to allow-unauthenticated** —
+that would let anyone set the header themselves and impersonate a user.
+
+Permissions are enforced on the API, not just in the sidebar: a user without the
+`gbp` tab gets a 403 from `/api/gbp` even if they craft the request by hand.
+
+### Linkable tabs
+
+Each tab now has its own URL fragment — `…/#campaigns`, `…/#gbp` — so a view can
+be bookmarked or sent to a colleague, and the browser back button works. A link
+to a tab the recipient lacks access to falls back to their first allowed tab.
