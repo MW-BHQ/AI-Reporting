@@ -1,3 +1,7 @@
+> **New to this project? Read [CONTEXT.md](CONTEXT.md) first.** It records every
+> verified API quirk, the reasoning behind each design decision, and the dead
+> ends that must not be re-attempted.
+
 # Cross-Channel Control Room — Deploy to GCP Cloud Run
 
 A single Node service that serves the dashboard and proxies live pulls from

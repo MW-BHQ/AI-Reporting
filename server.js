@@ -251,7 +251,7 @@ async function readAccess() {
   let users = [];
   if (ACCESS_BUCKET) {
     try {
-      const stored = await gcsRead(ACCESS_OBJECT);
+      const stored = await gcsRead(ACCESS_OBJECT, ACCESS_BUCKET);
       if (stored && Array.isArray(stored.users)) users = stored.users;
     } catch (e) {
       logJson("WARNING", "access_read_failed", { error: String(e.message || e) });
@@ -267,7 +267,7 @@ async function readAccess() {
 async function writeAccess(users) {
   _access = { at: Date.now(), users };
   if (!ACCESS_BUCKET) return { persisted: false };
-  const ok = await gcsWrite(ACCESS_OBJECT, { users, updatedAt: new Date().toISOString() });
+  const ok = await gcsWrite(ACCESS_OBJECT, { users, updatedAt: new Date().toISOString() }, ACCESS_BUCKET);
   return { persisted: Boolean(ok) };
 }
 
@@ -1294,22 +1294,22 @@ const GOAL_DEFS = {
  * Without a bucket configured it falls back to the in-memory cache with a long
  * TTL — correct, just re-computed after each cold start.
  */
-const BENCH_BUCKET = process.env.BENCHMARK_BUCKET || "";
+const BENCH_BUCKET = process.env.BENCHMARK_BUCKET || process.env.ACCESS_BUCKET || "";
 
-async function gcsRead(objectName) {
-  if (!BENCH_BUCKET) return null;
+async function gcsRead(objectName, bucket = BENCH_BUCKET) {
+  if (!bucket) return null;
   const token = await gcpAccessToken();
-  const url = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(BENCH_BUCKET)}/o/${encodeURIComponent(objectName)}?alt=media`;
+  const url = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(objectName)}?alt=media`;
   const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`GCS read ${res.status}`);
   return res.json();
 }
 
-async function gcsWrite(objectName, value) {
-  if (!BENCH_BUCKET) return false;
+async function gcsWrite(objectName, value, bucket = BENCH_BUCKET) {
+  if (!bucket) return false;
   const token = await gcpAccessToken();
-  const url = `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(BENCH_BUCKET)}/o?uploadType=media&name=${encodeURIComponent(objectName)}`;
+  const url = `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(bucket)}/o?uploadType=media&name=${encodeURIComponent(objectName)}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },

@@ -1,3 +1,5 @@
+> See [CONTEXT.md](CONTEXT.md) for verified API facts, decisions and dead ends.
+
 # Roadmap — Cross-Channel Control Room
 
 ## v.1 — Realtime cross-channel overview  ✅ shipped

@@ -1168,6 +1168,14 @@ function renderUsers() {
         </label>`).join('')}
       </div>
       <div class="note">Adding someone here shapes what they see. It does <b>not</b> let them in — they must also be granted IAP access in Google Cloud, which is the actual gate. Someone with IAP access but no entry below sees only: ${d.defaultTabs.length?d.defaultTabs.map(esc).join(', '):'nothing'}.</div>
+
+      <div class="warnbox" style="margin-top:12px;">
+        <b>Step 1 — grant IAP access first, or they'll see "You don't have access".</b><br>
+        Open <a href="https://console.cloud.google.com/welcome?project=ai-reporting-503911&cloudshell=true" target="_blank" rel="noopener">Cloud Shell</a>, paste this command (it fills in as you type the email above), then come back and click Add.
+        <pre id="iapCmd" style="margin:8px 0 6px;padding:10px 12px;background:rgba(0,0,0,.05);border-radius:8px;font-size:11.5px;line-height:1.6;overflow-x:auto;white-space:pre;"></pre>
+        <button class="btn btn-ghost" id="copyIapCmd" style="padding:5px 10px;font-size:11px;">Copy command</button>
+        <span id="iapCopied" style="font-size:11px;color:var(--faint);margin-left:8px;"></span>
+      </div>
     </div>
 
     <div class="card mt">
@@ -1206,6 +1214,25 @@ function renderUsers() {
       const r = await res.json(); S.users.users = r.users; render();
     } catch (e) { alert(e.message); b.disabled = false; }
   }));
+
+  const iapCmdFor = (email) => [
+    'gcloud iap web add-iam-policy-binding \\',
+    '  --project=ai-reporting-503911 \\',
+    '  --resource-type=cloud-run --service=ai-reporting-git \\',
+    '  --region=asia-southeast1 \\',
+    `  --member="user:${email || 'NEW.PERSON@bangkokhospital.com'}" \\`,
+    '  --role="roles/iap.httpsResourceAccessor" --condition=None',
+  ].join('\n');
+  const refreshIapCmd = () => { $('iapCmd').textContent = iapCmdFor($('newEmail').value.trim().toLowerCase()); };
+  refreshIapCmd();
+  $('newEmail').addEventListener('input', refreshIapCmd);
+  $('copyIapCmd').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText($('iapCmd').textContent);
+      $('iapCopied').textContent = 'copied — paste it in Cloud Shell';
+    } catch { $('iapCopied').textContent = 'copy failed — select the text manually'; }
+    setTimeout(() => { $('iapCopied').textContent = ''; }, 4000);
+  });
 
   $('addUser').addEventListener('click', async () => {
     const email = $('newEmail').value.trim();
