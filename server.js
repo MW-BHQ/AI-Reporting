@@ -1,5 +1,5 @@
 /**
- * Cross-Channel Control Room — v3
+ * BHQ Signal Room (Cross-Channel Control Room) — v3
  *
  * Single Cloud Run service. Serves the SPA and exposes:
  *   GET  /api/overview?from&to[&refresh=1]   funnel + channels + ecommerce + forecast
@@ -810,7 +810,7 @@ async function buildCampaign(code, from, to) {
       from, to, { accounts: [GA4_ACCOUNT] }),
     // Organic posts, matched to the campaign by the short link in their text.
     fbPosts: windsor("facebook_organic",
-      ["post_id", "post_message", "permalink_url", "post_impressions", "post_engagements"], from, to),
+      ["post_id", "post_message", "permalink_url", "post_impressions", "post_clicks", "post_engagements"], from, to),
   };
   // One job per ad platform; unconnected ones fail harmlessly into null.
   for (const p of AD_PLATFORMS) {
@@ -1001,6 +1001,7 @@ async function buildCampaign(code, from, to) {
         permalink: r.permalink_url || null,
         excerpt: String(r.post_message || "").slice(0, 140),
         impressions: n(r.post_impressions),
+        clicks: n(r.post_clicks),
         engagements: n(r.post_engagements),
         matchedLink: hit,
         platform: "Facebook organic",
@@ -1011,6 +1012,7 @@ async function buildCampaign(code, from, to) {
   const organicTotals = organicPosts ? {
     posts: organicPosts.length,
     impressions: organicPosts.reduce((a, p) => a + p.impressions, 0),
+    clicks: organicPosts.reduce((a, p) => a + (p.clicks || 0), 0),
     engagements: organicPosts.reduce((a, p) => a + p.engagements, 0),
   } : null;
 
@@ -2327,6 +2329,6 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, "public")));
 
 app.listen(PORT, () => {
-  console.log(`Control Room v${VERSION} listening on :${PORT}`);
+  console.log(`BHQ Signal Room v${VERSION} listening on :${PORT}`);
   gcpProjectId().then((id) => console.log(`[init] GCP project: ${id}`)).catch(() => {});
 });

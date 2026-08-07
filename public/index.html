@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Control Room · Bangkok Hospital</title>
+<title>BHQ Signal Room · Bangkok Hospital</title>
 <link rel="icon" type="image/png" href="/brand/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -280,8 +280,8 @@
     <div class="brand">
       <img class="brand-logo" src="/brand/bh-wordmark.png" alt="Bangkok Hospital">
       <div class="brand-app">
-        <div class="brand-name">Control Room</div>
-        <div class="brand-sub">Marketing Division</div>
+        <div class="brand-name">BHQ Signal Room</div>
+        <div class="brand-sub">Marketing Intelligence</div>
       </div>
     </div>
 
@@ -330,7 +330,7 @@
     <div class="print-head">
       <img src="/brand/bh-wordmark.png" alt="Bangkok Hospital">
       <div class="pmeta">
-        <div><b id="printTitle">Control Room</b></div>
+        <div><b id="printTitle">BHQ Signal Room</b></div>
         <div id="printRange"></div>
       </div>
     </div>
@@ -341,8 +341,9 @@
       </div>
       <div class="toolbar">
         <div class="seg" id="presets">
+          <button data-lastmonth="1" class="active">LM</button>
           <button data-days="7">7D</button>
-          <button data-days="30" class="active">30D</button>
+          <button data-days="30">30D</button>
           <button data-days="90">90D</button>
           <button data-month="1">MTD</button>
         </div>
@@ -418,15 +419,20 @@ function setMTD() {
   $('from').value = fmtISO(new Date(now.getFullYear(), now.getMonth(), 1));
   $('to').value = fmtISO(now);
 }
+function setLastMonth() {
+  const now = new Date();
+  $('from').value = fmtISO(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+  $('to').value = fmtISO(new Date(now.getFullYear(), now.getMonth(), 0));
+}
 $('presets').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   [...$('presets').children].forEach(x => x.classList.remove('active'));
   b.classList.add('active');
-  if (b.dataset.days) setDays(+b.dataset.days); else setMTD();
+  if (b.dataset.days) setDays(+b.dataset.days); else if (b.dataset.lastmonth) setLastMonth(); else setMTD();
 });
 ['from','to'].forEach(id => $(id).addEventListener('change', () =>
   [...$('presets').children].forEach(b => b.classList.remove('active'))));
-setDays(30);
+setLastMonth();
 
 // ============================================================ navigation
 // Client-side only: switching tabs never refetches, which was the whole point.
@@ -916,15 +922,16 @@ function renderCampaignBody(d) {
 
     ${(d.organicPosts&&d.organicPosts.length)||(d.shortLinks&&d.shortLinks.length)?`<div class="card mt">
       <h2>Organic reach · matched by short link</h2>
-      ${d.organicTotals&&d.organicTotals.posts?`<div class="grid g-3" style="margin-bottom:14px;">
+      ${d.organicTotals&&d.organicTotals.posts?`<div class="grid g-4" style="margin-bottom:14px;">
         <div class="stat"><div class="lab">Posts found</div><div class="val">${num(d.organicTotals.posts)}</div></div>
         <div class="stat"><div class="lab">Post impressions</div><div class="val">${num(d.organicTotals.impressions)}</div></div>
+        <div class="stat"><div class="lab">Post clicks</div><div class="val">${num(d.organicTotals.clicks)}</div></div>
         <div class="stat"><div class="lab">Post engagements</div><div class="val">${num(d.organicTotals.engagements)}</div></div>
       </div>`:''}
-      ${(d.organicPosts||[]).length?`<table><thead><tr><th>Post</th><th class="num">Impr</th><th class="num">Engmt</th></tr></thead><tbody>
+      ${(d.organicPosts||[]).length?`<table><thead><tr><th>Post</th><th class="num">Impr</th><th class="num">Clicks</th><th class="num">Engmt</th></tr></thead><tbody>
       ${d.organicPosts.slice(0,10).map(o=>`<tr>
         <td class="strong i18n trunc" title="${esc(o.excerpt)}">${o.permalink?`<a href="${esc(o.permalink)}" target="_blank" rel="noopener" style="color:var(--violet);text-decoration:none;">${esc(o.excerpt)}</a>`:esc(o.excerpt)}</td>
-        <td class="num">${num(o.impressions)}</td><td class="num">${num(o.engagements)}</td></tr>`).join('')}
+        <td class="num">${num(o.impressions)}</td><td class="num">${num(o.clicks)}</td><td class="num">${num(o.engagements)}</td></tr>`).join('')}
       </tbody></table>`:`<div style="font-size:12.5px;color:var(--muted);">No organic posts carried this campaign's short links in this date range.</div>`}
       ${d.lineMessages&&d.lineMessages.messages.length?`<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
         <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:10px;">LINE broadcasts · ${d.lineMessages.messages.length} message(s)</div>
@@ -1196,12 +1203,17 @@ function renderUsers() {
     return res.json();
   };
 
+  const persistWarn = (r) => {
+    if (r.persisted) return;
+    alert('WARNING: this change was NOT saved to Cloud Storage — it lives in memory and will disappear on the next restart or deploy.\n\nMost likely cause: the runtime service account lacks "Storage Object Admin" on the ACCESS_BUCKET, or the bucket name is wrong. Check Cloud Storage > ai-reporting-access > Permissions.');
+  };
+
   document.querySelectorAll('[data-save]').forEach(b => b.addEventListener('click', async () => {
     b.disabled = true; b.textContent = 'Saving…';
     try {
       const email = b.dataset.save;
       const r = await post({ email, tabs: collect(email) });
-      S.users.users = r.users; setStatus('ok', r.persisted ? 'saved' : 'saved in memory only'); render();
+      S.users.users = r.users; setStatus(r.persisted?'ok':'bad', r.persisted ? 'saved' : 'NOT saved to bucket'); persistWarn(r); render();
     } catch (e) { setStatus('bad','save failed'); alert(e.message); b.disabled = false; b.textContent = 'Save'; }
   }));
 
@@ -1240,7 +1252,7 @@ function renderUsers() {
     const tabs2 = [...document.querySelectorAll('.newTab')].filter(i=>i.checked).map(i=>i.value);
     try {
       const r = await post({ email, tabs: tabs2, note: $('newNote').value.trim() });
-      S.users.users = r.users; setStatus('ok', r.persisted?'added':'added in memory only'); render();
+      S.users.users = r.users; setStatus(r.persisted?'ok':'bad', r.persisted?'added':'NOT saved to bucket'); persistWarn(r); render();
     } catch (e) { alert(e.message); }
   });
 }
