@@ -965,37 +965,6 @@ async function buildCampaign(code, from, to) {
   for (const [c, entry] of sheets.links.entries()) {
     if (norm(c).startsWith(needle)) lineReqIds.push(...(entry.lineRequestIds || []));
   }
-  // Same-day heuristic: the campaign code starts with YYMMDD, and LINE's
-  // delivery table does report how many broadcast messages went out per day.
-  // A broadcast sent on the campaign's launch date is very likely the campaign
-  // broadcast, so surface that day's send volume, clearly labelled as a
-  // same-day match rather than a tracked link. Opens/clicks stay unknowable
-  // for OA Manager sends (no request IDs).
-  let lineSameDay = null;
-  const codeDigits = String(code || "").match(/^(\d{2})(\d{2})(\d{2})/);
-  if (codeDigits) {
-    const codeDate = `20${codeDigits[1]}-${codeDigits[2]}-${codeDigits[3]}`;
-    // Windsor's raw connector API and its metadata API disagree on LINE field
-    // naming (plain "broadcast" vs prefixed "message__broadcast"), so try the
-    // plain names first and fall back to the prefixed ones.
-    const attempts = [
-      ["broadcast", "targeting", "api_broadcast", "api_narrowcast", "api_multicast", "api_push"],
-      ["message__broadcast", "message__targeting", "message__api_broadcast", "message__api_narrowcast", "message__api_multicast", "message__api_push"],
-    ];
-    for (const flds of attempts) {
-      try {
-        const rows = await windsor("line", ["date", ...flds], codeDate, codeDate);
-        if (!rows || !rows.length) continue;
-        const sum = (name) => rows.reduce((a, r) => a + n(r[name] !== undefined ? r[name] : r[`message__${name.replace(/^message__/, "")}`]), 0);
-        const broadcasts = sum(flds[0]) + sum(flds[2]);
-        const targeted = sum(flds[1]) + sum(flds[3]) + sum(flds[4]) + sum(flds[5]);
-        if (broadcasts + targeted > 0) { lineSameDay = { date: codeDate, broadcasts, targeted }; break; }
-      } catch (e) {
-        logJson("WARNING", "line_same_day_attempt_failed", { fields: flds[0], error: String(e.message || e) });
-      }
-    }
-  }
-
   let lineMessages = null;
   if (lineReqIds.length) {
     try {
@@ -1057,43 +1026,6 @@ async function buildCampaign(code, from, to) {
     }
     organicPosts.sort((a, b) => b.impressions - a.impressions);
   }
-  /**
-   * Same-day fallback: when no post matched by short link (usually because the
-   * link was never registered in UTM Builder column M), list the posts that
-   * were PUBLISHED on the campaign's code date instead. Several unrelated
-   * posts can share a date, so these are shown as candidates for a human to
-   * recognise — they are never folded into funnel or table totals.
-   */
-  let sameDayPosts = null;
-  {
-    const cd = String(code || "").match(/^(\d{2})(\d{2})(\d{2})/);
-    if (cd && data.fbPosts !== null && !(organicPosts && organicPosts.length)) {
-      const codeIso = `20${cd[1]}-${cd[2]}-${cd[3]}`;
-      const seen2 = new Set();
-      sameDayPosts = [];
-      for (const r of data.fbPosts) {
-        const created = String(r.post_created_time || "").slice(0, 10);
-        if (created !== codeIso) continue;
-        const id = r.post_id || String(r.post_message || "").slice(0, 40);
-        if (seen2.has(id)) continue;
-        seen2.add(id);
-        const linkMatch = String(r.post_message || "").match(/bkhos\.co\/[A-Za-z0-9_-]+/);
-        sameDayPosts.push({
-          postId: r.post_id || null,
-          permalink: r.permalink_url || null,
-          excerpt: String(r.post_message || "").slice(0, 140),
-          impressions: n(r.post_impressions),
-          clicks: n(r.post_clicks),
-          engagements: n(r.post_engagements),
-          shortLinkInPost: linkMatch ? linkMatch[0] : null,
-        });
-      }
-      sameDayPosts.sort((a, b) => b.impressions - a.impressions);
-      sameDayPosts = sameDayPosts.slice(0, 12);
-      if (!sameDayPosts.length) sameDayPosts = null;
-    }
-  }
-
   const organicTotals = organicPosts ? {
     posts: organicPosts.length,
     impressions: organicPosts.reduce((a, p) => a + p.impressions, 0),
@@ -1200,6 +1132,42 @@ async function buildCampaign(code, from, to) {
       fbOrg.organicSource = true;
     }
   }
+
+  // Same-day heuristic: the campaign code starts with YYMMDD, and LINE's
+  // delivery table does report how many broadcast messages went out per day.
+  // A broadcast sent on the campaign's launch date is very likely the campaign
+  // broadcast, so surface that day's send volume, clearly labelled as a
+  // same-day match rather than a tracked link. Opens/clicks stay unknowable
+  // for OA Manager sends (no request IDs).
+  // Only for campaigns that actually ran on LINE (a GA4 line-source variant
+  // exists): the date heuristic exists because LINE is blind, and it has no
+  // business firing for FB/IG/ads campaigns that merely share a launch date.
+  let lineSameDay = null;
+  const isLineCampaign = variants.some((v) => norm(v.source || "").includes("line"));
+  const codeDigits = String(code || "").match(/^(\d{2})(\d{2})(\d{2})/);
+  if (isLineCampaign && codeDigits) {
+    const codeDate = `20${codeDigits[1]}-${codeDigits[2]}-${codeDigits[3]}`;
+    // Windsor's raw connector API and its metadata API disagree on LINE field
+    // naming (plain "broadcast" vs prefixed "message__broadcast"), so try the
+    // plain names first and fall back to the prefixed ones.
+    const attempts = [
+      ["broadcast", "targeting", "api_broadcast", "api_narrowcast", "api_multicast", "api_push"],
+      ["message__broadcast", "message__targeting", "message__api_broadcast", "message__api_narrowcast", "message__api_multicast", "message__api_push"],
+    ];
+    for (const flds of attempts) {
+      try {
+        const rows = await windsor("line", ["date", ...flds], codeDate, codeDate);
+        if (!rows || !rows.length) continue;
+        const sum = (name) => rows.reduce((a, r) => a + n(r[name] !== undefined ? r[name] : r[`message__${name.replace(/^message__/, "")}`]), 0);
+        const broadcasts = sum(flds[0]) + sum(flds[2]);
+        const targeted = sum(flds[1]) + sum(flds[3]) + sum(flds[4]) + sum(flds[5]);
+        if (broadcasts + targeted > 0) { lineSameDay = { date: codeDate, broadcasts, targeted }; break; }
+      } catch (e) {
+        logJson("WARNING", "line_same_day_attempt_failed", { fields: flds[0], error: String(e.message || e) });
+      }
+    }
+  }
+
 
   // LINE can never report views or clicks for OA Manager sends, but delivery
   // volume on the campaign date exists — put it in the LINE row's Impr column,
@@ -1322,7 +1290,7 @@ async function buildCampaign(code, from, to) {
     matchedVariants: variants.length,
     totals, variants, keyEventBreakdown, trend,
     byPlatform, adCampaigns, orphanAdCampaigns, landingPages,
-    topic, shortLinks: uniqueLinks, organicPosts, organicTotals, sameDayPosts,
+    topic, shortLinks: uniqueLinks, organicPosts, organicTotals,
     goal, goalLabel: goalDef ? goalDef.label : null,
     objectives: [...new Set(adCampaigns.map((c) => c.objective).filter(Boolean))],
     goalResultLabel: goalDef ? goalDef.resultLabel : null,
