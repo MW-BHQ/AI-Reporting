@@ -1010,8 +1010,8 @@ function renderCampaignBody(d) {
           ${(d.variants||[]).map(v=>`<tr>
             <td class="strong i18n trunc" title="${esc(v.code)}${v.adNames&&v.adNames.length?' \u2014 ad campaigns: '+esc(v.adNames.join(' | ')):''}">${esc(v.code)}</td>
             <td>${esc(v.source||'—')}${v.medium?' <span style="color:var(--faint)">/ '+esc(v.medium)+'</span>':''}</td>
-            <td class="num">${num(v.impressions)}</td>
-            <td class="num">${num(v.clicks)}</td>
+            <td class="num">${num(v.impressions)}${v.organicSource?' <span class="pill grey" title="From organic Facebook posts matched by short link — not ad-platform data">org</span>':''}</td>
+            <td class="num">${num(v.clicks)}${v.organicSource?' <span class="pill grey" title="From organic Facebook posts matched by short link — not ad-platform data">org</span>':''}</td>
             <td class="num">${num(v.spend,{money:true})}${v.spendEstimated?' <span class="pill grey" title="Split across variants by visit share">~</span>':''}</td>
             <td class="num">${num(v.visits)}</td>
             <td class="num">${num(v.engagement)}</td>
@@ -1053,7 +1053,7 @@ function renderCampaignBody(d) {
   `;
   drawFunnelChart('funnelChart', [
     { label:'Impressions', value:t.impressions, color:'#7C6BF5' },
-    { label:'Ad clicks',   value:t.clicks,      color:'#A9B4CE' },
+    { label:'Clicks',      value:t.clicks,      color:'#A9B4CE' },
     { label:'Visits',      value:t.visits,      color:'#4B8DF8' },
     { label:'Engaged',     value:t.engagement,  color:'#9FC8C2' },
     { label:'Key events',  value:t.keyEvents,   color:'#3BC97F' },
@@ -1714,6 +1714,41 @@ function renderAudit() {
  * 344.8K impressions is a bar one pixel tall; a log axis makes every stage
  * readable at once. Zero and null are dropped because log(0) is undefined.
  */
+// Draws each bar's value at its end, so nobody has to hover. Values that
+// would collide with the chart edge move inside the bar in white.
+const barValueLabels = {
+  id: 'barValueLabels',
+  afterDatasetsDraw(chart) {
+    const { ctx, chartArea } = chart;
+    const horizontal = chart.options.indexAxis === 'y';
+    chart.data.datasets.forEach((ds, di) => {
+      const meta = chart.getDatasetMeta(di);
+      if (meta.type !== 'bar' || meta.hidden) return;
+      meta.data.forEach((el, i) => {
+        const v = ds.data[i];
+        if (v == null) return;
+        const txt = Number(v).toLocaleString();
+        ctx.save();
+        ctx.font = '600 10.5px Poppins, sans-serif';
+        if (horizontal) {
+          const fitsOutside = el.x + 8 + ctx.measureText(txt).width < chartArea.right - 2;
+          ctx.textAlign = fitsOutside ? 'left' : 'right';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = fitsOutside ? '#4C5878' : '#fff';
+          ctx.fillText(txt, fitsOutside ? el.x + 8 : el.x - 8, el.y);
+        } else {
+          const fitsAbove = el.y - 8 > chartArea.top + 10;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = fitsAbove ? 'bottom' : 'top';
+          ctx.fillStyle = fitsAbove ? '#4C5878' : '#fff';
+          ctx.fillText(txt, el.x, fitsAbove ? el.y - 4 : el.y + 4);
+        }
+        ctx.restore();
+      });
+    });
+  },
+};
+
 function drawFunnelChart(canvasId, stages) {
   const el = document.getElementById(canvasId);
   if (!el) return;
@@ -1727,6 +1762,7 @@ function drawFunnelChart(canvasId, stages) {
     if (typeof Chart === 'undefined') throw new Error('chart library unavailable');
     S.charts[canvasId] = new Chart(el, {
       type: 'bar',
+      plugins: [barValueLabels],
       data: { labels: usable.map(s=>s.label), datasets: [{
         data: usable.map(s=>s.value),
         backgroundColor: usable.map(s=>s.color),

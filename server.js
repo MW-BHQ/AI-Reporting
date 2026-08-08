@@ -1150,6 +1150,20 @@ async function buildCampaign(code, from, to) {
     : null;
   const offSiteGoal = Boolean(goalDef && goalDef.source === "Meta" && ["leads", "messages"].includes(goal));
 
+  // Organic FB rows in the detail table would otherwise always show blanks for
+  // impressions and clicks even when the link bridge found the posts. Fold the
+  // matched post metrics onto the organic facebook variant (spend stays null,
+  // and the row is flagged so the UI can mark the numbers as organic-post data).
+  if (organicTotals && organicTotals.posts) {
+    const fbOrg = variants.find((v) =>
+      norm(v.source || "").includes("facebook") && v.spend == null && v.impressions == null);
+    if (fbOrg) {
+      fbOrg.impressions = organicTotals.impressions;
+      fbOrg.clicks = organicTotals.clicks;
+      fbOrg.organicSource = true;
+    }
+  }
+
   const paidImpressions = anyAdMatch ? byPlatform.reduce((a, p) => a + n(p.impressions), 0) : null;
   const totals = {
     paidImpressions,
@@ -1163,7 +1177,8 @@ async function buildCampaign(code, from, to) {
     revenue: variants.reduce((a, v) => a + v.revenue, 0),
     purchases: variants.reduce((a, v) => a + v.purchases, 0),
     spend: byPlatform.some((p) => p.connected && p.spend) ? platformSpend : null,
-    clicks: anyAdMatch ? byPlatform.reduce((a, p) => a + n(p.clicks), 0) : null,
+    clicks: (!anyAdMatch && !(organicTotals && organicTotals.clicks)) ? null
+      : (anyAdMatch ? byPlatform.reduce((a, p) => a + n(p.clicks), 0) : 0) + (organicTotals ? n(organicTotals.clicks) : 0),
   };
   /**
    * Ad-platform ratios are computed unconditionally. They're measured by Meta
