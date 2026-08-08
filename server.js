@@ -825,7 +825,7 @@ async function buildCampaign(code, from, to) {
         if (plus45Iso > pTo) pTo = plus45Iso;
       }
       return windsor("facebook_organic",
-        ["post_id", "post_message", "url", "permalink_url", "post_impressions", "post_clicks", "post_engagements"], pFrom, pTo);
+        ["post_id", "post_created_time", "post_message", "url", "permalink_url", "post_impressions", "post_clicks", "post_engagements"], pFrom, pTo);
     })(),
   };
   // One job per ad platform; unconnected ones fail harmlessly into null.
@@ -1057,6 +1057,43 @@ async function buildCampaign(code, from, to) {
     }
     organicPosts.sort((a, b) => b.impressions - a.impressions);
   }
+  /**
+   * Same-day fallback: when no post matched by short link (usually because the
+   * link was never registered in UTM Builder column M), list the posts that
+   * were PUBLISHED on the campaign's code date instead. Several unrelated
+   * posts can share a date, so these are shown as candidates for a human to
+   * recognise — they are never folded into funnel or table totals.
+   */
+  let sameDayPosts = null;
+  {
+    const cd = String(code || "").match(/^(\d{2})(\d{2})(\d{2})/);
+    if (cd && data.fbPosts !== null && !(organicPosts && organicPosts.length)) {
+      const codeIso = `20${cd[1]}-${cd[2]}-${cd[3]}`;
+      const seen2 = new Set();
+      sameDayPosts = [];
+      for (const r of data.fbPosts) {
+        const created = String(r.post_created_time || "").slice(0, 10);
+        if (created !== codeIso) continue;
+        const id = r.post_id || String(r.post_message || "").slice(0, 40);
+        if (seen2.has(id)) continue;
+        seen2.add(id);
+        const linkMatch = String(r.post_message || "").match(/bkhos\.co\/[A-Za-z0-9_-]+/);
+        sameDayPosts.push({
+          postId: r.post_id || null,
+          permalink: r.permalink_url || null,
+          excerpt: String(r.post_message || "").slice(0, 140),
+          impressions: n(r.post_impressions),
+          clicks: n(r.post_clicks),
+          engagements: n(r.post_engagements),
+          shortLinkInPost: linkMatch ? linkMatch[0] : null,
+        });
+      }
+      sameDayPosts.sort((a, b) => b.impressions - a.impressions);
+      sameDayPosts = sameDayPosts.slice(0, 12);
+      if (!sameDayPosts.length) sameDayPosts = null;
+    }
+  }
+
   const organicTotals = organicPosts ? {
     posts: organicPosts.length,
     impressions: organicPosts.reduce((a, p) => a + p.impressions, 0),
@@ -1161,6 +1198,18 @@ async function buildCampaign(code, from, to) {
       fbOrg.impressions = organicTotals.impressions;
       fbOrg.clicks = organicTotals.clicks;
       fbOrg.organicSource = true;
+    }
+  }
+
+  // LINE can never report views or clicks for OA Manager sends, but delivery
+  // volume on the campaign date exists — put it in the LINE row's Impr column,
+  // flagged as "sent" so nobody reads delivery as views.
+  if (lineSameDay) {
+    const lineOrg = variants.find((v) =>
+      norm(v.source || "").includes("line") && v.spend == null && v.impressions == null);
+    if (lineOrg) {
+      lineOrg.impressions = n(lineSameDay.broadcasts) + n(lineSameDay.targeted);
+      lineOrg.lineSent = true;
     }
   }
 
@@ -1273,7 +1322,7 @@ async function buildCampaign(code, from, to) {
     matchedVariants: variants.length,
     totals, variants, keyEventBreakdown, trend,
     byPlatform, adCampaigns, orphanAdCampaigns, landingPages,
-    topic, shortLinks: uniqueLinks, organicPosts, organicTotals,
+    topic, shortLinks: uniqueLinks, organicPosts, organicTotals, sameDayPosts,
     goal, goalLabel: goalDef ? goalDef.label : null,
     objectives: [...new Set(adCampaigns.map((c) => c.objective).filter(Boolean))],
     goalResultLabel: goalDef ? goalDef.resultLabel : null,

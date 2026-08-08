@@ -928,7 +928,7 @@ function renderCampaignBody(d) {
       </div>
     </div>
 
-    ${(d.organicPosts&&d.organicPosts.length)||(d.shortLinks&&d.shortLinks.length)?`<div class="card mt">
+    ${(d.organicPosts&&d.organicPosts.length)||(d.shortLinks&&d.shortLinks.length)||(d.sameDayPosts&&d.sameDayPosts.length)?`<div class="card mt">
       <h2>Organic reach · matched by short link</h2>
       ${d.organicTotals&&d.organicTotals.posts?`<div class="grid g-4" style="margin-bottom:14px;">
         <div class="stat"><div class="lab">Posts found</div><div class="val">${num(d.organicTotals.posts)}</div></div>
@@ -941,6 +941,16 @@ function renderCampaignBody(d) {
         <td class="strong i18n trunc" title="${esc(o.excerpt)}">${o.permalink?`<a href="${esc(o.permalink)}" target="_blank" rel="noopener" style="color:var(--violet);text-decoration:none;">${esc(o.excerpt)}</a>`:esc(o.excerpt)}</td>
         <td class="num">${num(o.impressions)}</td><td class="num">${num(o.clicks)}</td><td class="num">${num(o.engagements)}</td></tr>`).join('')}
       </tbody></table>`:`<div style="font-size:12.5px;color:var(--muted);">No organic posts carried this campaign's short links in this date range.</div>`}
+      ${d.sameDayPosts&&d.sameDayPosts.length?`<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:10px;">Posts published on the campaign date · matched by date only</div>
+        <table><thead><tr><th>Post</th><th>Short link in post</th><th class="num">Impr</th><th class="num">Clicks</th><th class="num">Engmt</th></tr></thead><tbody>
+        ${d.sameDayPosts.map(o=>`<tr>
+          <td class="strong i18n trunc" title="${esc(o.excerpt)}">${o.permalink?`<a href="${esc(o.permalink)}" target="_blank" rel="noopener" style="color:var(--violet);text-decoration:none;">${esc(o.excerpt)}</a>`:esc(o.excerpt)}</td>
+          <td>${o.shortLinkInPost?`<code style="font-size:11px;">${esc(o.shortLinkInPost)}</code>`:'<span style="color:var(--faint);">none</span>'}</td>
+          <td class="num">${num(o.impressions)}</td><td class="num">${num(o.clicks)}</td><td class="num">${num(o.engagements)}</td></tr>`).join('')}
+        </tbody></table>
+        <div class="note">No post carried a short link registered against this code, so these are the posts <b>published on the campaign's date</b> — several unrelated posts can share a date, so recognise yours by eye. These numbers are <b>not</b> counted in the funnel or table. To attribute a post properly, register its <code>bkhos.co</code> link (shown above) in UTM Builder column M under this code, then Analyse again.</div>
+      </div>`:''}
       ${d.lineSameDay?`<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
         <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:10px;">LINE sends on campaign date · ${esc(d.lineSameDay.date)}</div>
         <div class="grid g-2">
@@ -1010,7 +1020,7 @@ function renderCampaignBody(d) {
           ${(d.variants||[]).map(v=>`<tr>
             <td class="strong i18n trunc" title="${esc(v.code)}${v.adNames&&v.adNames.length?' \u2014 ad campaigns: '+esc(v.adNames.join(' | ')):''}">${esc(v.code)}</td>
             <td>${esc(v.source||'—')}${v.medium?' <span style="color:var(--faint)">/ '+esc(v.medium)+'</span>':''}</td>
-            <td class="num">${num(v.impressions)}${v.organicSource?' <span class="pill grey" title="From organic Facebook posts matched by short link — not ad-platform data">org</span>':''}</td>
+            <td class="num">${num(v.impressions)}${v.organicSource?' <span class="pill grey" title="From organic Facebook posts matched by short link — not ad-platform data">org</span>':''}${v.lineSent?' <span class="pill grey" title="LINE messages delivered on the campaign date — delivery volume, not views. LINE never reports views or clicks for OA Manager sends.">sent</span>':''}</td>
             <td class="num">${num(v.clicks)}${v.organicSource?' <span class="pill grey" title="From organic Facebook posts matched by short link — not ad-platform data">org</span>':''}</td>
             <td class="num">${num(v.spend,{money:true})}${v.spendEstimated?' <span class="pill grey" title="Split across variants by visit share">~</span>':''}</td>
             <td class="num">${num(v.visits)}</td>
