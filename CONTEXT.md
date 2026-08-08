@@ -414,6 +414,7 @@ v3.7 Google Sheets integration · v3.8 tagging audit + 16:9 PDF ·
 v3.9 benchmarks · v3.10 objective awareness · v3.11 Google Business Profile ·
 v3.12 goal-aware campaigns · v3.13 user management + hash routing + smoke test ·
 v3.14 link clicks vs clicks-all, landing-page-view tagging check ·
+v3.16.1 fmtISO was UTC-based (toISOString) so all presets shifted -1 day in Bangkok (UTC+7) — now formats local dates · link bridge also matches the post link attachment (`url` field), not just `post_message` · LINE same-day heuristic: campaign code YYMMDD date → that day's LINE delivery volume shown as "sends on campaign date" (delivery only; opens/clicks stay unknowable) ·
 v3.16 rename to "BHQ Signal Room" · LM (last calendar month) date preset is now the default · organic FB post clicks (post_clicks) added to campaign link-bridge — NOTE: Meta deprecated impressions Nov 2025 but Windsor transparently remapped the old field IDs to the new "views"-based metrics, so post_impressions/post_clicks/page_impressions still return live data (verified 2026-08-07); LINE message_delivered/click remain zeros (OA Manager sends carry no request IDs — permanent) ·
 v3.15 ACCESS_BUCKET persistence (gcsRead/gcsWrite were hardcoded to
 BENCHMARK_BUCKET — fixed) + IAP grant command shown live in the Users tab.

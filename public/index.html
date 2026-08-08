@@ -380,7 +380,7 @@ const S = {
 };
 
 const $ = (id) => document.getElementById(id);
-const fmtISO = (d) => d.toISOString().slice(0, 10);
+const fmtISO = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 /** null means "we could not measure this" — render as an em dash, never 0. */
@@ -933,6 +933,14 @@ function renderCampaignBody(d) {
         <td class="strong i18n trunc" title="${esc(o.excerpt)}">${o.permalink?`<a href="${esc(o.permalink)}" target="_blank" rel="noopener" style="color:var(--violet);text-decoration:none;">${esc(o.excerpt)}</a>`:esc(o.excerpt)}</td>
         <td class="num">${num(o.impressions)}</td><td class="num">${num(o.clicks)}</td><td class="num">${num(o.engagements)}</td></tr>`).join('')}
       </tbody></table>`:`<div style="font-size:12.5px;color:var(--muted);">No organic posts carried this campaign's short links in this date range.</div>`}
+      ${d.lineSameDay?`<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:10px;">LINE sends on campaign date · ${esc(d.lineSameDay.date)}</div>
+        <div class="grid g-2">
+          <div class="stat"><div class="lab">Broadcast messages delivered</div><div class="val">${num(d.lineSameDay.broadcasts)}</div></div>
+          <div class="stat"><div class="lab">Targeted / API messages delivered</div><div class="val">${num(d.lineSameDay.targeted)}</div></div>
+        </div>
+        <div class="note">Matched by date only: these are all LINE messages sent on the campaign's launch date (from the code ${esc(d.code||'')}). Opens and clicks aren't recorded for OA Manager sends, so delivery volume is the honest ceiling here.</div>
+      </div>`:''}
       ${d.lineMessages&&d.lineMessages.messages.length?`<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
         <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:10px;">LINE broadcasts · ${d.lineMessages.messages.length} message(s)</div>
         <div class="grid g-3">

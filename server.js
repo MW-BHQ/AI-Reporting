@@ -810,7 +810,7 @@ async function buildCampaign(code, from, to) {
       from, to, { accounts: [GA4_ACCOUNT] }),
     // Organic posts, matched to the campaign by the short link in their text.
     fbPosts: windsor("facebook_organic",
-      ["post_id", "post_message", "permalink_url", "post_impressions", "post_clicks", "post_engagements"], from, to),
+      ["post_id", "post_message", "url", "permalink_url", "post_impressions", "post_clicks", "post_engagements"], from, to),
   };
   // One job per ad platform; unconnected ones fail harmlessly into null.
   for (const p of AD_PLATFORMS) {
@@ -949,6 +949,31 @@ async function buildCampaign(code, from, to) {
   for (const [c, entry] of sheets.links.entries()) {
     if (norm(c).startsWith(needle)) lineReqIds.push(...(entry.lineRequestIds || []));
   }
+  // Same-day heuristic: the campaign code starts with YYMMDD, and LINE's
+  // delivery table does report how many broadcast messages went out per day.
+  // A broadcast sent on the campaign's launch date is very likely the campaign
+  // broadcast, so surface that day's send volume, clearly labelled as a
+  // same-day match rather than a tracked link. Opens/clicks stay unknowable
+  // for OA Manager sends (no request IDs).
+  let lineSameDay = null;
+  const codeDigits = String(code || "").match(/^(\d{2})(\d{2})(\d{2})/);
+  if (codeDigits) {
+    const codeDate = `20${codeDigits[1]}-${codeDigits[2]}-${codeDigits[3]}`;
+    try {
+      const rows = await windsor("line",
+        ["date", "message__broadcast", "message__targeting", "message__api_broadcast", "message__api_narrowcast", "message__api_multicast", "message__api_push"],
+        codeDate, codeDate);
+      if (rows && rows.length) {
+        const sum = (f) => rows.reduce((a, r) => a + n(r[f]), 0);
+        const broadcasts = sum("message__broadcast") + sum("message__api_broadcast");
+        const targeted = sum("message__targeting") + sum("message__api_narrowcast") + sum("message__api_multicast") + sum("message__api_push");
+        if (broadcasts + targeted > 0) lineSameDay = { date: codeDate, broadcasts, targeted };
+      }
+    } catch (e) {
+      logJson("WARNING", "line_same_day_failed", { error: String(e.message || e) });
+    }
+  }
+
   let lineMessages = null;
   if (lineReqIds.length) {
     try {
@@ -990,8 +1015,9 @@ async function buildCampaign(code, from, to) {
     organicPosts = [];
     for (const r of data.fbPosts) {
       const msg = norm(r.post_message);
-      if (!msg) continue;
-      const hit = linkKeys.find((k) => msg.includes(k));
+      const attach = norm(r.url).replace(/^https?:\/\//, "");
+      if (!msg && !attach) continue;
+      const hit = linkKeys.find((k) => (msg && msg.includes(k)) || (attach && attach.includes(k)));
       if (!hit) continue;
       const id = r.post_id || r.permalink_url || msg.slice(0, 40);
       if (seen.has(id)) continue;
@@ -1216,7 +1242,7 @@ async function buildCampaign(code, from, to) {
     goalResultLabel: goalDef ? goalDef.resultLabel : null,
     goalResults, goalCostPerResult: goalResults && totals0Spend(byPlatform) ? totals0Spend(byPlatform) / goalResults : null,
     offSiteGoal, adLeads, adMessages,
-    lineMessages, lineRequestIdsFound: lineReqIds.length,
+    lineMessages, lineSameDay, lineRequestIdsFound: lineReqIds.length,
     sheetErrors: sheets.errors,
     unattributedSpend,
     emptyResult, dateHint, launchDate: launch,
