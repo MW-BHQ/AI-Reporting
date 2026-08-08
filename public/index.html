@@ -157,6 +157,8 @@
   .bar{display:flex;height:30px;border-radius:9px;overflow:hidden;background:rgba(140,155,190,.13);}
   .bar span{display:block;height:100%;transition:width .5s cubic-bezier(.4,0,.2,1);position:relative;}
   .bar span:hover{filter:brightness(1.08);}
+  .seg-val{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:10.5px;font-weight:600;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);pointer-events:none;white-space:nowrap;}
+  .stage.minor .seg-val{font-size:9px;right:4px;}
   .stage-note{font-size:10.5px;color:var(--faint);margin-top:5px;}
   /* Minor stages read as supporting context, not headline numbers. */
   .stage.minor{padding-left:16px;border-left:2px solid rgba(140,155,190,.22);margin-bottom:14px;}
@@ -350,7 +352,7 @@
         <div class="dates">
           <input type="date" id="from"><span>→</span><input type="date" id="to">
         </div>
-        <button class="btn btn-primary" id="loadBtn"><span class="spin"></span><span id="loadLabel">Load</span></button>
+        <button class="btn btn-primary" id="loadBtn"><span class="spin"></span><span id="loadLabel">Refresh</span></button>
         <button class="btn btn-ghost" id="printBtn" title="Print or save as PDF at 16:9 slide size">PDF</button>
       </div>
     </div>
@@ -574,7 +576,7 @@ $('loadBtn').addEventListener('click', async () => {
     setStatus('bad', 'failed');
     $('viewRoot').innerHTML = errorState(err.message);
   } finally {
-    btn.disabled = false; btn.classList.remove('loading'); $('loadLabel').textContent = 'Load';
+    btn.disabled = false; btn.classList.remove('loading'); $('loadLabel').textContent = 'Refresh';
   }
 });
 
@@ -591,6 +593,9 @@ function render() {
   const hideDates = NO_DATE_VIEWS.has(S.view);
   document.querySelector('.dates').classList.toggle('hidden', hideDates);
   $('presets').classList.toggle('hidden', hideDates);
+  // On Campaigns the Analyse button already fetches with the current dates,
+  // so a second fetch button would just be a confusing twin.
+  $('loadBtn').classList.toggle('hidden', S.view === 'campaigns');
   Object.values(S.charts).forEach(c => { try { c.destroy(); } catch(_){} });
   S.charts = {};
   if (S.view === 'overview') renderOverview();
@@ -626,7 +631,10 @@ function renderOverview() {
     const v = c[key];
     const pct = (v/total)*100;
     if (pct <= 0) return '';
-    return `<span style="width:${pct}%;background:${colorFor(f.indexOf(c))}" title="${esc(c.channel)}: ${num(v)}"></span>`;
+    // Value shown inside the segment when it's wide enough to hold it;
+    // narrow slivers keep the hover title only, so labels never overlap.
+    const label = pct >= 9 ? `<b class="seg-val">${num(v)}</b>` : '';
+    return `<span style="width:${pct}%;background:${colorFor(f.indexOf(c))}" title="${esc(c.channel)}: ${num(v)}">${label}</span>`;
   }).join('');
 
   const unavail = (d.unavailable||[]).length

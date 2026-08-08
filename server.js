@@ -809,8 +809,24 @@ async function buildCampaign(code, from, to) {
       ga4Fields(["session_manual_campaign_name", "landing_page"], ["sessions"]),
       from, to, { accounts: [GA4_ACCOUNT] }),
     // Organic posts, matched to the campaign by the short link in their text.
-    fbPosts: windsor("facebook_organic",
-      ["post_id", "post_message", "url", "permalink_url", "post_impressions", "post_clicks", "post_engagements"], from, to),
+    // The pull window is widened to always include the campaign's code date
+    // plus 45 days: posts are returned by publish date, so a post published
+    // after the viewing range (e.g. an August post for a July-registered code,
+    // viewed with the Last Month preset) would otherwise never be searched.
+    fbPosts: (() => {
+      const cd = String(code || "").match(/^(\d{2})(\d{2})(\d{2})/);
+      let pFrom = from, pTo = to;
+      if (cd) {
+        const codeIso = `20${cd[1]}-${cd[2]}-${cd[3]}`;
+        const plus45 = new Date(`${codeIso}T00:00:00Z`); plus45.setUTCDate(plus45.getUTCDate() + 45);
+        const today = new Date().toISOString().slice(0, 10);
+        const plus45Iso = plus45.toISOString().slice(0, 10) > today ? today : plus45.toISOString().slice(0, 10);
+        if (codeIso < pFrom) pFrom = codeIso;
+        if (plus45Iso > pTo) pTo = plus45Iso;
+      }
+      return windsor("facebook_organic",
+        ["post_id", "post_message", "url", "permalink_url", "post_impressions", "post_clicks", "post_engagements"], pFrom, pTo);
+    })(),
   };
   // One job per ad platform; unconnected ones fail harmlessly into null.
   for (const p of AD_PLATFORMS) {
@@ -959,18 +975,24 @@ async function buildCampaign(code, from, to) {
   const codeDigits = String(code || "").match(/^(\d{2})(\d{2})(\d{2})/);
   if (codeDigits) {
     const codeDate = `20${codeDigits[1]}-${codeDigits[2]}-${codeDigits[3]}`;
-    try {
-      const rows = await windsor("line",
-        ["date", "message__broadcast", "message__targeting", "message__api_broadcast", "message__api_narrowcast", "message__api_multicast", "message__api_push"],
-        codeDate, codeDate);
-      if (rows && rows.length) {
-        const sum = (f) => rows.reduce((a, r) => a + n(r[f]), 0);
-        const broadcasts = sum("message__broadcast") + sum("message__api_broadcast");
-        const targeted = sum("message__targeting") + sum("message__api_narrowcast") + sum("message__api_multicast") + sum("message__api_push");
-        if (broadcasts + targeted > 0) lineSameDay = { date: codeDate, broadcasts, targeted };
+    // Windsor's raw connector API and its metadata API disagree on LINE field
+    // naming (plain "broadcast" vs prefixed "message__broadcast"), so try the
+    // plain names first and fall back to the prefixed ones.
+    const attempts = [
+      ["broadcast", "targeting", "api_broadcast", "api_narrowcast", "api_multicast", "api_push"],
+      ["message__broadcast", "message__targeting", "message__api_broadcast", "message__api_narrowcast", "message__api_multicast", "message__api_push"],
+    ];
+    for (const flds of attempts) {
+      try {
+        const rows = await windsor("line", ["date", ...flds], codeDate, codeDate);
+        if (!rows || !rows.length) continue;
+        const sum = (name) => rows.reduce((a, r) => a + n(r[name] !== undefined ? r[name] : r[`message__${name.replace(/^message__/, "")}`]), 0);
+        const broadcasts = sum(flds[0]) + sum(flds[2]);
+        const targeted = sum(flds[1]) + sum(flds[3]) + sum(flds[4]) + sum(flds[5]);
+        if (broadcasts + targeted > 0) { lineSameDay = { date: codeDate, broadcasts, targeted }; break; }
+      } catch (e) {
+        logJson("WARNING", "line_same_day_attempt_failed", { fields: flds[0], error: String(e.message || e) });
       }
-    } catch (e) {
-      logJson("WARNING", "line_same_day_failed", { error: String(e.message || e) });
     }
   }
 
