@@ -221,6 +221,7 @@ const TABS = [
   { id: "benchmark", label: "Benchmarks" },
   { id: "audit",     label: "Tagging audit" },
   { id: "topics",    label: "Topic Explorer" },
+  { id: "audiences", label: "Audiences" },
   { id: "users",     label: "Users", adminOnly: true },
 ];
 const TAB_IDS = TABS.filter((t) => !t.adminOnly).map((t) => t.id);
@@ -1173,8 +1174,13 @@ async function buildCampaign(code, from, to) {
   // volume on the campaign date exists — put it in the LINE row's Impr column,
   // flagged as "sent" so nobody reads delivery as views.
   if (lineSameDay) {
-    const lineOrg = variants.find((v) =>
-      norm(v.source || "").includes("line") && v.spend == null && v.impressions == null);
+    // GA4 splits LINE into broadcast-style rows (medium paid/broadcast) and the
+    // rich menu (persistent tap menu, no send event). Delivery volume belongs
+    // only to the send-style row — never stamp it on richmenu.
+    const lineRows = variants.filter((v) =>
+      norm(v.source || "").includes("line") && v.spend == null && v.impressions == null
+      && !norm(v.medium || "").includes("richmenu"));
+    const lineOrg = lineRows.find((v) => /paid|broadcast|social/.test(norm(v.medium || ""))) || lineRows[0];
     if (lineOrg) {
       lineOrg.impressions = n(lineSameDay.broadcasts) + n(lineSameDay.targeted);
       lineOrg.lineSent = true;
@@ -2296,6 +2302,120 @@ app.post("/api/topic", requireTab("topics"), async (req, res) => {
 // ---------------------------------------------------------------- meta/infra
 
 /** Who am I, and what may I see? The client builds its nav from this. */
+// ------------------------------------------------------------ /api/audiences
+
+/**
+ * Meta Audience Set Analytics. Groups paid ad sets by their (normalised) name,
+ * because the team's discipline of reusing saved-audience names across
+ * campaigns makes the name the audience's identity. adset_targeting would be
+ * the true identity, but Meta refuses it at account scale ("reduce the amount
+ * of data"), so names it is — "– Copy" suffixes are collapsed into the parent.
+ *
+ * "First-degree action" ranking: each ad set row is classified by its
+ * campaign's objective token (lead / message / otherwise traffic), and the
+ * audience's primary cost-per uses the class where it spent the most, so a
+ * lead audience is judged on cost/lead and a traffic audience on cost/LPV
+ * rather than everything being forced through one metric.
+ */
+function normAudienceName(name) {
+  return String(name || "").replace(/\s*[–-]\s*copy\s*\d*$/i, "").replace(/\s+/g, " ").trim();
+}
+function classifyObjective(campaignName) {
+  const c = String(campaignName || "").toLowerCase();
+  if (c.includes("lead")) return "lead";
+  if (c.includes("message") || c.includes("whatsapp")) return "message";
+  return "traffic";
+}
+async function buildAudiences(from, to) {
+  // Null is not zero: if Meta is down this run, say so with a 200 +
+  // unavailable flag instead of a 500, matching every other view.
+  let rows;
+  try {
+    rows = await windsor("facebook",
+    ["adset_id", "adset_name", "campaign", "spend", "impressions",
+     "actions_link_click", "actions_landing_page_view", "actions_lead",
+     "actions_onsite_conversion_messaging_conversation_started_7d"],
+      from, to);
+  } catch (e) {
+    logJson("WARNING", "audiences_meta_unavailable", { error: String(e.message || e) });
+    rows = null;
+  }
+  if (rows === null) return { audiences: null, unavailable: true };
+
+  const map = new Map();
+  for (const r of rows) {
+    const name = normAudienceName(r.adset_name);
+    if (!name) continue;
+    if (!map.has(name)) map.set(name, {
+      name, spend: 0, impressions: 0, clicks: 0, lpv: 0, leads: 0, messages: 0,
+      campaigns: new Map(), spendByClass: { lead: 0, message: 0, traffic: 0 },
+    });
+    const a = map.get(name);
+    const spend = n(r.spend);
+    a.spend += spend;
+    a.impressions += n(r.impressions);
+    a.clicks += n(r.actions_link_click);
+    a.lpv += n(r.actions_landing_page_view);
+    a.leads += n(r.actions_lead);
+    a.messages += n(r.actions_onsite_conversion_messaging_conversation_started_7d);
+    a.spendByClass[classifyObjective(r.campaign)] += spend;
+    const cname = String(r.campaign || "(unnamed)");
+    if (!a.campaigns.has(cname)) a.campaigns.set(cname, { campaign: cname, spend: 0, impressions: 0, clicks: 0, lpv: 0, leads: 0, messages: 0 });
+    const c = a.campaigns.get(cname);
+    c.spend += spend; c.impressions += n(r.impressions); c.clicks += n(r.actions_link_click);
+    c.lpv += n(r.actions_landing_page_view); c.leads += n(r.actions_lead);
+    c.messages += n(r.actions_onsite_conversion_messaging_conversation_started_7d);
+  }
+
+  const per = (cost, count) => (count > 0 ? cost / count : null);
+  const audiences = [...map.values()].map((a) => {
+    const cls = Object.entries(a.spendByClass).sort((x, y) => y[1] - x[1])[0][0];
+    const primary =
+      cls === "lead"    ? { kpi: "lead",    label: "per lead", count: a.leads,    cost: per(a.spend, a.leads) } :
+      cls === "message" ? { kpi: "message", label: "per msg",  count: a.messages, cost: per(a.spend, a.messages) } :
+                          { kpi: "lpv",     label: "per LPV",  count: a.lpv,      cost: per(a.spend, a.lpv) };
+    return {
+      name: a.name,
+      uses: a.campaigns.size,
+      spend: a.spend, impressions: a.impressions, clicks: a.clicks,
+      lpv: a.lpv, leads: a.leads, messages: a.messages,
+      cpm: a.impressions > 0 ? (a.spend / a.impressions) * 1000 : null,
+      cpc: per(a.spend, a.clicks),
+      costPerLpv: per(a.spend, a.lpv),
+      costPerLead: per(a.spend, a.leads),
+      costPerMessage: per(a.spend, a.messages),
+      primary,
+      campaigns: [...a.campaigns.values()].sort((x, y) => y.spend - x.spend),
+    };
+  });
+  // Default order: cheapest primary result first; audiences whose primary
+  // action never fired sink to the bottom (spend with nothing to show for it).
+  audiences.sort((x, y) => {
+    if (x.primary.cost === null && y.primary.cost === null) return y.spend - x.spend;
+    if (x.primary.cost === null) return 1;
+    if (y.primary.cost === null) return -1;
+    return x.primary.cost - y.primary.cost;
+  });
+  const totals = audiences.reduce((t, a) => ({
+    sets: t.sets + 1, spend: t.spend + a.spend, impressions: t.impressions + a.impressions,
+    clicks: t.clicks + a.clicks, lpv: t.lpv + a.lpv, leads: t.leads + a.leads, messages: t.messages + a.messages,
+  }), { sets: 0, spend: 0, impressions: 0, clicks: 0, lpv: 0, leads: 0, messages: 0 });
+  return { audiences, totals };
+}
+
+app.get("/api/audiences", requireTab("audiences"), async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  if (!WINDSOR_API_KEY) return res.status(500).json({ error: "Server missing WINDSOR_API_KEY" });
+  try {
+    const out = await withCache(`audiences:${from}:${to}`, req.query.refresh === "1", () => buildAudiences(from, to));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "audiences_failed", { error: String(err.message || err) });
+    res.status(500).json({ error: err.message || "Audiences failed" });
+  }
+});
+
 app.get("/api/me", async (req, res) => {
   const email = callerEmail(req);
   const admin = isAdmin(email);

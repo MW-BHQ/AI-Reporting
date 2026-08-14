@@ -189,6 +189,8 @@
   .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:500;background:var(--violet-soft);color:var(--violet);}
   .pill.warn{background:#FFF1E6;color:#D97B1F;}
   .pill.grey{background:rgba(140,155,190,.14);color:var(--muted);}
+  .pill.green{background:rgba(74,190,140,.14);color:#2E9E6F;}
+  .pill.violet{background:var(--violet-soft);color:var(--violet);}
 
   /* ---------------- topic / campaign inputs ---------------- */
   .search{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
@@ -313,6 +315,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
         Topic Explorer
       </div>
+      <div class="nav-item" data-view="audiences">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><circle cx="16.5" cy="9.5" r="2.4"/><path d="M3.5 19c.6-3.2 2.9-5 5.5-5s4.9 1.8 5.5 5"/><path d="M15.5 14.6c2 .3 3.6 1.8 4 4.4"/></svg>
+        Audiences
+      </div>
       <div class="nav-item" data-view="users" data-admin="1">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.2 2.7-5 6-5s6 1.8 6 5"/><path d="M17 11h4M19 9v4"/></svg>
         Users
@@ -377,6 +383,7 @@ const S = {
   audit: null, auditKey: null,
   bench: null, benchKey: null, benchTab: null,
   gbp: null, gbpKey: null, gbpTab: null, gbpInit: false,
+  audiences: null, audiencesKey: null, audienceSort: 'primary', audienceOpen: null,
   me: null, users: null,
   charts: {},
 };
@@ -455,6 +462,9 @@ document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => {
     if (!S.me || !S.me.tabs.includes(item.dataset.view)) return;
     goTo(item.dataset.view);
+    if (S.view === 'audiences' && !S.audiences) {
+      loadAudiences().then(render).catch(err => { $('viewRoot').innerHTML = errorState(err.message); });
+    }
     if (S.view === 'gbp' && !S.gbpInit) {
       // Reviews accumulate slowly, so a year is the useful default window.
       const y = new Date(); y.setDate(y.getDate() - 1);
@@ -478,6 +488,7 @@ const TITLES = {
   audit: ['Tagging audit', 'How much traffic and spend the campaign view cannot attribute'],
   benchmark: ['Benchmarks', 'Latest complete month against trailing 3, 6 and 12-month norms'],
   gbp: ['Google Business Profile', 'Reviews and ratings by listing'],
+  audiences: ['Audiences', 'Meta audience sets ranked by cost per first-degree result'],
 };
 
 // ============================================================ fetching
@@ -491,6 +502,17 @@ async function loadOverview(refresh = false) {
   S.overview = await res.json(); S.overviewKey = key;
   setStatus('ok', S.overview.cached ? `cached ${S.overview.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
   return S.overview;
+}
+
+async function loadAudiences(refresh = false) {
+  const key = `${$('from').value}|${$('to').value}`;
+  if (!refresh && S.audiencesKey === key && S.audiences) return S.audiences;
+  setStatus('busy', 'pulling Meta ad sets…');
+  const res = await fetch(`/api/audiences?from=${$('from').value}&to=${$('to').value}${refresh?'&refresh=1':''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,200)}`);
+  S.audiences = await res.json(); S.audiencesKey = key;
+  setStatus('ok', S.audiences.cached ? `cached ${S.audiences.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.audiences;
 }
 
 async function loadCampaign(code, refresh = false) {
@@ -569,6 +591,7 @@ $('loadBtn').addEventListener('click', async () => {
     else if (S.view === 'audit') { await loadAudit(true); }
     else if (S.view === 'benchmark') { await loadBenchmark(true); }
     else if (S.view === 'gbp') { await loadGbp(true); }
+    else if (S.view === 'audiences') { await loadAudiences(true); }
     else if (S.view === 'users') { S.users = null; await loadUsers(); }
     else if (S.view === 'topics' && S.topicTerm) { await loadTopic(S.topicTerm); }
     render();
@@ -603,6 +626,7 @@ function render() {
   else if (S.view === 'audit') renderAudit();
   else if (S.view === 'benchmark') renderBenchmark();
   else if (S.view === 'gbp') renderGbp();
+  else if (S.view === 'audiences') renderAudiences();
   else if (S.view === 'users') renderUsers();
   else renderTopics();
 }
@@ -1352,6 +1376,95 @@ const stackTotalLabels = {
     ctx.restore();
   },
 };
+
+// ============================================================ AUDIENCES
+const fmtTHB = (v) => v === null || v === undefined ? '—' : '฿' + (v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(2));
+function renderAudiences() {
+  const d = S.audiences;
+  if (!d) {
+    $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">Pulling Meta ad sets…</div>
+      <div style="font-size:12.5px;color:var(--muted);">Every ad set in range, grouped by audience name.</div></div></div>`;
+    return;
+  }
+  if (d.unavailable || !d.audiences) {
+    $('viewRoot').innerHTML = errorState('Meta Ads was unavailable this run — try Refresh.');
+    return;
+  }
+  const t = d.totals;
+  const sorters = {
+    primary: (a,b) => 0, // server default order
+    spend: (a,b) => b.spend - a.spend,
+    impressions: (a,b) => b.impressions - a.impressions,
+    uses: (a,b) => b.uses - a.uses,
+    cpc: (a,b) => (a.cpc===null)-(b.cpc===null) || a.cpc - b.cpc,
+    cpm: (a,b) => (a.cpm===null)-(b.cpm===null) || a.cpm - b.cpm,
+    costPerLpv: (a,b) => (a.costPerLpv===null)-(b.costPerLpv===null) || a.costPerLpv - b.costPerLpv,
+  };
+  const list = [...d.audiences];
+  if (S.audienceSort !== 'primary') list.sort(sorters[S.audienceSort] || sorters.primary);
+
+  const kpiPill = (p) => `<span class="pill ${p.kpi==='lead'?'green':p.kpi==='message'?'violet':'grey'}" title="This audience is judged on its dominant objective: cost ${esc(p.label)}">${esc(p.label)}</span>`;
+
+  $('viewRoot').innerHTML = `
+    <div class="grid g-4" style="margin-bottom:14px;">
+      <div class="stat"><div class="lab">Audience sets</div><div class="val">${num(t.sets)}</div></div>
+      <div class="stat"><div class="lab">Total spend</div><div class="val">${fmtTHB(t.spend)}</div></div>
+      <div class="stat"><div class="lab">Impressions</div><div class="val">${num(t.impressions)}</div></div>
+      <div class="stat"><div class="lab">Landing page views</div><div class="val">${num(t.lpv)}</div></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+        <div class="card-title" style="margin:0;">Audience sets · ${esc($('from').value)} → ${esc($('to').value)}</div>
+        <select id="audSort" style="font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--glass-2);color:var(--ink);">
+          <option value="primary"${S.audienceSort==='primary'?' selected':''}>Cheapest result first</option>
+          <option value="spend"${S.audienceSort==='spend'?' selected':''}>Highest spend</option>
+          <option value="impressions"${S.audienceSort==='impressions'?' selected':''}>Most impressions</option>
+          <option value="uses"${S.audienceSort==='uses'?' selected':''}>Most reused</option>
+          <option value="costPerLpv"${S.audienceSort==='costPerLpv'?' selected':''}>Cost per LPV</option>
+          <option value="cpc"${S.audienceSort==='cpc'?' selected':''}>Cost per click</option>
+          <option value="cpm"${S.audienceSort==='cpm'?' selected':''}>CPM</option>
+        </select>
+      </div>
+      <table><thead><tr>
+        <th>Audience set</th><th class="num">Uses</th><th class="num">Spend</th><th class="num">Impr</th>
+        <th class="num">Clicks</th><th class="num">LPV</th><th class="num">Leads</th><th class="num">Msgs</th>
+        <th class="num">CPM</th><th class="num">CPC</th><th class="num">Cost/result</th><th></th>
+      </tr></thead><tbody>
+      ${list.map((a,i)=>`
+        <tr class="aud-row" data-i="${i}" style="cursor:pointer;">
+          <td class="strong trunc" title="${esc(a.name)}">${esc(a.name)}</td>
+          <td class="num">${num(a.uses)}</td>
+          <td class="num">${fmtTHB(a.spend)}</td>
+          <td class="num">${num(a.impressions)}</td>
+          <td class="num">${num(a.clicks)}</td>
+          <td class="num">${num(a.lpv)}</td>
+          <td class="num">${a.leads?num(a.leads):'—'}</td>
+          <td class="num">${a.messages?num(a.messages):'—'}</td>
+          <td class="num">${fmtTHB(a.cpm)}</td>
+          <td class="num">${fmtTHB(a.cpc)}</td>
+          <td class="num strong">${a.primary.cost===null?'<span title="Spent money but the primary action never fired">—⚠</span>':fmtTHB(a.primary.cost)} ${kpiPill(a.primary)}</td>
+          <td style="color:var(--faint);font-size:11px;">${S.audienceOpen===i?'▾':'▸'}</td>
+        </tr>
+        ${S.audienceOpen===i?`<tr><td colspan="12" style="background:var(--glass-2);padding:10px 14px;">
+          <table style="margin:0;"><thead><tr><th>Campaign</th><th class="num">Spend</th><th class="num">Impr</th><th class="num">Clicks</th><th class="num">LPV</th><th class="num">Leads</th><th class="num">Msgs</th></tr></thead><tbody>
+          ${a.campaigns.map(c=>`<tr>
+            <td class="trunc" title="${esc(c.campaign)}">${esc(c.campaign)}</td>
+            <td class="num">${fmtTHB(c.spend)}</td><td class="num">${num(c.impressions)}</td>
+            <td class="num">${num(c.clicks)}</td><td class="num">${num(c.lpv)}</td>
+            <td class="num">${c.leads?num(c.leads):'—'}</td><td class="num">${c.messages?num(c.messages):'—'}</td></tr>`).join('')}
+          </tbody></table>
+        </td></tr>`:''}`).join('')}
+      </tbody></table>
+      <div class="note">One row per audience set, grouped by ad set name across all Meta campaigns ("– Copy" variants are folded into the parent). <b>Cost/result</b> uses each audience's dominant objective — lead campaigns are judged per lead, message campaigns per conversation started, everything else per landing page view — so a lead audience isn't punished for cheap-click metrics it wasn't buying. Clicks are link clicks. LPV, leads and messages are Meta-reported; GA4 can't split visits by ad set, so LPV is the visit measure here. Rows marked ⚠ spent money with zero primary results.</div>
+    </div>`;
+
+  $('audSort').addEventListener('change', (e) => { S.audienceSort = e.target.value; S.audienceOpen = null; renderAudiences(); });
+  document.querySelectorAll('.aud-row').forEach(r => r.addEventListener('click', () => {
+    const i = +r.dataset.i;
+    S.audienceOpen = S.audienceOpen === i ? null : i;
+    renderAudiences();
+  }));
+}
 
 function renderGbp() {
   const d = S.gbp;

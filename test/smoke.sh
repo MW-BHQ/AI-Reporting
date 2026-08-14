@@ -41,6 +41,7 @@ check "campaign"   GET "/api/campaign?code=260701-08&from=$FROM&to=$TO"
 check "gbp"        GET "/api/gbp?from=$FROM&to=$TO"
 check "benchmark"  GET "/api/benchmark?to=$TO"
 check "untagged"   GET "/api/untagged?from=$FROM&to=$TO"
+check "audiences"  GET "/api/audiences?from=$FROM&to=$TO"
 check "topic"      POST "/api/topic" "{\"topic\":\"gallbladder\",\"from\":\"$FROM\",\"to\":\"$TO\"}"
 check "user upsert" POST "/api/users" '{"email":"x@bkh.test","tabs":["overview"]}'
 
@@ -52,6 +53,7 @@ SRV=$!
 sleep 2.5
 check "overview (meta down)" GET "/api/overview?from=$FROM&to=$TO"
 check "campaign (meta down)" GET "/api/campaign?code=260701-08&from=$FROM&to=$TO"
+check "audiences (meta down)" GET "/api/audiences?from=$FROM&to=$TO"
 
 kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
 echo ""
