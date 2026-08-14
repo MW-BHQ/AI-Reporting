@@ -2320,12 +2320,37 @@ app.post("/api/topic", requireTab("topics"), async (req, res) => {
 function normAudienceName(name) {
   return String(name || "").replace(/\s*[–-]\s*copy\s*\d*$/i, "").replace(/\s+/g, " ").trim();
 }
-function classifyObjective(campaignName) {
+/**
+ * Objective class decides which cost-per is the audience's real KPI.
+ * "ecommerce" covers Collaborative Ads (CPAS): those ads send people into the
+ * Shopee/Lazada app, so landing_page_view is near-zero by design and judging
+ * them on cost/LPV is meaningless. Meta reports their conversions under the
+ * catalog_segment_* fields instead, which only return numbers for the CPAS
+ * account (null everywhere else) — verified 2026-08-14.
+ */
+function classifyObjective(campaignName, hasCatalog) {
+  if (hasCatalog) return "ecommerce";
   const c = String(campaignName || "").toLowerCase();
   if (c.includes("lead")) return "lead";
   if (c.includes("message") || c.includes("whatsapp")) return "message";
   return "traffic";
 }
+
+// An audience needs enough delivery before its cost-per means anything. Without
+// this a set that spent ฿0 and recorded one stray lead ranks as the cheapest
+// audience in the account, which is a false winner, not an insight.
+const MIN_RANK_IMPRESSIONS = 1000;
+/**
+ * Meta campaign names carry the YYMMDD-NN code as a prefix (e.g.
+ * "260701-13_BGH_Better Club…"), which is the same code GA4 sees in
+ * utm_campaign. Names without one (agency-run flights like
+ * "aiq_bhq_ig_message_saudi") simply get no GA4 match.
+ */
+function codeFromCampaignName(name) {
+  const m = String(name || "").match(/(\d{6}-\d{2})/);
+  return m ? m[1] : null;
+}
+
 async function buildAudiences(from, to) {
   // Null is not zero: if Meta is down this run, say so with a 200 +
   // unavailable flag instead of a 500, matching every other view.
@@ -2342,65 +2367,171 @@ async function buildAudiences(from, to) {
   }
   if (rows === null) return { audiences: null, unavailable: true };
 
+  /**
+   * GA4 key events per utm_campaign. GA4 has no concept of an ad set, so a
+   * campaign's key events can only be APPORTIONED across the audiences that ran
+   * in it — by each audience's share of landing page views (the closest thing
+   * to "visits this audience sent"), falling back to spend share where LPV is
+   * not a meaningful measure, i.e. CPAS. The estimate is labelled as such in
+   * the UI and never enters the ranking. 9 metrics, inside GA4's limit of 10.
+   */
+  let ga4ByCode = null;
+  try {
+    const ga4 = await windsor("googleanalytics4",
+      ga4Fields(["session_manual_campaign_name"], ["sessions", "engaged_sessions", ...KEY_EVENT_FIELDS]),
+      from, to, { accounts: [GA4_ACCOUNT] });
+    if (ga4) {
+      ga4ByCode = new Map();
+      for (const r of ga4) {
+        const code = codeFromCampaignName(r.session_manual_campaign_name);
+        if (!code) continue;
+        if (!ga4ByCode.has(code)) ga4ByCode.set(code, { visits: 0, keyEvents: 0 });
+        const e = ga4ByCode.get(code);
+        e.visits += n(r.sessions);
+        e.keyEvents += sumKeyEvents(r);
+      }
+    }
+  } catch (e) {
+    logJson("WARNING", "audiences_ga4_unavailable", { error: String(e.message || e) });
+  }
+
+  // Campaign-wide LPV and spend, used as the denominator when splitting a
+  // campaign's GA4 key events across the audiences that ran inside it.
+  const campTotals = new Map();
+  for (const r of rows) {
+    const cname = String(r.campaign || "(unnamed)");
+    if (!campTotals.has(cname)) campTotals.set(cname, { lpv: 0, spend: 0 });
+    const ct = campTotals.get(cname);
+    ct.lpv += n(r.actions_landing_page_view);
+    ct.spend += n(r.spend);
+  }
+
   const map = new Map();
   for (const r of rows) {
     const name = normAudienceName(r.adset_name);
     if (!name) continue;
     if (!map.has(name)) map.set(name, {
-      name, spend: 0, impressions: 0, clicks: 0, lpv: 0, leads: 0, messages: 0,
-      campaigns: new Map(), spendByClass: { lead: 0, message: 0, traffic: 0 },
+      name, spend: 0, impressions: 0, reach: 0, clicks: 0, lpv: 0, leads: 0, messages: 0,
+      purchases: 0, revenue: 0, atc: 0, accounts: new Set(),
+      campaigns: new Map(), spendByClass: { lead: 0, message: 0, traffic: 0, ecommerce: 0 },
     });
     const a = map.get(name);
     const spend = n(r.spend);
+    const purchases = n(r.catalog_segment_actions_omni_purchase);
+    const revenue = n(r.catalog_segment_value_purchase);
+    const atc = n(r.catalog_segment_actions_omni_add_to_cart);
+    // A CPAS row is one that reports catalog metrics at all — including a zero
+    // purchase count alongside add-to-carts, since a CPAS set with traffic but
+    // no sale still belongs in the ecommerce class rather than being judged on LPV.
+    const hasCatalog = r.catalog_segment_actions_omni_purchase !== null
+      || r.catalog_segment_actions_omni_add_to_cart !== null;
     a.spend += spend;
     a.impressions += n(r.impressions);
+    a.reach += n(r.reach);
     a.clicks += n(r.actions_link_click);
     a.lpv += n(r.actions_landing_page_view);
     a.leads += n(r.actions_lead);
     a.messages += n(r.actions_onsite_conversion_messaging_conversation_started_7d);
-    a.spendByClass[classifyObjective(r.campaign)] += spend;
+    a.purchases += purchases; a.revenue += revenue; a.atc += atc;
+    if (r.account_name) a.accounts.add(String(r.account_name));
+    a.spendByClass[classifyObjective(r.campaign, hasCatalog)] += spend;
     const cname = String(r.campaign || "(unnamed)");
-    if (!a.campaigns.has(cname)) a.campaigns.set(cname, { campaign: cname, spend: 0, impressions: 0, clicks: 0, lpv: 0, leads: 0, messages: 0 });
+    if (!a.campaigns.has(cname)) a.campaigns.set(cname, {
+      campaign: cname, account: r.account_name || null, code: codeFromCampaignName(cname),
+      spend: 0, impressions: 0, clicks: 0, lpv: 0, leads: 0, messages: 0, purchases: 0, revenue: 0,
+    });
     const c = a.campaigns.get(cname);
+    if (!c.account && r.account_name) c.account = String(r.account_name);
     c.spend += spend; c.impressions += n(r.impressions); c.clicks += n(r.actions_link_click);
     c.lpv += n(r.actions_landing_page_view); c.leads += n(r.actions_lead);
     c.messages += n(r.actions_onsite_conversion_messaging_conversation_started_7d);
+    c.purchases += purchases; c.revenue += revenue;
   }
 
   const per = (cost, count) => (count > 0 ? cost / count : null);
+  const rate = (num_, den) => (den > 0 ? num_ / den : null);
   const audiences = [...map.values()].map((a) => {
     const cls = Object.entries(a.spendByClass).sort((x, y) => y[1] - x[1])[0][0];
     const primary =
-      cls === "lead"    ? { kpi: "lead",    label: "per lead", count: a.leads,    cost: per(a.spend, a.leads) } :
-      cls === "message" ? { kpi: "message", label: "per msg",  count: a.messages, cost: per(a.spend, a.messages) } :
-                          { kpi: "lpv",     label: "per LPV",  count: a.lpv,      cost: per(a.spend, a.lpv) };
+      cls === "lead"      ? { kpi: "lead",     label: "per lead",     count: a.leads,     cost: per(a.spend, a.leads) } :
+      cls === "message"   ? { kpi: "message",  label: "per msg",      count: a.messages,  cost: per(a.spend, a.messages) } :
+      cls === "ecommerce" ? { kpi: "purchase", label: "per purchase", count: a.purchases, cost: per(a.spend, a.purchases) } :
+                            { kpi: "lpv",      label: "per LPV",      count: a.lpv,       cost: per(a.spend, a.lpv) };
     return {
       name: a.name,
       uses: a.campaigns.size,
-      spend: a.spend, impressions: a.impressions, clicks: a.clicks,
+      accounts: [...a.accounts].sort(),
+      spend: a.spend, impressions: a.impressions, reach: a.reach, clicks: a.clicks,
       lpv: a.lpv, leads: a.leads, messages: a.messages,
+      purchases: a.purchases, revenue: a.revenue, atc: a.atc,
+      isCpas: cls === "ecommerce",
       cpm: a.impressions > 0 ? (a.spend / a.impressions) * 1000 : null,
       cpc: per(a.spend, a.clicks),
+      // Link CTR, not all-clicks CTR: the `clicks` field counts every click on
+      // the ad including reactions and profile taps, which inflates it badly
+      // (see CONTEXT.md) — actions_link_click is the outbound click.
+      ctr: rate(a.clicks, a.impressions),
+      // Of the people who clicked the link, how many actually arrived. Low
+      // values mean accidental clicks, a slow page, or a broken destination.
+      lpvRate: rate(a.lpv, a.clicks),
+      // Approximate: reach is summed across ad sets, so a person hit by the
+      // same audience in two campaigns counts twice. Directional, not exact.
+      frequency: rate(a.impressions, a.reach),
       costPerLpv: per(a.spend, a.lpv),
       costPerLead: per(a.spend, a.leads),
       costPerMessage: per(a.spend, a.messages),
+      costPerPurchase: per(a.spend, a.purchases),
+      roas: a.spend > 0 && a.revenue > 0 ? a.revenue / a.spend : null,
+      lowVolume: a.impressions < MIN_RANK_IMPRESSIONS,
       primary,
-      campaigns: [...a.campaigns.values()].sort((x, y) => y.spend - x.spend),
+      ...(() => {
+        // Apportion each campaign's GA4 key events to this audience by its
+        // share of that campaign's landing page views (spend share for CPAS,
+        // where LPV is not the right measure). Estimated, never ranked on.
+        if (!ga4ByCode) return { keyEventsEst: null, ga4Unavailable: true };
+        let est = 0, matched = 0;
+        for (const c of a.campaigns.values()) {
+          const g = c.code ? ga4ByCode.get(c.code) : null;
+          if (!g || !g.keyEvents) continue;
+          const ct = campTotals.get(c.campaign) || { lpv: 0, spend: 0 };
+          const useLpv = !(cls === "ecommerce") && ct.lpv > 0;
+          const share = useLpv ? (ct.lpv > 0 ? c.lpv / ct.lpv : 0)
+                               : (ct.spend > 0 ? c.spend / ct.spend : 0);
+          est += g.keyEvents * share;
+          matched++;
+          c.ga4KeyEvents = g.keyEvents;
+          c.ga4Visits = g.visits;
+          c.keyEventsEst = g.keyEvents * share;
+          c.sharePct = share;
+        }
+        return {
+          keyEventsEst: matched ? est : null,
+          keyEventCampaignsMatched: matched,
+          costPerKeyEventEst: matched && est > 0 ? a.spend / est : null,
+        };
+      })(),
+    campaigns: [...a.campaigns.values()].sort((x, y) => y.spend - x.spend),
     };
   });
-  // Default order: cheapest primary result first; audiences whose primary
-  // action never fired sink to the bottom (spend with nothing to show for it).
+  // Default order: cheapest primary result first. Two tiers sink below the
+  // ranked list — sets too small to judge, then sets that spent money without
+  // ever producing their primary action.
+  const tier = (a) => (a.lowVolume ? 2 : a.primary.cost === null ? 1 : 0);
   audiences.sort((x, y) => {
-    if (x.primary.cost === null && y.primary.cost === null) return y.spend - x.spend;
-    if (x.primary.cost === null) return 1;
-    if (y.primary.cost === null) return -1;
-    return x.primary.cost - y.primary.cost;
+    const tx = tier(x), ty = tier(y);
+    if (tx !== ty) return tx - ty;
+    if (tx === 0) return x.primary.cost - y.primary.cost;
+    return y.spend - x.spend;
   });
   const totals = audiences.reduce((t, a) => ({
     sets: t.sets + 1, spend: t.spend + a.spend, impressions: t.impressions + a.impressions,
-    clicks: t.clicks + a.clicks, lpv: t.lpv + a.lpv, leads: t.leads + a.leads, messages: t.messages + a.messages,
-  }), { sets: 0, spend: 0, impressions: 0, clicks: 0, lpv: 0, leads: 0, messages: 0 });
-  return { audiences, totals };
+    clicks: t.clicks + a.clicks, lpv: t.lpv + a.lpv, leads: t.leads + a.leads,
+    messages: t.messages + a.messages, purchases: t.purchases + a.purchases, revenue: t.revenue + a.revenue,
+  }), { sets: 0, spend: 0, impressions: 0, clicks: 0, lpv: 0, leads: 0, messages: 0, purchases: 0, revenue: 0 });
+  totals.ctr = rate(totals.clicks, totals.impressions);
+  totals.keyEvents = ga4ByCode
+    ? [...ga4ByCode.values()].reduce((t, g) => t + g.keyEvents, 0) : null;
+  return { audiences, totals, ga4Available: ga4ByCode !== null };
 }
 
 app.get("/api/audiences", requireTab("audiences"), async (req, res) => {

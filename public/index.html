@@ -1379,6 +1379,9 @@ const stackTotalLabels = {
 
 // ============================================================ AUDIENCES
 const fmtTHB = (v) => v === null || v === undefined ? '—' : '฿' + (v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(2));
+const pct = (v) => v === null || v === undefined ? '—' : (v * 100).toFixed(v < 0.1 ? 2 : 1) + '%';
+// Bare amount: the ฿ lives in the column header instead of every cell.
+const fmtAmt = (v) => v === null || v === undefined ? '—' : (v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(2));
 function renderAudiences() {
   const d = S.audiences;
   if (!d) {
@@ -1399,18 +1402,22 @@ function renderAudiences() {
     cpc: (a,b) => (a.cpc===null)-(b.cpc===null) || a.cpc - b.cpc,
     cpm: (a,b) => (a.cpm===null)-(b.cpm===null) || a.cpm - b.cpm,
     costPerLpv: (a,b) => (a.costPerLpv===null)-(b.costPerLpv===null) || a.costPerLpv - b.costPerLpv,
+    ctr: (a,b) => (a.ctr===null)-(b.ctr===null) || b.ctr - a.ctr,
+    lpvRate: (a,b) => (a.lpvRate===null)-(b.lpvRate===null) || b.lpvRate - a.lpvRate,
+    frequency: (a,b) => (a.frequency===null)-(b.frequency===null) || b.frequency - a.frequency,
   };
   const list = [...d.audiences];
   if (S.audienceSort !== 'primary') list.sort(sorters[S.audienceSort] || sorters.primary);
 
-  const kpiPill = (p) => `<span class="pill ${p.kpi==='lead'?'green':p.kpi==='message'?'violet':'grey'}" title="This audience is judged on its dominant objective: cost ${esc(p.label)}">${esc(p.label)}</span>`;
+  const kpiPill = (p) => `<span class="pill ${p.kpi==='lead'?'green':p.kpi==='message'?'violet':p.kpi==='purchase'?'warn':'grey'}" title="This audience is judged on its dominant objective: cost ${esc(p.label)}">${esc(p.label)}</span>`;
 
   $('viewRoot').innerHTML = `
-    <div class="grid g-4" style="margin-bottom:14px;">
+    <div class="grid g-5" style="margin-bottom:14px;">
       <div class="stat"><div class="lab">Audience sets</div><div class="val">${num(t.sets)}</div></div>
       <div class="stat"><div class="lab">Total spend</div><div class="val">${fmtTHB(t.spend)}</div></div>
       <div class="stat"><div class="lab">Impressions</div><div class="val">${num(t.impressions)}</div></div>
       <div class="stat"><div class="lab">Landing page views</div><div class="val">${num(t.lpv)}</div></div>
+      <div class="stat"><div class="lab">Overall link CTR</div><div class="val">${pct(t.ctr)}</div></div>
     </div>
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
@@ -1423,39 +1430,63 @@ function renderAudiences() {
           <option value="costPerLpv"${S.audienceSort==='costPerLpv'?' selected':''}>Cost per LPV</option>
           <option value="cpc"${S.audienceSort==='cpc'?' selected':''}>Cost per click</option>
           <option value="cpm"${S.audienceSort==='cpm'?' selected':''}>CPM</option>
+          <option value="ctr"${S.audienceSort==='ctr'?' selected':''}>Best link CTR</option>
+          <option value="lpvRate"${S.audienceSort==='lpvRate'?' selected':''}>Best click→visit rate</option>
+          <option value="frequency"${S.audienceSort==='frequency'?' selected':''}>Highest frequency (fatigue)</option>
         </select>
       </div>
       <table><thead><tr>
-        <th>Audience set</th><th class="num">Uses</th><th class="num">Spend</th><th class="num">Impr</th>
-        <th class="num">Clicks</th><th class="num">LPV</th><th class="num">Leads</th><th class="num">Msgs</th>
-        <th class="num">CPM</th><th class="num">CPC</th><th class="num">Cost/result</th><th></th>
+        <th>Audience set</th><th class="num">Uses</th><th class="num">Spend ฿</th><th class="num">Impr</th>
+        <th class="num" title="Link clicks ÷ impressions. Independent of budget, so it compares audiences fairly.">CTR</th>
+        <th class="num">Clicks</th>
+        <th class="num">LPV</th><th class="num">Leads</th><th class="num">Msgs</th>
+        <th class="num" title="Estimated: GA4 key events for this audience's campaigns, split by its share of landing page views. GA4 cannot see ad sets, so this is apportioned, not measured.">Key ev. est</th>
+        <th class="num" title="Impressions ÷ reach. Above ~3 suggests fatigue. Approximate when an audience ran in several campaigns.">Freq</th>
+        <th class="num">CPM ฿</th><th class="num">Cost/result ฿</th><th></th>
       </tr></thead><tbody>
       ${list.map((a,i)=>`
         <tr class="aud-row" data-i="${i}" style="cursor:pointer;">
           <td class="strong trunc" title="${esc(a.name)}">${esc(a.name)}</td>
           <td class="num">${num(a.uses)}</td>
-          <td class="num">${fmtTHB(a.spend)}</td>
+          <td class="num">${fmtAmt(a.spend)}</td>
           <td class="num">${num(a.impressions)}</td>
+          <td class="num">${pct(a.ctr)}</td>
           <td class="num">${num(a.clicks)}</td>
-          <td class="num">${num(a.lpv)}</td>
+          <td class="num">${a.isCpas?'—':num(a.lpv)}</td>
           <td class="num">${a.leads?num(a.leads):'—'}</td>
           <td class="num">${a.messages?num(a.messages):'—'}</td>
-          <td class="num">${fmtTHB(a.cpm)}</td>
-          <td class="num">${fmtTHB(a.cpc)}</td>
-          <td class="num strong">${a.primary.cost===null?'<span title="Spent money but the primary action never fired">—⚠</span>':fmtTHB(a.primary.cost)} ${kpiPill(a.primary)}</td>
+          <td class="num" style="color:var(--muted);">${a.keyEventsEst===null?'—':'~'+num(Math.round(a.keyEventsEst))}</td>
+          <td class="num"${a.frequency&&a.frequency>=3?' style="color:#D97B1F;font-weight:600;" title="High frequency — the same people are seeing this repeatedly"':''}>${a.frequency===null?'—':a.frequency.toFixed(2)}</td>
+          <td class="num">${fmtAmt(a.cpm)}</td>
+          <td class="num strong">${a.lowVolume?'<span class="pill warn" title="Under 1,000 impressions — too little delivery for a cost-per to mean anything">too small</span>':a.primary.cost===null?'<span title="Spent money but the primary action never fired">—⚠</span>':fmtAmt(a.primary.cost)} ${a.lowVolume?'':kpiPill(a.primary)}</td>
           <td style="color:var(--faint);font-size:11px;">${S.audienceOpen===i?'▾':'▸'}</td>
         </tr>
-        ${S.audienceOpen===i?`<tr><td colspan="12" style="background:var(--glass-2);padding:10px 14px;">
-          <table style="margin:0;"><thead><tr><th>Campaign</th><th class="num">Spend</th><th class="num">Impr</th><th class="num">Clicks</th><th class="num">LPV</th><th class="num">Leads</th><th class="num">Msgs</th></tr></thead><tbody>
+        ${S.audienceOpen===i?`<tr><td colspan="14" style="background:var(--glass-2);padding:10px 14px;">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.9;">
+            Ad account${a.accounts.length>1?'s':''}: <b>${a.accounts.length?a.accounts.map(esc).join(' · '):'unknown'}</b>
+            ${a.isCpas?'':` · click→visit rate: <b>${pct(a.lpvRate)}</b> <span style="color:var(--faint);">(landing page views ÷ link clicks — low means accidental clicks, a slow page or a broken link)</span>`}
+            · CPC: <b>${fmtTHB(a.cpc)}</b>
+            ${a.costPerKeyEventEst?` · est. cost per key event: <b>${fmtTHB(a.costPerKeyEventEst)}</b>`:''}
+            ${a.isCpas?` · CPAS: ${num(a.purchases)} purchase${a.purchases===1?'':'s'}, ${fmtTHB(a.revenue)} revenue${a.roas?`, ROAS ${a.roas.toFixed(2)}×`:''}, ${num(a.atc)} add-to-cart`:''}
+          </div>
+          <table style="margin:0;"><thead><tr><th>Ad account</th><th>Campaign</th><th class="num">Spend ฿</th><th class="num">Impr</th><th class="num">CTR</th><th class="num">Clicks</th><th class="num">LPV</th><th class="num">Leads</th><th class="num">Msgs</th><th class="num" title="Every key event GA4 recorded for this whole campaign code — all audiences combined">GA4 key ev. (campaign)</th><th class="num" title="This audience's apportioned share">→ this audience</th>${a.isCpas?'<th class="num">Purch</th><th class="num">Revenue ฿</th>':''}</tr></thead><tbody>
           ${a.campaigns.map(c=>`<tr>
-            <td class="trunc" title="${esc(c.campaign)}">${esc(c.campaign)}</td>
-            <td class="num">${fmtTHB(c.spend)}</td><td class="num">${num(c.impressions)}</td>
-            <td class="num">${num(c.clicks)}</td><td class="num">${num(c.lpv)}</td>
-            <td class="num">${c.leads?num(c.leads):'—'}</td><td class="num">${c.messages?num(c.messages):'—'}</td></tr>`).join('')}
+            <td style="color:var(--muted);white-space:nowrap;">${esc(c.account||'—')}</td>
+            <td class="trunc" title="${esc(c.campaign)}">${esc(c.campaign)}${c.code?'':' <span class="pill grey" title="No YYMMDD-NN code in this campaign name, so it cannot be matched to GA4">no code</span>'}</td>
+            <td class="num">${fmtAmt(c.spend)}</td><td class="num">${num(c.impressions)}</td>
+            <td class="num">${pct(c.impressions>0?c.clicks/c.impressions:null)}</td>
+            <td class="num">${num(c.clicks)}</td><td class="num">${a.isCpas?'—':num(c.lpv)}</td>
+            <td class="num">${c.leads?num(c.leads):'—'}</td><td class="num">${c.messages?num(c.messages):'—'}</td>
+            <td class="num">${c.ga4KeyEvents===undefined?'—':num(c.ga4KeyEvents)}</td>
+            <td class="num" style="color:var(--muted);">${c.keyEventsEst===undefined?'—':'~'+num(Math.round(c.keyEventsEst))+' <span style="font-size:10px;">('+pct(c.sharePct)+')</span>'}</td>
+            ${a.isCpas?`<td class="num">${c.purchases?num(c.purchases):'—'}</td><td class="num">${c.revenue?fmtAmt(c.revenue):'—'}</td>`:''}</tr>`).join('')}
           </tbody></table>
         </td></tr>`:''}`).join('')}
       </tbody></table>
-      <div class="note">One row per audience set, grouped by ad set name across all Meta campaigns ("– Copy" variants are folded into the parent). <b>Cost/result</b> uses each audience's dominant objective — lead campaigns are judged per lead, message campaigns per conversation started, everything else per landing page view — so a lead audience isn't punished for cheap-click metrics it wasn't buying. Clicks are link clicks. LPV, leads and messages are Meta-reported; GA4 can't split visits by ad set, so LPV is the visit measure here. Rows marked ⚠ spent money with zero primary results.</div>
+      <div class="note">One row per audience set, grouped by ad set name across all Meta campaigns ("– Copy" variants folded into the parent). Click a row for its per-campaign breakdown and ad account.<br>
+      <b>Budget-independent metrics</b> — use these to compare audiences fairly, since impressions and clicks mostly track how much money was poured in. <b>CTR</b> = link clicks ÷ impressions (does the creative land with these people). <b>→visit</b> = landing page views ÷ link clicks (did the click become a real visit; low means accidental clicks, a slow page or a broken link). <b>Freq</b> = impressions ÷ reach, amber above 3 (fatigue); approximate when one audience ran in several campaigns, since reach is summed and repeat people count twice.<br>
+      <b>Key ev. est</b> is apportioned, not measured: GA4 has no concept of an ad set, so each campaign's key events are split across the audiences that ran in it by their share of landing page views (spend share for CPAS). The split always sums back to GA4's campaign total, but a share is an assumption — treat it as a steer, never as a reported figure, and never as grounds for killing an audience on its own. Campaigns whose Meta name carries no <code>YYMMDD-NN</code> code can't be matched to GA4 at all and show "no code". Open a row to see each campaign's real GA4 total beside this audience's share, plus CPC and click→visit rate.<br>
+      <b>Cost/result</b> follows each audience's dominant objective: lead campaigns per lead, message campaigns per conversation started, CPAS per Shopee purchase, everything else per landing page view. Sets under 1,000 impressions are marked <b>too small</b> and sunk below the ranking rather than winning it on one stray result; rows marked ⚠ spent money with zero primary results. Clicks are link clicks, never all-clicks. GA4 can't split visits by ad set, so LPV is the visit measure.</div>
     </div>`;
 
   $('audSort').addEventListener('change', (e) => { S.audienceSort = e.target.value; S.audienceOpen = null; renderAudiences(); });
