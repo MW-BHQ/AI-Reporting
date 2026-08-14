@@ -2328,8 +2328,8 @@ function normAudienceName(name) {
  * catalog_segment_* fields instead, which only return numbers for the CPAS
  * account (null everywhere else) — verified 2026-08-14.
  */
-function classifyObjective(campaignName, hasCatalog) {
-  if (hasCatalog) return "ecommerce";
+function classifyObjective(campaignName, isCpasAccount) {
+  if (isCpasAccount) return "ecommerce";
   const c = String(campaignName || "").toLowerCase();
   if (c.includes("lead")) return "lead";
   if (c.includes("message") || c.includes("whatsapp")) return "message";
@@ -2352,18 +2352,35 @@ function codeFromCampaignName(name) {
 }
 
 async function buildAudiences(from, to) {
-  // Null is not zero: if Meta is down this run, say so with a 200 +
-  // unavailable flag instead of a 500, matching every other view.
-  let rows;
+  const BASE_FIELDS = ["adset_id", "adset_name", "campaign", "account_name", "spend",
+    "impressions", "reach", "actions_link_click", "actions_landing_page_view",
+    "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d"];
+  const CATALOG_FIELDS = ["catalog_segment_actions_omni_purchase",
+    "catalog_segment_value_purchase", "catalog_segment_actions_omni_add_to_cart"];
+
+  /**
+   * Null is not zero: if Meta is down this run, say so with a 200 + unavailable
+   * flag instead of a 500, matching every other view.
+   *
+   * Meta's insights API also rejects requests it considers too heavy at account
+   * scale — asking for adset_targeting across these six accounts returns
+   * "Please reduce the amount of data you're asking for". The catalog_segment
+   * fields are the next-heaviest part and only matter for the one CPAS account,
+   * so if the full pull fails, retry without them rather than losing the whole
+   * tab: CPAS purchase metrics degrade, everything else lives.
+   */
+  let rows = null, catalogAvailable = true;
   try {
-    rows = await windsor("facebook",
-    ["adset_id", "adset_name", "campaign", "spend", "impressions",
-     "actions_link_click", "actions_landing_page_view", "actions_lead",
-     "actions_onsite_conversion_messaging_conversation_started_7d"],
-      from, to);
+    rows = await windsor("facebook", [...BASE_FIELDS, ...CATALOG_FIELDS], from, to);
   } catch (e) {
-    logJson("WARNING", "audiences_meta_unavailable", { error: String(e.message || e) });
-    rows = null;
+    logJson("WARNING", "audiences_full_pull_failed_retrying_without_catalog", { error: String(e.message || e) });
+    catalogAvailable = false;
+    try {
+      rows = await windsor("facebook", BASE_FIELDS, from, to);
+    } catch (e2) {
+      logJson("WARNING", "audiences_meta_unavailable", { error: String(e2.message || e2) });
+      rows = null;
+    }
   }
   if (rows === null) return { audiences: null, unavailable: true };
 
@@ -2395,6 +2412,28 @@ async function buildAudiences(from, to) {
     logJson("WARNING", "audiences_ga4_unavailable", { error: String(e.message || e) });
   }
 
+  /**
+   * Which ad accounts are Collaborative Ads (CPAS) accounts.
+   *
+   * Detected at ACCOUNT level from rows that actually report a positive catalog
+   * metric, because CPAS is an account-level arrangement with the marketplace
+   * partner. An earlier per-row check (`field !== null`) classified EVERY row
+   * as CPAS the moment the catalog fields went missing from the pull, since
+   * `undefined !== null` is true — so the whole account was judged on cost per
+   * purchase and every cost/result went blank. Requiring a positive number
+   * means a missing or null field can only ever fail towards the safe default.
+   */
+  const num_ = (v) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
+  const cpasAccounts = new Set();
+  for (const r of rows) {
+    if (!r.account_name) continue;
+    if (num_(r.catalog_segment_actions_omni_purchase) > 0
+      || num_(r.catalog_segment_value_purchase) > 0
+      || num_(r.catalog_segment_actions_omni_add_to_cart) > 0) {
+      cpasAccounts.add(String(r.account_name));
+    }
+  }
+
   // Campaign-wide LPV and spend, used as the denominator when splitting a
   // campaign's GA4 key events across the audiences that ran inside it.
   const campTotals = new Map();
@@ -2420,11 +2459,7 @@ async function buildAudiences(from, to) {
     const purchases = n(r.catalog_segment_actions_omni_purchase);
     const revenue = n(r.catalog_segment_value_purchase);
     const atc = n(r.catalog_segment_actions_omni_add_to_cart);
-    // A CPAS row is one that reports catalog metrics at all — including a zero
-    // purchase count alongside add-to-carts, since a CPAS set with traffic but
-    // no sale still belongs in the ecommerce class rather than being judged on LPV.
-    const hasCatalog = r.catalog_segment_actions_omni_purchase !== null
-      || r.catalog_segment_actions_omni_add_to_cart !== null;
+    const isCpasAccount = r.account_name ? cpasAccounts.has(String(r.account_name)) : false;
     a.spend += spend;
     a.impressions += n(r.impressions);
     a.reach += n(r.reach);
@@ -2434,7 +2469,7 @@ async function buildAudiences(from, to) {
     a.messages += n(r.actions_onsite_conversion_messaging_conversation_started_7d);
     a.purchases += purchases; a.revenue += revenue; a.atc += atc;
     if (r.account_name) a.accounts.add(String(r.account_name));
-    a.spendByClass[classifyObjective(r.campaign, hasCatalog)] += spend;
+    a.spendByClass[classifyObjective(r.campaign, isCpasAccount)] += spend;
     const cname = String(r.campaign || "(unnamed)");
     if (!a.campaigns.has(cname)) a.campaigns.set(cname, {
       campaign: cname, account: r.account_name || null, code: codeFromCampaignName(cname),
@@ -2504,9 +2539,22 @@ async function buildAudiences(from, to) {
           c.keyEventsEst = g.keyEvents * share;
           c.sharePct = share;
         }
+        /**
+         * Key events per visit, for benchmarking rather than raw volume.
+         *
+         * Honest caveat, stated in the UI: because the apportioning divides a
+         * campaign's key events by LPV share and this rate then divides by the
+         * audience's own LPV, the result equals the CAMPAIGN's key-events-per-
+         * visit rate, blended across whichever campaigns the audience ran in.
+         * It tells you whether an audience was used on well-converting
+         * campaigns; it cannot isolate the audience's own conversion quality,
+         * because GA4 never sees ad sets. CTR and click→visit are the
+         * genuinely per-audience quality signals.
+         */
         return {
           keyEventsEst: matched ? est : null,
           keyEventCampaignsMatched: matched,
+          keyEventRate: matched && est > 0 && a.lpv > 0 ? est / a.lpv : null,
           costPerKeyEventEst: matched && est > 0 ? a.spend / est : null,
         };
       })(),
@@ -2531,7 +2579,7 @@ async function buildAudiences(from, to) {
   totals.ctr = rate(totals.clicks, totals.impressions);
   totals.keyEvents = ga4ByCode
     ? [...ga4ByCode.values()].reduce((t, g) => t + g.keyEvents, 0) : null;
-  return { audiences, totals, ga4Available: ga4ByCode !== null };
+  return { audiences, totals, ga4Available: ga4ByCode !== null, catalogAvailable };
 }
 
 app.get("/api/audiences", requireTab("audiences"), async (req, res) => {

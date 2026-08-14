@@ -30,6 +30,24 @@ check() {
   fi
 }
 
+# A 200 only proves the endpoint ran. This asserts a JSON path is actually
+# populated — it catches an edit that silently failed to apply (e.g. a field
+# dropped from a Windsor pull), which a status-code check cannot see.
+expect_field() {
+  local name="$1" path="$2" jqexpr="$3"
+  local got
+  got=$(curl -s -H "$ADMIN" "$BASE$path" | node -e "
+    let raw=''; process.stdin.on('data',d=>raw+=d).on('end',()=>{
+      try { const d=JSON.parse(raw); const v=(${jqexpr}); console.log(v===undefined||v===null?'MISSING':String(v)); }
+      catch(e){ console.log('PARSE_ERROR'); }
+    });")
+  if [ "$got" = "MISSING" ] || [ "$got" = "PARSE_ERROR" ] || [ -z "$got" ]; then
+    FAIL=$((FAIL+1)); printf '  FAIL %-22s %s => %s\n' "$name" "$jqexpr" "$got"
+  else
+    printf '  ok   %-22s %s\n' "$name" "$got"
+  fi
+}
+
 FROM=2026-07-01; TO=2026-07-31
 echo "--- endpoints ---"
 check "version"    GET "/api/version"
@@ -42,6 +60,19 @@ check "gbp"        GET "/api/gbp?from=$FROM&to=$TO"
 check "benchmark"  GET "/api/benchmark?to=$TO"
 check "untagged"   GET "/api/untagged?from=$FROM&to=$TO"
 check "audiences"  GET "/api/audiences?from=$FROM&to=$TO"
+echo "--- audiences field integrity (a dropped Windsor field must fail here) ---"
+AUD="/api/audiences?from=$FROM&to=$TO"
+expect_field "aud ad account"   "$AUD" "d.audiences[0].accounts[0]"
+expect_field "aud frequency"    "$AUD" "d.audiences[0].frequency"
+expect_field "aud ctr"          "$AUD" "d.audiences[0].ctr"
+expect_field "aud catalog flag" "$AUD" "d.catalogAvailable"
+expect_field "aud key ev est"   "$AUD" "d.audiences[0].keyEventsEst"
+expect_field "aud KE/visit"     "$AUD" "d.audiences[0].keyEventRate"
+# Regression guard for the 3.20 bug: with no positive catalog metric anywhere,
+# nothing may be classified as CPAS. `undefined !== null` once made every row
+# ecommerce, which blanked every cost/result in the account.
+expect_field "no false CPAS"    "$AUD" "d.audiences.every(a=>!a.isCpas||a.purchases>0)||'BAD'"
+
 check "topic"      POST "/api/topic" "{\"topic\":\"gallbladder\",\"from\":\"$FROM\",\"to\":\"$TO\"}"
 check "user upsert" POST "/api/users" '{"email":"x@bkh.test","tabs":["overview"]}'
 
