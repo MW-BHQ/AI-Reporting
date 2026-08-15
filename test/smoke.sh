@@ -66,8 +66,9 @@ expect_field "aud ad account"   "$AUD" "d.audiences[0].accounts[0]"
 expect_field "aud frequency"    "$AUD" "d.audiences[0].frequency"
 expect_field "aud ctr"          "$AUD" "d.audiences[0].ctr"
 expect_field "aud catalog flag" "$AUD" "d.catalogAvailable"
-expect_field "aud key ev est"   "$AUD" "d.audiences[0].keyEventsEst"
-expect_field "aud KE/visit"     "$AUD" "d.audiences[0].keyEventRate"
+expect_field "aud viewContent"  "$AUD" "d.audiences[0].viewContent"
+expect_field "aud cost/VC"      "$AUD" "d.audiences[0].costPerViewContent"
+expect_field "aud meta rank"    "$AUD" "d.audiences[0].rankings.quality||'none-rated'"
 # Regression guard for the 3.20 bug: with no positive catalog metric anywhere,
 # nothing may be classified as CPAS. `undefined !== null` once made every row
 # ecommerce, which blanked every cost/result in the account.

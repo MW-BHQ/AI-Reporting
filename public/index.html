@@ -1390,6 +1390,15 @@ const stackTotalLabels = {
 const fmtTHB = (v) => v === null || v === undefined ? '—' : '฿' + (v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(2));
 const pct = (v) => v === null || v === undefined ? '—' : (v * 100).toFixed(v < 0.1 ? 2 : 1) + '%';
 // Bare amount: the ฿ lives in the column header instead of every cell.
+const RANK_LABEL = { ABOVE_AVERAGE:'above', AVERAGE:'avg', BELOW_AVERAGE_35:'bottom 35%', BELOW_AVERAGE_20:'bottom 20%', BELOW_AVERAGE_10:'bottom 10%' };
+const RANK_CLASS = { ABOVE_AVERAGE:'green', AVERAGE:'grey', BELOW_AVERAGE_35:'warn', BELOW_AVERAGE_20:'warn', BELOW_AVERAGE_10:'warn' };
+const rankPills = (r) => {
+  if (!r) return '<span style="color:var(--faint);">—</span>';
+  const parts = [['quality','Quality'],['engagement','Engagement'],['conversion','Conversion rate']]
+    .filter(([k]) => r[k])
+    .map(([k,label]) => `<span class="pill ${RANK_CLASS[r[k]]||'grey'}" title="${label} ranking vs competing advertisers: ${esc(r[k])}">${label[0]}:${esc(RANK_LABEL[r[k]]||r[k])}</span>`);
+  return parts.length ? parts.join(' ') : '<span style="color:var(--faint);" title="Meta had too little delivery to rate this set">—</span>';
+};
 const fmtAmt = (v) => v === null || v === undefined ? '—' : (v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(2));
 function renderAudiences() {
   const d = S.audiences;
@@ -1429,7 +1438,8 @@ function renderAudiences() {
     costPerLpv: (a,b) => (a.costPerLpv===null)-(b.costPerLpv===null) || a.costPerLpv - b.costPerLpv,
     ctr: (a,b) => (a.ctr===null)-(b.ctr===null) || b.ctr - a.ctr,
     lpvRate: (a,b) => (a.lpvRate===null)-(b.lpvRate===null) || b.lpvRate - a.lpvRate,
-    keyEventRate: (a,b) => (a.keyEventRate==null)-(b.keyEventRate==null) || b.keyEventRate - a.keyEventRate,
+    costPerViewContent: (a,b) => (a.costPerViewContent==null)-(b.costPerViewContent==null) || a.costPerViewContent - b.costPerViewContent,
+    vcRate: (a,b) => (a.vcRate==null)-(b.vcRate==null) || b.vcRate - a.vcRate,
   };
   const list = [...d.audiences];
   if (S.audienceSort !== 'primary') list.sort(sorters[S.audienceSort] || sorters.primary);
@@ -1437,12 +1447,13 @@ function renderAudiences() {
   const kpiPill = (p) => `<span class="pill ${p.kpi==='lead'?'green':p.kpi==='message'?'violet':p.kpi==='purchase'?'warn':'grey'}" title="This audience is judged on its dominant objective: cost ${esc(p.label)}">${esc(p.label)}</span>`;
 
   $('viewRoot').innerHTML = `
-    <div class="grid g-5" style="margin-bottom:14px;">
+    <div class="grid g-3" style="margin-bottom:14px;">
       <div class="stat"><div class="lab">Audience sets</div><div class="val">${num(t.sets)}</div></div>
       <div class="stat"><div class="lab">Total spend</div><div class="val">${fmtTHB(t.spend)}</div></div>
       <div class="stat"><div class="lab">Impressions</div><div class="val">${num(t.impressions)}</div></div>
       <div class="stat"><div class="lab">Landing page views</div><div class="val">${num(t.lpv)}</div></div>
       <div class="stat"><div class="lab">Overall link CTR</div><div class="val">${pct(t.ctr)}</div></div>
+      <div class="stat"><div class="lab">ViewContent</div><div class="val">${num(t.viewContent)}</div></div>
     </div>
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
@@ -1457,7 +1468,8 @@ function renderAudiences() {
           <option value="cpm"${S.audienceSort==='cpm'?' selected':''}>CPM</option>
           <option value="ctr"${S.audienceSort==='ctr'?' selected':''}>Best link CTR</option>
           <option value="lpvRate"${S.audienceSort==='lpvRate'?' selected':''}>Best click→visit rate</option>
-          <option value="keyEventRate"${S.audienceSort==='keyEventRate'?' selected':''}>Best key events per visit</option>
+          <option value="costPerViewContent"${S.audienceSort==='costPerViewContent'?' selected':''}>Cheapest per ViewContent</option>
+          <option value="vcRate"${S.audienceSort==='vcRate'?' selected':''}>Best ViewContent per visit</option>
         </select>
       </div>
       <table><thead><tr>
@@ -1465,8 +1477,10 @@ function renderAudiences() {
         <th class="num" title="Link clicks ÷ impressions. Independent of budget, so it compares audiences fairly.">CTR</th>
         <th class="num">Clicks</th>
         <th class="num">LPV</th><th class="num">Leads</th><th class="num">Msgs</th>
-        <th class="num" title="Estimated: GA4 key events for this audience's campaigns, split by its share of landing page views. GA4 cannot see ad sets, so this is apportioned, not measured.">Key ev. est</th>
-        <th class="num" title="Key events ÷ landing page views. A benchmark rate rather than a volume — but note it reflects the campaigns this audience ran in, not the audience itself (GA4 cannot see ad sets).">KE/visit</th>
+        <th class="num" title="Meta pixel ViewContent: visitors who went deeper than the landing page. Measured per ad set.">VC</th>
+        <th class="num" title="Cost per ViewContent — the sharpest quality signal here, because it prices real content consumption rather than clicks.">฿/VC</th>
+        <th class="num" title="ViewContent ÷ landing page views: of the visits that arrived, how many went deeper.">VC/visit</th>
+        <th title="Meta's own percentile diagnostics against competing advertisers: quality · engagement · conversion rate. Blank where Meta had too little delivery to rate the set.">Meta rank</th>
         <th class="num">CPM ฿</th><th class="num">Cost/result ฿</th><th></th>
       </tr></thead><tbody>
       ${list.map((a,i)=>`
@@ -1480,8 +1494,10 @@ function renderAudiences() {
           <td class="num">${a.isCpas?'—':num(a.lpv)}</td>
           <td class="num">${a.leads?num(a.leads):'—'}</td>
           <td class="num">${a.messages?num(a.messages):'—'}</td>
-          <td class="num" style="color:var(--muted);">${a.keyEventsEst===null?'—':'~'+num(Math.round(a.keyEventsEst))}</td>
-          <td class="num">${a.keyEventRate===null||a.keyEventRate===undefined?'—':pct(a.keyEventRate)}</td>
+          <td class="num">${a.isCpas||a.primary.kpi==='message'?'<span style="color:var(--faint);" title="This audience was not buying site visits, so ViewContent is not the right measure for it">n/a</span>':a.vcSuspect?`<span class="pill warn" title="Sent ${num(a.lpv)} visits but recorded no ViewContent. Either the traffic is poor, or the pixel event is not configured on the destination page — worth checking before judging the audience.">check pixel</span>`:num(a.viewContent)}</td>
+          <td class="num strong">${a.isCpas||a.primary.kpi==='message'?'—':fmtAmt(a.costPerViewContent)}</td>
+          <td class="num">${a.isCpas||a.primary.kpi==='message'?'—':pct(a.vcRate)}</td>
+          <td style="white-space:nowrap;">${rankPills(a.rankings)}</td>
           <td class="num">${fmtAmt(a.cpm)}</td>
           <td class="num strong">${a.lowVolume?'<span class="pill warn" title="Under 1,000 impressions — too little delivery for a cost-per to mean anything">too small</span>':a.primary.cost===null?'<span title="Spent money but the primary action never fired">—⚠</span>':fmtAmt(a.primary.cost)} ${a.lowVolume?'':kpiPill(a.primary)}</td>
           <td style="color:var(--faint);font-size:11px;">${S.audienceOpen===i?'▾':'▸'}</td>
@@ -1492,19 +1508,16 @@ function renderAudiences() {
             ${a.isCpas?'':` · click→visit rate: <b>${pct(a.lpvRate)}</b> <span style="color:var(--faint);">(landing page views ÷ link clicks — low means accidental clicks, a slow page or a broken link)</span>`}
             · CPC: <b>${fmtTHB(a.cpc)}</b>
             · frequency: <b${a.frequency&&a.frequency>=3?' style="color:#D97B1F;"':''}>${a.frequency===null||a.frequency===undefined?'—':a.frequency.toFixed(2)}</b> <span style="color:var(--faint);">(impressions ÷ reach; above 3 means the same people are seeing it repeatedly)</span>
-            ${a.costPerKeyEventEst?` · est. cost per key event: <b>${fmtTHB(a.costPerKeyEventEst)}</b>`:''}
             ${a.isCpas?` · CPAS: ${num(a.purchases)} purchase${a.purchases===1?'':'s'}, ${fmtTHB(a.revenue)} revenue${a.roas?`, ROAS ${a.roas.toFixed(2)}×`:''}, ${num(a.atc)} add-to-cart`:''}
           </div>
-          <table style="margin:0;"><thead><tr><th>Ad account</th><th>Campaign</th><th class="num">Spend ฿</th><th class="num">Impr</th><th class="num">CTR</th><th class="num">Clicks</th><th class="num">LPV</th><th class="num">Leads</th><th class="num">Msgs</th><th class="num" title="Every key event GA4 recorded for this whole campaign code — all audiences combined">GA4 key ev. (campaign)</th><th class="num" title="This audience's apportioned share">→ this audience</th>${a.isCpas?'<th class="num">Purch</th><th class="num">Revenue ฿</th>':''}</tr></thead><tbody>
+          <table style="margin:0;"><thead><tr><th>Ad account</th><th>Campaign</th><th class="num">Spend ฿</th><th class="num">Impr</th><th class="num">CTR</th><th class="num">Clicks</th><th class="num">LPV</th><th class="num">Leads</th><th class="num">Msgs</th>${a.isCpas?'<th class="num">Purch</th><th class="num">Revenue ฿</th>':''}</tr></thead><tbody>
           ${a.campaigns.map(c=>`<tr>
             <td style="color:var(--muted);white-space:nowrap;">${esc(c.account||'—')}</td>
-            <td class="trunc" title="${esc(c.campaign)}">${esc(c.campaign)}${c.code?'':' <span class="pill grey" title="No YYMMDD-NN code in this campaign name, so it cannot be matched to GA4">no code</span>'}</td>
+            <td class="trunc" title="${esc(c.campaign)}">${esc(c.campaign)}</td>
             <td class="num">${fmtAmt(c.spend)}</td><td class="num">${num(c.impressions)}</td>
             <td class="num">${pct(c.impressions>0?c.clicks/c.impressions:null)}</td>
             <td class="num">${num(c.clicks)}</td><td class="num">${a.isCpas?'—':num(c.lpv)}</td>
             <td class="num">${c.leads?num(c.leads):'—'}</td><td class="num">${c.messages?num(c.messages):'—'}</td>
-            <td class="num">${c.ga4KeyEvents===undefined?'—':num(c.ga4KeyEvents)}</td>
-            <td class="num" style="color:var(--muted);">${c.keyEventsEst===undefined?'—':'~'+num(Math.round(c.keyEventsEst))+' <span style="font-size:10px;">('+pct(c.sharePct)+')</span>'}</td>
             ${a.isCpas?`<td class="num">${c.purchases?num(c.purchases):'—'}</td><td class="num">${c.revenue?fmtAmt(c.revenue):'—'}</td>`:''}</tr>`).join('')}
           </tbody></table>
         </td></tr>`:''}`).join('')}

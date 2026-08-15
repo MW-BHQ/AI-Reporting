@@ -2328,11 +2328,27 @@ function normAudienceName(name) {
  * catalog_segment_* fields instead, which only return numbers for the CPAS
  * account (null everywhere else) — verified 2026-08-14.
  */
-function classifyObjective(campaignName, isCpasAccount) {
+/**
+ * Objective class decides which cost-per is the audience's real KPI.
+ *
+ * Campaign-name tokens come first because they state intent. Agency flights
+ * often carry no useful token, though, so we fall back to what the ad set
+ * actually produced: a set that generated conversations and no site visits is
+ * a message campaign whatever its name says. Without that fallback those sets
+ * were judged on cost per landing page view, which they were never buying.
+ */
+function classifyObjective(campaignName, isCpasAccount, row) {
   if (isCpasAccount) return "ecommerce";
   const c = String(campaignName || "").toLowerCase();
   if (c.includes("lead")) return "lead";
-  if (c.includes("message") || c.includes("whatsapp")) return "message";
+  if (c.includes("message") || c.includes("whatsapp") || c.includes("msg")) return "message";
+  if (row) {
+    const leads = n(row.actions_lead);
+    const msgs = n(row.actions_onsite_conversion_messaging_conversation_started_7d);
+    const lpv = n(row.actions_landing_page_view);
+    if (msgs > 0 && msgs >= leads && lpv < msgs) return "message";
+    if (leads > 0 && leads > msgs && lpv < leads) return "lead";
+  }
   return "traffic";
 }
 
@@ -2354,7 +2370,13 @@ function codeFromCampaignName(name) {
 async function buildAudiences(from, to) {
   const BASE_FIELDS = ["adset_id", "adset_name", "campaign", "account_name", "spend",
     "impressions", "reach", "actions_link_click", "actions_landing_page_view",
-    "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d"];
+    "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d",
+    // Quality layer, all measured per ad set by Meta (no modelling):
+    // ViewContent is the pixel event fired when a visitor actually views
+    // content, i.e. a level deeper than landing_page_view. The three rankings
+    // are Meta's own percentile diagnostics against competing advertisers.
+    "actions_offsite_conversion_fb_pixel_view_content", "actions_omni_view_content",
+    "quality_ranking", "engagement_rate_ranking", "conversion_rate_ranking"];
   const CATALOG_FIELDS = ["catalog_segment_actions_omni_purchase",
     "catalog_segment_value_purchase", "catalog_segment_actions_omni_add_to_cart"];
 
@@ -2451,7 +2473,8 @@ async function buildAudiences(from, to) {
     if (!name) continue;
     if (!map.has(name)) map.set(name, {
       name, spend: 0, impressions: 0, reach: 0, clicks: 0, lpv: 0, leads: 0, messages: 0,
-      purchases: 0, revenue: 0, atc: 0, accounts: new Set(),
+      purchases: 0, revenue: 0, atc: 0, viewContent: 0, accounts: new Set(),
+      rankSpend: { quality: new Map(), engagement: new Map(), conversion: new Map() },
       campaigns: new Map(), spendByClass: { lead: 0, message: 0, traffic: 0, ecommerce: 0 },
     });
     const a = map.get(name);
@@ -2468,8 +2491,23 @@ async function buildAudiences(from, to) {
     a.leads += n(r.actions_lead);
     a.messages += n(r.actions_onsite_conversion_messaging_conversation_started_7d);
     a.purchases += purchases; a.revenue += revenue; a.atc += atc;
+    // Take whichever ViewContent field reports more: `omni` includes app plus
+    // web while the offsite pixel field is web only, and they disagree on some
+    // CPAS rows.
+    a.viewContent += Math.max(n(r.actions_offsite_conversion_fb_pixel_view_content),
+                              n(r.actions_omni_view_content));
+    // Rankings are categorical per ad set, so weight each value by the spend
+    // behind it and report the heaviest — one cheap ad set shouldn't set the
+    // rating for an audience that ran ฿50k elsewhere. UNKNOWN means Meta had
+    // too little delivery to rate it, so it is never counted as a rating.
+    for (const [key, field] of [["quality", "quality_ranking"],
+      ["engagement", "engagement_rate_ranking"], ["conversion", "conversion_rate_ranking"]]) {
+      const v = String(r[field] || "UNKNOWN");
+      if (v === "UNKNOWN" || v === "null") continue;
+      a.rankSpend[key].set(v, (a.rankSpend[key].get(v) || 0) + spend);
+    }
     if (r.account_name) a.accounts.add(String(r.account_name));
-    a.spendByClass[classifyObjective(r.campaign, isCpasAccount)] += spend;
+    a.spendByClass[classifyObjective(r.campaign, isCpasAccount, r)] += spend;
     const cname = String(r.campaign || "(unnamed)");
     if (!a.campaigns.has(cname)) a.campaigns.set(cname, {
       campaign: cname, account: r.account_name || null, code: codeFromCampaignName(cname),
@@ -2484,6 +2522,7 @@ async function buildAudiences(from, to) {
   }
 
   const per = (cost, count) => (count > 0 ? cost / count : null);
+  const topRank = (m) => (m.size ? [...m.entries()].sort((x, y) => y[1] - x[1])[0][0] : null);
   const rate = (num_, den) => (den > 0 ? num_ / den : null);
   const audiences = [...map.values()].map((a) => {
     const cls = Object.entries(a.spendByClass).sort((x, y) => y[1] - x[1])[0][0];
@@ -2500,6 +2539,19 @@ async function buildAudiences(from, to) {
       lpv: a.lpv, leads: a.leads, messages: a.messages,
       purchases: a.purchases, revenue: a.revenue, atc: a.atc,
       isCpas: cls === "ecommerce",
+      viewContent: a.viewContent,
+      costPerViewContent: per(a.spend, a.viewContent),
+      // Of the visits that landed, how many went deeper into the site.
+      vcRate: rate(a.viewContent, a.lpv),
+      // A set that sent real visits but recorded no ViewContent is either poor
+      // traffic or landing on a page where the event was never configured —
+      // the UI says both, because we cannot tell them apart from here.
+      vcSuspect: a.lpv >= 100 && a.viewContent === 0,
+      rankings: {
+        quality: topRank(a.rankSpend.quality),
+        engagement: topRank(a.rankSpend.engagement),
+        conversion: topRank(a.rankSpend.conversion),
+      },
       cpm: a.impressions > 0 ? (a.spend / a.impressions) * 1000 : null,
       cpc: per(a.spend, a.clicks),
       // Link CTR, not all-clicks CTR: the `clicks` field counts every click on
@@ -2519,45 +2571,6 @@ async function buildAudiences(from, to) {
       roas: a.spend > 0 && a.revenue > 0 ? a.revenue / a.spend : null,
       lowVolume: a.impressions < MIN_RANK_IMPRESSIONS,
       primary,
-      ...(() => {
-        // Apportion each campaign's GA4 key events to this audience by its
-        // share of that campaign's landing page views (spend share for CPAS,
-        // where LPV is not the right measure). Estimated, never ranked on.
-        if (!ga4ByCode) return { keyEventsEst: null, ga4Unavailable: true };
-        let est = 0, matched = 0;
-        for (const c of a.campaigns.values()) {
-          const g = c.code ? ga4ByCode.get(c.code) : null;
-          if (!g || !g.keyEvents) continue;
-          const ct = campTotals.get(c.campaign) || { lpv: 0, spend: 0 };
-          const useLpv = !(cls === "ecommerce") && ct.lpv > 0;
-          const share = useLpv ? (ct.lpv > 0 ? c.lpv / ct.lpv : 0)
-                               : (ct.spend > 0 ? c.spend / ct.spend : 0);
-          est += g.keyEvents * share;
-          matched++;
-          c.ga4KeyEvents = g.keyEvents;
-          c.ga4Visits = g.visits;
-          c.keyEventsEst = g.keyEvents * share;
-          c.sharePct = share;
-        }
-        /**
-         * Key events per visit, for benchmarking rather than raw volume.
-         *
-         * Honest caveat, stated in the UI: because the apportioning divides a
-         * campaign's key events by LPV share and this rate then divides by the
-         * audience's own LPV, the result equals the CAMPAIGN's key-events-per-
-         * visit rate, blended across whichever campaigns the audience ran in.
-         * It tells you whether an audience was used on well-converting
-         * campaigns; it cannot isolate the audience's own conversion quality,
-         * because GA4 never sees ad sets. CTR and click→visit are the
-         * genuinely per-audience quality signals.
-         */
-        return {
-          keyEventsEst: matched ? est : null,
-          keyEventCampaignsMatched: matched,
-          keyEventRate: matched && est > 0 && a.lpv > 0 ? est / a.lpv : null,
-          costPerKeyEventEst: matched && est > 0 ? a.spend / est : null,
-        };
-      })(),
     campaigns: [...a.campaigns.values()].sort((x, y) => y.spend - x.spend),
     };
   });
@@ -2575,11 +2588,10 @@ async function buildAudiences(from, to) {
     sets: t.sets + 1, spend: t.spend + a.spend, impressions: t.impressions + a.impressions,
     clicks: t.clicks + a.clicks, lpv: t.lpv + a.lpv, leads: t.leads + a.leads,
     messages: t.messages + a.messages, purchases: t.purchases + a.purchases, revenue: t.revenue + a.revenue,
-  }), { sets: 0, spend: 0, impressions: 0, clicks: 0, lpv: 0, leads: 0, messages: 0, purchases: 0, revenue: 0 });
+    viewContent: t.viewContent + a.viewContent,
+  }), { sets: 0, spend: 0, impressions: 0, clicks: 0, lpv: 0, leads: 0, messages: 0, purchases: 0, revenue: 0, viewContent: 0 });
   totals.ctr = rate(totals.clicks, totals.impressions);
-  totals.keyEvents = ga4ByCode
-    ? [...ga4ByCode.values()].reduce((t, g) => t + g.keyEvents, 0) : null;
-  return { audiences, totals, ga4Available: ga4ByCode !== null, catalogAvailable };
+  return { audiences, totals, catalogAvailable };
 }
 
 app.get("/api/audiences", requireTab("audiences"), async (req, res) => {
