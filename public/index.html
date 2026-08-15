@@ -1393,11 +1393,20 @@ const stackTotalLabels = {
 const fmtTHB = (v) => v === null || v === undefined ? '—' : '฿' + (v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(2));
 const pct = (v) => v === null || v === undefined ? '—' : (v * 100).toFixed(v < 0.1 ? 2 : 1) + '%';
 // Bare amount: the ฿ lives in the column header instead of every cell.
+// Short label for the narrow Obj column, plus the full Meta goal name for the
+// hover, so the column stays tight without hiding what it actually means.
 const GOAL_LABEL = {
-  LANDING_PAGE_VIEWS:'Landing page views', LINK_CLICKS:'Link clicks', LEAD_GENERATION:'Leads',
-  QUALITY_LEAD:'Quality leads', CONVERSATIONS:'Conversations', OFFSITE_CONVERSIONS:'Sales (catalog)',
-  POST_ENGAGEMENT:'Post engagement', PAGE_LIKES:'Page likes', THRUPLAY:'Video thruplay',
-  REACH:'Reach', IMPRESSIONS:'Impressions', AD_RECALL_LIFT:'Ad recall',
+  LANDING_PAGE_VIEWS:'Traffic', LINK_CLICKS:'Clicks', LEAD_GENERATION:'Leads',
+  QUALITY_LEAD:'Leads', CONVERSATIONS:'Message', OFFSITE_CONVERSIONS:'Sales',
+  POST_ENGAGEMENT:'Engage', PAGE_LIKES:'Likes', THRUPLAY:'Video',
+  REACH:'Reach', IMPRESSIONS:'Reach', AD_RECALL_LIFT:'Recall',
+};
+const GOAL_FULL = {
+  LANDING_PAGE_VIEWS:'Landing page views', LINK_CLICKS:'Link clicks', LEAD_GENERATION:'Lead generation',
+  QUALITY_LEAD:'Quality leads', CONVERSATIONS:'Conversations (WhatsApp/Messenger)',
+  OFFSITE_CONVERSIONS:'Offsite conversions (catalog sales)', POST_ENGAGEMENT:'Post engagement',
+  PAGE_LIKES:'Page likes', THRUPLAY:'Video thruplay', REACH:'Reach', IMPRESSIONS:'Impressions',
+  AD_RECALL_LIFT:'Ad recall lift',
 };
 const RANK_LABEL = { ABOVE_AVERAGE:'above', AVERAGE:'avg', BELOW_AVERAGE_35:'bottom 35%', BELOW_AVERAGE_20:'bottom 20%', BELOW_AVERAGE_10:'bottom 10%' };
 const RANK_CLASS = { ABOVE_AVERAGE:'green', AVERAGE:'grey', BELOW_AVERAGE_35:'warn', BELOW_AVERAGE_20:'warn', BELOW_AVERAGE_10:'warn' };
@@ -1478,32 +1487,30 @@ function renderAudiences() {
       </div>
       <table><thead><tr>
         <th>Audience set</th>
-        <th title="What Meta was told to optimise this ad set for. Taken from the ad set's optimization goal, which is what actually drove delivery — not the campaign name or the campaign objective, which can disagree with it.">Buying<span class="ihint">i</span></th>
+        <th title="The ad set's Meta optimisation goal — what it was actually told to buy. Cost/result is priced on this: a Leads set is costed per lead, a Message set per conversation, a Reach set on CPM. Read from Meta's optimization goal, not the campaign name or campaign objective, which can disagree with it.">Obj<span class="ihint">i</span></th>
         <th class="num">Uses</th><th class="num">Spend ฿</th><th class="num">Impr</th>
         <th class="num" title="Link clicks ÷ impressions. Independent of budget, so it compares audiences fairly.">CTR</th>
         <th class="num">Clicks</th>
-        <th class="num">LPV</th><th class="num">Leads</th><th class="num">Msgs</th>
+        <th class="num">LPV</th>
         <th title="Meta's own percentile diagnostics, each comparing this ad set against other advertisers competing for the same audience. Q = Quality: how your ad's perceived quality compares. E = Engagement rate: how likely people are to click, react, comment or share. C = Conversion rate: how likely people are to complete the ad set's optimisation goal after clicking. Blank where Meta had too little delivery to rate it.">Meta rank<span class="ihint">i</span></th>
         <th class="num">CPM ฿</th><th class="num">Cost/result ฿</th><th></th>
       </tr></thead><tbody>
       ${list.map((a,i)=>`
         <tr class="aud-row" data-i="${i}" style="cursor:pointer;">
           <td class="strong trunc" title="${esc(a.name)}">${esc(a.name)}</td>
-          <td style="white-space:nowrap;font-size:11.5px;color:var(--muted);" title="${esc(a.objective||'unknown')} — this is the ad set's Meta optimization goal and decides which cost-per is used for it">${esc(GOAL_LABEL[a.objective]||a.objective||'—')}</td>
+          <td style="white-space:nowrap;font-size:11.5px;color:var(--muted);" title="${a.objective?esc(GOAL_FULL[a.objective]||a.objective)+' — Meta optimisation goal; Cost/result is priced on it':'Meta returned no optimisation goal for this set, so it is priced per landing page view by default'}">${esc(GOAL_LABEL[a.objective]||'—')}</td>
           <td class="num">${num(a.uses)}</td>
           <td class="num">${fmtAmt(a.spend)}</td>
           <td class="num">${num(a.impressions)}</td>
           <td class="num">${pct(a.ctr)}</td>
           <td class="num">${num(a.clicks)}</td>
           <td class="num">${a.isCpas?'—':num(a.lpv)}</td>
-          <td class="num">${a.leads?num(a.leads):'—'}</td>
-          <td class="num">${a.messages?num(a.messages):'—'}</td>
           <td style="white-space:nowrap;">${rankPills(a.rankings)}</td>
           <td class="num">${fmtAmt(a.cpm)}</td>
           <td class="num strong">${a.lowVolume?'<span class="pill warn" title="Under 1,000 impressions — too little delivery for a cost-per to mean anything">too small</span>':a.primary.cost===null?'<span title="Spent money but the primary action never fired">—⚠</span>':fmtAmt(a.primary.cost)} ${a.lowVolume?'':kpiPill(a.primary)}</td>
           <td style="color:var(--faint);font-size:11px;">${S.audienceOpen===i?'▾':'▸'}</td>
         </tr>
-        ${S.audienceOpen===i?`<tr><td colspan="14" style="background:var(--glass-2);padding:10px 14px;">
+        ${S.audienceOpen===i?`<tr><td colspan="12" style="background:var(--glass-2);padding:10px 14px;">
           <div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.9;">
             Ad account${a.accounts.length>1?'s':''}: <b>${a.accounts.length?a.accounts.map(esc).join(' · '):'unknown'}</b>
             ${a.isCpas?'':` · click→visit rate: <b>${pct(a.lpvRate)}</b>`}

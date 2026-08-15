@@ -44,6 +44,10 @@ function windsorRows(connector, fields) {
     else if (name === "post_message") row.post_message = "See https://bkhos.co/wKBkLa for details";
     else if (name === "permalink_url") row.permalink_url = "https://facebook.com/p/123";
     else if (name === "post_id") row.post_id = "123_456";
+    // CONVERSATIONS with campaign_objective OUTCOME_TRAFFIC reproduces the real
+    // WhatsApp shape, where the campaign field disagrees with the ad set goal —
+    // so the smoke test proves the ad set goal is the one that wins.
+    else if (name === "adsset_optimization_goal") row.adsset_optimization_goal = "CONVERSATIONS";
     else if (name === "review_comment") row.review_comment = "Great service";
     else if (name === "review_reviewer") row.review_reviewer = "A. Patient";
     else if (name === "review_reply_comment") row.review_reply_comment = "";

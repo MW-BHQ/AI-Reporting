@@ -2388,7 +2388,10 @@ async function buildAudiences(from, to) {
     "impressions", "reach", "actions_link_click", "actions_landing_page_view",
     "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d", "actions_post_engagement",
     // Meta's own percentile diagnostics against competing advertisers.
-    "quality_ranking", "engagement_rate_ranking", "conversion_rate_ranking"];
+    "quality_ranking", "engagement_rate_ranking", "conversion_rate_ranking",
+    // What the ad set was told to buy — this decides its KPI. Do not remove:
+    // without these every row silently falls back to "traffic"/per LPV.
+    "adsset_optimization_goal", "campaign_objective"];
   const CATALOG_FIELDS = ["catalog_segment_actions_omni_purchase",
     "catalog_segment_value_purchase", "catalog_segment_actions_omni_add_to_cart"];
 
