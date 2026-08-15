@@ -193,6 +193,18 @@
     border-radius:50%;background:rgba(140,155,190,.2);color:var(--muted);font-size:9px;font-style:italic;
     font-weight:700;cursor:help;vertical-align:middle;}
   .ihint:hover{background:var(--violet);color:#fff;}
+  /* Q/E/C: header letters and the dot cells share one fixed column width, so
+     each dot sits directly under its letter. */
+  .qec-head,.qec{display:inline-flex;align-items:center;}
+  .qec-head b{width:38px;text-align:center;font-weight:600;color:var(--muted);}
+  .qec-cell{width:38px;display:inline-flex;align-items:center;justify-content:center;gap:3px;
+    color:var(--faint);font-size:10.5px;cursor:help;}
+  .qec-cell em{font-style:normal;color:#D97B1F;font-weight:600;}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none;}
+  .dot.d-good{background:#2E9E6F;}
+  .dot.d-mid{background:#A9B4CE;}
+  .dot.d-warn{background:#E8A33D;}
+  .dot.d-bad{background:#D9534F;}
   /* Floating tooltip: appended to <body> so a table's overflow can never clip
      it, and shown instantly instead of waiting for the browser's title delay. */
   #tip{position:fixed;z-index:9999;max-width:340px;padding:9px 11px;border-radius:9px;
@@ -1456,12 +1468,25 @@ const GOAL_FULL = {
 };
 const RANK_LABEL = { ABOVE_AVERAGE:'above', AVERAGE:'avg', BELOW_AVERAGE_35:'bottom 35%', BELOW_AVERAGE_20:'bottom 20%', BELOW_AVERAGE_10:'bottom 10%' };
 const RANK_CLASS = { ABOVE_AVERAGE:'green', AVERAGE:'grey', BELOW_AVERAGE_35:'warn', BELOW_AVERAGE_20:'warn', BELOW_AVERAGE_10:'warn' };
-const rankPills = (r) => {
-  if (!r) return '<span style="color:var(--faint);">—</span>';
-  const parts = [['quality','Quality'],['engagement','Engagement'],['conversion','Conversion rate']]
-    .filter(([k]) => r[k])
-    .map(([k,label]) => `<span class="pill ${RANK_CLASS[r[k]]||'grey'}" title="${label} ranking vs competing advertisers: ${esc(r[k])}">${label[0]}:${esc(RANK_LABEL[r[k]]||r[k])}</span>`);
-  return parts.length ? parts.join(' ') : '<span style="color:var(--faint);" title="Meta had too little delivery to rate this set">—</span>';
+// Compact Q/E/C readout: a coloured dot per metric, aligned under the header
+// letters. Below-average carries its band figure, since "bottom 20%" is a
+// materially worse place to sit than "bottom 35%".
+const RANK_DOT = {
+  ABOVE_AVERAGE:    { cls:'d-good', text:'',    word:'above average' },
+  AVERAGE:          { cls:'d-mid',  text:'',    word:'average' },
+  BELOW_AVERAGE_35: { cls:'d-warn', text:'35%', word:'bottom 35%' },
+  BELOW_AVERAGE_20: { cls:'d-warn', text:'20%', word:'bottom 20%' },
+  BELOW_AVERAGE_10: { cls:'d-bad',  text:'10%', word:'bottom 10%' },
+};
+const rankDots = (r) => {
+  const cells = [['quality','Quality'],['engagement','Engagement rate'],['conversion','Conversion rate']]
+    .map(([k,label]) => {
+      const v = r && r[k];
+      const d = v && RANK_DOT[v];
+      if (!d) return `<span class="qec-cell" data-tip="${label}: Meta had too little delivery to rate this set">—</span>`;
+      return `<span class="qec-cell" data-tip="${label}: ${d.word}"><i class="dot ${d.cls}"></i>${d.text?`<em>${d.text}</em>`:''}</span>`;
+    });
+  return `<span class="qec">${cells.join('')}</span>`;
 };
 const fmtAmt = (v) => v === null || v === undefined ? '—' : (v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(2));
 function renderAudiences() {
@@ -1538,13 +1563,13 @@ function renderAudiences() {
         <th class="num"><span data-tip="Link clicks ÷ impressions. Independent of budget, so it compares audiences fairly.">CTR</span></th>
         <th class="num">Clicks</th>
         <th class="num">LPV</th>
-        <th><span data-tip="Meta's percentile diagnostics, each comparing this ad set against other advertisers competing for the same audience. Q = Quality: how your ad's perceived quality compares. E = Engagement rate: how likely people are to click, react, comment or share. C = Conversion rate: how likely people are to complete the ad set's optimisation goal after clicking. Blank where Meta had too little delivery to rate it.">Meta rank<span class="ihint">i</span></span></th>
+        <th><span data-tip="Meta's percentile diagnostics, each comparing this ad set against other advertisers competing for the same audience. Q = Quality: how your ad's perceived quality compares. E = Engagement rate: how likely people are to click, react, comment or share. C = Conversion rate: how likely people are to complete the ad set's optimisation goal after clicking. Green dot = above average. Grey dot = average. Amber dot with a figure = below average, and the figure is the bottom band Meta places it in, so 35% means the bottom 35% of competing ads and 20% is worse than 35%. A dash means Meta had too little delivery to rate it."><span class="qec-head"><b>Q</b><b>E</b><b>C</b></span><span class="ihint">i</span></span></th>
         <th class="num">CPM ฿</th><th class="num">Cost/result ฿</th><th></th>
       </tr></thead><tbody>
       ${list.map((a,i)=>`
         <tr class="aud-row" data-i="${i}" style="cursor:pointer;">
           <td class="strong trunc" title="${esc(a.name)}">${esc(a.name)}</td>
-          <td style="white-space:nowrap;font-size:11.5px;color:var(--muted);text-align:center;">
+          <td style="white-space:nowrap;font-size:11.5px;color:var(--muted);text-align:left;">
             <span data-tip="${a.objective?esc(GOAL_FULL[a.objective]||a.objective)+' — Meta optimisation goal; Cost/result is priced on it.':'Meta returned no optimisation goal for this set, so it is priced per landing page view by default.'}${a.objectiveMix?' Used across '+a.objectiveMix.length+' goals: '+a.objectiveMix.map(m=>(GOAL_FULL[m.goal]||m.goal)+' '+Math.round(m.share*100)+'% of spend').join(', ')+'. The row follows the goal with the most spend; open it to see each campaign.':''}">${esc(GOAL_LABEL[a.objective]||'—')}${a.objectiveMix?` <span class="pill warn" style="font-size:9px;padding:1px 5px;">mixed</span>`:''}</span>
           </td>
           <td class="num">${num(a.uses)}</td>
@@ -1553,7 +1578,7 @@ function renderAudiences() {
           <td class="num">${pct(a.ctr)}</td>
           <td class="num">${num(a.clicks)}</td>
           <td class="num">${a.isCpas?'—':num(a.lpv)}</td>
-          <td style="white-space:nowrap;">${rankPills(a.rankings)}</td>
+          <td style="white-space:nowrap;">${rankDots(a.rankings)}</td>
           <td class="num">${fmtAmt(a.cpm)}</td>
           <td class="num strong">${a.lowVolume?'<span class="pill warn" title="Under 1,000 impressions — too little delivery for a cost-per to mean anything">too small</span>':a.primary.cost===null?'<span title="Spent money but the primary action never fired">—⚠</span>':fmtAmt(a.primary.cost)} ${a.lowVolume?'':kpiPill(a.primary)}</td>
           <td style="color:var(--faint);font-size:11px;">${S.audienceOpen===i?'▾':'▸'}</td>
@@ -1566,7 +1591,7 @@ function renderAudiences() {
             · frequency: <b${a.frequency&&a.frequency>=3?' style="color:#D97B1F;"':''}>${a.frequency===null||a.frequency===undefined?'—':a.frequency.toFixed(2)}</b> <span style="color:var(--faint);">(above 3 means quite repeatedly)</span>
             ${a.isCpas?` · CPAS: ${num(a.purchases)} purchase${a.purchases===1?'':'s'}, ${fmtTHB(a.revenue)} revenue${a.roas?`, ROAS ${a.roas.toFixed(2)}×`:''}, ${num(a.atc)} add-to-cart`:''}
           </div>
-          <table style="margin:0;"><thead><tr><th>Ad account</th><th>Campaign</th><th>Obj</th><th class="num">Spend ฿</th><th class="num">Impr</th><th class="num">CTR</th><th class="num">Clicks</th><th class="num">LPV</th><th class="num">Leads</th><th class="num">Msgs</th>${a.isCpas?'<th class="num">Purch</th><th class="num">Revenue ฿</th>':''}</tr></thead><tbody>
+          <table style="margin:0;"><thead><tr><th>Ad account</th><th>Campaign</th><th>Obj</th><th class="num">Spend ฿</th><th class="num">Impr</th><th class="num">CTR</th><th class="num">Clicks</th><th class="num">LPV</th><th class="num">Leads</th><th class="num">Msgs</th><th class="num">Cost/result ฿</th>${a.isCpas?'<th class="num">Purch</th><th class="num">Revenue ฿</th>':''}</tr></thead><tbody>
           ${a.campaigns.map(c=>`<tr>
             <td style="color:var(--muted);white-space:nowrap;">${esc(c.account||'—')}</td>
             <td class="trunc" title="${esc(c.campaign)}">${esc(c.campaign)}</td>
@@ -1575,6 +1600,7 @@ function renderAudiences() {
             <td class="num">${pct(c.impressions>0?c.clicks/c.impressions:null)}</td>
             <td class="num">${num(c.clicks)}</td><td class="num">${a.isCpas?'—':num(c.lpv)}</td>
             <td class="num">${c.leads?num(c.leads):'—'}</td><td class="num">${c.messages?num(c.messages):'—'}</td>
+            <td class="num strong">${c.costPerResult==null?'—':fmtAmt(c.costPerResult)} <span style="color:var(--faint);font-size:10px;">${esc(c.resultLabel||'')}</span></td>
             ${a.isCpas?`<td class="num">${c.purchases?num(c.purchases):'—'}</td><td class="num">${c.revenue?fmtAmt(c.revenue):'—'}</td>`:''}</tr>`).join('')}
           </tbody></table>
         </td></tr>`:''}`).join('')}

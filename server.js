@@ -2528,7 +2528,7 @@ async function buildAudiences(from, to) {
     if (!a.campaigns.has(cname)) a.campaigns.set(cname, {
       campaign: cname, account: r.account_name || null, code: codeFromCampaignName(cname),
       goals: new Map(),
-      spend: 0, impressions: 0, clicks: 0, lpv: 0, leads: 0, messages: 0, purchases: 0, revenue: 0,
+      spend: 0, impressions: 0, clicks: 0, lpv: 0, leads: 0, messages: 0, purchases: 0, revenue: 0, engagements: 0,
     });
     const c = a.campaigns.get(cname);
     if (!c.account && r.account_name) c.account = String(r.account_name);
@@ -2539,7 +2539,7 @@ async function buildAudiences(from, to) {
     c.spend += spend; c.impressions += n(r.impressions); c.clicks += n(r.actions_link_click);
     c.lpv += n(r.actions_landing_page_view); c.leads += n(r.actions_lead);
     c.messages += n(r.actions_onsite_conversion_messaging_conversation_started_7d);
-    c.purchases += purchases; c.revenue += revenue;
+    c.purchases += purchases; c.revenue += revenue; c.engagements += n(r.actions_post_engagement);
   }
 
   const per = (cost, count) => (count > 0 ? cost / count : null);
@@ -2610,7 +2610,21 @@ async function buildAudiences(from, to) {
       lowVolume: a.impressions < MIN_RANK_IMPRESSIONS,
       primary,
     campaigns: [...a.campaigns.values()]
-      .map((c) => ({ ...c, goal: topRank(c.goals), goals: undefined }))
+      .map((c) => {
+        // Each campaign is priced on ITS OWN goal, not the audience's dominant
+        // one — that is the whole point of showing the split for a mixed set.
+        const goal = topRank(c.goals);
+        const k = GOAL_CLASS[String(goal || "").toUpperCase()] || "traffic";
+        const cp =
+          k === "lead"       ? { label: "per lead",  cost: per(c.spend, c.leads) } :
+          k === "message"    ? { label: "per msg",   cost: per(c.spend, c.messages) } :
+          k === "ecommerce"  ? { label: "per purch", cost: per(c.spend, c.purchases) } :
+          k === "clicks"     ? { label: "per click", cost: per(c.spend, c.clicks) } :
+          k === "engagement" ? { label: "per engmt", cost: per(c.spend, c.engagements) } :
+          k === "awareness"  ? { label: "CPM",       cost: c.impressions > 0 ? (c.spend / c.impressions) * 1000 : null } :
+                               { label: "per LPV",   cost: per(c.spend, c.lpv) };
+        return { ...c, goal, goals: undefined, costPerResult: cp.cost, resultLabel: cp.label };
+      })
       .sort((x, y) => y.spend - x.spend),
     };
   });
