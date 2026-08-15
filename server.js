@@ -222,6 +222,7 @@ const TABS = [
   { id: "audit",     label: "Tagging audit" },
   { id: "topics",    label: "Topic Explorer" },
   { id: "audiences", label: "Audiences" },
+  { id: "ecom",      label: "E-commerce" },
   { id: "users",     label: "Users", adminOnly: true },
 ];
 const TAB_IDS = TABS.filter((t) => !t.adminOnly).map((t) => t.id);
@@ -1383,6 +1384,10 @@ const GOAL_DEFS = {
  * TTL — correct, just re-computed after each cold start.
  */
 const BENCH_BUCKET = process.env.BENCHMARK_BUCKET || process.env.ACCESS_BUCKET || "";
+// The normalised e-commerce sheet. Carries no customer PII — names, phones and
+// emails are replaced with irreversible keys before they ever reach it.
+const ECOM_SHEET_ID = process.env.ECOM_SHEET_ID || "";
+const ECOM_TAB = process.env.ECOM_TAB || "Orders";
 
 async function gcsRead(objectName, bucket = BENCH_BUCKET) {
   if (!bucket) return null;
@@ -2664,6 +2669,148 @@ app.get("/api/audiences", requireTab("audiences"), async (req, res) => {
   } catch (err) {
     logJson("ERROR", "audiences_failed", { error: String(err.message || err) });
     res.status(500).json({ error: err.message || "Audiences failed" });
+  }
+});
+
+// ------------------------------------------------------------ /api/ecommerce
+
+/**
+ * Reads the normalised Orders tab from Google Sheets using the Cloud Run
+ * service account. The sheet must be shared with that account as a Viewer and
+ * the Sheets API enabled on the project.
+ */
+async function fetchEcomRows() {
+  if (!ECOM_SHEET_ID) throw new Error("ECOM_SHEET_ID is not set");
+  const token = await gcpAccessToken();
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(ECOM_SHEET_ID)}`
+    + `/values/${encodeURIComponent(ECOM_TAB)}?majorDimension=ROWS`;
+  const r = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+  if (!r.ok) {
+    const body = (await r.text()).slice(0, 300);
+    throw new Error(`sheets HTTP ${r.status} ${body}`);
+  }
+  const j = await r.json();
+  const values = j.values || [];
+  if (values.length < 2) return [];
+  // Columns are resolved by header name, never by position: the normaliser has
+  // changed its column count before, and a positional read would silently
+  // return the wrong field rather than fail.
+  const head = values[0].map((h) => String(h || "").trim());
+  const at = (name) => head.indexOf(name);
+  const need = ["purchase_date", "channel", "price", "order_id"];
+  const missing = need.filter((c) => at(c) === -1);
+  if (missing.length) throw new Error(`Orders tab missing column(s): ${missing.join(", ")}`);
+  const idx = {};
+  ["purchase_date","channel","price","order_id","package_name","sku","center","payment_method",
+   "txn_fee_alloc","comm_fee_alloc","net_revenue","coupon_status","is_valid_sale",
+   "email_key","discount_pct","full_price"].forEach((c) => { idx[c] = at(c); });
+  return values.slice(1).map((row) => {
+    const g = (c) => (idx[c] === -1 ? "" : (row[idx[c]] === undefined ? "" : row[idx[c]]));
+    return {
+      date: String(g("purchase_date") || "").slice(0, 10),
+      channel: String(g("channel") || "").trim() || "(unknown)",
+      orderId: String(g("order_id") || ""),
+      pkg: String(g("package_name") || ""),
+      sku: String(g("sku") || ""),
+      center: String(g("center") || ""),
+      method: String(g("payment_method") || ""),
+      price: n(g("price")),
+      txn: n(g("txn_fee_alloc")),
+      comm: n(g("comm_fee_alloc")),
+      couponStatus: String(g("coupon_status") || ""),
+      valid: String(g("is_valid_sale") || "").toUpperCase() !== "FALSE",
+      customer: String(g("email_key") || ""),
+    };
+  }).filter((r) => r.date);
+}
+
+async function buildEcommerce(from, to) {
+  const all = await fetchEcomRows();
+  const rows = all.filter((r) => r.date >= from && r.date <= to);
+  if (!rows.length) {
+    return { empty: true, rangeHas: all.length, first: all.length ? all.map(r=>r.date).sort()[0] : null,
+             last: all.length ? all.map(r=>r.date).sort().slice(-1)[0] : null };
+  }
+  const orders = new Set(), customers = new Map();
+  let revenue = 0, fees = 0, redeemed = 0, mapped = 0;
+  const byChannel = new Map(), byDay = new Map(), byPkg = new Map(), byCenter = new Map();
+
+  for (const r of rows) {
+    revenue += r.price; fees += r.txn + r.comm;
+    orders.add(r.orderId);
+    if (r.couponStatus === "ใช้งานแล้ว") redeemed++;
+    if (r.sku) mapped++;
+    if (r.customer) {
+      if (!customers.has(r.customer)) customers.set(r.customer, { orders: new Set(), channels: new Set(), rev: 0 });
+      const c = customers.get(r.customer);
+      c.orders.add(r.orderId); c.channels.add(r.channel); c.rev += r.price;
+    }
+    const ch = byChannel.get(r.channel) || { channel: r.channel, revenue: 0, fees: 0, coupons: 0, redeemed: 0, orders: new Set() };
+    ch.revenue += r.price; ch.fees += r.txn + r.comm; ch.coupons++; ch.orders.add(r.orderId);
+    if (r.couponStatus === "ใช้งานแล้ว") ch.redeemed++;
+    byChannel.set(r.channel, ch);
+
+    const d = byDay.get(r.date) || { date: r.date, total: 0, byChannel: {} };
+    d.total += r.price; d.byChannel[r.channel] = (d.byChannel[r.channel] || 0) + r.price;
+    byDay.set(r.date, d);
+
+    const p = byPkg.get(r.pkg) || { name: r.pkg, revenue: 0, units: 0, center: r.center };
+    p.revenue += r.price; p.units++; if (!p.center && r.center) p.center = r.center;
+    byPkg.set(r.pkg, p);
+
+    // Centre is only meaningful for rows whose SKU has been confirmed; the rest
+    // are grouped as unmapped so the gap is visible instead of silently absent.
+    const key = r.center || "(unmapped)";
+    const cc = byCenter.get(key) || { center: key, revenue: 0, coupons: 0 };
+    cc.revenue += r.price; cc.coupons++;
+    byCenter.set(key, cc);
+  }
+
+  const channels = [...byChannel.values()]
+    .map((c) => ({ channel: c.channel, revenue: c.revenue, fees: c.fees, coupons: c.coupons,
+      orders: c.orders.size, aov: c.orders.size ? c.revenue / c.orders.size : 0,
+      takeRate: c.revenue ? c.fees / c.revenue : null,
+      redemption: c.coupons ? c.redeemed / c.coupons : null }))
+    .sort((a, b) => b.revenue - a.revenue);
+
+  const custList = [...customers.values()];
+  const topCustomer = custList.sort((a, b) => b.rev - a.rev)[0] || null;
+
+  return {
+    totals: {
+      revenue, fees, net: revenue - fees, orders: orders.size, coupons: rows.length,
+      aov: orders.size ? revenue / orders.size : 0,
+      couponsPerOrder: orders.size ? rows.length / orders.size : 0,
+      takeRate: revenue ? fees / revenue : null,
+      redemption: rows.length ? redeemed / rows.length : null,
+      packages: byPkg.size,
+      mappedShare: rows.length ? mapped / rows.length : 0,
+    },
+    channels,
+    channelOrder: channels.map((c) => c.channel),
+    daily: [...byDay.values()].sort((a, b) => (a.date < b.date ? -1 : 1)),
+    packages: [...byPkg.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 12),
+    centers: [...byCenter.values()].sort((a, b) => b.revenue - a.revenue),
+    customers: {
+      count: customers.size,
+      repeat: custList.filter((c) => c.orders.size > 1).length,
+      multiChannel: custList.filter((c) => c.channels.size > 1).length,
+      revenuePer: customers.size ? revenue / customers.size : 0,
+      topShare: topCustomer && revenue ? topCustomer.rev / revenue : 0,
+      topOrders: topCustomer ? topCustomer.orders.size : 0,
+    },
+  };
+}
+
+app.get("/api/ecommerce", requireTab("ecom"), async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  try {
+    const out = await withCache(`ecom:${from}:${to}`, req.query.refresh === "1", () => buildEcommerce(from, to));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "ecommerce_failed", { error: String(err.message || err) });
+    res.status(500).json({ error: err.message || "E-commerce failed" });
   }
 });
 

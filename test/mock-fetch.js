@@ -73,6 +73,27 @@ global.fetch = async (url, opts = {}) => {
   }
 
   if (u.includes("sheets.googleapis.com")) {
+    // values.get on the e-commerce Orders tab (no `ranges` param, unlike the
+    // batchGet the UTM Builder uses).
+    if (u.includes("/values/") && !u.includes("ranges=")) {
+      const head = ["load_batch","order_id","receipt_no","seller_order_id","purchase_date",
+        "purchase_time","year_month","channel","country","campaign_name","payment_status",
+        "order_status","payment_method","package_name","sku","center","english_name","location",
+        "price","full_price","discount_pct","discount_alloc","promo_alloc","txn_fee_alloc",
+        "comm_fee_alloc","net_revenue","coupon_no","coupon_status","coupon_expiry",
+        "is_valid_sale","map_status","email_key","phone_key","dedup_key"];
+      const mk = (o) => head.map((h) => (o[h] === undefined ? "" : o[h]));
+      return jsonRes({ values: [head,
+        mk({ purchase_date:"2026-07-01", channel:"Shopee", order_id:"A", package_name:"Essence",
+             sku:"HD25-01", center:"Check-Up", price:5000, txn_fee_alloc:100, comm_fee_alloc:250,
+             coupon_status:"ใช้งานแล้ว", is_valid_sale:"TRUE", email_key:"c1", payment_method:"Card" }),
+        mk({ purchase_date:"2026-07-01", channel:"Lazada", order_id:"B", package_name:"Dental",
+             sku:"", center:"", price:3000, txn_fee_alloc:90, comm_fee_alloc:400,
+             coupon_status:"ซื้อคูปอง", is_valid_sale:"TRUE", email_key:"c2", payment_method:"Card" }),
+        mk({ purchase_date:"2026-07-02", channel:"Shopee", order_id:"C", package_name:"Superior",
+             sku:"HD25-02", center:"Check-Up", price:7000, txn_fee_alloc:140, comm_fee_alloc:350,
+             coupon_status:"ซื้อคูปอง", is_valid_sale:"TRUE", email_key:"c1", payment_method:"Card" })] });
+    }
     // UTM Builder L:P and Content Plan A:H, in the documented column order.
     const ranges = [...new URL(u).searchParams.getAll("ranges")];
     return jsonRes({

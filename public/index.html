@@ -60,11 +60,11 @@
   /* ---------------- left rail ---------------- */
   .rail{
     width:236px;flex:none;padding:22px 16px;
-    display:flex;flex-direction:column;gap:26px;
+    display:flex;flex-direction:column;gap:18px;
     background:var(--glass);
     backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
     border-right:1px solid var(--line);
-    position:sticky;top:0;height:100vh;
+    position:sticky;top:0;height:100vh;overflow:hidden;
   }
   .brand{display:flex;flex-direction:column;gap:12px;padding:2px 8px 0;}
   .brand-logo{width:150px;height:auto;display:block;}
@@ -72,7 +72,13 @@
   .brand-name{font-weight:600;font-size:14.5px;line-height:1.15;}
   .brand-sub{font-size:10.5px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;}
 
-  .nav{display:flex;flex-direction:column;gap:4px;}
+  /* The nav scrolls on short screens; brand and footer stay put. Without
+     min-height:0 a flex child refuses to shrink and the list is clipped
+     instead of scrolling. */
+  .nav{display:flex;flex-direction:column;gap:4px;flex:1 1 auto;min-height:0;overflow-y:auto;
+    scrollbar-width:thin;scrollbar-color:var(--line) transparent;}
+  .nav::-webkit-scrollbar{width:6px;}
+  .nav::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px;}
   .nav-label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:0 10px 6px;}
   .nav-sep{height:1px;background:var(--line);margin:7px 10px;}
   /* "Meta Ads" is a heading, not a destination — no data-view, so the click
@@ -93,7 +99,7 @@
   }
   .nav-item svg{width:17px;height:17px;flex:none;}
 
-  .rail-foot{margin-top:auto;padding:12px;border-radius:var(--r-sm);background:var(--glass-2);border:1px solid var(--line);}
+  .rail-foot{flex:none;margin-top:12px;padding:12px;border-radius:var(--r-sm);background:var(--glass-2);border:1px solid var(--line);}
   .rail-foot .k{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);}
   .rail-foot .v{font-size:12px;color:var(--ink-2);margin-top:3px;}
 
@@ -201,6 +207,16 @@
   .ihint:hover{background:var(--violet);color:#fff;}
   /* Q/E/C: header letters and the dot cells share one fixed column width, so
      each dot sits directly under its letter. */
+  .legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;}
+  .legend .lg{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);}
+  .legend .lg i{width:9px;height:9px;border-radius:2.5px;display:inline-block;}
+  .swatch{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:7px;}
+  .minibar{position:absolute;right:0;top:50%;transform:translateY(-50%);height:20px;
+    background:var(--violet-soft);border-radius:4px;z-index:0;}
+  td.barcell{position:relative;}
+  td.barcell b{position:relative;}
+  .stat .sub2{font-size:10.5px;color:var(--faint);margin-top:2px;}
+  td.num.bad{color:#D9534F;font-weight:600;} td.num.good{color:#2E9E6F;font-weight:600;}
   .qec-head,.qec{display:inline-flex;align-items:center;}
   .qec-head b{width:38px;text-align:center;font-weight:600;color:var(--muted);}
   .qec-cell{width:38px;display:inline-flex;align-items:center;justify-content:center;
@@ -308,7 +324,7 @@
   @media(max-width:760px){
     .shell{flex-direction:column;}
     .rail{width:auto;height:auto;position:static;flex-direction:row;align-items:center;gap:14px;overflow-x:auto;}
-    .nav{flex-direction:row;}.nav-label,.nav-sep,.nav-group,.rail-foot,.brand-app{display:none;}
+    .nav{flex-direction:row;overflow-y:visible;flex:0 0 auto;}.nav-label,.nav-sep,.nav-group,.rail-foot,.brand-app{display:none;}
     .nav-item.sub{margin-left:0;}
     .brand{flex-direction:row;padding:0;}.brand-logo{width:112px;}
     .main{padding:18px 16px 40px;}
@@ -357,6 +373,13 @@
       <div class="nav-item sub" data-view="audit">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h9"/></svg>
         Tagging audit
+      </div>
+
+      <div class="nav-sep"></div>
+      <div class="nav-group">E-commerce</div>
+      <div class="nav-item sub" data-view="ecom">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h2l2.2 10.2a2 2 0 002 1.6h7.1a2 2 0 002-1.55L21 8H7"/><circle cx="10.5" cy="20" r="1.2"/><circle cx="18" cy="20" r="1.2"/></svg>
+        Overview
       </div>
 
       <div class="nav-sep"></div>
@@ -430,6 +453,7 @@ const S = {
   bench: null, benchKey: null, benchTab: null,
   gbp: null, gbpKey: null, gbpTab: null, gbpInit: false,
   audiences: null, audiencesKey: null, audienceSort: 'primary', audienceOpen: null,
+  ecom: null, ecomKey: null, ecomLoading: false, ecomError: null,
   audiencesLoading: false, audiencesError: null,
   me: null, users: null,
   charts: {},
@@ -564,6 +588,7 @@ const TITLES = {
   benchmark: ['Benchmarks', 'Latest complete month against trailing 3, 6 and 12-month norms'],
   gbp: ['Google Business Profile', 'Reviews and ratings by listing'],
   audiences: ['Audiences', 'Meta audience sets ranked by cost per first-degree result'],
+  ecom: ['E-commerce', 'Package sales across every online sales channel'],
 };
 
 // ============================================================ fetching
@@ -577,6 +602,24 @@ async function loadOverview(refresh = false) {
   S.overview = await res.json(); S.overviewKey = key;
   setStatus('ok', S.overview.cached ? `cached ${S.overview.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
   return S.overview;
+}
+
+async function loadEcom(refresh = false) {
+  const key = `${$('from').value}|${$('to').value}`;
+  if (!refresh && S.ecomKey === key && S.ecom) return S.ecom;
+  setStatus('busy', 'reading the Orders sheet…');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 120000);
+  let res;
+  try {
+    res = await fetch(`/api/ecommerce?from=${$('from').value}&to=${$('to').value}${refresh?'&refresh=1':''}`, { signal: ctrl.signal });
+  } catch (e) {
+    throw new Error(e.name === 'AbortError' ? 'The Orders sheet took too long to read. Press Refresh to retry.' : `Network error: ${e.message}`);
+  } finally { clearTimeout(timer); }
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,220)}`);
+  S.ecom = await res.json(); S.ecomKey = key;
+  setStatus('ok', S.ecom.cached ? `cached ${S.ecom.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.ecom;
 }
 
 async function loadAudiences(refresh = false) {
@@ -678,6 +721,7 @@ $('loadBtn').addEventListener('click', async () => {
     else if (S.view === 'benchmark') { await loadBenchmark(true); }
     else if (S.view === 'gbp') { await loadGbp(true); }
     else if (S.view === 'audiences') { S.audiencesError = null; await loadAudiences(true); }
+    else if (S.view === 'ecom') { S.ecomError = null; await loadEcom(true); }
     else if (S.view === 'users') { S.users = null; await loadUsers(); }
     else if (S.view === 'topics' && S.topicTerm) { await loadTopic(S.topicTerm); }
     render();
@@ -713,6 +757,7 @@ function render() {
   else if (S.view === 'benchmark') renderBenchmark();
   else if (S.view === 'gbp') renderGbp();
   else if (S.view === 'audiences') renderAudiences();
+  else if (S.view === 'ecom') renderEcom();
   else if (S.view === 'users') renderUsers();
   else renderTopics();
 }
@@ -1505,6 +1550,138 @@ const rankDots = (r) => {
   return `<span class="qec">${cells.join('')}</span>`;
 };
 const fmtAmt = (v) => v === null || v === undefined ? '—' : (v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(2));
+// ============================================================ E-COMMERCE
+const CH_COLORS = ['#7B61FF','#4ABE8C','#F0A93B','#59A5F5','#E0719B','#8C97B4','#5BC8C0','#C08BE8'];
+function renderEcom() {
+  const d = S.ecom;
+  if (!d && !S.ecomLoading && !S.ecomError) {
+    S.ecomLoading = true;
+    loadEcom().catch(e => { S.ecomError = e.message || String(e); })
+      .finally(() => { S.ecomLoading = false; render(); });
+  }
+  if (S.ecomError) { const m = S.ecomError; $('viewRoot').innerHTML = errorState(m); S.ecomError = null; return; }
+  if (!d) {
+    $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">Reading the Orders sheet…</div>
+      <div style="font-size:12.5px;color:var(--muted);">Normalised coupon rows from every sales channel.</div></div></div>`;
+    return;
+  }
+  if (d.empty) {
+    $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in this date range</div>
+      <div style="font-size:12.5px;color:var(--muted);max-width:460px;">
+      The Orders sheet holds ${num(d.rangeHas)} row(s)${d.first?`, running from <b>${esc(d.first)}</b> to <b>${esc(d.last)}</b>`:''}.
+      Move the date range to cover a month that has been imported.</div></div></div>`;
+    return;
+  }
+
+  const t = d.totals, order = d.channelOrder;
+  const colour = (ch) => CH_COLORS[order.indexOf(ch) % CH_COLORS.length];
+  const maxDay = Math.max(...d.daily.map(x => x.total), 1);
+
+  // Stacked daily bars: each day's revenue split by the channel that earned it.
+  const W = 760, HH = 170, gap = 3;
+  const bw = W / d.daily.length;
+  const bars = d.daily.map((day, i) => {
+    let y = HH, seg = '';
+    order.forEach(ch => {
+      const v = day.byChannel[ch] || 0;
+      if (!v) return;
+      const hgt = (v / maxDay) * HH;
+      y -= hgt;
+      seg += `<rect x="${(i*bw).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1,bw-gap).toFixed(1)}" height="${hgt.toFixed(1)}" fill="${colour(ch)}"><title>${esc(day.date)} · ${esc(ch)}: ฿${num(Math.round(v))}</title></rect>`;
+    });
+    return seg;
+  }).join('');
+
+  const legend = order.map(ch => `<span class="lg"><i style="background:${colour(ch)}"></i>${esc(ch)}</span>`).join('');
+  const maxCh = Math.max(...d.channels.map(c => c.revenue), 1);
+
+  $('viewRoot').innerHTML = `
+    <div class="grid g-4" style="margin-bottom:14px;">
+      <div class="stat"><div class="lab">Gross revenue</div><div class="val">฿${num(Math.round(t.revenue))}</div></div>
+      <div class="stat"><div class="lab">Marketplace fees</div><div class="val">฿${num(Math.round(t.fees))}</div>
+        <div class="sub2">${pct(t.takeRate)} of gross</div></div>
+      <div class="stat"><div class="lab">Net revenue</div><div class="val">฿${num(Math.round(t.net))}</div></div>
+      <div class="stat"><div class="lab">Average order</div><div class="val">฿${num(Math.round(t.aov))}</div>
+        <div class="sub2">${t.couponsPerOrder.toFixed(2)} coupons per order</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Daily revenue by channel</div>
+      <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${bars}</svg>
+      <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:6px;">
+        <span>${esc(d.daily[0].date)}</span><span>${esc(d.daily[d.daily.length-1].date)}</span>
+      </div>
+      <div class="legend">${legend}</div>
+      <div class="note">Each bar is one day, split by the channel that earned the revenue. Hover any segment for the exact figure.</div>
+    </div>
+
+    <div class="card mt">
+      <div class="card-title">Channels</div>
+      <table><thead><tr>
+        <th>Channel</th><th class="num">Revenue</th><th class="num">Share</th><th class="num">Orders</th>
+        <th class="num">AOV ฿</th><th class="num">Take rate</th><th class="num">Fees ฿</th><th class="num">Redeemed</th>
+      </tr></thead><tbody>
+      ${d.channels.map(c => `<tr>
+        <td class="strong" style="white-space:nowrap;"><i class="swatch" style="background:${colour(c.channel)}"></i>${esc(c.channel)}</td>
+        <td class="num barcell"><span class="minibar" style="width:${(c.revenue/maxCh*100).toFixed(1)}%"></span><b>฿${num(Math.round(c.revenue))}</b></td>
+        <td class="num">${pct(c.revenue/t.revenue)}</td>
+        <td class="num">${num(c.orders)}</td>
+        <td class="num">${num(Math.round(c.aov))}</td>
+        <td class="num${c.takeRate>=0.12?' bad':(c.takeRate<=0.03?' good':'')}">${pct(c.takeRate)}</td>
+        <td class="num">${num(Math.round(c.fees))}</td>
+        <td class="num${c.redemption<=0.2?' bad':(c.redemption>=0.7?' good':'')}">${pct(c.redemption)}</td>
+      </tr>`).join('')}
+      </tbody></table>
+      <div class="note">Take rate is transaction plus commission fees as a share of that channel's revenue. Redeemed is the share of coupons already used — revenue booked is not the same as care delivered.</div>
+    </div>
+
+    <div class="grid g-2-1 mt">
+      <div class="card">
+        <div class="card-title">Top packages</div>
+        <table><thead><tr><th>Package</th><th class="num">Sold</th><th class="num">Revenue ฿</th></tr></thead><tbody>
+        ${d.packages.map(p => `<tr>
+          <td class="trunc i18n" style="max-width:0;" title="${esc(p.name)}">${esc(p.name)}</td>
+          <td class="num">${num(p.units)}</td>
+          <td class="num strong">${num(Math.round(p.revenue))}</td></tr>`).join('')}
+        </tbody></table>
+        <div class="note">${num(t.packages)} distinct packages sold in this range.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Customers</div>
+        <div class="grid g-2">
+          <div class="stat"><div class="lab">Distinct</div><div class="val">${num(d.customers.count)}</div></div>
+          <div class="stat"><div class="lab">Bought twice or more</div><div class="val">${num(d.customers.repeat)}</div></div>
+          <div class="stat"><div class="lab">Used 2+ channels</div><div class="val">${num(d.customers.multiChannel)}</div></div>
+          <div class="stat"><div class="lab">Revenue each</div><div class="val">฿${num(Math.round(d.customers.revenuePer))}</div></div>
+        </div>
+        <div class="note">Counted by an irreversible key, never by name, phone or email — none of which leave the source sheet.
+        ${d.customers.topShare>=0.05?`The largest single buyer accounts for <b>${pct(d.customers.topShare)}</b> of revenue across ${num(d.customers.topOrders)} orders, so treat the averages with that in mind.`:''}</div>
+      </div>
+    </div>
+
+    ${t.mappedShare < 0.999 ? `<div class="card mt">
+      <div class="card-title">Revenue by medical centre</div>
+      <table><thead><tr><th>Centre</th><th class="num">Revenue ฿</th><th class="num">Share</th><th class="num">Coupons</th></tr></thead><tbody>
+      ${d.centers.map(c => `<tr>
+        <td class="strong">${c.center==='(unmapped)'?'<span class="pill warn">not yet mapped</span>':esc(c.center)}</td>
+        <td class="num">${num(Math.round(c.revenue))}</td>
+        <td class="num">${pct(c.revenue/t.revenue)}</td>
+        <td class="num">${num(c.coupons)}</td></tr>`).join('')}
+      </tbody></table>
+      <div class="note"><b>${pct(1-t.mappedShare)} of rows have no confirmed SKU yet</b>, so this split is incomplete by that much.
+      The e-commerce team resolves them in the Package_Map tab; every centre figure corrects itself on the next refresh.</div>
+    </div>` : `<div class="card mt">
+      <div class="card-title">Revenue by medical centre</div>
+      <table><thead><tr><th>Centre</th><th class="num">Revenue ฿</th><th class="num">Share</th><th class="num">Coupons</th></tr></thead><tbody>
+      ${d.centers.map(c => `<tr><td class="strong">${esc(c.center)}</td>
+        <td class="num">${num(Math.round(c.revenue))}</td>
+        <td class="num">${pct(c.revenue/t.revenue)}</td>
+        <td class="num">${num(c.coupons)}</td></tr>`).join('')}
+      </tbody></table>
+    </div>`}
+  `;
+}
+
 function renderAudiences() {
   const d = S.audiences;
   // The fetch is kicked off from here rather than from the nav click, so the

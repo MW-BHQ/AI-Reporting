@@ -60,6 +60,7 @@ check "gbp"        GET "/api/gbp?from=$FROM&to=$TO"
 check "benchmark"  GET "/api/benchmark?to=$TO"
 check "untagged"   GET "/api/untagged?from=$FROM&to=$TO"
 check "audiences"  GET "/api/audiences?from=$FROM&to=$TO"
+check "ecommerce"  GET "/api/ecommerce?from=$FROM&to=$TO"
 echo "--- audiences field integrity (a dropped Windsor field must fail here) ---"
 AUD="/api/audiences?from=$FROM&to=$TO"
 expect_field "aud ad account"   "$AUD" "d.audiences[0].accounts[0]"
@@ -78,6 +79,13 @@ expect_field "campaign cost/res" "$AUD" "d.audiences[0].campaigns[0].resultLabel
 expect_field "no empty campaigns" "$AUD" "d.audiences.every(a=>a.campaigns.every(c=>c.spend>0||c.impressions>0))?'clean':undefined"
 expect_field "uses matches rows"  "$AUD" "d.audiences.every(a=>a.uses===a.campaigns.length)?'match':undefined"
 # Guard: a reach/awareness buy must never be priced per LPV.
+ECOM="/api/ecommerce?from=$FROM&to=$TO"
+expect_field "ecom revenue"     "$ECOM" "d.totals.revenue===15000?15000:undefined"
+expect_field "ecom channels"    "$ECOM" "d.channels.length===2?'2':undefined"
+expect_field "ecom stacked day" "$ECOM" "d.daily[0].byChannel.Shopee===5000?'ok':undefined"
+# Unmapped rows must show up as a visible gap, never be dropped or hidden.
+expect_field "ecom unmapped"    "$ECOM" "d.centers.some(c=>c.center==='(unmapped)')?'flagged':undefined"
+expect_field "ecom repeat cust" "$ECOM" "d.customers.repeat===1?'1':undefined"
 expect_field "awareness=CPM"    "$AUD" "d.audiences.every(a=>a.objectiveClass!=='awareness'||a.primary.kpi==='cpm')||'BAD'"
 # Regression guard for the 3.20 bug: with no positive catalog metric anywhere,
 # nothing may be classified as CPAS. `undefined !== null` once made every row
