@@ -1582,17 +1582,19 @@ Read from Meta's ad set optimization goal, not the campaign name and not the cam
         <th class="num"><span data-tip="Link clicks ÷ impressions. Independent of budget, so it compares audiences fairly.">CTR</span></th>
         <th class="num">Clicks</th>
         <th class="num">LPV</th>
-        <th><span data-tip="Meta's percentile diagnostics, each comparing this ad set against other advertisers competing for the same audience.
+        <th><span data-tip="Meta's own ad relevance diagnostics — Meta calculates these, the dashboard only displays them. Each compares this ad set against other advertisers competing for the same audience.
 
 Q — Quality: how your ad's perceived quality compares.
-E — Engagement rate: how likely people are to click, react, comment or share.
-C — Conversion rate: how likely people are to complete the ad set's goal after clicking.
+E — Engagement rate: expected likelihood of clicks, reactions, comments or shares.
+C — Conversion rate: expected likelihood of completing THIS ad set's own optimisation goal, compared only with ads buying that same goal. For a Traffic set the goal is the landing page view; for a Leads set it is the lead.
 
 ● green — above average
 ● grey — average
 ● amber + figure — below average; the figure is the bottom band, so 20% is worse than 35%
 ● red — bottom 10%
-— dash — too little delivery for Meta to rate it"><span class="qec-head"><b>Q</b><b>E</b><b>C</b></span><span class="ihint">i</span></span></th>
+— dash — not rated
+
+These are relative percentiles, not absolute scores, and they are forward-looking estimates rather than measured results. Meta needs 500+ impressions before rating an ad set, does not rate conversion for reach or impressions buys, and does not feed these into the auction. Meta's own guidance: use them to diagnose ad sets that are underperforming, not to tune ones already hitting their targets."><span class="qec-head"><b>Q</b><b>E</b><b>C</b></span><span class="ihint">i</span></span></th>
         <th class="num">CPM ฿</th><th class="num">Cost/result ฿</th><th></th>
       </tr></thead><tbody>
       ${list.map((a,i)=>`

@@ -2520,7 +2520,10 @@ async function buildAudiences(from, to) {
     }
     if (r.account_name) a.accounts.add(String(r.account_name));
     a.spendByClass[classifyObjective(r)] += spend;
-    if (r.adsset_optimization_goal) {
+    // Only goals with real delivery count. An ad set that exists but spent ฿0
+    // in the range would otherwise add a second key here and flag the whole
+    // audience "mixed" on the strength of a campaign that never ran.
+    if (r.adsset_optimization_goal && (spend > 0 || n(r.impressions) > 0)) {
       a.goals.set(String(r.adsset_optimization_goal),
         (a.goals.get(String(r.adsset_optimization_goal)) || 0) + spend);
     }
@@ -2532,7 +2535,7 @@ async function buildAudiences(from, to) {
     });
     const c = a.campaigns.get(cname);
     if (!c.account && r.account_name) c.account = String(r.account_name);
-    if (r.adsset_optimization_goal) {
+    if (r.adsset_optimization_goal && (spend > 0 || n(r.impressions) > 0)) {
       c.goals.set(String(r.adsset_optimization_goal),
         (c.goals.get(String(r.adsset_optimization_goal)) || 0) + spend);
     }
@@ -2560,7 +2563,7 @@ async function buildAudiences(from, to) {
                              { kpi: "lpv",      label: "per LPV",      count: a.lpv,         cost: per(a.spend, a.lpv) };
     return {
       name: a.name,
-      uses: a.campaigns.size,
+      uses: [...a.campaigns.values()].filter((c) => c.spend > 0 || c.impressions > 0).length,
       accounts: [...a.accounts].sort(),
       spend: a.spend, impressions: a.impressions, reach: a.reach, clicks: a.clicks,
       lpv: a.lpv, leads: a.leads, messages: a.messages,
@@ -2610,6 +2613,10 @@ async function buildAudiences(from, to) {
       lowVolume: a.impressions < MIN_RANK_IMPRESSIONS,
       primary,
     campaigns: [...a.campaigns.values()]
+      // Rows with no spend and no impressions are ad sets that existed in the
+      // range but never delivered. They render as a line of dashes and inflate
+      // the Uses count, so they are dropped rather than shown as empty.
+      .filter((c) => c.spend > 0 || c.impressions > 0)
       .map((c) => {
         // Each campaign is priced on ITS OWN goal, not the audience's dominant
         // one — that is the whole point of showing the split for a mixed set.
