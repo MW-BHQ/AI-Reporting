@@ -1596,8 +1596,8 @@ function renderEcomCentres() {
     <div class="grid g-3" style="margin-bottom:14px;">
       <div class="stat"><div class="lab">Centres selling</div><div class="val">${num(t.centres)}</div></div>
       <div class="stat"><div class="lab">Revenue</div><div class="val">฿${num(Math.round(t.revenue))}</div></div>
-      <div class="stat"><div class="lab">Sold but not yet redeemed</div><div class="val">฿${num(Math.round(t.unredeemedValue))}</div>
-        <div class="sub2">${pct(t.unredeemedValue/t.revenue)} of revenue · patients who have paid but not come in</div></div>
+      <div class="stat"><div class="lab">Coupons sold</div><div class="val">${num(t.coupons)}</div>
+        <div class="sub2">฿${num(Math.round(t.revenue/(t.coupons||1)))} average price</div></div>
     </div>
 
     <div class="card">
@@ -1606,10 +1606,9 @@ function renderEcomCentres() {
       </div>
       <table class="sticky-head"><thead><tr>
         <th>Centre</th><th class="num">Revenue ฿</th><th class="num">Share</th><th class="num">Coupons</th>
-        <th class="num">Avg price ฿</th>
-        <th class="num"><span data-tip="Share of this centre's coupons already used. Low means people bought and never came in — revenue booked but no patient in the building, and no chance to convert them into further care.">Redeemed</span></th>
-        <th class="num"><span data-tip="Revenue sitting on coupons nobody has used yet. This is the follow-up list: a reminder campaign here is cheaper than acquiring a new buyer.">At risk ฿</span></th>
-        <th class="num"><span data-tip="Average discount off list price, across the coupons whose package has a confirmed list price in the master.">Discount</span></th>
+        <th class="num"><span data-tip="Revenue divided by coupons sold — the average price point this centre actually sells at, taken straight from ราคา/แพ็กเกจ.">Avg price ฿</span></th>
+        <th class="num">Orders</th>
+        <th><span data-tip="The package earning the most for this centre, and how many were sold.">Best seller</span></th>
         <th><span data-tip="The channel carrying most of this centre's revenue, and how concentrated it is. Above about 70% means the centre depends on one storefront.">Leans on</span></th>
       </tr></thead><tbody>
       ${list.map(c => `<tr>
@@ -1618,15 +1617,13 @@ function renderEcomCentres() {
         <td class="num">${pct(c.share)}</td>
         <td class="num">${num(c.coupons)}</td>
         <td class="num">${num(Math.round(c.avgPrice))}</td>
-        <td class="num${c.redemption<=0.35?' bad':(c.redemption>=0.7?' good':'')}">${pct(c.redemption)}</td>
-        <td class="num">${num(Math.round(c.unredeemedValue))}</td>
-        <td class="num">${c.discountDepth===null?'—':pct(c.discountDepth)}</td>
+        <td class="num">${num(c.orders)}</td>
+        <td class="trunc i18n" style="max-width:0;font-size:11.5px;color:var(--muted);" title="${esc(c.topPackage)}">${esc(c.topPackage)} <span style="color:var(--faint);">×${num(c.topPackageUnits)}</span></td>
         <td style="font-size:11.5px;color:var(--muted);white-space:nowrap;">${esc(c.topChannel)}
           <span style="color:${c.concentration>=0.7?'#D97B1F':'var(--faint)'};">${pct(c.concentration)}</span></td>
       </tr>`).join('')}
       </tbody></table>
-      <div class="note">Sorted by revenue. <b>At risk</b> is the value of coupons sold but not yet used —
-      the cheapest marketing a centre has is reminding people who already paid.
+      <div class="note">Sorted by revenue. Prices come straight from ราคา/แพ็กเกจ — the figure the customer actually paid.
       ${t.unmappedShare>0.001?`<b>${pct(t.unmappedShare)} of revenue is still unmapped</b>, so those rows sit in their own line until the e-commerce team confirms the SKUs.`:''}</div>
     </div>
 
@@ -1720,7 +1717,7 @@ function renderEcom() {
       <div class="card-title">Channels</div>
       <table><thead><tr>
         <th>Channel</th><th class="num">Revenue</th><th class="num">Share</th><th class="num">Orders</th>
-        <th class="num">AOV ฿</th><th class="num">Take rate</th><th class="num">Fees ฿</th><th class="num">Redeemed</th>
+        <th class="num">AOV ฿</th><th class="num">Coupons</th><th class="num">Take rate</th><th class="num">Fees ฿</th>
       </tr></thead><tbody>
       ${d.channels.map(c => `<tr>
         <td class="strong" style="white-space:nowrap;"><i class="swatch" style="background:${colour(c.channel)}"></i>${esc(c.channel)}</td>
@@ -1728,12 +1725,12 @@ function renderEcom() {
         <td class="num">${pct(c.revenue/t.revenue)}</td>
         <td class="num">${num(c.orders)}</td>
         <td class="num">${num(Math.round(c.aov))}</td>
+        <td class="num">${num(c.coupons)}</td>
         <td class="num${c.takeRate>=0.12?' bad':(c.takeRate<=0.03?' good':'')}">${pct(c.takeRate)}</td>
         <td class="num">${num(Math.round(c.fees))}</td>
-        <td class="num${c.redemption<=0.2?' bad':(c.redemption>=0.7?' good':'')}">${pct(c.redemption)}</td>
       </tr>`).join('')}
       </tbody></table>
-      <div class="note">Take rate is transaction plus commission fees as a share of that channel's revenue. Redeemed is the share of coupons already used — revenue booked is not the same as care delivered.</div>
+      <div class="note">Take rate is transaction plus commission fees as a share of that channel's revenue — what the storefront costs you per baht sold.</div>
     </div>
 
     <div class="grid g-2-1 mt">

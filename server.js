@@ -2923,6 +2923,10 @@ async function buildCentres(from, to, scope) {
     totals: {
       revenue,
       centres: list.length,
+      coupons: rows.length,
+      // Kept in the payload but no longer shown: coupon status is not updated
+      // in real time and the team cannot act on it yet, so leading with it
+      // would imply a decision nobody can make.
       unredeemedValue: list.reduce((a, c) => a + c.unredeemedValue, 0),
       unmappedShare: revenue
         ? (centres.get("Unmapped") ? centres.get("Unmapped").revenue / revenue : 0) : 0,
