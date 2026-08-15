@@ -223,6 +223,7 @@ const TABS = [
   { id: "topics",    label: "Topic Explorer" },
   { id: "audiences", label: "Audiences" },
   { id: "ecom",      label: "E-commerce" },
+  { id: "ecomcentre",label: "E-commerce · Centres" },
   { id: "users",     label: "Users", adminOnly: true },
 ];
 const TAB_IDS = TABS.filter((t) => !t.adminOnly).map((t) => t.id);
@@ -1388,6 +1389,26 @@ const BENCH_BUCKET = process.env.BENCHMARK_BUCKET || process.env.ACCESS_BUCKET |
 // emails are replaced with irreversible keys before they ever reach it.
 const ECOM_SHEET_ID = process.env.ECOM_SHEET_ID || "";
 const ECOM_TAB = process.env.ECOM_TAB || "Orders";
+
+/**
+ * Sales channels grouped the way the business thinks about them, supplied by
+ * the marketing team. This matters because a handful of B2B and Special
+ * Campaign orders are enormous — three "Agent" orders alone were ฿8.3M in
+ * July — so mixing them into per-channel averages destroys the comparison.
+ * The e-commerce view therefore defaults to Online only.
+ */
+const CHANNEL_TYPE = {
+  "Shopee": "Online", "Shop.BeDee": "Online", "Lazada": "Online",
+  "Line Shopping": "Online", "Line Chatbot": "Online",
+  "Bangkok Hospital Website": "Online",
+  "เวชระเบียน": "Offline", "ทันตกรรม": "Offline", "HPC 1": "Offline",
+  "เปียโน": "Offline", "Contact Center": "Offline", "พลาซ่า": "Offline",
+  "Agent": "B2B", "Insurance": "B2B",
+  "Run with the Flow": "Special Campaign", "Partnership": "Special Campaign",
+  "คูปองอภินันทนาการ": "Complementary", "Complementary (Discount Coupon)": "Complementary",
+  "Extra": "Extra",
+};
+const channelType = (ch) => CHANNEL_TYPE[String(ch || "").trim()] || "Unclassified";
 
 async function gcsRead(objectName, bucket = BENCH_BUCKET) {
   if (!bucket) return null;
@@ -2720,15 +2741,20 @@ async function fetchEcomRows() {
       couponStatus: String(g("coupon_status") || ""),
       valid: String(g("is_valid_sale") || "").toUpperCase() !== "FALSE",
       customer: String(g("email_key") || ""),
+      fullPrice: n(g("full_price")),
+      type: channelType(g("channel")),
     };
   }).filter((r) => r.date);
 }
 
-async function buildEcommerce(from, to) {
+async function buildEcommerce(from, to, scope) {
   const all = await fetchEcomRows();
-  const rows = all.filter((r) => r.date >= from && r.date <= to);
+  const inRange = all.filter((r) => r.date >= from && r.date <= to);
+  // Online is the default because B2B and Special Campaign orders are few and
+  // enormous; including them silently would make every channel average wrong.
+  const rows = scope === "all" ? inRange : inRange.filter((r) => r.type === "Online");
   if (!rows.length) {
-    return { empty: true, rangeHas: all.length, first: all.length ? all.map(r=>r.date).sort()[0] : null,
+    return { empty: true, scope: scope || "online", rangeHas: all.length, first: all.length ? all.map(r=>r.date).sort()[0] : null,
              last: all.length ? all.map(r=>r.date).sort().slice(-1)[0] : null };
   }
   const orders = new Set(), customers = new Map();
@@ -2776,7 +2802,16 @@ async function buildEcommerce(from, to) {
   const custList = [...customers.values()];
   const topCustomer = custList.sort((a, b) => b.rev - a.rev)[0] || null;
 
+  // Every channel type present in range, so the view can say what is excluded.
+  const types = new Map();
+  for (const r of inRange) {
+    const t = types.get(r.type) || { type: r.type, revenue: 0, coupons: 0 };
+    t.revenue += r.price; t.coupons++; types.set(r.type, t);
+  }
+
   return {
+    scope: scope === "all" ? "all" : "online",
+    types: [...types.values()].sort((a, b) => b.revenue - a.revenue),
     totals: {
       revenue, fees, net: revenue - fees, orders: orders.size, coupons: rows.length,
       aov: orders.size ? revenue / orders.size : 0,
@@ -2806,11 +2841,106 @@ app.get("/api/ecommerce", requireTab("ecom"), async (req, res) => {
   const { from, to } = req.query;
   if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
   try {
-    const out = await withCache(`ecom:${from}:${to}`, req.query.refresh === "1", () => buildEcommerce(from, to));
+    const scope = req.query.scope === "all" ? "all" : "online";
+    const out = await withCache(`ecom:${scope}:${from}:${to}`, req.query.refresh === "1",
+      () => buildEcommerce(from, to, scope));
     res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
   } catch (err) {
     logJson("ERROR", "ecommerce_failed", { error: String(err.message || err) });
     res.status(500).json({ error: err.message || "E-commerce failed" });
+  }
+});
+
+/**
+ * Centres, seen the way a centre owner would ask about their own business:
+ * how much did we sell, through which channel, at what discount, and how much
+ * of it has actually been redeemed. Presented as one table across all centres
+ * rather than a per-centre drilldown, so the whole picture is comparable.
+ *
+ * Unredeemed coupons matter more here than anywhere else in the dashboard:
+ * a sold coupon is revenue booked, but only a redeemed one is a patient who
+ * walked in and might convert into further care.
+ */
+async function buildCentres(from, to, scope) {
+  const all = await fetchEcomRows();
+  const inRange = all.filter((r) => r.date >= from && r.date <= to);
+  const rows = scope === "all" ? inRange : inRange.filter((r) => r.type === "Online");
+  if (!rows.length) return { empty: true, scope: scope || "online", rangeHas: all.length };
+
+  const centres = new Map();
+  const channelSet = new Set();
+  let revenue = 0;
+
+  for (const r of rows) {
+    revenue += r.price;
+    channelSet.add(r.channel);
+    const key = r.center || "Unmapped";
+    const c = centres.get(key) || {
+      centre: key, revenue: 0, coupons: 0, redeemed: 0, orders: new Set(),
+      listPrice: 0, discounted: 0, byChannel: {}, packages: new Map(),
+    };
+    c.revenue += r.price;
+    c.coupons++;
+    c.orders.add(r.orderId);
+    if (r.couponStatus === "ใช้งานแล้ว") c.redeemed++;
+    // Discount depth only counts rows where the master knows a list price.
+    if (r.fullPrice > 0) { c.listPrice += r.fullPrice; c.discounted += r.price; }
+    c.byChannel[r.channel] = (c.byChannel[r.channel] || 0) + r.price;
+    const p = c.packages.get(r.pkg) || { name: r.pkg, revenue: 0, units: 0 };
+    p.revenue += r.price; p.units++;
+    c.packages.set(r.pkg, p);
+    centres.set(key, c);
+  }
+
+  const channels = [...channelSet].sort();
+  const list = [...centres.values()].map((c) => {
+    const top = Object.entries(c.byChannel).sort((a, b) => b[1] - a[1])[0];
+    const best = [...c.packages.values()].sort((a, b) => b.revenue - a.revenue)[0];
+    return {
+      centre: c.centre,
+      revenue: c.revenue,
+      share: revenue ? c.revenue / revenue : 0,
+      coupons: c.coupons,
+      orders: c.orders.size,
+      avgPrice: c.coupons ? c.revenue / c.coupons : 0,
+      redemption: c.coupons ? c.redeemed / c.coupons : null,
+      // Revenue sitting on coupons nobody has used yet.
+      unredeemedValue: c.revenue * (1 - (c.coupons ? c.redeemed / c.coupons : 0)),
+      discountDepth: c.listPrice > 0 ? 1 - c.discounted / c.listPrice : null,
+      topChannel: top ? top[0] : "",
+      topChannelShare: top && c.revenue ? top[1] / c.revenue : 0,
+      concentration: top && c.revenue ? top[1] / c.revenue : 0,
+      topPackage: best ? best.name : "",
+      topPackageUnits: best ? best.units : 0,
+      byChannel: c.byChannel,
+    };
+  }).sort((a, b) => b.revenue - a.revenue);
+
+  return {
+    scope: scope === "all" ? "all" : "online",
+    channels,
+    centres: list,
+    totals: {
+      revenue,
+      centres: list.length,
+      unredeemedValue: list.reduce((a, c) => a + c.unredeemedValue, 0),
+      unmappedShare: revenue
+        ? (centres.get("Unmapped") ? centres.get("Unmapped").revenue / revenue : 0) : 0,
+    },
+  };
+}
+
+app.get("/api/ecommerce/centres", requireTab("ecomcentre"), async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  try {
+    const scope = req.query.scope === "all" ? "all" : "online";
+    const out = await withCache(`ecomcentre:${scope}:${from}:${to}`, req.query.refresh === "1",
+      () => buildCentres(from, to, scope));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "ecom_centres_failed", { error: String(err.message || err) });
+    res.status(500).json({ error: err.message || "Centres failed" });
   }
 });
 

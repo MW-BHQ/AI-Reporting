@@ -91,8 +91,17 @@ global.fetch = async (url, opts = {}) => {
              sku:"", center:"", price:3000, txn_fee_alloc:90, comm_fee_alloc:400,
              coupon_status:"ซื้อคูปอง", is_valid_sale:"TRUE", email_key:"c2", payment_method:"Card" }),
         mk({ purchase_date:"2026-07-02", channel:"Shopee", order_id:"C", package_name:"Superior",
-             sku:"HD25-02", center:"Check-Up", price:7000, txn_fee_alloc:140, comm_fee_alloc:350,
-             coupon_status:"ซื้อคูปอง", is_valid_sale:"TRUE", email_key:"c1", payment_method:"Card" })] });
+             sku:"HD25-02", center:"Check-Up", price:7000, full_price:14000, txn_fee_alloc:140,
+             comm_fee_alloc:350, coupon_status:"ซื้อคูปอง", is_valid_sale:"TRUE", email_key:"c1",
+             payment_method:"Card" }),
+        mk({ purchase_date:"2026-07-02", channel:"Lazada", order_id:"D", package_name:"Heart",
+             sku:"HT25-01", center:"Heart", price:9000, full_price:12000, txn_fee_alloc:180,
+             comm_fee_alloc:900, coupon_status:"ใช้งานแล้ว", is_valid_sale:"TRUE", email_key:"c3",
+             payment_method:"Card" }),
+        // B2B: one huge order that must be excluded from the Online default.
+        mk({ purchase_date:"2026-07-03", channel:"Agent", order_id:"E", package_name:"Bulk",
+             sku:"HD25-01", center:"Check-Up", price:500000, txn_fee_alloc:0, comm_fee_alloc:0,
+             coupon_status:"ซื้อคูปอง", is_valid_sale:"TRUE", email_key:"c9", payment_method:"" })] });
     }
     // UTM Builder L:P and Content Plan A:H, in the documented column order.
     const ranges = [...new URL(u).searchParams.getAll("ranges")];

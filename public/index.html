@@ -64,8 +64,11 @@
     background:var(--glass);
     backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
     border-right:1px solid var(--line);
-    position:sticky;top:0;height:100vh;overflow:hidden;
+    position:sticky;top:0;height:100vh;overflow-y:auto;
+    scrollbar-width:thin;scrollbar-color:var(--line) transparent;
   }
+  .rail::-webkit-scrollbar{width:6px;}
+  .rail::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px;}
   .brand{display:flex;flex-direction:column;gap:12px;padding:2px 8px 0;}
   .brand-logo{width:150px;height:auto;display:block;}
   .brand-app{padding-top:11px;border-top:1px solid var(--line);}
@@ -75,10 +78,7 @@
   /* The nav scrolls on short screens; brand and footer stay put. Without
      min-height:0 a flex child refuses to shrink and the list is clipped
      instead of scrolling. */
-  .nav{display:flex;flex-direction:column;gap:4px;flex:1 1 auto;min-height:0;overflow-y:auto;
-    scrollbar-width:thin;scrollbar-color:var(--line) transparent;}
-  .nav::-webkit-scrollbar{width:6px;}
-  .nav::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px;}
+  .nav{display:flex;flex-direction:column;gap:4px;flex:none;}
   .nav-label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:0 10px 6px;}
   .nav-sep{height:1px;background:var(--line);margin:7px 10px;}
   /* "Meta Ads" is a heading, not a destination — no data-view, so the click
@@ -99,7 +99,7 @@
   }
   .nav-item svg{width:17px;height:17px;flex:none;}
 
-  .rail-foot{flex:none;margin-top:12px;padding:12px;border-radius:var(--r-sm);background:var(--glass-2);border:1px solid var(--line);}
+  .rail-foot{flex:none;margin-top:18px;padding:12px;border-radius:var(--r-sm);background:var(--glass-2);border:1px solid var(--line);}
   .rail-foot .k{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);}
   .rail-foot .v{font-size:12px;color:var(--ink-2);margin-top:3px;}
 
@@ -210,6 +210,10 @@
   .legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;}
   .legend .lg{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);}
   .legend .lg i{width:9px;height:9px;border-radius:2.5px;display:inline-block;}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;}
+  .seg button{border:0;background:transparent;padding:5px 12px;font-size:11.5px;color:var(--muted);
+    cursor:pointer;font-family:inherit;}
+  .seg button.on{background:var(--violet);color:#fff;font-weight:500;}
   .swatch{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:7px;}
   .minibar{position:absolute;right:0;top:50%;transform:translateY(-50%);height:20px;
     background:var(--violet-soft);border-radius:4px;z-index:0;}
@@ -381,6 +385,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h2l2.2 10.2a2 2 0 002 1.6h7.1a2 2 0 002-1.55L21 8H7"/><circle cx="10.5" cy="20" r="1.2"/><circle cx="18" cy="20" r="1.2"/></svg>
         Overview
       </div>
+      <div class="nav-item sub" data-view="ecomcentre">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V9l5-4 5 4v11"/><path d="M14 20V12h6v8"/><path d="M2 20h20"/></svg>
+        By centre
+      </div>
 
       <div class="nav-sep"></div>
       <div class="nav-item" data-view="topics">
@@ -394,9 +402,7 @@
     </nav>
 
     <div class="rail-foot">
-      <div class="k">Data source</div>
-      <div class="v">GA4 Group + Windsor.ai</div>
-      <div class="k" style="margin-top:9px;">Build</div>
+      <div class="k">Build</div>
       <div class="v" id="verLabel">—</div>
     </div>
   </aside>
@@ -453,7 +459,8 @@ const S = {
   bench: null, benchKey: null, benchTab: null,
   gbp: null, gbpKey: null, gbpTab: null, gbpInit: false,
   audiences: null, audiencesKey: null, audienceSort: 'primary', audienceOpen: null,
-  ecom: null, ecomKey: null, ecomLoading: false, ecomError: null,
+  ecom: null, ecomKey: null, ecomLoading: false, ecomError: null, ecomScope: 'online',
+  ecomc: null, ecomcKey: null, ecomcLoading: false, ecomcError: null,
   audiencesLoading: false, audiencesError: null,
   me: null, users: null,
   charts: {},
@@ -589,6 +596,7 @@ const TITLES = {
   gbp: ['Google Business Profile', 'Reviews and ratings by listing'],
   audiences: ['Audiences', 'Meta audience sets ranked by cost per first-degree result'],
   ecom: ['E-commerce', 'Package sales across every online sales channel'],
+  ecomcentre: ['E-commerce · By centre', 'Which centres sell, through which channel, and how much is still unredeemed'],
 };
 
 // ============================================================ fetching
@@ -604,15 +612,26 @@ async function loadOverview(refresh = false) {
   return S.overview;
 }
 
+async function loadEcomCentres(refresh = false) {
+  const key = `${$('from').value}|${$('to').value}|${S.ecomScope}`;
+  if (!refresh && S.ecomcKey === key && S.ecomc) return S.ecomc;
+  setStatus('busy', 'grouping sales by centre…');
+  const res = await fetch(`/api/ecommerce/centres?from=${$('from').value}&to=${$('to').value}&scope=${S.ecomScope}${refresh?'&refresh=1':''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,220)}`);
+  S.ecomc = await res.json(); S.ecomcKey = key;
+  setStatus('ok', S.ecomc.cached ? `cached ${S.ecomc.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.ecomc;
+}
+
 async function loadEcom(refresh = false) {
-  const key = `${$('from').value}|${$('to').value}`;
+  const key = `${$('from').value}|${$('to').value}|${S.ecomScope}`;
   if (!refresh && S.ecomKey === key && S.ecom) return S.ecom;
   setStatus('busy', 'reading the Orders sheet…');
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 120000);
   let res;
   try {
-    res = await fetch(`/api/ecommerce?from=${$('from').value}&to=${$('to').value}${refresh?'&refresh=1':''}`, { signal: ctrl.signal });
+    res = await fetch(`/api/ecommerce?from=${$('from').value}&to=${$('to').value}&scope=${S.ecomScope}${refresh?'&refresh=1':''}`, { signal: ctrl.signal });
   } catch (e) {
     throw new Error(e.name === 'AbortError' ? 'The Orders sheet took too long to read. Press Refresh to retry.' : `Network error: ${e.message}`);
   } finally { clearTimeout(timer); }
@@ -722,6 +741,7 @@ $('loadBtn').addEventListener('click', async () => {
     else if (S.view === 'gbp') { await loadGbp(true); }
     else if (S.view === 'audiences') { S.audiencesError = null; await loadAudiences(true); }
     else if (S.view === 'ecom') { S.ecomError = null; await loadEcom(true); }
+    else if (S.view === 'ecomcentre') { S.ecomcError = null; await loadEcomCentres(true); }
     else if (S.view === 'users') { S.users = null; await loadUsers(); }
     else if (S.view === 'topics' && S.topicTerm) { await loadTopic(S.topicTerm); }
     render();
@@ -758,6 +778,7 @@ function render() {
   else if (S.view === 'gbp') renderGbp();
   else if (S.view === 'audiences') renderAudiences();
   else if (S.view === 'ecom') renderEcom();
+  else if (S.view === 'ecomcentre') renderEcomCentres();
   else if (S.view === 'users') renderUsers();
   else renderTopics();
 }
@@ -1552,6 +1573,86 @@ const rankDots = (r) => {
 const fmtAmt = (v) => v === null || v === undefined ? '—' : (v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(2));
 // ============================================================ E-COMMERCE
 const CH_COLORS = ['#7B61FF','#4ABE8C','#F0A93B','#59A5F5','#E0719B','#8C97B4','#5BC8C0','#C08BE8'];
+function renderEcomCentres() {
+  const d = S.ecomc;
+  if (!d && !S.ecomcLoading && !S.ecomcError) {
+    S.ecomcLoading = true;
+    loadEcomCentres().catch(e => { S.ecomcError = e.message || String(e); })
+      .finally(() => { S.ecomcLoading = false; render(); });
+  }
+  if (S.ecomcError) { const m = S.ecomcError; $('viewRoot').innerHTML = errorState(m); S.ecomcError = null; return; }
+  if (!d) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">Grouping sales by centre…</div></div></div>`; return; }
+  if (d.empty) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in this range</div>
+    <div style="font-size:12.5px;color:var(--muted);">The Orders sheet holds ${num(d.rangeHas)} row(s).</div></div></div>`; return; }
+
+  const t = d.totals, list = d.centres;
+  const maxRev = Math.max(...list.map(c => c.revenue), 1);
+  const scopeBtn = `<div class="seg">
+      <button data-scope="online"${S.ecomScope==='online'?' class="on"':''}>Online only</button>
+      <button data-scope="all"${S.ecomScope==='all'?' class="on"':''}>All channels</button>
+    </div>`;
+
+  $('viewRoot').innerHTML = `
+    <div class="grid g-3" style="margin-bottom:14px;">
+      <div class="stat"><div class="lab">Centres selling</div><div class="val">${num(t.centres)}</div></div>
+      <div class="stat"><div class="lab">Revenue</div><div class="val">฿${num(Math.round(t.revenue))}</div></div>
+      <div class="stat"><div class="lab">Sold but not yet redeemed</div><div class="val">฿${num(Math.round(t.unredeemedValue))}</div>
+        <div class="sub2">${pct(t.unredeemedValue/t.revenue)} of revenue · patients who have paid but not come in</div></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <div class="card-title" style="margin:0;">Centres</div>${scopeBtn}
+      </div>
+      <table class="sticky-head"><thead><tr>
+        <th>Centre</th><th class="num">Revenue ฿</th><th class="num">Share</th><th class="num">Coupons</th>
+        <th class="num">Avg price ฿</th>
+        <th class="num"><span data-tip="Share of this centre's coupons already used. Low means people bought and never came in — revenue booked but no patient in the building, and no chance to convert them into further care.">Redeemed</span></th>
+        <th class="num"><span data-tip="Revenue sitting on coupons nobody has used yet. This is the follow-up list: a reminder campaign here is cheaper than acquiring a new buyer.">At risk ฿</span></th>
+        <th class="num"><span data-tip="Average discount off list price, across the coupons whose package has a confirmed list price in the master.">Discount</span></th>
+        <th><span data-tip="The channel carrying most of this centre's revenue, and how concentrated it is. Above about 70% means the centre depends on one storefront.">Leans on</span></th>
+      </tr></thead><tbody>
+      ${list.map(c => `<tr>
+        <td class="strong">${c.centre==='Unmapped'?'<span class="pill warn">unmapped</span>':esc(c.centre)}</td>
+        <td class="num barcell"><span class="minibar" style="width:${(c.revenue/maxRev*100).toFixed(1)}%"></span><b>${num(Math.round(c.revenue))}</b></td>
+        <td class="num">${pct(c.share)}</td>
+        <td class="num">${num(c.coupons)}</td>
+        <td class="num">${num(Math.round(c.avgPrice))}</td>
+        <td class="num${c.redemption<=0.35?' bad':(c.redemption>=0.7?' good':'')}">${pct(c.redemption)}</td>
+        <td class="num">${num(Math.round(c.unredeemedValue))}</td>
+        <td class="num">${c.discountDepth===null?'—':pct(c.discountDepth)}</td>
+        <td style="font-size:11.5px;color:var(--muted);white-space:nowrap;">${esc(c.topChannel)}
+          <span style="color:${c.concentration>=0.7?'#D97B1F':'var(--faint)'};">${pct(c.concentration)}</span></td>
+      </tr>`).join('')}
+      </tbody></table>
+      <div class="note">Sorted by revenue. <b>At risk</b> is the value of coupons sold but not yet used —
+      the cheapest marketing a centre has is reminding people who already paid.
+      ${t.unmappedShare>0.001?`<b>${pct(t.unmappedShare)} of revenue is still unmapped</b>, so those rows sit in their own line until the e-commerce team confirms the SKUs.`:''}</div>
+    </div>
+
+    <div class="card mt">
+      <div class="card-title">Which channel sells each centre</div>
+      <table><thead><tr><th>Centre</th>${d.channels.map(ch=>`<th class="num">${esc(ch)}</th>`).join('')}</tr></thead><tbody>
+      ${list.map(c => {
+        const tot = c.revenue || 1;
+        return `<tr><td class="strong">${c.centre==='Unmapped'?'<span class="pill warn">unmapped</span>':esc(c.centre)}</td>
+        ${d.channels.map(ch => {
+          const v = c.byChannel[ch] || 0, s = v/tot;
+          const bg = v ? `background:rgba(123,97,255,${(0.06+s*0.5).toFixed(3)});` : '';
+          return `<td class="num" style="${bg}" title="${esc(ch)} · ฿${num(Math.round(v))}">${v?pct(s):'<span style="color:var(--faint)">—</span>'}</td>`;
+        }).join('')}</tr>`;
+      }).join('')}
+      </tbody></table>
+      <div class="note">Each row reads across to 100% of that centre's revenue. Darker means more of the centre's
+      sales come through that channel. A centre concentrated in one column is exposed if that storefront's terms change —
+      which is the practical reason to care where a package sells, not just how much.</div>
+    </div>`;
+
+  document.querySelectorAll('[data-scope]').forEach(b => b.addEventListener('click', () => {
+    S.ecomScope = b.dataset.scope; S.ecomc = null; S.ecom = null; render();
+  }));
+}
+
 function renderEcom() {
   const d = S.ecom;
   if (!d && !S.ecomLoading && !S.ecomError) {
