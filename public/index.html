@@ -210,6 +210,15 @@
   .legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;}
   .legend .lg{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);}
   .legend .lg i{width:9px;height:9px;border-radius:2.5px;display:inline-block;}
+  /* E-commerce tables carry long Thai package names next to short numbers, so
+     they need more column separation than the dense ad tables elsewhere. */
+  .roomy th, .roomy td{padding-right:20px;}
+  .roomy th:last-child, .roomy td:last-child{padding-right:0;}
+  .roomy td{padding-top:11px;padding-bottom:11px;}
+  /* Cross-tab: shaded cells need internal padding or the fill touches the text. */
+  .xtab td, .xtab th{padding:10px 14px;}
+  .xtab td:first-child, .xtab th:first-child{padding-left:0;}
+  .xtab td.cell{border-radius:5px;}
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;}
   .seg button{border:0;background:transparent;padding:5px 12px;font-size:11.5px;color:var(--muted);
     cursor:pointer;font-family:inherit;}
@@ -1604,7 +1613,12 @@ function renderEcomCentres() {
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
         <div class="card-title" style="margin:0;">Centres</div>${scopeBtn}
       </div>
-      <table class="sticky-head"><thead><tr>
+      <table class="sticky-head roomy">
+      <colgroup>
+        <col style="width:14%"><col style="width:13%"><col style="width:7%"><col style="width:8%">
+        <col style="width:9%"><col style="width:7%"><col style="width:24%"><col style="width:18%">
+      </colgroup>
+      <thead><tr>
         <th>Centre</th><th class="num">Revenue ฿</th><th class="num">Share</th><th class="num">Coupons</th>
         <th class="num"><span data-tip="Revenue divided by coupons sold — the average price point this centre actually sells at, taken straight from ราคา/แพ็กเกจ.">Avg price ฿</span></th>
         <th class="num">Orders</th>
@@ -1618,9 +1632,9 @@ function renderEcomCentres() {
         <td class="num">${num(c.coupons)}</td>
         <td class="num">${num(Math.round(c.avgPrice))}</td>
         <td class="num">${num(c.orders)}</td>
-        <td class="trunc i18n" style="max-width:0;font-size:11.5px;color:var(--muted);" title="${esc(c.topPackage)}">${esc(c.topPackage)} <span style="color:var(--faint);">×${num(c.topPackageUnits)}</span></td>
+        <td class="trunc i18n" style="max-width:0;font-size:11.5px;color:var(--muted);" title="${esc(c.topPackage)} · ${num(c.topPackageUnits)} sold">${esc(c.topPackage)}<span style="color:var(--faint);"> ×${num(c.topPackageUnits)}</span></td>
         <td style="font-size:11.5px;color:var(--muted);white-space:nowrap;">${esc(c.topChannel)}
-          <span style="color:${c.concentration>=0.7?'#D97B1F':'var(--faint)'};">${pct(c.concentration)}</span></td>
+          <span style="color:${c.concentration>=0.7?'#D97B1F':'var(--faint)'};font-weight:${c.concentration>=0.7?600:400};margin-left:6px;">${pct(c.concentration)}</span></td>
       </tr>`).join('')}
       </tbody></table>
       <div class="note">Sorted by revenue. Prices come straight from ราคา/แพ็กเกจ — the figure the customer actually paid.
@@ -1629,14 +1643,14 @@ function renderEcomCentres() {
 
     <div class="card mt">
       <div class="card-title">Which channel sells each centre</div>
-      <table><thead><tr><th>Centre</th>${d.channels.map(ch=>`<th class="num">${esc(ch)}</th>`).join('')}</tr></thead><tbody>
+      <table class="xtab"><thead><tr><th>Centre</th>${d.channels.map(ch=>`<th class="num">${esc(ch)}</th>`).join('')}</tr></thead><tbody>
       ${list.map(c => {
         const tot = c.revenue || 1;
         return `<tr><td class="strong">${c.centre==='Unmapped'?'<span class="pill warn">unmapped</span>':esc(c.centre)}</td>
         ${d.channels.map(ch => {
           const v = c.byChannel[ch] || 0, s = v/tot;
           const bg = v ? `background:rgba(123,97,255,${(0.06+s*0.5).toFixed(3)});` : '';
-          return `<td class="num" style="${bg}" title="${esc(ch)} · ฿${num(Math.round(v))}">${v?pct(s):'<span style="color:var(--faint)">—</span>'}</td>`;
+          return `<td class="num cell" style="${bg}" title="${esc(ch)} · ฿${num(Math.round(v))}">${v?pct(s):'<span style="color:var(--faint)">—</span>'}</td>`;
         }).join('')}</tr>`;
       }).join('')}
       </tbody></table>
@@ -1692,6 +1706,7 @@ function renderEcom() {
 
   const legend = order.map(ch => `<span class="lg"><i style="background:${colour(ch)}"></i>${esc(ch)}</span>`).join('');
   const maxCh = Math.max(...d.channels.map(c => c.revenue), 1);
+  const maxCentre = Math.max(...d.centers.map(c => c.revenue), 1);
 
   $('viewRoot').innerHTML = `
     <div class="grid g-4" style="margin-bottom:14px;">
@@ -1715,7 +1730,7 @@ function renderEcom() {
 
     <div class="card mt">
       <div class="card-title">Channels</div>
-      <table><thead><tr>
+      <table class="roomy"><thead><tr>
         <th>Channel</th><th class="num">Revenue</th><th class="num">Share</th><th class="num">Orders</th>
         <th class="num">AOV ฿</th><th class="num">Coupons</th><th class="num">Take rate</th><th class="num">Fees ฿</th>
       </tr></thead><tbody>
@@ -1736,10 +1751,11 @@ function renderEcom() {
     <div class="grid g-2-1 mt">
       <div class="card">
         <div class="card-title">Top packages</div>
-        <table><thead><tr><th>Package</th><th class="num">Sold</th><th class="num">Revenue ฿</th></tr></thead><tbody>
+        <table class="roomy"><thead><tr><th>Package</th><th class="num">Sold</th><th class="num">Avg price ฿</th><th class="num">Revenue ฿</th></tr></thead><tbody>
         ${d.packages.map(p => `<tr>
           <td class="trunc i18n" style="max-width:0;" title="${esc(p.name)}">${esc(p.name)}</td>
           <td class="num">${num(p.units)}</td>
+          <td class="num">${num(Math.round(p.revenue/(p.units||1)))}</td>
           <td class="num strong">${num(Math.round(p.revenue))}</td></tr>`).join('')}
         </tbody></table>
         <div class="note">${num(t.packages)} distinct packages sold in this range.</div>
@@ -1759,22 +1775,24 @@ function renderEcom() {
 
     ${t.mappedShare < 0.999 ? `<div class="card mt">
       <div class="card-title">Revenue by medical centre</div>
-      <table><thead><tr><th>Centre</th><th class="num">Revenue ฿</th><th class="num">Share</th><th class="num">Coupons</th></tr></thead><tbody>
+      <table class="roomy"><thead><tr><th>Centre</th><th class="num">Revenue ฿</th><th class="num">Share</th><th class="num">Coupons</th><th class="num">Avg price ฿</th></tr></thead><tbody>
       ${d.centers.map(c => `<tr>
         <td class="strong">${c.center==='(unmapped)'?'<span class="pill warn">not yet mapped</span>':esc(c.center)}</td>
-        <td class="num">${num(Math.round(c.revenue))}</td>
+        <td class="num barcell"><span class="minibar" style="width:${(c.revenue/maxCentre*100).toFixed(1)}%"></span><b>${num(Math.round(c.revenue))}</b></td>
         <td class="num">${pct(c.revenue/t.revenue)}</td>
-        <td class="num">${num(c.coupons)}</td></tr>`).join('')}
+        <td class="num">${num(c.coupons)}</td>
+        <td class="num">${num(Math.round(c.revenue/(c.coupons||1)))}</td></tr>`).join('')}
       </tbody></table>
       <div class="note"><b>${pct(1-t.mappedShare)} of rows have no confirmed SKU yet</b>, so this split is incomplete by that much.
       The e-commerce team resolves them in the Package_Map tab; every centre figure corrects itself on the next refresh.</div>
     </div>` : `<div class="card mt">
       <div class="card-title">Revenue by medical centre</div>
-      <table><thead><tr><th>Centre</th><th class="num">Revenue ฿</th><th class="num">Share</th><th class="num">Coupons</th></tr></thead><tbody>
+      <table class="roomy"><thead><tr><th>Centre</th><th class="num">Revenue ฿</th><th class="num">Share</th><th class="num">Coupons</th><th class="num">Avg price ฿</th></tr></thead><tbody>
       ${d.centers.map(c => `<tr><td class="strong">${esc(c.center)}</td>
-        <td class="num">${num(Math.round(c.revenue))}</td>
+        <td class="num barcell"><span class="minibar" style="width:${(c.revenue/maxCentre*100).toFixed(1)}%"></span><b>${num(Math.round(c.revenue))}</b></td>
         <td class="num">${pct(c.revenue/t.revenue)}</td>
-        <td class="num">${num(c.coupons)}</td></tr>`).join('')}
+        <td class="num">${num(c.coupons)}</td>
+        <td class="num">${num(Math.round(c.revenue/(c.coupons||1)))}</td></tr>`).join('')}
       </tbody></table>
     </div>`}
   `;
