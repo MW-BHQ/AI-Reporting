@@ -72,6 +72,7 @@ expect_field "aud objective"    "$AUD" "d.audiences[0].objective==='CONVERSATION
 # CONVERSATIONS, the real WhatsApp shape). If the goal field is ever dropped from the
 # Windsor pull again, this fails instead of silently pricing everything per LPV.
 expect_field "obj beats campaign" "$AUD" "d.audiences[0].primary.kpi==='message'?'per-msg':undefined"
+expect_field "campaign obj"     "$AUD" "d.audiences[0].campaigns[0].goal==='CONVERSATIONS'?'ok':undefined"
 # Guard: a reach/awareness buy must never be priced per LPV.
 expect_field "awareness=CPM"    "$AUD" "d.audiences.every(a=>a.objectiveClass!=='awareness'||a.primary.kpi==='cpm')||'BAD'"
 # Regression guard for the 3.20 bug: with no positive catalog metric anywhere,

@@ -2527,10 +2527,15 @@ async function buildAudiences(from, to) {
     const cname = String(r.campaign || "(unnamed)");
     if (!a.campaigns.has(cname)) a.campaigns.set(cname, {
       campaign: cname, account: r.account_name || null, code: codeFromCampaignName(cname),
+      goals: new Map(),
       spend: 0, impressions: 0, clicks: 0, lpv: 0, leads: 0, messages: 0, purchases: 0, revenue: 0,
     });
     const c = a.campaigns.get(cname);
     if (!c.account && r.account_name) c.account = String(r.account_name);
+    if (r.adsset_optimization_goal) {
+      c.goals.set(String(r.adsset_optimization_goal),
+        (c.goals.get(String(r.adsset_optimization_goal)) || 0) + spend);
+    }
     c.spend += spend; c.impressions += n(r.impressions); c.clicks += n(r.actions_link_click);
     c.lpv += n(r.actions_landing_page_view); c.leads += n(r.actions_lead);
     c.messages += n(r.actions_onsite_conversion_messaging_conversation_started_7d);
@@ -2569,6 +2574,23 @@ async function buildAudiences(from, to) {
       cpm,
       objective: topRank(a.goals),
       objectiveClass: cls,
+      /**
+       * An audience can be reused across ad sets bought on different goals —
+       * Cancer_20-60 split its July spend 50/50 between lead generation and
+       * traffic. The headline row uses the goal carrying the MOST SPEND, not
+       * the most recent campaign: recency lets a small late test relabel an
+       * audience that spent heavily on something else, whereas spend share
+       * reflects what the budget was actually buying. Where the split is close
+       * no single label is honest, so the mix is exposed and the row is
+       * flagged; the per-campaign goals sit in the expansion.
+       */
+      objectiveMix: (() => {
+        if (a.goals.size <= 1) return null;
+        const total = [...a.goals.values()].reduce((x, y) => x + y, 0) || 1;
+        return [...a.goals.entries()]
+          .sort((x, y) => y[1] - x[1])
+          .map(([goal, spend]) => ({ goal, spend, share: spend / total }));
+      })(),
       cpc: per(a.spend, a.clicks),
       // Link CTR, not all-clicks CTR: the `clicks` field counts every click on
       // the ad including reactions and profile taps, which inflates it badly
@@ -2587,7 +2609,9 @@ async function buildAudiences(from, to) {
       roas: a.spend > 0 && a.revenue > 0 ? a.revenue / a.spend : null,
       lowVolume: a.impressions < MIN_RANK_IMPRESSIONS,
       primary,
-    campaigns: [...a.campaigns.values()].sort((x, y) => y.spend - x.spend),
+    campaigns: [...a.campaigns.values()]
+      .map((c) => ({ ...c, goal: topRank(c.goals), goals: undefined }))
+      .sort((x, y) => y.spend - x.spend),
     };
   });
   // Default order: cheapest primary result first. Two tiers sink below the

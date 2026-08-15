@@ -192,6 +192,20 @@
   .ihint{display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;margin-left:4px;
     border-radius:50%;background:rgba(140,155,190,.2);color:var(--muted);font-size:9px;font-style:italic;
     font-weight:700;cursor:help;vertical-align:middle;}
+  .ihint:hover{background:var(--violet);color:#fff;}
+  /* Floating tooltip: appended to <body> so a table's overflow can never clip
+     it, and shown instantly instead of waiting for the browser's title delay. */
+  #tip{position:fixed;z-index:9999;max-width:340px;padding:9px 11px;border-radius:9px;
+    background:#2A3350;color:#fff;font-size:11.5px;line-height:1.55;font-weight:400;
+    box-shadow:0 8px 24px rgba(20,28,55,.28);pointer-events:none;opacity:0;transition:opacity .12s;
+    white-space:normal;text-align:left;letter-spacing:0;}
+  #tip.on{opacity:1;}
+  /* Sticky header for the wide audience table, so the columns stay identified
+     while scrolling. Cells need their own background or rows show through. */
+  table.sticky-head thead th{position:sticky;top:0;z-index:3;background:var(--card, #FBFCFE);
+    padding-top:9px;box-shadow:inset 0 -1px 0 var(--line);}
+  table.sticky-head thead th{text-align:center;}
+  table.sticky-head thead th:first-child{text-align:left;}
   .pill.green{background:rgba(74,190,140,.14);color:#2E9E6F;}
   .pill.violet{background:var(--violet-soft);color:var(--violet);}
 
@@ -337,6 +351,7 @@
   </aside>
 
   <!-- ================= main ================= -->
+  <div id="tip"></div>
   <main class="main">
     <div class="print-head">
       <img src="/brand/bh-wordmark.png" alt="Bangkok Hospital">
@@ -393,6 +408,37 @@ const S = {
 };
 
 const $ = (id) => document.getElementById(id);
+
+/**
+ * Tooltips for anything carrying data-tip. Delegated from document, so it keeps
+ * working after any re-render, and positioned in fixed coordinates against the
+ * viewport so table overflow cannot clip it.
+ */
+(function tooltips() {
+  let el;
+  const show = (target) => {
+    el = el || $('tip');
+    el.textContent = target.getAttribute('data-tip');
+    el.classList.add('on');
+    const r = target.getBoundingClientRect();
+    const t = el.getBoundingClientRect();
+    let left = r.left + r.width / 2 - t.width / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - t.width - 8));
+    // Prefer below; flip above when there is no room.
+    let top = r.bottom + 8;
+    if (top + t.height > window.innerHeight - 8) top = r.top - t.height - 8;
+    el.style.left = left + 'px';
+    el.style.top = Math.max(8, top) + 'px';
+  };
+  const hide = () => { if (el) el.classList.remove('on'); };
+  document.addEventListener('mouseover', (e) => {
+    const t = e.target.closest('[data-tip]');
+    if (t) show(t); else hide();
+  });
+  document.addEventListener('mouseout', (e) => { if (e.target.closest('[data-tip]')) hide(); });
+  document.addEventListener('scroll', hide, true);
+})();
+
 const fmtISO = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
@@ -1485,20 +1531,22 @@ function renderAudiences() {
           <option value="lpvRate"${S.audienceSort==='lpvRate'?' selected':''}>Best click→visit rate</option>
         </select>
       </div>
-      <table><thead><tr>
+      <table class="sticky-head"><thead><tr>
         <th>Audience set</th>
-        <th title="The ad set's Meta optimisation goal — what it was actually told to buy. Cost/result is priced on this: a Leads set is costed per lead, a Message set per conversation, a Reach set on CPM. Read from Meta's optimization goal, not the campaign name or campaign objective, which can disagree with it.">Obj<span class="ihint">i</span></th>
+        <th><span data-tip="The ad set's Meta optimisation goal — what it was actually told to buy. Cost/result is priced on this: a Leads set costs per lead, a Message set per conversation, a Reach set on CPM. Read from Meta's optimization goal, not the campaign name or campaign objective, which can disagree with it. Where one audience was used across several goals, the label follows the goal carrying the most spend and is marked mixed.">Obj<span class="ihint">i</span></span></th>
         <th class="num">Uses</th><th class="num">Spend ฿</th><th class="num">Impr</th>
-        <th class="num" title="Link clicks ÷ impressions. Independent of budget, so it compares audiences fairly.">CTR</th>
+        <th class="num"><span data-tip="Link clicks ÷ impressions. Independent of budget, so it compares audiences fairly.">CTR</span></th>
         <th class="num">Clicks</th>
         <th class="num">LPV</th>
-        <th title="Meta's own percentile diagnostics, each comparing this ad set against other advertisers competing for the same audience. Q = Quality: how your ad's perceived quality compares. E = Engagement rate: how likely people are to click, react, comment or share. C = Conversion rate: how likely people are to complete the ad set's optimisation goal after clicking. Blank where Meta had too little delivery to rate it.">Meta rank<span class="ihint">i</span></th>
+        <th><span data-tip="Meta's percentile diagnostics, each comparing this ad set against other advertisers competing for the same audience. Q = Quality: how your ad's perceived quality compares. E = Engagement rate: how likely people are to click, react, comment or share. C = Conversion rate: how likely people are to complete the ad set's optimisation goal after clicking. Blank where Meta had too little delivery to rate it.">Meta rank<span class="ihint">i</span></span></th>
         <th class="num">CPM ฿</th><th class="num">Cost/result ฿</th><th></th>
       </tr></thead><tbody>
       ${list.map((a,i)=>`
         <tr class="aud-row" data-i="${i}" style="cursor:pointer;">
           <td class="strong trunc" title="${esc(a.name)}">${esc(a.name)}</td>
-          <td style="white-space:nowrap;font-size:11.5px;color:var(--muted);" title="${a.objective?esc(GOAL_FULL[a.objective]||a.objective)+' — Meta optimisation goal; Cost/result is priced on it':'Meta returned no optimisation goal for this set, so it is priced per landing page view by default'}">${esc(GOAL_LABEL[a.objective]||'—')}</td>
+          <td style="white-space:nowrap;font-size:11.5px;color:var(--muted);text-align:center;">
+            <span data-tip="${a.objective?esc(GOAL_FULL[a.objective]||a.objective)+' — Meta optimisation goal; Cost/result is priced on it.':'Meta returned no optimisation goal for this set, so it is priced per landing page view by default.'}${a.objectiveMix?' Used across '+a.objectiveMix.length+' goals: '+a.objectiveMix.map(m=>(GOAL_FULL[m.goal]||m.goal)+' '+Math.round(m.share*100)+'% of spend').join(', ')+'. The row follows the goal with the most spend; open it to see each campaign.':''}">${esc(GOAL_LABEL[a.objective]||'—')}${a.objectiveMix?` <span class="pill warn" style="font-size:9px;padding:1px 5px;">mixed</span>`:''}</span>
+          </td>
           <td class="num">${num(a.uses)}</td>
           <td class="num">${fmtAmt(a.spend)}</td>
           <td class="num">${num(a.impressions)}</td>
@@ -1518,10 +1566,11 @@ function renderAudiences() {
             · frequency: <b${a.frequency&&a.frequency>=3?' style="color:#D97B1F;"':''}>${a.frequency===null||a.frequency===undefined?'—':a.frequency.toFixed(2)}</b> <span style="color:var(--faint);">(above 3 means quite repeatedly)</span>
             ${a.isCpas?` · CPAS: ${num(a.purchases)} purchase${a.purchases===1?'':'s'}, ${fmtTHB(a.revenue)} revenue${a.roas?`, ROAS ${a.roas.toFixed(2)}×`:''}, ${num(a.atc)} add-to-cart`:''}
           </div>
-          <table style="margin:0;"><thead><tr><th>Ad account</th><th>Campaign</th><th class="num">Spend ฿</th><th class="num">Impr</th><th class="num">CTR</th><th class="num">Clicks</th><th class="num">LPV</th><th class="num">Leads</th><th class="num">Msgs</th>${a.isCpas?'<th class="num">Purch</th><th class="num">Revenue ฿</th>':''}</tr></thead><tbody>
+          <table style="margin:0;"><thead><tr><th>Ad account</th><th>Campaign</th><th>Obj</th><th class="num">Spend ฿</th><th class="num">Impr</th><th class="num">CTR</th><th class="num">Clicks</th><th class="num">LPV</th><th class="num">Leads</th><th class="num">Msgs</th>${a.isCpas?'<th class="num">Purch</th><th class="num">Revenue ฿</th>':''}</tr></thead><tbody>
           ${a.campaigns.map(c=>`<tr>
             <td style="color:var(--muted);white-space:nowrap;">${esc(c.account||'—')}</td>
             <td class="trunc" title="${esc(c.campaign)}">${esc(c.campaign)}</td>
+            <td style="white-space:nowrap;font-size:11px;color:var(--muted);" title="${esc(GOAL_FULL[c.goal]||c.goal||'no optimisation goal reported')}">${esc(GOAL_LABEL[c.goal]||'—')}</td>
             <td class="num">${fmtAmt(c.spend)}</td><td class="num">${num(c.impressions)}</td>
             <td class="num">${pct(c.impressions>0?c.clicks/c.impressions:null)}</td>
             <td class="num">${num(c.clicks)}</td><td class="num">${a.isCpas?'—':num(c.lpv)}</td>
