@@ -66,9 +66,10 @@ expect_field "aud ad account"   "$AUD" "d.audiences[0].accounts[0]"
 expect_field "aud frequency"    "$AUD" "d.audiences[0].frequency"
 expect_field "aud ctr"          "$AUD" "d.audiences[0].ctr"
 expect_field "aud catalog flag" "$AUD" "d.catalogAvailable"
-expect_field "aud viewContent"  "$AUD" "d.audiences[0].viewContent"
-expect_field "aud cost/VC"      "$AUD" "d.audiences[0].costPerViewContent"
 expect_field "aud meta rank"    "$AUD" "d.audiences[0].rankings.quality||'none-rated'"
+expect_field "aud objective"    "$AUD" "d.audiences[0].objective||'none'"
+# Guard: a reach/awareness buy must never be priced per LPV.
+expect_field "awareness=CPM"    "$AUD" "d.audiences.every(a=>a.objectiveClass!=='awareness'||a.primary.kpi==='cpm')||'BAD'"
 # Regression guard for the 3.20 bug: with no positive catalog metric anywhere,
 # nothing may be classified as CPAS. `undefined !== null` once made every row
 # ecommerce, which blanked every cost/result in the account.

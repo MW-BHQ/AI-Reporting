@@ -1670,11 +1670,11 @@ const BLANK = () => ({
 
 const META_MONTHLY_FIELDS = [
   "date", "account_name", "spend", "impressions", "clicks",
-  "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d", "actions_landing_page_view",
+  "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d", "actions_post_engagement", "actions_landing_page_view",
 ];
 const META_CAMPAIGN_FIELDS = [
   "account_name", "campaign", "campaign_objective", "spend", "impressions", "clicks",
-  "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d",
+  "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d", "actions_post_engagement",
 ];
 const leadsOf = (r) => n(r.actions_lead);
 const msgsOf = (r) => n(r.actions_onsite_conversion_messaging_conversation_started_7d);
@@ -2331,24 +2331,40 @@ function normAudienceName(name) {
 /**
  * Objective class decides which cost-per is the audience's real KPI.
  *
- * Campaign-name tokens come first because they state intent. Agency flights
- * often carry no useful token, though, so we fall back to what the ad set
- * actually produced: a set that generated conversations and no site visits is
- * a message campaign whatever its name says. Without that fallback those sets
- * were judged on cost per landing page view, which they were never buying.
+ * Read from Meta's own `adsset_optimization_goal` — what the ad set was
+ * actually told to buy — never from campaign names, which are free text and
+ * lie. `campaign_objective` is NOT a safe substitute either: the WhatsApp sets
+ * report campaign_objective OUTCOME_TRAFFIC while their optimization goal is
+ * CONVERSATIONS, so the campaign field would have them judged on landing page
+ * views they were never buying. Optimization goal first, campaign objective
+ * only as a fallback when it is missing.
  */
-function classifyObjective(campaignName, isCpasAccount, row) {
-  if (isCpasAccount) return "ecommerce";
-  const c = String(campaignName || "").toLowerCase();
-  if (c.includes("lead")) return "lead";
-  if (c.includes("message") || c.includes("whatsapp") || c.includes("msg")) return "message";
-  if (row) {
-    const leads = n(row.actions_lead);
-    const msgs = n(row.actions_onsite_conversion_messaging_conversation_started_7d);
-    const lpv = n(row.actions_landing_page_view);
-    if (msgs > 0 && msgs >= leads && lpv < msgs) return "message";
-    if (leads > 0 && leads > msgs && lpv < leads) return "lead";
-  }
+const GOAL_CLASS = {
+  LANDING_PAGE_VIEWS: "traffic",
+  LINK_CLICKS: "clicks",
+  LEAD_GENERATION: "lead",
+  QUALITY_LEAD: "lead",
+  CONVERSATIONS: "message",
+  OFFSITE_CONVERSIONS: "ecommerce",
+  POST_ENGAGEMENT: "engagement",
+  PAGE_LIKES: "engagement",
+  THRUPLAY: "engagement",
+  REACH: "awareness",
+  IMPRESSIONS: "awareness",
+  AD_RECALL_LIFT: "awareness",
+};
+const CAMPAIGN_OBJECTIVE_CLASS = {
+  OUTCOME_TRAFFIC: "traffic",
+  OUTCOME_LEADS: "lead",
+  OUTCOME_SALES: "ecommerce",
+  OUTCOME_ENGAGEMENT: "engagement",
+  OUTCOME_AWARENESS: "awareness",
+};
+function classifyObjective(row) {
+  const goal = String(row && row.adsset_optimization_goal || "").toUpperCase();
+  if (GOAL_CLASS[goal]) return GOAL_CLASS[goal];
+  const obj = String(row && row.campaign_objective || "").toUpperCase();
+  if (CAMPAIGN_OBJECTIVE_CLASS[obj]) return CAMPAIGN_OBJECTIVE_CLASS[obj];
   return "traffic";
 }
 
@@ -2370,12 +2386,8 @@ function codeFromCampaignName(name) {
 async function buildAudiences(from, to) {
   const BASE_FIELDS = ["adset_id", "adset_name", "campaign", "account_name", "spend",
     "impressions", "reach", "actions_link_click", "actions_landing_page_view",
-    "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d",
-    // Quality layer, all measured per ad set by Meta (no modelling):
-    // ViewContent is the pixel event fired when a visitor actually views
-    // content, i.e. a level deeper than landing_page_view. The three rankings
-    // are Meta's own percentile diagnostics against competing advertisers.
-    "actions_offsite_conversion_fb_pixel_view_content", "actions_omni_view_content",
+    "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d", "actions_post_engagement",
+    // Meta's own percentile diagnostics against competing advertisers.
     "quality_ranking", "engagement_rate_ranking", "conversion_rate_ranking"];
   const CATALOG_FIELDS = ["catalog_segment_actions_omni_purchase",
     "catalog_segment_value_purchase", "catalog_segment_actions_omni_add_to_cart"];
@@ -2473,9 +2485,10 @@ async function buildAudiences(from, to) {
     if (!name) continue;
     if (!map.has(name)) map.set(name, {
       name, spend: 0, impressions: 0, reach: 0, clicks: 0, lpv: 0, leads: 0, messages: 0,
-      purchases: 0, revenue: 0, atc: 0, viewContent: 0, accounts: new Set(),
+      purchases: 0, revenue: 0, atc: 0, engagements: 0, accounts: new Set(),
       rankSpend: { quality: new Map(), engagement: new Map(), conversion: new Map() },
-      campaigns: new Map(), spendByClass: { lead: 0, message: 0, traffic: 0, ecommerce: 0 },
+      campaigns: new Map(), goals: new Map(),
+      spendByClass: { lead: 0, message: 0, traffic: 0, ecommerce: 0, engagement: 0, awareness: 0, clicks: 0 },
     });
     const a = map.get(name);
     const spend = n(r.spend);
@@ -2491,11 +2504,7 @@ async function buildAudiences(from, to) {
     a.leads += n(r.actions_lead);
     a.messages += n(r.actions_onsite_conversion_messaging_conversation_started_7d);
     a.purchases += purchases; a.revenue += revenue; a.atc += atc;
-    // Take whichever ViewContent field reports more: `omni` includes app plus
-    // web while the offsite pixel field is web only, and they disagree on some
-    // CPAS rows.
-    a.viewContent += Math.max(n(r.actions_offsite_conversion_fb_pixel_view_content),
-                              n(r.actions_omni_view_content));
+    a.engagements += n(r.actions_post_engagement);
     // Rankings are categorical per ad set, so weight each value by the spend
     // behind it and report the heaviest — one cheap ad set shouldn't set the
     // rating for an audience that ran ฿50k elsewhere. UNKNOWN means Meta had
@@ -2507,7 +2516,11 @@ async function buildAudiences(from, to) {
       a.rankSpend[key].set(v, (a.rankSpend[key].get(v) || 0) + spend);
     }
     if (r.account_name) a.accounts.add(String(r.account_name));
-    a.spendByClass[classifyObjective(r.campaign, isCpasAccount, r)] += spend;
+    a.spendByClass[classifyObjective(r)] += spend;
+    if (r.adsset_optimization_goal) {
+      a.goals.set(String(r.adsset_optimization_goal),
+        (a.goals.get(String(r.adsset_optimization_goal)) || 0) + spend);
+    }
     const cname = String(r.campaign || "(unnamed)");
     if (!a.campaigns.has(cname)) a.campaigns.set(cname, {
       campaign: cname, account: r.account_name || null, code: codeFromCampaignName(cname),
@@ -2526,11 +2539,17 @@ async function buildAudiences(from, to) {
   const rate = (num_, den) => (den > 0 ? num_ / den : null);
   const audiences = [...map.values()].map((a) => {
     const cls = Object.entries(a.spendByClass).sort((x, y) => y[1] - x[1])[0][0];
+    const cpm = a.impressions > 0 ? (a.spend / a.impressions) * 1000 : null;
     const primary =
-      cls === "lead"      ? { kpi: "lead",     label: "per lead",     count: a.leads,     cost: per(a.spend, a.leads) } :
-      cls === "message"   ? { kpi: "message",  label: "per msg",      count: a.messages,  cost: per(a.spend, a.messages) } :
-      cls === "ecommerce" ? { kpi: "purchase", label: "per purchase", count: a.purchases, cost: per(a.spend, a.purchases) } :
-                            { kpi: "lpv",      label: "per LPV",      count: a.lpv,       cost: per(a.spend, a.lpv) };
+      cls === "lead"       ? { kpi: "lead",     label: "per lead",     count: a.leads,       cost: per(a.spend, a.leads) } :
+      cls === "message"    ? { kpi: "message",  label: "per msg",      count: a.messages,    cost: per(a.spend, a.messages) } :
+      cls === "ecommerce"  ? { kpi: "purchase", label: "per purchase", count: a.purchases,   cost: per(a.spend, a.purchases) } :
+      cls === "clicks"     ? { kpi: "click",    label: "per click",    count: a.clicks,      cost: per(a.spend, a.clicks) } :
+      cls === "engagement" ? { kpi: "engage",   label: "per engmt",    count: a.engagements, cost: per(a.spend, a.engagements) } :
+      // A reach buy is not trying to produce visits at all, so it is priced on
+      // CPM. Scoring it per LPV says nothing about whether it did its job.
+      cls === "awareness"  ? { kpi: "cpm",      label: "CPM (reach buy)", count: a.impressions, cost: cpm } :
+                             { kpi: "lpv",      label: "per LPV",      count: a.lpv,         cost: per(a.spend, a.lpv) };
     return {
       name: a.name,
       uses: a.campaigns.size,
@@ -2539,20 +2558,14 @@ async function buildAudiences(from, to) {
       lpv: a.lpv, leads: a.leads, messages: a.messages,
       purchases: a.purchases, revenue: a.revenue, atc: a.atc,
       isCpas: cls === "ecommerce",
-      viewContent: a.viewContent,
-      costPerViewContent: per(a.spend, a.viewContent),
-      // Of the visits that landed, how many went deeper into the site.
-      vcRate: rate(a.viewContent, a.lpv),
-      // A set that sent real visits but recorded no ViewContent is either poor
-      // traffic or landing on a page where the event was never configured —
-      // the UI says both, because we cannot tell them apart from here.
-      vcSuspect: a.lpv >= 100 && a.viewContent === 0,
       rankings: {
         quality: topRank(a.rankSpend.quality),
         engagement: topRank(a.rankSpend.engagement),
         conversion: topRank(a.rankSpend.conversion),
       },
-      cpm: a.impressions > 0 ? (a.spend / a.impressions) * 1000 : null,
+      cpm,
+      objective: topRank(a.goals),
+      objectiveClass: cls,
       cpc: per(a.spend, a.clicks),
       // Link CTR, not all-clicks CTR: the `clicks` field counts every click on
       // the ad including reactions and profile taps, which inflates it badly
@@ -2588,8 +2601,7 @@ async function buildAudiences(from, to) {
     sets: t.sets + 1, spend: t.spend + a.spend, impressions: t.impressions + a.impressions,
     clicks: t.clicks + a.clicks, lpv: t.lpv + a.lpv, leads: t.leads + a.leads,
     messages: t.messages + a.messages, purchases: t.purchases + a.purchases, revenue: t.revenue + a.revenue,
-    viewContent: t.viewContent + a.viewContent,
-  }), { sets: 0, spend: 0, impressions: 0, clicks: 0, lpv: 0, leads: 0, messages: 0, purchases: 0, revenue: 0, viewContent: 0 });
+  }), { sets: 0, spend: 0, impressions: 0, clicks: 0, lpv: 0, leads: 0, messages: 0, purchases: 0, revenue: 0 });
   totals.ctr = rate(totals.clicks, totals.impressions);
   return { audiences, totals, catalogAvailable };
 }
