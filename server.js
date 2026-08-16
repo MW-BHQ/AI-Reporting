@@ -3025,7 +3025,6 @@ async function buildChannels(from, to, scope) {
       avgPrice: c.coupons ? c.revenue / c.coupons : 0,
       takeRate: c.revenue ? c.fees / c.revenue : null,
       couponsPerOrder: c.orders.size ? c.coupons / c.orders.size : 0,
-      repeatShare: null,
       series,
       momentum: firstHalf > 0 ? (lastHalf - firstHalf) / firstHalf : null,
       firstHalf, lastHalf, delta: lastHalf - firstHalf,
@@ -3237,7 +3236,9 @@ app.get("/api/version", (_req, res) => res.json({
  * so a permissions problem is one request away from a diagnosis instead of
  * showing up as mysteriously empty campaign names.
  */
-app.get("/api/sheets-check", async (_req, res) => {
+// Returns spreadsheet IDs and the first row of each sheet, which is more than a
+// tab-restricted viewer should see. Diagnostics are an admin tool.
+app.get("/api/sheets-check", requireAdmin, async (_req, res) => {
   const out = { scope: SHEETS_SCOPE, utmSheet: SHEET_UTM, planSheet: SHEET_PLAN, steps: [] };
   try {
     await sheetsToken();

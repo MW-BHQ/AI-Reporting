@@ -1666,8 +1666,8 @@ const rankDots = (r) => {
     .map(([k,label]) => {
       const v = r && r[k];
       const d = v && RANK_DOT[v];
-      if (!d) return `<span class="qec-cell" data-tip="${label}: Meta had too little delivery to rate this set">—</span>`;
-      return `<span class="qec-cell" data-tip="${label}: ${d.word}"><i class="dot ${d.cls}"></i>${d.text?`<em>${d.text}</em>`:''}</span>`;
+      if (!d) return `<span class="qec-cell" data-tip="${esc(label)}: Meta had too little delivery to rate this set">—</span>`;
+      return `<span class="qec-cell" data-tip="${esc(label)}: ${d.word}"><i class="dot ${d.cls}"></i>${d.text?`<em>${d.text}</em>`:''}</span>`;
     });
   return `<span class="qec">${cells.join('')}</span>`;
 };
@@ -2251,7 +2251,7 @@ These are relative percentiles, not absolute scores, and they are forward-lookin
         <tr class="aud-row" data-i="${i}" style="cursor:pointer;">
           <td class="strong trunc" style="max-width:0;" title="${esc(a.name)}">${esc(a.name)}</td>
           <td style="white-space:nowrap;font-size:11.5px;color:var(--muted);text-align:left;">
-            <span data-tip="${a.objective?esc(GOAL_FULL[a.objective]||a.objective)+' — Meta optimisation goal; Cost/result is priced on it.':'Meta returned no optimisation goal for this set, so it is priced per landing page view by default.'}${a.objectiveMix?' Used across '+a.objectiveMix.length+' goals: '+a.objectiveMix.map(m=>(GOAL_FULL[m.goal]||m.goal)+' '+Math.round(m.share*100)+'% of spend').join(', ')+'. The row follows the goal with the most spend; open it to see each campaign.':''}">${esc(GOAL_LABEL[a.objective]||'—')}${a.objectiveMix?` <span class="pill warn" style="font-size:9px;padding:1px 5px;">mixed</span>`:''}</span>
+            <span data-tip="${a.objective?esc(GOAL_FULL[a.objective]||a.objective)+' — Meta optimisation goal; Cost/result is priced on it.':'Meta returned no optimisation goal for this set, so it is priced per landing page view by default.'}${a.objectiveMix?' Used across '+a.objectiveMix.length+' goals: '+a.objectiveMix.map(m=>esc(GOAL_FULL[m.goal]||m.goal)+' '+Math.round(m.share*100)+'% of spend').join(', ')+'. The row follows the goal with the most spend; open it to see each campaign.':''}">${esc(GOAL_LABEL[a.objective]||'—')}${a.objectiveMix?` <span class="pill warn" style="font-size:9px;padding:1px 5px;">mixed</span>`:''}</span>
           </td>
           <td class="num">${num(a.uses)}</td>
           <td class="num">${fmtAmt(a.spend)}</td>

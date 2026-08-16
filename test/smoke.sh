@@ -49,6 +49,9 @@ expect_field() {
 }
 
 FROM=2026-07-01; TO=2026-07-31
+echo "--- static audit ---"
+node "$(dirname "$0")/audit.js" || FAIL=$((FAIL+1))
+echo
 echo "--- endpoints ---"
 check "version"    GET "/api/version"
 check "me"         GET "/api/me"
