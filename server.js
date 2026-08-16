@@ -224,6 +224,8 @@ const TABS = [
   { id: "audiences", label: "Audiences" },
   { id: "ecom",      label: "E-commerce" },
   { id: "ecomcentre",label: "E-commerce · Centres" },
+  { id: "ecomchannels", label: "E-commerce · Channels" },
+  { id: "ecommigration", label: "E-commerce · Migration" },
   { id: "users",     label: "Users", adminOnly: true },
 ];
 const TAB_IDS = TABS.filter((t) => !t.adminOnly).map((t) => t.id);
@@ -2700,6 +2702,17 @@ app.get("/api/audiences", requireTab("audiences"), async (req, res) => {
  * service account. The sheet must be shared with that account as a Viewer and
  * the Sheets API enabled on the project.
  */
+let ecomRowCache = { at: 0, rows: null };
+const ECOM_ROWS_TTL_MS = 5 * 60 * 1000;
+
+async function ecomRows(force) {
+  const fresh = !force && ecomRowCache.rows && (Date.now() - ecomRowCache.at) < ECOM_ROWS_TTL_MS;
+  if (fresh) return ecomRowCache.rows;
+  const rows = await fetchEcomRows();
+  ecomRowCache = { at: Date.now(), rows };
+  return rows;
+}
+
 async function fetchEcomRows() {
   if (!ECOM_SHEET_ID) throw new Error("ECOM_SHEET_ID is not set");
   const token = await gcpAccessToken();
@@ -2748,7 +2761,7 @@ async function fetchEcomRows() {
 }
 
 async function buildEcommerce(from, to, scope) {
-  const all = await fetchEcomRows();
+  const all = await ecomRows();
   const inRange = all.filter((r) => r.date >= from && r.date <= to);
   // Online is the default because B2B and Special Campaign orders are few and
   // enormous; including them silently would make every channel average wrong.
@@ -2862,7 +2875,7 @@ app.get("/api/ecommerce", requireTab("ecom"), async (req, res) => {
  * walked in and might convert into further care.
  */
 async function buildCentres(from, to, scope) {
-  const all = await fetchEcomRows();
+  const all = await ecomRows();
   const inRange = all.filter((r) => r.date >= from && r.date <= to);
   const rows = scope === "all" ? inRange : inRange.filter((r) => r.type === "Online");
   if (!rows.length) return { empty: true, scope: scope || "online", rangeHas: all.length };
@@ -2945,6 +2958,199 @@ app.get("/api/ecommerce/centres", requireTab("ecomcentre"), async (req, res) => 
   } catch (err) {
     logJson("ERROR", "ecom_centres_failed", { error: String(err.message || err) });
     res.status(500).json({ error: err.message || "Centres failed" });
+  }
+});
+
+/**
+ * Channel analysis: how each channel performs over time and what it is
+ * distinctively good at.
+ *
+ * "Good at" is answered with an affinity index rather than a raw share. A
+ * channel selling mostly Check-Up packages is not interesting if everyone sells
+ * mostly Check-Up. The index compares the channel's mix against the overall
+ * mix, so 2.0 means that centre is twice as concentrated here as it is across
+ * the business — that is what makes a channel distinctive.
+ */
+async function buildChannels(from, to, scope) {
+  const all = await ecomRows();
+  const inRange = all.filter((r) => r.date >= from && r.date <= to);
+  const rows = scope === "all" ? inRange : inRange.filter((r) => r.type === "Online");
+  if (!rows.length) return { empty: true, scope: scope || "online", rangeHas: all.length };
+
+  const months = [...new Set(rows.map((r) => r.date.slice(0, 7)))].sort();
+  const overallCentre = new Map();
+  let revenue = 0;
+  for (const r of rows) {
+    revenue += r.price;
+    const k = r.center || "Unmapped";
+    overallCentre.set(k, (overallCentre.get(k) || 0) + r.price);
+  }
+
+  const ch = new Map();
+  for (const r of rows) {
+    const c = ch.get(r.channel) || {
+      channel: r.channel, type: r.type, revenue: 0, fees: 0, coupons: 0,
+      orders: new Set(), customers: new Set(), byMonth: new Map(),
+      centres: new Map(), packages: new Map(),
+    };
+    c.revenue += r.price; c.fees += r.txn + r.comm; c.coupons++;
+    c.orders.add(r.orderId);
+    if (r.customer) c.customers.add(r.customer);
+    const m = r.date.slice(0, 7);
+    c.byMonth.set(m, (c.byMonth.get(m) || 0) + r.price);
+    const ck = r.center || "Unmapped";
+    c.centres.set(ck, (c.centres.get(ck) || 0) + r.price);
+    const p = c.packages.get(r.pkg) || { name: r.pkg, revenue: 0, units: 0 };
+    p.revenue += r.price; p.units++;
+    c.packages.set(r.pkg, p);
+    ch.set(r.channel, c);
+  }
+
+  const half = Math.floor(months.length / 2);
+  const channels = [...ch.values()].map((c) => {
+    const series = months.map((m) => c.byMonth.get(m) || 0);
+    // Momentum compares the two halves of the selected range rather than the
+    // last two months, which would swing wildly on a single promotion.
+    const firstHalf = series.slice(0, half).reduce((a, b) => a + b, 0);
+    const lastHalf = series.slice(half).reduce((a, b) => a + b, 0);
+    const affinity = [...c.centres.entries()].map(([centre, rev]) => {
+      const chShare = c.revenue ? rev / c.revenue : 0;
+      const allShare = revenue ? (overallCentre.get(centre) || 0) / revenue : 0;
+      return { centre, revenue: rev, share: chShare, index: allShare > 0 ? chShare / allShare : null };
+    }).filter((a) => a.revenue > 0).sort((a, b) => (b.index || 0) - (a.index || 0));
+    return {
+      channel: c.channel, type: c.type, revenue: c.revenue, fees: c.fees,
+      coupons: c.coupons, orders: c.orders.size, customers: c.customers.size,
+      aov: c.orders.size ? c.revenue / c.orders.size : 0,
+      avgPrice: c.coupons ? c.revenue / c.coupons : 0,
+      takeRate: c.revenue ? c.fees / c.revenue : null,
+      couponsPerOrder: c.orders.size ? c.coupons / c.orders.size : 0,
+      repeatShare: null,
+      series,
+      momentum: firstHalf > 0 ? (lastHalf - firstHalf) / firstHalf : null,
+      activeMonths: series.filter((v) => v > 0).length,
+      bestAt: affinity.slice(0, 3),
+      topPackages: [...c.packages.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 3),
+    };
+  }).sort((a, b) => b.revenue - a.revenue);
+
+  return {
+    scope: scope === "all" ? "all" : "online",
+    months, revenue, channels,
+    monthly: months.map((m) => ({
+      month: m,
+      total: channels.reduce((a, c) => a + c.series[months.indexOf(m)], 0),
+      byChannel: Object.fromEntries(channels.map((c) => [c.channel, c.series[months.indexOf(m)]])),
+    })),
+  };
+}
+
+app.get("/api/ecommerce/channels", requireTab("ecomchannels"), async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  try {
+    const scope = req.query.scope === "all" ? "all" : "online";
+    const out = await withCache(`ecomch:${scope}:${from}:${to}`, req.query.refresh === "1",
+      () => buildChannels(from, to, scope));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "ecom_channels_failed", { error: String(err.message || err) });
+    res.status(500).json({ error: err.message || "Channels failed" });
+  }
+});
+
+/**
+ * Channel migration: do customers who start online later buy offline, and
+ * vice versa.
+ *
+ * Definitions matter here, so they are stated rather than implied:
+ *  · A customer is a stable hashed key. Rows without one cannot take part, and
+ *    the response reports how many were excluded on that basis.
+ *  · Only customers with purchases on two or more DIFFERENT DATES count. Two
+ *    coupons in one basket are one shopping decision, not a migration.
+ *  · Their FIRST purchase sets the origin type; every later purchase of a
+ *    different type is a switch, dated to the month it happened.
+ *  · This is ALWAYS computed across all channel types. Restricting to online
+ *    would make the question unanswerable.
+ */
+async function buildMigration(from, to) {
+  const all = await ecomRows();
+  const rows = all.filter((r) => r.date >= from && r.date <= to);
+  if (!rows.length) return { empty: true, rangeHas: all.length };
+
+  const noKey = rows.filter((r) => !r.customer).length;
+  const byCustomer = new Map();
+  for (const r of rows) {
+    if (!r.customer) continue;
+    if (!byCustomer.has(r.customer)) byCustomer.set(r.customer, []);
+    byCustomer.get(r.customer).push(r);
+  }
+
+  const months = [...new Set(rows.map((r) => r.date.slice(0, 7)))].sort();
+  const flow = new Map();          // "Online→Offline" => count of customers
+  const monthly = new Map();       // month => { toOffline, toOnline, other }
+  months.forEach((m) => monthly.set(m, { month: m, toOffline: 0, toOnline: 0, other: 0 }));
+
+  let multiDate = 0, switchers = 0, loyal = 0;
+  const originCounts = new Map(), originSwitched = new Map();
+
+  for (const [, list] of byCustomer) {
+    list.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    const dates = [...new Set(list.map((r) => r.date))];
+    if (dates.length < 2) continue;         // one shopping trip is not a migration
+    multiDate++;
+    const origin = list[0].type;
+    originCounts.set(origin, (originCounts.get(origin) || 0) + 1);
+
+    // The first purchase on a different type, if any, is the migration event.
+    const jump = list.find((r) => r.type !== origin);
+    if (!jump) { loyal++; continue; }
+    switchers++;
+    originSwitched.set(origin, (originSwitched.get(origin) || 0) + 1);
+    const key = `${origin}→${jump.type}`;
+    flow.set(key, (flow.get(key) || 0) + 1);
+    const m = monthly.get(jump.date.slice(0, 7));
+    if (m) {
+      if (origin === "Online" && jump.type !== "Online") m.toOffline++;
+      else if (origin !== "Online" && jump.type === "Online") m.toOnline++;
+      else m.other++;
+    }
+  }
+
+  const flows = [...flow.entries()]
+    .map(([k, count]) => ({ from: k.split("→")[0], to: k.split("→")[1], count }))
+    .sort((a, b) => b.count - a.count);
+
+  const origins = [...originCounts.entries()].map(([type, customers]) => ({
+    type, customers, switched: originSwitched.get(type) || 0,
+    switchRate: customers ? (originSwitched.get(type) || 0) / customers : 0,
+  })).sort((a, b) => b.customers - a.customers);
+
+  return {
+    months,
+    monthly: months.map((m) => monthly.get(m)),
+    flows, origins,
+    totals: {
+      customers: byCustomer.size,
+      returning: multiDate,
+      switchers, loyal,
+      switchRate: multiDate ? switchers / multiDate : 0,
+      rowsWithoutKey: noKey,
+      coverage: rows.length ? 1 - noKey / rows.length : 1,
+    },
+  };
+}
+
+app.get("/api/ecommerce/migration", requireTab("ecommigration"), async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  try {
+    const out = await withCache(`ecommig:${from}:${to}`, req.query.refresh === "1",
+      () => buildMigration(from, to));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "ecom_migration_failed", { error: String(err.message || err) });
+    res.status(500).json({ error: err.message || "Migration failed" });
   }
 });
 

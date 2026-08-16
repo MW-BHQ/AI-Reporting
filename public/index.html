@@ -219,6 +219,15 @@
   .xtab td, .xtab th{padding:10px 14px;}
   .xtab td:first-child, .xtab th:first-child{padding-left:0;}
   .xtab td.cell{border-radius:5px;}
+  .affinity{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;}
+  .afcard{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--glass-2);}
+  .afhead{display:flex;align-items:center;gap:2px;font-size:12.5px;margin-bottom:8px;}
+  .afrow{display:flex;align-items:baseline;gap:7px;font-size:11.5px;margin-bottom:4px;}
+  .afname{flex:1;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .afidx{font-weight:600;color:var(--muted);} .afidx.hot{color:var(--violet);}
+  .afshare{color:var(--faint);font-size:10.5px;}
+  .afpkg{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:10.5px;
+    color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;}
   .seg button{border:0;background:transparent;padding:5px 12px;font-size:11.5px;color:var(--muted);
     cursor:pointer;font-family:inherit;}
@@ -398,6 +407,14 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V9l5-4 5 4v11"/><path d="M14 20V12h6v8"/><path d="M2 20h20"/></svg>
         By centre
       </div>
+      <div class="nav-item sub" data-view="ecomchannels">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17l5-6 4 3 5-7 4 4"/><circle cx="8" cy="11" r="1"/><circle cx="12" cy="14" r="1"/></svg>
+        Channels
+      </div>
+      <div class="nav-item sub" data-view="ecommigration">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h11l-3-3M20 16H9l3 3"/></svg>
+        Migration
+      </div>
 
       <div class="nav-sep"></div>
       <div class="nav-item" data-view="topics">
@@ -470,6 +487,8 @@ const S = {
   audiences: null, audiencesKey: null, audienceSort: 'primary', audienceOpen: null,
   ecom: null, ecomKey: null, ecomLoading: false, ecomError: null, ecomScope: 'online',
   ecomc: null, ecomcKey: null, ecomcLoading: false, ecomcError: null,
+  ecomch: null, ecomchKey: null, ecomchLoading: false, ecomchError: null,
+  ecommig: null, ecommigKey: null, ecommigLoading: false, ecommigError: null,
   audiencesLoading: false, audiencesError: null,
   me: null, users: null,
   charts: {},
@@ -605,7 +624,9 @@ const TITLES = {
   gbp: ['Google Business Profile', 'Reviews and ratings by listing'],
   audiences: ['Audiences', 'Meta audience sets ranked by cost per first-degree result'],
   ecom: ['E-commerce', 'Package sales across every online sales channel'],
-  ecomcentre: ['E-commerce · By centre', 'Which centres sell, through which channel, and how much is still unredeemed'],
+  ecomcentre: ['E-commerce · By centre', 'Which centres sell, and through which channel'],
+  ecomchannels: ['E-commerce · Channels', 'How each channel performs over time, and what it is distinctively good at'],
+  ecommigration: ['E-commerce · Migration', 'Do customers who start online later buy offline'],
 };
 
 // ============================================================ fetching
@@ -619,6 +640,28 @@ async function loadOverview(refresh = false) {
   S.overview = await res.json(); S.overviewKey = key;
   setStatus('ok', S.overview.cached ? `cached ${S.overview.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
   return S.overview;
+}
+
+async function loadEcomChannels(refresh = false) {
+  const key = `${$('from').value}|${$('to').value}|${S.ecomScope}`;
+  if (!refresh && S.ecomchKey === key && S.ecomch) return S.ecomch;
+  setStatus('busy', 'comparing channels…');
+  const res = await fetch(`/api/ecommerce/channels?from=${$('from').value}&to=${$('to').value}&scope=${S.ecomScope}${refresh?'&refresh=1':''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,220)}`);
+  S.ecomch = await res.json(); S.ecomchKey = key;
+  setStatus('ok', S.ecomch.cached ? `cached ${S.ecomch.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.ecomch;
+}
+
+async function loadEcomMigration(refresh = false) {
+  const key = `${$('from').value}|${$('to').value}`;
+  if (!refresh && S.ecommigKey === key && S.ecommig) return S.ecommig;
+  setStatus('busy', 'tracing customer journeys…');
+  const res = await fetch(`/api/ecommerce/migration?from=${$('from').value}&to=${$('to').value}${refresh?'&refresh=1':''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,220)}`);
+  S.ecommig = await res.json(); S.ecommigKey = key;
+  setStatus('ok', S.ecommig.cached ? `cached ${S.ecommig.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.ecommig;
 }
 
 async function loadEcomCentres(refresh = false) {
@@ -751,6 +794,8 @@ $('loadBtn').addEventListener('click', async () => {
     else if (S.view === 'audiences') { S.audiencesError = null; await loadAudiences(true); }
     else if (S.view === 'ecom') { S.ecomError = null; await loadEcom(true); }
     else if (S.view === 'ecomcentre') { S.ecomcError = null; await loadEcomCentres(true); }
+    else if (S.view === 'ecomchannels') { S.ecomchError = null; await loadEcomChannels(true); }
+    else if (S.view === 'ecommigration') { S.ecommigError = null; await loadEcomMigration(true); }
     else if (S.view === 'users') { S.users = null; await loadUsers(); }
     else if (S.view === 'topics' && S.topicTerm) { await loadTopic(S.topicTerm); }
     render();
@@ -788,6 +833,8 @@ function render() {
   else if (S.view === 'audiences') renderAudiences();
   else if (S.view === 'ecom') renderEcom();
   else if (S.view === 'ecomcentre') renderEcomCentres();
+  else if (S.view === 'ecomchannels') renderEcomChannels();
+  else if (S.view === 'ecommigration') renderEcomMigration();
   else if (S.view === 'users') renderUsers();
   else renderTopics();
 }
@@ -1582,6 +1629,201 @@ const rankDots = (r) => {
 const fmtAmt = (v) => v === null || v === undefined ? '—' : (v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(2));
 // ============================================================ E-COMMERCE
 const CH_COLORS = ['#7B61FF','#4ABE8C','#F0A93B','#59A5F5','#E0719B','#8C97B4','#5BC8C0','#C08BE8'];
+function renderEcomMigration() {
+  const d = S.ecommig;
+  if (!d && !S.ecommigLoading && !S.ecommigError) {
+    S.ecommigLoading = true;
+    loadEcomMigration().catch(e => { S.ecommigError = e.message || String(e); })
+      .finally(() => { S.ecommigLoading = false; render(); });
+  }
+  if (S.ecommigError) { const m = S.ecommigError; $('viewRoot').innerHTML = errorState(m); S.ecommigError = null; return; }
+  if (!d) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">Tracing customer journeys…</div></div></div>`; return; }
+  if (d.empty) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in this range</div></div></div>`; return; }
+
+  const t = d.totals;
+  const W = 760, HH = 150;
+  const maxM = Math.max(...d.monthly.map(m => Math.max(m.toOffline, m.toOnline, m.other)), 1);
+  const bw = W / Math.max(d.monthly.length, 1);
+  const bars = d.monthly.map((m, i) => {
+    const x = i * bw, w = Math.max(1, bw/3 - 1.5);
+    const h1 = (m.toOffline/maxM)*HH, h2 = (m.toOnline/maxM)*HH, h3 = (m.other/maxM)*HH;
+    return `<rect x="${x.toFixed(1)}" y="${(HH-h1).toFixed(1)}" width="${w.toFixed(1)}" height="${h1.toFixed(1)}" fill="#F0A93B"><title>${esc(m.month)} · online → elsewhere: ${m.toOffline}</title></rect>
+      <rect x="${(x+w+1.5).toFixed(1)}" y="${(HH-h2).toFixed(1)}" width="${w.toFixed(1)}" height="${h2.toFixed(1)}" fill="#7B61FF"><title>${esc(m.month)} · elsewhere → online: ${m.toOnline}</title></rect>
+      <rect x="${(x+2*(w+1.5)).toFixed(1)}" y="${(HH-h3).toFixed(1)}" width="${w.toFixed(1)}" height="${h3.toFixed(1)}" fill="#C3CBE0"><title>${esc(m.month)} · other moves: ${m.other}</title></rect>`;
+  }).join('');
+
+  const maxFlow = Math.max(...d.flows.map(f => f.count), 1);
+
+  $('viewRoot').innerHTML = `
+    <div class="grid g-4" style="margin-bottom:14px;">
+      <div class="stat"><div class="lab">Identifiable customers</div><div class="val">${num(t.customers)}</div>
+        <div class="sub2">${pct(t.coverage)} of rows carry a customer key</div></div>
+      <div class="stat"><div class="lab">Came back another day</div><div class="val">${num(t.returning)}</div>
+        <div class="sub2">${pct(t.returning/(t.customers||1))} of customers</div></div>
+      <div class="stat"><div class="lab">Changed channel type</div><div class="val">${num(t.switchers)}</div>
+        <div class="sub2">${pct(t.switchRate)} of returning customers</div></div>
+      <div class="stat"><div class="lab">Stayed put</div><div class="val">${num(t.loyal)}</div>
+        <div class="sub2">returned but never switched type</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">When customers switch</div>
+      <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${bars}</svg>
+      <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:6px;">
+        <span>${esc(d.months[0]||'')}</span><span>${esc(d.months[d.months.length-1]||'')}</span>
+      </div>
+      <div class="legend">
+        <span class="lg"><i style="background:#F0A93B"></i>Online → elsewhere</span>
+        <span class="lg"><i style="background:#7B61FF"></i>Elsewhere → online</span>
+        <span class="lg"><i style="background:#C3CBE0"></i>Other moves</span>
+      </div>
+      <div class="note">Each customer appears once, in the month they first bought through a different type of channel than the one they started on.</div>
+    </div>
+
+    <div class="grid g-2-1 mt">
+      <div class="card">
+        <div class="card-title">Where they go</div>
+        <table class="roomy"><thead><tr><th>From</th><th>To</th><th class="num">Customers</th><th></th></tr></thead><tbody>
+        ${d.flows.map(f => `<tr>
+          <td class="strong">${esc(f.from)}</td>
+          <td class="strong">${esc(f.to)}</td>
+          <td class="num">${num(f.count)}</td>
+          <td style="width:34%;"><span style="display:block;height:9px;border-radius:4px;background:${f.from==='Online'?'#F0A93B':'#7B61FF'};width:${(f.count/maxFlow*100).toFixed(1)}%;opacity:.8;"></span></td>
+        </tr>`).join('')}
+        </tbody></table>
+      </div>
+      <div class="card">
+        <div class="card-title">Stickiness by starting point</div>
+        <table class="roomy"><thead><tr><th>Started on</th><th class="num">Returning</th><th class="num">Switched</th><th class="num">Switch rate</th></tr></thead><tbody>
+        ${d.origins.map(o => `<tr>
+          <td class="strong">${esc(o.type)}</td>
+          <td class="num">${num(o.customers)}</td>
+          <td class="num">${num(o.switched)}</td>
+          <td class="num${o.switchRate>=0.5?' bad':(o.switchRate<=0.2?' good':'')}">${pct(o.switchRate)}</td>
+        </tr>`).join('')}
+        </tbody></table>
+        <div class="note">A high switch rate is not automatically bad — it can mean the channel introduces people to the hospital who then buy where it suits them.</div>
+      </div>
+    </div>
+
+    <div class="card mt">
+      <div class="card-title">How this is counted</div>
+      <div class="note" style="font-size:12.5px;">
+        A customer is a stable hashed key built from their email — no name, phone or address is involved.
+        Only customers who bought on <b>two or more different dates</b> are counted, because two coupons in one
+        basket are a single decision, not a migration. Their first purchase sets the starting type, and the first
+        later purchase of a different type is the switch, dated to that month.<br><br>
+        ${t.coverage < 0.999 ? `<b>${pct(1-t.coverage)} of rows carry no customer key</b> and cannot take part —
+        those buyers may well have switched without appearing here, so read these counts as a floor, not a total.` :
+        'Every row in range carries a customer key.'}
+        This view always spans all channel types; restricting it to online would make the question unanswerable.
+      </div>
+    </div>`;
+}
+
+function renderEcomChannels() {
+  const d = S.ecomch;
+  if (!d && !S.ecomchLoading && !S.ecomchError) {
+    S.ecomchLoading = true;
+    loadEcomChannels().catch(e => { S.ecomchError = e.message || String(e); })
+      .finally(() => { S.ecomchLoading = false; render(); });
+  }
+  if (S.ecomchError) { const m = S.ecomchError; $('viewRoot').innerHTML = errorState(m); S.ecomchError = null; return; }
+  if (!d) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">Comparing channels…</div></div></div>`; return; }
+  if (d.empty) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in this range</div></div></div>`; return; }
+
+  const months = d.months, colour = (ch) => CH_COLORS[d.channels.findIndex(c => c.channel === ch) % CH_COLORS.length];
+  const W = 760, HH = 180;
+  const maxM = Math.max(...d.monthly.map(m => m.total), 1);
+  const bw = W / Math.max(months.length, 1);
+  const stack = d.monthly.map((m, i) => {
+    let y = HH, seg = '';
+    d.channels.forEach(c => {
+      const v = m.byChannel[c.channel] || 0;
+      if (!v) return;
+      const hgt = (v / maxM) * HH; y -= hgt;
+      seg += `<rect x="${(i*bw).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1,bw-4).toFixed(1)}" height="${hgt.toFixed(1)}" fill="${colour(c.channel)}"><title>${esc(m.month)} · ${esc(c.channel)}: ฿${num(Math.round(v))}</title></rect>`;
+    });
+    return seg;
+  }).join('');
+
+  // Each channel's own trend, scaled to itself so small channels are readable.
+  const spark = (c) => {
+    const mx = Math.max(...c.series, 1), w = 92, hgt = 26;
+    const step = w / Math.max(c.series.length - 1, 1);
+    const pts = c.series.map((v, i) => `${(i*step).toFixed(1)},${(hgt - (v/mx)*hgt).toFixed(1)}`).join(' ');
+    return `<svg width="${w}" height="${hgt}" viewBox="0 0 ${w} ${hgt}" style="vertical-align:middle;">
+      <polyline points="${pts}" fill="none" stroke="${colour(c.channel)}" stroke-width="1.6"/></svg>`;
+  };
+  const mom = (v) => v === null ? '<span style="color:var(--faint)">—</span>'
+    : `<span style="color:${v>=0.05?'#2E9E6F':(v<=-0.05?'#D9534F':'var(--muted)')};font-weight:${Math.abs(v)>=0.05?600:400};">${v>=0?'+':''}${(v*100).toFixed(0)}%</span>`;
+
+  $('viewRoot').innerHTML = `
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <div class="card-title" style="margin:0;">Revenue by month</div>
+        <div class="seg">
+          <button data-scope="online"${S.ecomScope==='online'?' class="on"':''}>Online only</button>
+          <button data-scope="all"${S.ecomScope==='all'?' class="on"':''}>All channels</button>
+        </div>
+      </div>
+      <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${stack}</svg>
+      <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:6px;">
+        <span>${esc(months[0]||'')}</span><span>${esc(months[months.length-1]||'')}</span>
+      </div>
+      <div class="legend">${d.channels.map(c=>`<span class="lg"><i style="background:${colour(c.channel)}"></i>${esc(c.channel)}</span>`).join('')}</div>
+    </div>
+
+    <div class="card mt">
+      <div class="card-title">Channel scorecard</div>
+      <table class="roomy">
+      <colgroup><col style="width:17%"><col style="width:11%"><col style="width:12%"><col style="width:8%">
+        <col style="width:9%"><col style="width:9%"><col style="width:8%"><col style="width:8%"><col style="width:18%"></colgroup>
+      <thead><tr>
+        <th>Channel</th><th class="num">Revenue ฿</th><th>Trend</th>
+        <th class="num"><span data-tip="Second half of the selected range against the first half. Compared in halves rather than month to month, so one promotion does not read as a trend.">Momentum</span></th>
+        <th class="num">Orders</th><th class="num">AOV ฿</th><th class="num">Avg price ฿</th>
+        <th class="num">Take rate</th><th>Customers</th>
+      </tr></thead><tbody>
+      ${d.channels.map(c => `<tr>
+        <td class="strong" style="white-space:nowrap;"><i class="swatch" style="background:${colour(c.channel)}"></i>${esc(c.channel)}
+          ${c.type!=='Online'?`<span class="pill grey" style="font-size:9px;">${esc(c.type)}</span>`:''}</td>
+        <td class="num strong">${num(Math.round(c.revenue))}</td>
+        <td>${spark(c)}</td>
+        <td class="num">${mom(c.momentum)}</td>
+        <td class="num">${num(c.orders)}</td>
+        <td class="num">${num(Math.round(c.aov))}</td>
+        <td class="num">${num(Math.round(c.avgPrice))}</td>
+        <td class="num">${c.takeRate===null?'—':pct(c.takeRate)}</td>
+        <td class="num">${num(c.customers)}</td>
+      </tr>`).join('')}
+      </tbody></table>
+      <div class="note">Each trend line is scaled to its own channel, so a small channel's shape is readable next to a large one — compare direction, not height.</div>
+    </div>
+
+    <div class="card mt">
+      <div class="card-title">What each channel is distinctively good at</div>
+      <div class="affinity">
+      ${d.channels.map(c => `<div class="afcard">
+        <div class="afhead"><i class="swatch" style="background:${colour(c.channel)}"></i><b>${esc(c.channel)}</b></div>
+        ${c.bestAt.length ? c.bestAt.map(a => `<div class="afrow">
+            <span class="afname">${esc(a.centre)}</span>
+            <span class="afidx${a.index>=1.5?' hot':''}">${a.index===null?'—':a.index.toFixed(1)}×</span>
+            <span class="afshare">${pct(a.share)} of its revenue</span>
+          </div>`).join('') : '<div class="afrow" style="color:var(--faint)">no centre data yet</div>'}
+        <div class="afpkg" title="${esc(c.topPackages.map(p=>p.name).join(' · '))}">Best seller: ${esc((c.topPackages[0]||{}).name||'—')}</div>
+      </div>`).join('')}
+      </div>
+      <div class="note">The multiple compares a centre's weight in that channel against its weight across the business.
+      <b>2.0× means the centre is twice as concentrated in this channel as it is overall</b> — that is what the channel is
+      distinctively good at, as opposed to simply large. Centres shown are the top three by index, not by revenue.</div>
+    </div>`;
+
+  document.querySelectorAll('[data-scope]').forEach(b => b.addEventListener('click', () => {
+    S.ecomScope = b.dataset.scope; S.ecomch = null; S.ecomc = null; S.ecom = null; render();
+  }));
+}
+
 function renderEcomCentres() {
   const d = S.ecomc;
   if (!d && !S.ecomcLoading && !S.ecomcError) {
