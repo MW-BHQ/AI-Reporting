@@ -232,6 +232,8 @@
   .seg button{border:0;background:transparent;padding:5px 12px;font-size:11.5px;color:var(--muted);
     cursor:pointer;font-family:inherit;}
   .seg button.on{background:var(--violet);color:#fff;font-weight:500;}
+  .seg.locked{opacity:.55;cursor:not-allowed;}
+  .seg.locked button{cursor:not-allowed;}
   .swatch{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:7px;}
   .minibar{position:absolute;right:0;top:50%;transform:translateY(-50%);height:20px;
     background:var(--violet-soft);border-radius:4px;z-index:0;}
@@ -456,6 +458,10 @@
           <button data-days="90">90D</button>
           <button data-month="1">MTD</button>
         </div>
+        <div class="seg" id="scopeSeg">
+          <button data-scope="online">Online only</button>
+          <button data-scope="all">All channels</button>
+        </div>
         <div class="dates">
           <input type="date" id="from"><span>→</span><input type="date" id="to">
         </div>
@@ -576,6 +582,16 @@ $('presets').addEventListener('click', (e) => {
   b.classList.add('active');
   if (b.dataset.days) setDays(+b.dataset.days); else if (b.dataset.lastmonth) setLastMonth(); else setMTD();
 });
+document.querySelectorAll('#scopeSeg button').forEach(btn => btn.addEventListener('click', () => {
+  if (btn.disabled || S.ecomScope === btn.dataset.scope) return;
+  S.ecomScope = btn.dataset.scope;
+  // Every e-commerce view depends on scope, so all of them are invalidated
+  // together — leaving one stale was the flaw in the per-card version.
+  S.ecom = null; S.ecomKey = null;
+  S.ecomc = null; S.ecomcKey = null;
+  S.ecomch = null; S.ecomchKey = null;
+  render();
+}));
 ['from','to'].forEach(id => $(id).addEventListener('change', () =>
   [...$('presets').children].forEach(b => b.classList.remove('active'))));
 setLastMonth();
@@ -823,6 +839,26 @@ function render() {
   // On Campaigns the Analyse button already fetches with the current dates,
   // so a second fetch button would just be a confusing twin.
   $('loadBtn').classList.toggle('hidden', S.view === 'campaigns');
+  // Scope is a global filter like the date range, so it lives in the header and
+  // only appears where it means something. Migration is the exception: a switch
+  // between channel types cannot be observed inside a single type, so the
+  // control is shown locked rather than hidden, which would look like an
+  // oversight.
+  const isEcom = S.view.indexOf('ecom') === 0;
+  const seg = $('scopeSeg');
+  seg.classList.toggle('hidden', !isEcom);
+  if (isEcom) {
+    const locked = S.view === 'ecommigration';
+    seg.classList.toggle('locked', locked);
+    seg.title = locked
+      ? 'Migration always spans every channel type — a switch from one type to another cannot be seen inside a single type.'
+      : '';
+    seg.querySelectorAll('button').forEach(b => {
+      const on = locked ? b.dataset.scope === 'all' : b.dataset.scope === S.ecomScope;
+      b.classList.toggle('on', on);
+      b.disabled = locked;
+    });
+  }
   Object.values(S.charts).forEach(c => { try { c.destroy(); } catch(_){} });
   S.charts = {};
   if (S.view === 'overview') renderOverview();
@@ -1762,10 +1798,7 @@ function renderEcomChannels() {
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
         <div class="card-title" style="margin:0;">Revenue by month</div>
-        <div class="seg">
-          <button data-scope="online"${S.ecomScope==='online'?' class="on"':''}>Online only</button>
-          <button data-scope="all"${S.ecomScope==='all'?' class="on"':''}>All channels</button>
-        </div>
+        <div class="note" style="margin:0;">${S.ecomScope==='all'?'All channel types':'Online channels only'}</div>
       </div>
       <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${stack}</svg>
       <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:6px;">
@@ -1819,9 +1852,6 @@ function renderEcomChannels() {
       distinctively good at, as opposed to simply large. Centres shown are the top three by index, not by revenue.</div>
     </div>`;
 
-  document.querySelectorAll('[data-scope]').forEach(b => b.addEventListener('click', () => {
-    S.ecomScope = b.dataset.scope; S.ecomch = null; S.ecomc = null; S.ecom = null; render();
-  }));
 }
 
 function renderEcomCentres() {
@@ -1838,11 +1868,6 @@ function renderEcomCentres() {
 
   const t = d.totals, list = d.centres;
   const maxRev = Math.max(...list.map(c => c.revenue), 1);
-  const scopeBtn = `<div class="seg">
-      <button data-scope="online"${S.ecomScope==='online'?' class="on"':''}>Online only</button>
-      <button data-scope="all"${S.ecomScope==='all'?' class="on"':''}>All channels</button>
-    </div>`;
-
   $('viewRoot').innerHTML = `
     <div class="grid g-3" style="margin-bottom:14px;">
       <div class="stat"><div class="lab">Centres selling</div><div class="val">${num(t.centres)}</div></div>
@@ -1853,7 +1878,8 @@ function renderEcomCentres() {
 
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
-        <div class="card-title" style="margin:0;">Centres</div>${scopeBtn}
+        <div class="card-title" style="margin:0;">Centres</div>
+        <div class="note" style="margin:0;">${S.ecomScope==='all'?'All channel types':'Online channels only'}</div>
       </div>
       <table class="sticky-head roomy">
       <colgroup>
@@ -1901,9 +1927,6 @@ function renderEcomCentres() {
       which is the practical reason to care where a package sells, not just how much.</div>
     </div>`;
 
-  document.querySelectorAll('[data-scope]').forEach(b => b.addEventListener('click', () => {
-    S.ecomScope = b.dataset.scope; S.ecomc = null; S.ecom = null; render();
-  }));
 }
 
 function renderEcom() {
