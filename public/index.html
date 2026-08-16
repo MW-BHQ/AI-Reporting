@@ -212,6 +212,15 @@
   .legend .lg i{width:9px;height:9px;border-radius:2.5px;display:inline-block;}
   /* E-commerce tables carry long Thai package names next to short numbers, so
      they need more column separation than the dense ad tables elsewhere. */
+  /* A card must clip its own content: with 19 channels the cross-tab and the
+     scorecard are wider than the viewport, and without this they ran straight
+     out past the card's rounded edge. */
+  .tscroll{overflow-x:auto;margin:0 -22px;padding:0 22px;
+    scrollbar-width:thin;scrollbar-color:var(--line) transparent;}
+  .tscroll::-webkit-scrollbar{height:7px;}
+  .tscroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px;}
+  .tscroll > table{min-width:max-content;}
+  .tscroll > table.sticky-head{table-layout:auto;}
   .roomy th, .roomy td{padding-right:20px;}
   .roomy th:last-child, .roomy td:last-child{padding-right:0;}
   .roomy td{padding-top:11px;padding-bottom:11px;}
@@ -493,7 +502,7 @@ const S = {
   audiences: null, audiencesKey: null, audienceSort: 'primary', audienceOpen: null,
   ecom: null, ecomKey: null, ecomLoading: false, ecomError: null, ecomScope: 'online',
   ecomc: null, ecomcKey: null, ecomcLoading: false, ecomcError: null,
-  ecomch: null, ecomchKey: null, ecomchLoading: false, ecomchError: null,
+  ecomch: null, ecomchKey: null, ecomchLoading: false, ecomchError: null, ecomMixMode: 'abs',
   ecommig: null, ecommigKey: null, ecommigLoading: false, ecommigError: null,
   audiencesLoading: false, audiencesError: null,
   me: null, users: null,
@@ -1702,6 +1711,12 @@ function renderEcomMigration() {
         <div class="sub2">returned but never switched type</div></div>
     </div>
 
+    ${d.unclassified && d.unclassified.length ? `<div class="card" style="border-left:3px solid #D97B1F;margin-bottom:14px;">
+      <div class="card-title" style="margin-bottom:6px;">${num(d.unclassified.length)} channel${d.unclassified.length===1?'':'s'} not in the taxonomy</div>
+      <div class="note" style="margin:0;">These names are grouped as <b>Unclassified</b> — that is a gap in the channel list, not a customer segment.
+      Tell me which type each belongs to and they will be counted properly:
+      ${d.unclassified.map(u=>`<b>${esc(u.name)}</b> (฿${num(Math.round(u.revenue))})`).join(' · ')}</div>
+    </div>` : ''}
     <div class="card">
       <div class="card-title">When customers switch</div>
       <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${bars}</svg>
@@ -1745,6 +1760,8 @@ function renderEcomMigration() {
     <div class="card mt">
       <div class="card-title">How this is counted</div>
       <div class="note" style="font-size:12.5px;">
+        <b>"Unclassified" is a channel whose name is missing from the taxonomy, not a new customer.</b>
+        Every customer here bought at least twice, so none of them are new.<br><br>
         A customer is a stable hashed key built from their email — no name, phone or address is involved.
         Only customers who bought on <b>two or more different dates</b> are counted, because two coupons in one
         basket are a single decision, not a migration. Their first purchase sets the starting type, and the first
@@ -1772,13 +1789,18 @@ function renderEcomChannels() {
   const W = 760, HH = 180;
   const maxM = Math.max(...d.monthly.map(m => m.total), 1);
   const bw = W / Math.max(months.length, 1);
+  // Absolute answers "how much"; 100% answers "is the mix shifting" — which is
+  // a different question and the one a stacked total cannot show when the total
+  // itself is moving.
+  const share = S.ecomMixMode === 'share';
   const stack = d.monthly.map((m, i) => {
     let y = HH, seg = '';
+    const denom = share ? (m.total || 1) : maxM;
     d.channels.forEach(c => {
       const v = m.byChannel[c.channel] || 0;
       if (!v) return;
-      const hgt = (v / maxM) * HH; y -= hgt;
-      seg += `<rect x="${(i*bw).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1,bw-4).toFixed(1)}" height="${hgt.toFixed(1)}" fill="${colour(c.channel)}"><title>${esc(m.month)} · ${esc(c.channel)}: ฿${num(Math.round(v))}</title></rect>`;
+      const hgt = (v / denom) * HH; y -= hgt;
+      seg += `<rect x="${(i*bw).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1,bw-4).toFixed(1)}" height="${hgt.toFixed(1)}" fill="${colour(c.channel)}"><title>${esc(m.month)} · ${esc(c.channel)}: ฿${num(Math.round(v))}${share?` · ${pct(v/(m.total||1))}`:''}</title></rect>`;
     });
     return seg;
   }).join('');
@@ -1795,10 +1817,22 @@ function renderEcomChannels() {
     : `<span style="color:${v>=0.05?'#2E9E6F':(v<=-0.05?'#D9534F':'var(--muted)')};font-weight:${Math.abs(v)>=0.05?600:400};">${v>=0?'+':''}${(v*100).toFixed(0)}%</span>`;
 
   $('viewRoot').innerHTML = `
+    ${d.unclassified && d.unclassified.length ? `<div class="card" style="border-left:3px solid #D97B1F;margin-bottom:14px;">
+      <div class="card-title" style="margin-bottom:6px;">${num(d.unclassified.length)} channel${d.unclassified.length===1?'':'s'} not in the taxonomy</div>
+      <div class="note" style="margin:0;">These names are grouped as <b>Unclassified</b> — that is a gap in the channel list, not a customer segment.
+      Tell me which type each belongs to and they will be counted properly:
+      ${d.unclassified.map(u=>`<b>${esc(u.name)}</b> (฿${num(Math.round(u.revenue))})`).join(' · ')}</div>
+    </div>` : ''}
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
         <div class="card-title" style="margin:0;">Revenue by month</div>
-        <div class="note" style="margin:0;">${S.ecomScope==='all'?'All channel types':'Online channels only'}</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="note" style="margin:0;">${S.ecomScope==='all'?'All channel types':'Online channels only'}</span>
+          <div class="seg">
+            <button data-mix="abs"${S.ecomMixMode!=='share'?' class="on"':''}>฿</button>
+            <button data-mix="share"${S.ecomMixMode==='share'?' class="on"':''}>% mix</button>
+          </div>
+        </div>
       </div>
       <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${stack}</svg>
       <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:6px;">
@@ -1809,7 +1843,7 @@ function renderEcomChannels() {
 
     <div class="card mt">
       <div class="card-title">Channel scorecard</div>
-      <table class="roomy">
+      <div class="tscroll"><table class="roomy">
       <colgroup><col style="width:17%"><col style="width:11%"><col style="width:12%"><col style="width:8%">
         <col style="width:9%"><col style="width:9%"><col style="width:8%"><col style="width:8%"><col style="width:18%"></colgroup>
       <thead><tr>
@@ -1830,9 +1864,47 @@ function renderEcomChannels() {
         <td class="num">${c.takeRate===null?'—':pct(c.takeRate)}</td>
         <td class="num">${num(c.customers)}</td>
       </tr>`).join('')}
-      </tbody></table>
+      </tbody></table></div>
       <div class="note">Each trend line is scaled to its own channel, so a small channel's shape is readable next to a large one — compare direction, not height.</div>
     </div>
+
+    ${(() => {
+      const movers = d.channels.filter(c => Math.abs(c.delta) > 0).sort((a,b) => b.delta - a.delta);
+      if (!movers.length || !d.split.lastFrom) return '';
+      const start = d.channels.reduce((a,c) => a + c.firstHalf, 0);
+      const end = d.channels.reduce((a,c) => a + c.lastHalf, 0);
+      // A bridge only reads clearly with a handful of bars, so the smallest
+      // movers are pooled rather than drawn as slivers nobody can label.
+      const big = movers.filter(c => Math.abs(c.delta) >= Math.abs(end-start) * 0.04 || movers.length <= 8);
+      const rest = movers.filter(c => !big.includes(c));
+      const restDelta = rest.reduce((a,c) => a + c.delta, 0);
+      const steps = [{label:'First half', value:start, type:'total'},
+        ...big.map(c => ({label:c.channel, value:c.delta, type:'step'})),
+        ...(rest.length ? [{label:`${rest.length} smaller channels`, value:restDelta, type:'step'}] : []),
+        {label:'Second half', value:end, type:'total'}];
+      const peak = Math.max(start, end, ...steps.reduce((acc,s,i) => { acc.push(Math.abs(s.value)); return acc; }, []));
+      const W2 = 760, H2 = 200, bw2 = W2 / steps.length;
+      let run = 0;
+      const bars = steps.map((s, i) => {
+        const x = i * bw2 + 6, w = bw2 - 12;
+        let y0, y1, fill;
+        if (s.type === 'total') { y0 = 0; y1 = s.value; fill = '#4C5878'; run = s.value; }
+        else { y0 = run; y1 = run + s.value; run = y1; fill = s.value >= 0 ? '#4ABE8C' : '#E8724F'; }
+        const top = H2 - (Math.max(y0,y1) / peak) * H2;
+        const hgt = Math.max(2, (Math.abs(y1 - y0) / peak) * H2);
+        return `<rect x="${x.toFixed(1)}" y="${top.toFixed(1)}" width="${w.toFixed(1)}" height="${hgt.toFixed(1)}" rx="2" fill="${fill}">
+            <title>${esc(s.label)}: ${s.type==='step'&&s.value>=0?'+':''}฿${num(Math.round(s.value))}</title></rect>
+          <text x="${(x+w/2).toFixed(1)}" y="${Math.max(10, top-5).toFixed(1)}" text-anchor="middle" font-size="9.5" fill="var(--muted)">${s.type==='step'&&s.value>=0?'+':''}${Math.abs(s.value)>=1000?(s.value/1000000>=1?(s.value/1000000).toFixed(1)+'M':(s.value/1000).toFixed(0)+'K'):Math.round(s.value)}</text>`;
+      }).join('');
+      const labels = steps.map((s,i) => `<span style="width:${(100/steps.length).toFixed(2)}%;text-align:center;font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 3px;" title="${esc(s.label)}">${esc(s.label)}</span>`).join('');
+      return `<div class="card mt">
+        <div class="card-title">What moved between the two halves</div>
+        <svg viewBox="0 0 ${W2} ${H2}" width="100%" height="${H2}" style="display:block;overflow:visible;">${bars}</svg>
+        <div style="display:flex;margin-top:7px;">${labels}</div>
+        <div class="note">Bridging <b>${esc(d.split.firstFrom)}–${esc(d.split.firstTo)}</b> to <b>${esc(d.split.lastFrom)}–${esc(d.split.lastTo)}</b>.
+        Green added revenue, orange lost it. This answers which channels caused the change, which a stacked total cannot.</div>
+      </div>`;
+    })()}
 
     <div class="card mt">
       <div class="card-title">What each channel is distinctively good at</div>
@@ -1852,6 +1924,12 @@ function renderEcomChannels() {
       distinctively good at, as opposed to simply large. Centres shown are the top three by index, not by revenue.</div>
     </div>`;
 
+  // Switching absolute vs share is a pure re-render — the data is already here.
+  document.querySelectorAll('[data-mix]').forEach(b => b.addEventListener('click', () => {
+    if (S.ecomMixMode === b.dataset.mix) return;
+    S.ecomMixMode = b.dataset.mix;
+    render();
+  }));
 }
 
 function renderEcomCentres() {
@@ -1881,7 +1959,7 @@ function renderEcomCentres() {
         <div class="card-title" style="margin:0;">Centres</div>
         <div class="note" style="margin:0;">${S.ecomScope==='all'?'All channel types':'Online channels only'}</div>
       </div>
-      <table class="sticky-head roomy">
+      <div class="tscroll"><table class="sticky-head roomy">
       <colgroup>
         <col style="width:14%"><col style="width:13%"><col style="width:7%"><col style="width:8%">
         <col style="width:9%"><col style="width:7%"><col style="width:24%"><col style="width:18%">
@@ -1904,14 +1982,14 @@ function renderEcomCentres() {
         <td style="font-size:11.5px;color:var(--muted);white-space:nowrap;">${esc(c.topChannel)}
           <span style="color:${c.concentration>=0.7?'#D97B1F':'var(--faint)'};font-weight:${c.concentration>=0.7?600:400};margin-left:6px;">${pct(c.concentration)}</span></td>
       </tr>`).join('')}
-      </tbody></table>
+      </tbody></table></div>
       <div class="note">Sorted by revenue. Prices come straight from ราคา/แพ็กเกจ — the figure the customer actually paid.
       ${t.unmappedShare>0.001?`<b>${pct(t.unmappedShare)} of revenue is still unmapped</b>, so those rows sit in their own line until the e-commerce team confirms the SKUs.`:''}</div>
     </div>
 
     <div class="card mt">
       <div class="card-title">Which channel sells each centre</div>
-      <table class="xtab"><thead><tr><th>Centre</th>${d.channels.map(ch=>`<th class="num">${esc(ch)}</th>`).join('')}</tr></thead><tbody>
+      <div class="tscroll"><table class="xtab"><thead><tr><th>Centre</th>${d.channels.map(ch=>`<th class="num">${esc(ch)}</th>`).join('')}</tr></thead><tbody>
       ${list.map(c => {
         const tot = c.revenue || 1;
         return `<tr><td class="strong">${c.centre==='Unmapped'?'<span class="pill warn">unmapped</span>':esc(c.centre)}</td>
@@ -1921,7 +1999,7 @@ function renderEcomCentres() {
           return `<td class="num cell" style="${bg}" title="${esc(ch)} · ฿${num(Math.round(v))}">${v?pct(s):'<span style="color:var(--faint)">—</span>'}</td>`;
         }).join('')}</tr>`;
       }).join('')}
-      </tbody></table>
+      </tbody></table></div>
       <div class="note">Each row reads across to 100% of that centre's revenue. Darker means more of the centre's
       sales come through that channel. A centre concentrated in one column is exposed if that storefront's terms change —
       which is the practical reason to care where a package sells, not just how much.</div>

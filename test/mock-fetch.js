@@ -107,6 +107,9 @@ global.fetch = async (url, opts = {}) => {
              sku:"HD25-01", center:"Check-Up", price:4000, coupon_status:"ใช้งานแล้ว",
              is_valid_sale:"TRUE", email_key:"c1", payment_method:"Cash" }),
         // c2 buys Online twice on different dates: returning but NOT a switcher.
+        mk({ purchase_date:"2026-08-07", channel:"Roadshow 2024", order_id:"H", package_name:"Event",
+             sku:"HD25-01", center:"Check-Up", price:1500, coupon_status:"ซื้อคูปอง",
+             is_valid_sale:"TRUE", email_key:"c7", payment_method:"Cash" }),
         mk({ purchase_date:"2026-08-06", channel:"Lazada", order_id:"G", package_name:"Dental",
              sku:"", center:"", price:3200, coupon_status:"ซื้อคูปอง",
              is_valid_sale:"TRUE", email_key:"c2", payment_method:"Card" })] });

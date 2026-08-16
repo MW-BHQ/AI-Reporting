@@ -3028,14 +3028,30 @@ async function buildChannels(from, to, scope) {
       repeatShare: null,
       series,
       momentum: firstHalf > 0 ? (lastHalf - firstHalf) / firstHalf : null,
+      firstHalf, lastHalf, delta: lastHalf - firstHalf,
       activeMonths: series.filter((v) => v > 0).length,
       bestAt: affinity.slice(0, 3),
       topPackages: [...c.packages.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 3),
     };
   }).sort((a, b) => b.revenue - a.revenue);
 
+  // Channel names absent from CHANNEL_TYPE fall into "Unclassified", which is a
+  // taxonomy gap, not a customer segment. Surfacing the names lets it be fixed
+  // rather than quietly averaged into the analysis.
+  const unclassified = [...new Map(inRange.filter((r) => r.type === "Unclassified")
+    .map((r) => [r.channel, 0])).keys()].map((name) => ({
+      name,
+      revenue: inRange.filter((r) => r.channel === name).reduce((a, r) => a + r.price, 0),
+    })).sort((a, b) => b.revenue - a.revenue);
+
+  const mid = months[half] || null;
   return {
     scope: scope === "all" ? "all" : "online",
+    unclassified,
+    // Where the range was cut for momentum and the bridge, so the UI can label
+    // the two periods honestly instead of saying "before" and "after".
+    split: { index: half, firstFrom: months[0] || null, firstTo: months[half-1] || null,
+             lastFrom: mid, lastTo: months[months.length-1] || null },
     months, revenue, channels,
     monthly: months.map((m) => ({
       month: m,
@@ -3126,8 +3142,15 @@ async function buildMigration(from, to) {
     switchRate: customers ? (originSwitched.get(type) || 0) / customers : 0,
   })).sort((a, b) => b.customers - a.customers);
 
+  const unclassified = [...new Map(rows.filter((r) => r.type === "Unclassified")
+    .map((r) => [r.channel, 0])).keys()].map((name) => ({
+      name,
+      revenue: rows.filter((r) => r.channel === name).reduce((a, r) => a + r.price, 0),
+    })).sort((a, b) => b.revenue - a.revenue);
+
   return {
     months,
+    unclassified,
     monthly: months.map((m) => monthly.get(m)),
     flows, origins,
     totals: {

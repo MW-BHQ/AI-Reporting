@@ -100,6 +100,8 @@ CH2="/api/ecommerce/channels?from=$FROM&to=2026-08-31&scope=all"
 expect_field "chan months"      "$CH2" "d.months.length===2?'2':undefined"
 expect_field "chan affinity"    "$CH2" "d.channels.some(c=>c.bestAt.length)?'yes':undefined"
 expect_field "chan momentum"    "$CH2" "d.channels.some(c=>c.momentum!==null)?'yes':undefined"
+# A channel missing from CHANNEL_TYPE must be reported by name, not silently bucketed.
+expect_field "unclassified named" "$CH2" "(d.unclassified||[]).some(u=>u.name==='Roadshow 2024')?'named':undefined"
 MIG="/api/ecommerce/migration?from=$FROM&to=2026-08-31"
 # c1 goes Online -> Offline (a switcher); c2 buys online twice (returning, not a switcher).
 expect_field "mig switchers"    "$MIG" "d.totals.switchers===1?'1':undefined"
