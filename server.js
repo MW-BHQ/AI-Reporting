@@ -1400,14 +1400,18 @@ const ECOM_TAB = process.env.ECOM_TAB || "Orders";
  * The e-commerce view therefore defaults to Online only.
  */
 const CHANNEL_TYPE = {
-  "Shopee": "Online", "Shop.BeDee": "Online", "Lazada": "Online",
-  "Line Shopping": "Online", "Line Chatbot": "Online",
-  "Bangkok Hospital Website": "Online",
-  "เวชระเบียน": "Offline", "ทันตกรรม": "Offline", "HPC 1": "Offline",
-  "เปียโน": "Offline", "Contact Center": "Offline", "พลาซ่า": "Offline",
-  "Agent": "B2B", "Insurance": "B2B",
-  "Run with the Flow": "Special Campaign", "Partnership": "Special Campaign",
+  "Shopee": "Online", "Lazada": "Online", "Health Plaza": "Online", "Line Chatbot": "Online",
+  "Line Shopping": "Online", "Shop.BeDee": "Online", "Bangkok Hospital Website": "Online",
+  "HPC 1": "Offline", "เปียโน": "Offline", "เวชระเบียน": "Offline", "ทันตกรรม": "Offline",
+  "Contact Center": "Offline", "เว็บไซต์": "Offline", "พลาซ่า": "Offline",
+  "BHT IPD / OPD": "Offline", "ชีววัฒนะ": "Offline", "Website (Special)": "Offline",
+  "ตึกวัฒโนสถ": "Offline",
+  "Agent": "B2B", "SME&COP": "B2B", "การตลาดกลุ่มลูกค้าองค์กร": "B2B", "DR PHARMA": "B2B",
+  "SAVE DRUG": "B2B", "Insurance": "B2B",
+  "Partnership": "Special Campaign", "Free Trial": "Special Campaign",
+  "Run with the Flow": "Special Campaign",
   "คูปองอภินันทนาการ": "Complementary", "Complementary (Discount Coupon)": "Complementary",
+  "Better Club": "Complementary",
   "Extra": "Extra",
 };
 const channelType = (ch) => CHANNEL_TYPE[String(ch || "").trim()] || "Unclassified";

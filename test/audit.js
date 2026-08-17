@@ -40,6 +40,20 @@ for (const [name, expected] of Object.entries(REQUIRED_FIELDS)) {
                  : ok(`fields:${name}`, `${expected.length} fields`);
 }
 
+// ---------------------------------------------------------------- taxonomy
+// Every channel in the data must be classified, or the dashboard silently
+// buckets it as "Unclassified" — a taxonomy gap that reads like a segment.
+const ctBlock = server.match(/const CHANNEL_TYPE = \{([\s\S]*?)\n\};/);
+if (!ctBlock) fail("channel taxonomy", "CHANNEL_TYPE not found");
+else {
+  const entries = [...ctBlock[1].matchAll(/"([^"]+)":\s*"([^"]+)"/g)];
+  const types = new Set(entries.map((m) => m[2]));
+  const allowed = ["Online", "Offline", "B2B", "Special Campaign", "Complementary", "Extra"];
+  const bad = [...types].filter((t) => !allowed.includes(t));
+  bad.length ? fail("channel taxonomy", `unknown type(s): ${bad.join(", ")}`)
+             : ok("channel taxonomy", `${entries.length} channels across ${types.size} types`);
+}
+
 // ---------------------------------------------------------------- tabs
 const tabsBlock = server.slice(server.indexOf("const TABS"), server.indexOf("];", server.indexOf("const TABS")));
 const tabs = [...tabsBlock.matchAll(/id: "(\w+)"/g)].map((m) => m[1]);
