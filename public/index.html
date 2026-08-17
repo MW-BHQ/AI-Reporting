@@ -237,6 +237,13 @@
   .afshare{color:var(--faint);font-size:10.5px;}
   .afpkg{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:10.5px;
     color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  table.sortable thead th{cursor:pointer;user-select:none;position:relative;}
+  table.sortable thead th:hover{color:var(--ink-2);}
+  table.sortable thead th.sorted::after{content:'';position:absolute;right:2px;top:50%;
+    margin-top:-2px;border-left:3.5px solid transparent;border-right:3.5px solid transparent;}
+  table.sortable thead th.sorted[data-sort="asc"]::after{border-bottom:4px solid var(--violet);}
+  table.sortable thead th.sorted[data-sort="desc"]::after{border-top:4px solid var(--violet);}
+  table.sortable thead th.num.sorted::after{right:-7px;}
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;}
   .seg button{border:0;background:transparent;padding:5px 12px;font-size:11.5px;color:var(--muted);
     cursor:pointer;font-family:inherit;}
@@ -540,6 +547,56 @@ const $ = (id) => document.getElementById(id);
   document.addEventListener('mouseout', (e) => { if (e.target.closest('[data-tip]')) hide(); });
   document.addEventListener('scroll', hide, true);
 })();
+
+/**
+ * Click-to-sort for any table marked `.sortable`.
+ *
+ * Delegated from document so it survives every re-render, and it sorts the DOM
+ * rows in place rather than the underlying data — which means it works on all
+ * tables without threading sort state through each renderer.
+ *
+ * Values are read from the rendered text, so the parser has to understand the
+ * formats actually used here: ฿12,345 · 1.1K · 23.2M · 54.9% · 2.0× · —
+ */
+function sortValue_(cell) {
+  const raw = (cell.textContent || '').trim();
+  if (!raw || raw === '—' || raw === '-') return { n: null, s: '' };
+  let t = raw.replace(/[฿,\s]/g, '').replace('×', '');
+  const pctSign = t.endsWith('%');
+  if (pctSign) t = t.slice(0, -1);
+  let mult = 1;
+  if (/K$/i.test(t)) { mult = 1e3; t = t.slice(0, -1); }
+  else if (/M$/i.test(t)) { mult = 1e6; t = t.slice(0, -1); }
+  const num = parseFloat(t.replace(/^[~+]/, ''));
+  return Number.isFinite(num) ? { n: num * mult, s: raw } : { n: null, s: raw.toLowerCase() };
+}
+
+document.addEventListener('click', (e) => {
+  const th = e.target.closest('table.sortable thead th');
+  if (!th) return;
+  const table = th.closest('table');
+  const tbody = table.tBodies[0];
+  if (!tbody) return;
+  const idx = [...th.parentNode.children].indexOf(th);
+  // Expansion rows belong to the row above them and must not be reordered.
+  const rows = [...tbody.rows].filter(r => !r.dataset.child && r.cells.length > idx);
+  if (rows.length < 2) return;
+
+  const asc = th.dataset.sort !== 'asc';
+  [...th.parentNode.children].forEach(o => { delete o.dataset.sort; o.classList.remove('sorted'); });
+  th.dataset.sort = asc ? 'asc' : 'desc';
+  th.classList.add('sorted');
+
+  rows.sort((a, b) => {
+    const x = sortValue_(a.cells[idx]), y = sortValue_(b.cells[idx]);
+    // Blanks always sink, whichever direction is chosen.
+    if (x.n === null && y.n === null) return x.s.localeCompare(y.s) * (asc ? 1 : -1);
+    if (x.n === null) return 1;
+    if (y.n === null) return -1;
+    return asc ? x.n - y.n : y.n - x.n;
+  });
+  rows.forEach(r => tbody.appendChild(r));
+});
 
 const fmtISO = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -1719,6 +1776,10 @@ function renderEcomMigration() {
     </div>` : ''}
     <div class="card">
       <div class="card-title">When customers switch</div>
+      ${d.months.length < 2 ? `<div class="note" style="margin:0 0 4px;">Only
+        <b>${esc(d.months[0]||'one month')}</b> is in range, so there is nothing to plot over time —
+        a switch needs a before and an after. The tables below still work: they compare each
+        customer's first purchase with their later ones inside this range.</div>` : `
       <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${bars}</svg>
       <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:6px;">
         <span>${esc(d.months[0]||'')}</span><span>${esc(d.months[d.months.length-1]||'')}</span>
@@ -1728,6 +1789,7 @@ function renderEcomMigration() {
         <span class="lg"><i style="background:#7B61FF"></i>Elsewhere → online</span>
         <span class="lg"><i style="background:#C3CBE0"></i>Other moves</span>
       </div>
+      `}
       <div class="note">Each customer appears once, in the month they first bought through a different type of channel than the one they started on.</div>
     </div>
 
@@ -1806,7 +1868,9 @@ function renderEcomChannels() {
   }).join('');
 
   // Each channel's own trend, scaled to itself so small channels are readable.
+  const singleMonth = d.months.length < 2;
   const spark = (c) => {
+    if (singleMonth) return '<span style="color:var(--faint);font-size:10.5px;">one month</span>';
     const mx = Math.max(...c.series, 1), w = 92, hgt = 26;
     const step = w / Math.max(c.series.length - 1, 1);
     const pts = c.series.map((v, i) => `${(i*step).toFixed(1)},${(hgt - (v/mx)*hgt).toFixed(1)}`).join(' ');
@@ -1843,9 +1907,11 @@ function renderEcomChannels() {
 
     <div class="card mt">
       <div class="card-title">Channel scorecard</div>
-      <div class="tscroll"><table class="roomy">
-      <colgroup><col style="width:17%"><col style="width:11%"><col style="width:12%"><col style="width:8%">
-        <col style="width:9%"><col style="width:9%"><col style="width:8%"><col style="width:8%"><col style="width:18%"></colgroup>
+      <div class="tscroll"><table class="roomy sortable">
+      <colgroup>
+        <col style="width:22%"><col style="width:12%"><col style="width:11%"><col style="width:10%">
+        <col style="width:8%"><col style="width:10%"><col style="width:10%"><col style="width:9%"><col style="width:8%">
+      </colgroup>
       <thead><tr>
         <th>Channel</th><th class="num">Revenue ฿</th><th>Trend</th>
         <th class="num"><span data-tip="Second half of the selected range against the first half. Compared in halves rather than month to month, so one promotion does not read as a trend.">Momentum</span></th>
@@ -1865,10 +1931,20 @@ function renderEcomChannels() {
         <td class="num">${num(c.customers)}</td>
       </tr>`).join('')}
       </tbody></table></div>
-      <div class="note">Each trend line is scaled to its own channel, so a small channel's shape is readable next to a large one — compare direction, not height.</div>
+      <div class="note">${singleMonth
+        ? 'Trend and momentum need more than one month. Widen the date range — 90D or a custom span — to see direction.'
+        : "Each trend line is scaled to its own channel, so a small channel's shape is readable next to a large one — compare direction, not height."}</div>
     </div>
 
     ${(() => {
+      // A bridge compares two periods. With one month there is no first half,
+      // so every channel would appear to have grown from zero — which is an
+      // artefact of the range, not a finding. Say so instead of drawing it.
+      if (d.months.length < 2) return `<div class="card mt">
+        <div class="card-title">What moved between the two halves</div>
+        <div class="note" style="margin:0;">Needs at least two months. The range currently covers
+        <b>${esc(d.months[0]||'one month')}</b> only — widen it to 90D or a custom range and this
+        will show which channels drove the change.</div></div>`;
       const movers = d.channels.filter(c => Math.abs(c.delta) > 0).sort((a,b) => b.delta - a.delta);
       if (!movers.length || !d.split.lastFrom) return '';
       const start = d.channels.reduce((a,c) => a + c.firstHalf, 0);
@@ -1959,7 +2035,7 @@ function renderEcomCentres() {
         <div class="card-title" style="margin:0;">Centres</div>
         <div class="note" style="margin:0;">${S.ecomScope==='all'?'All channel types':'Online channels only'}</div>
       </div>
-      <div class="tscroll"><table class="sticky-head roomy">
+      <div class="tscroll"><table class="sticky-head roomy sortable">
       <colgroup>
         <col style="width:14%"><col style="width:13%"><col style="width:7%"><col style="width:8%">
         <col style="width:9%"><col style="width:7%"><col style="width:24%"><col style="width:18%">
@@ -2073,7 +2149,7 @@ function renderEcom() {
 
     <div class="card mt">
       <div class="card-title">Channels</div>
-      <table class="roomy"><thead><tr>
+      <table class="roomy sortable"><thead><tr>
         <th>Channel</th><th class="num">Revenue</th><th class="num">Share</th><th class="num">Orders</th>
         <th class="num">AOV ฿</th><th class="num">Coupons</th><th class="num">Take rate</th><th class="num">Fees ฿</th>
       </tr></thead><tbody>
@@ -2094,7 +2170,7 @@ function renderEcom() {
     <div class="grid g-2-1 mt">
       <div class="card">
         <div class="card-title">Top packages</div>
-        <table class="roomy"><thead><tr><th>Package</th><th class="num">Sold</th><th class="num">Avg price ฿</th><th class="num">Revenue ฿</th></tr></thead><tbody>
+        <table class="roomy sortable"><thead><tr><th>Package</th><th class="num">Sold</th><th class="num">Avg price ฿</th><th class="num">Revenue ฿</th></tr></thead><tbody>
         ${d.packages.map(p => `<tr>
           <td class="trunc i18n" style="max-width:0;" title="${esc(p.name)}">${esc(p.name)}</td>
           <td class="num">${num(p.units)}</td>
@@ -2118,7 +2194,7 @@ function renderEcom() {
 
     ${t.mappedShare < 0.999 ? `<div class="card mt">
       <div class="card-title">Revenue by medical centre</div>
-      <table class="roomy"><thead><tr><th>Centre</th><th class="num">Revenue ฿</th><th class="num">Share</th><th class="num">Coupons</th><th class="num">Avg price ฿</th></tr></thead><tbody>
+      <table class="roomy sortable"><thead><tr><th>Centre</th><th class="num">Revenue ฿</th><th class="num">Share</th><th class="num">Coupons</th><th class="num">Avg price ฿</th></tr></thead><tbody>
       ${d.centers.map(c => `<tr>
         <td class="strong">${c.center==='(unmapped)'?'<span class="pill warn">not yet mapped</span>':esc(c.center)}</td>
         <td class="num barcell"><span class="minibar" style="width:${(c.revenue/maxCentre*100).toFixed(1)}%"></span><b>${num(Math.round(c.revenue))}</b></td>
@@ -2130,7 +2206,7 @@ function renderEcom() {
       The e-commerce team resolves them in the Package_Map tab; every centre figure corrects itself on the next refresh.</div>
     </div>` : `<div class="card mt">
       <div class="card-title">Revenue by medical centre</div>
-      <table class="roomy"><thead><tr><th>Centre</th><th class="num">Revenue ฿</th><th class="num">Share</th><th class="num">Coupons</th><th class="num">Avg price ฿</th></tr></thead><tbody>
+      <table class="roomy sortable"><thead><tr><th>Centre</th><th class="num">Revenue ฿</th><th class="num">Share</th><th class="num">Coupons</th><th class="num">Avg price ฿</th></tr></thead><tbody>
       ${d.centers.map(c => `<tr><td class="strong">${esc(c.center)}</td>
         <td class="num barcell"><span class="minibar" style="width:${(c.revenue/maxCentre*100).toFixed(1)}%"></span><b>${num(Math.round(c.revenue))}</b></td>
         <td class="num">${pct(c.revenue/t.revenue)}</td>
