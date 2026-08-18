@@ -2765,6 +2765,46 @@ async function fetchEcomRows() {
   }).filter((r) => r.date);
 }
 
+/**
+ * The two comparison windows every e-commerce view offers.
+ *
+ * "Previous" is the equally long span immediately before the selected range, so
+ * a 31-day selection compares against the 31 days before it — that is the
+ * period-on-period read, and it is labelled MoM because a month is the usual
+ * selection, not because it is always a calendar month.
+ * "Year ago" is the same calendar dates one year earlier, which is the honest
+ * comparison for a seasonal business.
+ */
+function comparisonWindows(from, to) {
+  const d0 = new Date(`${from}T00:00:00Z`), d1 = new Date(`${to}T00:00:00Z`);
+  const days = Math.round((d1 - d0) / 86400000) + 1;
+  const prevTo = new Date(d0); prevTo.setUTCDate(prevTo.getUTCDate() - 1);
+  const prevFrom = new Date(prevTo); prevFrom.setUTCDate(prevFrom.getUTCDate() - (days - 1));
+  const yoyFrom = new Date(d0); yoyFrom.setUTCFullYear(yoyFrom.getUTCFullYear() - 1);
+  const yoyTo = new Date(d1); yoyTo.setUTCFullYear(yoyTo.getUTCFullYear() - 1);
+  const iso = (d) => d.toISOString().slice(0, 10);
+  return {
+    days,
+    prev: { from: iso(prevFrom), to: iso(prevTo) },
+    yoy: { from: iso(yoyFrom), to: iso(yoyTo) },
+  };
+}
+
+/** Revenue keyed by an arbitrary grouping, over a date window. */
+function revenueBy(rows, win, keyFn) {
+  const m = new Map();
+  let total = 0;
+  for (const r of rows) {
+    if (r.date < win.from || r.date > win.to) continue;
+    total += r.price;
+    const k = keyFn(r);
+    m.set(k, (m.get(k) || 0) + r.price);
+  }
+  return { total, byKey: m };
+}
+
+const pctChange = (now, then) => (then > 0 ? (now - then) / then : null);
+
 async function buildEcommerce(from, to, scope) {
   const all = await ecomRows();
   const inRange = all.filter((r) => r.date >= from && r.date <= to);
@@ -2827,9 +2867,35 @@ async function buildEcommerce(from, to, scope) {
     t.revenue += r.price; t.coupons++; types.set(r.type, t);
   }
 
+  const cw = comparisonWindows(from, to);
+  const inScope = (r) => scope === "all" || r.type === "Online";
+  const scoped = all.filter(inScope);
+  const prevRev = revenueBy(scoped, cw.prev, (r) => r.channel);
+  const yoyRev = revenueBy(scoped, cw.yoy, (r) => r.channel);
+  const prevCentre = revenueBy(scoped, cw.prev, (r) => r.center || "(unmapped)");
+  const yoyCentre = revenueBy(scoped, cw.yoy, (r) => r.center || "(unmapped)");
+  for (const c of channels) {
+    c.prevRevenue = prevRev.byKey.get(c.channel) || 0;
+    c.yoyRevenue = yoyRev.byKey.get(c.channel) || 0;
+    c.mom = pctChange(c.revenue, c.prevRevenue);
+    c.yoy = pctChange(c.revenue, c.yoyRevenue);
+  }
+  const centreList = [...byCenter.values()].sort((a, b) => b.revenue - a.revenue);
+  for (const c of centreList) {
+    c.prevRevenue = prevCentre.byKey.get(c.center) || 0;
+    c.yoyRevenue = yoyCentre.byKey.get(c.center) || 0;
+    c.mom = pctChange(c.revenue, c.prevRevenue);
+    c.yoy = pctChange(c.revenue, c.yoyRevenue);
+  }
+
   return {
     scope: scope === "all" ? "all" : "online",
     types: [...types.values()].sort((a, b) => b.revenue - a.revenue),
+    compare: {
+      windows: cw,
+      prev: { revenue: prevRev.total, change: pctChange(revenue, prevRev.total) },
+      yoy: { revenue: yoyRev.total, change: pctChange(revenue, yoyRev.total) },
+    },
     totals: {
       revenue, fees, net: revenue - fees, orders: orders.size, coupons: rows.length,
       aov: orders.size ? revenue / orders.size : 0,
@@ -2843,7 +2909,7 @@ async function buildEcommerce(from, to, scope) {
     channelOrder: channels.map((c) => c.channel),
     daily: [...byDay.values()].sort((a, b) => (a.date < b.date ? -1 : 1)),
     packages: [...byPkg.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 12),
-    centers: [...byCenter.values()].sort((a, b) => b.revenue - a.revenue),
+    centers: centreList,
     customers: {
       count: customers.size,
       repeat: custList.filter((c) => c.orders.size > 1).length,
@@ -2934,8 +3000,23 @@ async function buildCentres(from, to, scope) {
     };
   }).sort((a, b) => b.revenue - a.revenue);
 
+  const cwC = comparisonWindows(from, to);
+  const inScopeC = (r) => scope === "all" || r.type === "Online";
+  const scopedC = all.filter(inScopeC);
+  const pC = revenueBy(scopedC, cwC.prev, (r) => r.center || "Unmapped");
+  const yC = revenueBy(scopedC, cwC.yoy, (r) => r.center || "Unmapped");
+  for (const c of list) {
+    c.prevRevenue = pC.byKey.get(c.centre) || 0;
+    c.yoyRevenue = yC.byKey.get(c.centre) || 0;
+    c.mom = pctChange(c.revenue, c.prevRevenue);
+    c.yoy = pctChange(c.revenue, c.yoyRevenue);
+  }
+
   return {
     scope: scope === "all" ? "all" : "online",
+    compare: { windows: cwC,
+      prev: { revenue: pC.total, change: pctChange(revenue, pC.total) },
+      yoy: { revenue: yC.total, change: pctChange(revenue, yC.total) } },
     channels,
     centres: list,
     totals: {
@@ -3048,10 +3129,24 @@ async function buildChannels(from, to, scope) {
       revenue: inRange.filter((r) => r.channel === name).reduce((a, r) => a + r.price, 0),
     })).sort((a, b) => b.revenue - a.revenue);
 
+  const cwH = comparisonWindows(from, to);
+  const scopedH = all.filter((r) => scope === "all" || r.type === "Online");
+  const pH = revenueBy(scopedH, cwH.prev, (r) => r.channel);
+  const yH = revenueBy(scopedH, cwH.yoy, (r) => r.channel);
+  for (const c of channels) {
+    c.prevRevenue = pH.byKey.get(c.channel) || 0;
+    c.yoyRevenue = yH.byKey.get(c.channel) || 0;
+    c.mom = pctChange(c.revenue, c.prevRevenue);
+    c.yoy = pctChange(c.revenue, c.yoyRevenue);
+  }
+
   const mid = months[half] || null;
   return {
     scope: scope === "all" ? "all" : "online",
     unclassified,
+    compare: { windows: cwH,
+      prev: { revenue: pH.total, change: pctChange(revenue, pH.total) },
+      yoy: { revenue: yH.total, change: pctChange(revenue, yH.total) } },
     // Where the range was cut for momentum and the bridge, so the UI can label
     // the two periods honestly instead of saying "before" and "after".
     split: { index: half, firstFrom: months[0] || null, firstTo: months[half-1] || null,

@@ -91,6 +91,10 @@ expect_field "ecom channels"    "$ECOM" "d.channels.length===2?'2':undefined"
 expect_field "ecom stacked day" "$ECOM" "d.daily[0].byChannel.Shopee===5000?'ok':undefined"
 # Unmapped rows must show up as a visible gap, never be dropped or hidden.
 expect_field "ecom unmapped"    "$ECOM" "d.centers.some(c=>c.center==='(unmapped)')?'flagged':undefined"
+# Comparison windows must be the equal-length span before, and the same dates a year back.
+expect_field "cmp prev window"  "$ECOM" "d.compare.windows.prev.to==='2026-06-30'?'ok':undefined"
+expect_field "cmp yoy window"   "$ECOM" "d.compare.windows.yoy.from==='2025-07-01'?'ok':undefined"
+expect_field "cmp on channels"  "$ECOM" "d.channels.every(c=>'mom' in c && 'yoy' in c)?'ok':undefined"
 expect_field "ecom repeat cust" "$ECOM" "d.customers.repeat===1?'1':undefined"
 # The ฿500k Agent order must NOT be in the Online default, and must appear with scope=all.
 expect_field "B2B excluded"     "$ECOM" "d.totals.revenue===24000?'24000':undefined"
@@ -100,6 +104,7 @@ expect_field "centre count"     "$CEN" "d.centres.length===3?'3':undefined"
 expect_field "centre at-risk"   "$CEN" "d.totals.unredeemedValue>0?'yes':undefined"
 expect_field "centre discount"  "$CEN" "d.centres.some(c=>c.discountDepth!==null)?'yes':undefined"
 expect_field "centre matrix"    "$CEN" "d.channels.length>=2?'ok':undefined"
+expect_field "cmp on centres"   "$CEN" "d.centres.every(c=>'mom' in c && 'yoy' in c)?'ok':undefined"
 CH2="/api/ecommerce/channels?from=$FROM&to=2026-08-31&scope=all"
 expect_field "chan months"      "$CH2" "d.months.length===2?'2':undefined"
 expect_field "chan affinity"    "$CH2" "d.channels.some(c=>c.bestAt.length)?'yes':undefined"

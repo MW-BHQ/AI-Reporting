@@ -250,6 +250,12 @@
   table.sortable thead th.sorted[data-sort="desc"]::after{content:'↓';}
   /* the trailing chevron-only column and any empty header get no marker */
   table.sortable thead th:empty::after{content:'';}
+  .dlt{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 5px;border-radius:5px;
+    margin-left:5px;cursor:help;white-space:nowrap;}
+  .dlt.up{background:rgba(74,190,140,.14);color:#2E9E6F;}
+  .dlt.down{background:#FFEDE7;color:#D9534F;}
+  .dlt.flat{background:rgba(140,155,190,.14);color:var(--muted);}
+  .dlt.none{background:transparent;color:var(--faint);font-weight:400;}
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;}
   .seg button{border:0;background:transparent;padding:5px 12px;font-size:11.5px;color:var(--muted);
     cursor:pointer;font-family:inherit;}
@@ -429,7 +435,7 @@
       </div>
       <div class="nav-item sub" data-view="ecomcentre">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V9l5-4 5 4v11"/><path d="M14 20V12h6v8"/><path d="M2 20h20"/></svg>
-        By centre
+        Centers
       </div>
       <div class="nav-item sub" data-view="ecomchannels">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17l5-6 4 3 5-7 4 4"/><circle cx="8" cy="11" r="1"/><circle cx="12" cy="14" r="1"/></svg>
@@ -743,7 +749,7 @@ const TITLES = {
   gbp: ['Google Business Profile', 'Reviews and ratings by listing'],
   audiences: ['Audiences', 'Meta audience sets ranked by cost per first-degree result'],
   ecom: ['E-commerce', 'Package sales across every online sales channel'],
-  ecomcentre: ['E-commerce · By centre', 'Which centres sell, and through which channel'],
+  ecomcentre: ['E-commerce · Centers', 'Which centers sell, and through which channel'],
   ecomchannels: ['E-commerce · Channels', 'How each channel performs over time, and what it is distinctively good at'],
   ecommigration: ['E-commerce · Migration', 'Do customers who start online later buy offline'],
   ecomchurn: ['E-commerce · Churn', 'Which channels and centres are losing their customers'],
@@ -1790,6 +1796,15 @@ const TYPE_COLORS = {
   'Special Campaign': '#59A5F5', 'Complementary': '#E0719B',
   'Extra': '#5BC8C0', 'Unclassified': '#A9B4CE',
 };
+// Change chip: green up, orange down, muted when there is nothing to compare
+// against. "—" is deliberate rather than 0%, because no prior data and no change
+// are different facts.
+const delta = (v, label) => {
+  if (v === null || v === undefined) return `<span class="dlt none" data-tip="No ${esc(label)} data to compare against">—</span>`;
+  const cls = v > 0.005 ? 'up' : (v < -0.005 ? 'down' : 'flat');
+  const sign = v > 0 ? '+' : '';
+  return `<span class="dlt ${cls}" data-tip="${esc(label)}">${sign}${(v*100).toFixed(v>=1||v<=-1?0:1)}%</span>`;
+};
 const typeColour = (t) => TYPE_COLORS[t] || '#A9B4CE';
 
 const CH_COLORS = ['#7B61FF','#4ABE8C','#F0A93B','#59A5F5','#E0719B','#8C97B4','#5BC8C0','#C08BE8'];
@@ -1881,8 +1896,8 @@ function renderEcomChurn() {
     </div>
 
     <div class="card mt">
-      <div class="card-title">Centres losing customers</div>
-      <div class="tscroll">${tbl(d.centres, 'Centre', '#E8724F')}</div>
+      <div class="card-title">Centers losing customers</div>
+      <div class="tscroll">${tbl(d.centres, 'Center', '#E8724F')}</div>
       <div class="note">Attributed to the centre of the last package bought.${
         d.centres.some(c=>c.name==='Unmapped')
           ? ' Rows whose package has no confirmed SKU appear as <b>unmapped</b> and cannot be assigned to a centre yet.' : ''}</div>
@@ -2108,14 +2123,16 @@ function renderEcomChannels() {
       <div class="card-title">Channel scorecard</div>
       <div class="tscroll"><table class="roomy sortable">
       <colgroup>
-        <col style="width:22%"><col style="width:12%"><col style="width:11%"><col style="width:10%">
-        <col style="width:8%"><col style="width:10%"><col style="width:10%"><col style="width:9%"><col style="width:8%">
+        <col style="width:18%"><col style="width:10%"><col style="width:9%"><col style="width:8%">
+        <col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:9%">
+        <col style="width:9%"><col style="width:8%"><col style="width:8%">
       </colgroup>
       <thead><tr>
         <th>Channel</th><th class="num">Revenue ฿</th><th>Trend</th>
         <th class="num"><span data-tip="Second half of the selected range against the first half. Compared in halves rather than month to month, so one promotion does not read as a trend.">Momentum</span></th>
+        <th class="num">MoM</th><th class="num">YoY</th>
         <th class="num">Orders</th><th class="num">AOV ฿</th><th class="num">Avg price ฿</th>
-        <th class="num">Take rate</th><th>Customers</th>
+        <th class="num">Take rate</th><th class="num">Customers</th>
       </tr></thead><tbody>
       ${d.channels.map(c => `<tr>
         <td class="strong" style="white-space:nowrap;"><i class="swatch" style="background:${colour(c.channel)}"></i>${esc(c.channel)}
@@ -2123,6 +2140,8 @@ function renderEcomChannels() {
         <td class="num strong">${num(Math.round(c.revenue))}</td>
         <td>${spark(c)}</td>
         <td class="num">${mom(c.momentum)}</td>
+        <td class="num">${delta(c.mom,`฿${num(Math.round(c.prevRevenue||0))} in the previous period`)}</td>
+        <td class="num">${delta(c.yoy,`฿${num(Math.round(c.yoyRevenue||0))} a year earlier`)}</td>
         <td class="num">${num(c.orders)}</td>
         <td class="num">${num(Math.round(c.aov))}</td>
         <td class="num">${num(Math.round(c.avgPrice))}</td>
@@ -2223,7 +2242,7 @@ function renderEcomCentres() {
   const maxRev = Math.max(...list.map(c => c.revenue), 1);
   $('viewRoot').innerHTML = `
     <div class="grid g-3" style="margin-bottom:14px;">
-      <div class="stat"><div class="lab">Centres selling</div><div class="val">${num(t.centres)}</div></div>
+      <div class="stat"><div class="lab">Centers selling</div><div class="val">${num(t.centres)}</div></div>
       <div class="stat"><div class="lab">Revenue</div><div class="val">฿${num(Math.round(t.revenue))}</div></div>
       <div class="stat"><div class="lab">Coupons sold</div><div class="val">${num(t.coupons)}</div>
         <div class="sub2">฿${num(Math.round(t.revenue/(t.coupons||1)))} average price</div></div>
@@ -2231,18 +2250,20 @@ function renderEcomCentres() {
 
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
-        <div class="card-title" style="margin:0;">Centres</div>
+        <div class="card-title" style="margin:0;">Centers</div>
         <div class="note" style="margin:0;">${S.ecomScope==='all'?'All channel types':'Online channels only'}</div>
       </div>
       <div class="tscroll"><table class="sticky-head roomy sortable">
       <colgroup>
-        <col style="width:14%"><col style="width:13%"><col style="width:7%"><col style="width:8%">
-        <col style="width:9%"><col style="width:7%"><col style="width:24%"><col style="width:18%">
+        <col style="width:13%"><col style="width:12%"><col style="width:6%"><col style="width:7%">
+        <col style="width:8%"><col style="width:6%"><col style="width:7%"><col style="width:7%">
+        <col style="width:19%"><col style="width:15%">
       </colgroup>
       <thead><tr>
-        <th>Centre</th><th class="num">Revenue ฿</th><th class="num">Share</th><th class="num">Coupons</th>
+        <th>Center</th><th class="num">Revenue ฿</th><th class="num">Share</th><th class="num">Coupons</th>
         <th class="num"><span data-tip="Revenue divided by coupons sold — the average price point this centre actually sells at, taken straight from ราคา/แพ็กเกจ.">Avg price ฿</span></th>
         <th class="num">Orders</th>
+        <th class="num">MoM</th><th class="num">YoY</th>
         <th><span data-tip="The package earning the most for this centre, and how many were sold.">Best seller</span></th>
         <th><span data-tip="The channel carrying most of this centre's revenue, and how concentrated it is. Above about 70% means the centre depends on one storefront.">Leans on</span></th>
       </tr></thead><tbody>
@@ -2253,6 +2274,8 @@ function renderEcomCentres() {
         <td class="num">${num(c.coupons)}</td>
         <td class="num">${num(Math.round(c.avgPrice))}</td>
         <td class="num">${num(c.orders)}</td>
+        <td class="num">${delta(c.mom,`฿${num(Math.round(c.prevRevenue||0))} in the previous period`)}</td>
+        <td class="num">${delta(c.yoy,`฿${num(Math.round(c.yoyRevenue||0))} a year earlier`)}</td>
         <td class="trunc i18n" style="max-width:0;font-size:11.5px;color:var(--muted);" title="${esc(c.topPackage)} · ${num(c.topPackageUnits)} sold">${esc(c.topPackage)}<span style="color:var(--faint);"> ×${num(c.topPackageUnits)}</span></td>
         <td style="font-size:11.5px;color:var(--muted);white-space:nowrap;">${esc(c.topChannel)}
           <span style="color:${c.concentration>=0.7?'#D97B1F':'var(--faint)'};font-weight:${c.concentration>=0.7?600:400};margin-left:6px;">${pct(c.concentration)}</span></td>
@@ -2263,8 +2286,8 @@ function renderEcomCentres() {
     </div>
 
     <div class="card mt">
-      <div class="card-title">Which channel sells each centre</div>
-      <div class="tscroll"><table class="xtab"><thead><tr><th>Centre</th>${d.channels.map(ch=>`<th class="num">${esc(ch)}</th>`).join('')}</tr></thead><tbody>
+      <div class="card-title">Which channel sells each center</div>
+      <div class="tscroll"><table class="xtab"><thead><tr><th>Center</th>${d.channels.map(ch=>`<th class="num">${esc(ch)}</th>`).join('')}</tr></thead><tbody>
       ${list.map(c => {
         const tot = c.revenue || 1;
         return `<tr><td class="strong">${c.centre==='Unmapped'?'<span class="pill warn">unmapped</span>':esc(c.centre)}</td>
@@ -2328,7 +2351,9 @@ function renderEcom() {
 
   $('viewRoot').innerHTML = `
     <div class="grid g-4" style="margin-bottom:14px;">
-      <div class="stat"><div class="lab">Gross revenue</div><div class="val">฿${num(Math.round(t.revenue))}</div></div>
+      <div class="stat"><div class="lab">Gross revenue</div><div class="val">฿${num(Math.round(t.revenue))}</div>
+        ${d.compare?`<div class="sub2">${delta(d.compare.prev.change,`vs previous ${d.compare.windows.days} days (${d.compare.windows.prev.from} → ${d.compare.windows.prev.to})`)} MoM
+          ${delta(d.compare.yoy.change,`vs ${d.compare.windows.yoy.from} → ${d.compare.windows.yoy.to}`)} YoY</div>`:''}</div>
       <div class="stat"><div class="lab">Marketplace fees</div><div class="val">฿${num(Math.round(t.fees))}</div>
         <div class="sub2">${pct(t.takeRate)} of gross</div></div>
       <div class="stat"><div class="lab">Net revenue</div><div class="val">฿${num(Math.round(t.net))}</div></div>
@@ -2350,7 +2375,7 @@ function renderEcom() {
       <div class="card-title">Channels</div>
       <table class="roomy sortable"><thead><tr>
         <th>Channel</th><th class="num">Revenue</th><th class="num">Share</th><th class="num">Orders</th>
-        <th class="num">AOV ฿</th><th class="num">Coupons</th><th class="num">Take rate</th><th class="num">Fees ฿</th>
+        <th class="num">AOV ฿</th><th class="num">Coupons</th><th class="num">MoM</th><th class="num">YoY</th><th class="num">Take rate</th><th class="num">Fees ฿</th>
       </tr></thead><tbody>
       ${d.channels.map(c => `<tr>
         <td class="strong" style="white-space:nowrap;"><i class="swatch" style="background:${colour(c.channel)}"></i>${esc(c.channel)}</td>
@@ -2359,6 +2384,8 @@ function renderEcom() {
         <td class="num">${num(c.orders)}</td>
         <td class="num">${num(Math.round(c.aov))}</td>
         <td class="num">${num(c.coupons)}</td>
+        <td class="num">${delta(c.mom,`฿${num(Math.round(c.prevRevenue||0))} in the previous period`)}</td>
+        <td class="num">${delta(c.yoy,`฿${num(Math.round(c.yoyRevenue||0))} a year earlier`)}</td>
         <td class="num${c.takeRate>=0.12?' bad':(c.takeRate<=0.03?' good':'')}">${pct(c.takeRate)}</td>
         <td class="num">${num(Math.round(c.fees))}</td>
       </tr>`).join('')}
@@ -2392,25 +2419,29 @@ function renderEcom() {
     </div>
 
     ${t.mappedShare < 0.999 ? `<div class="card mt">
-      <div class="card-title">Revenue by medical centre</div>
-      <table class="roomy sortable"><thead><tr><th>Centre</th><th class="num">Revenue ฿</th><th class="num">Share</th><th class="num">Coupons</th><th class="num">Avg price ฿</th></tr></thead><tbody>
+      <div class="card-title">Revenue by medical center</div>
+      <table class="roomy sortable"><thead><tr><th>Center</th><th class="num">Revenue ฿</th><th class="num">Share</th><th class="num">Coupons</th><th class="num">Avg price ฿</th><th class="num">MoM</th><th class="num">YoY</th></tr></thead><tbody>
       ${d.centers.map(c => `<tr>
         <td class="strong">${c.center==='(unmapped)'?'<span class="pill warn">not yet mapped</span>':esc(c.center)}</td>
         <td class="num barcell"><span class="minibar" style="width:${(c.revenue/maxCentre*100).toFixed(1)}%"></span><b>${num(Math.round(c.revenue))}</b></td>
         <td class="num">${pct(c.revenue/t.revenue)}</td>
         <td class="num">${num(c.coupons)}</td>
-        <td class="num">${num(Math.round(c.revenue/(c.coupons||1)))}</td></tr>`).join('')}
+        <td class="num">${num(Math.round(c.revenue/(c.coupons||1)))}</td>
+        <td class="num">${delta(c.mom,`฿${num(Math.round(c.prevRevenue||0))} in the previous period`)}</td>
+        <td class="num">${delta(c.yoy,`฿${num(Math.round(c.yoyRevenue||0))} a year earlier`)}</td></tr>`).join('')}
       </tbody></table>
       <div class="note"><b>${pct(1-t.mappedShare)} of rows have no confirmed SKU yet</b>, so this split is incomplete by that much.
       The e-commerce team resolves them in the Package_Map tab; every centre figure corrects itself on the next refresh.</div>
     </div>` : `<div class="card mt">
-      <div class="card-title">Revenue by medical centre</div>
-      <table class="roomy sortable"><thead><tr><th>Centre</th><th class="num">Revenue ฿</th><th class="num">Share</th><th class="num">Coupons</th><th class="num">Avg price ฿</th></tr></thead><tbody>
+      <div class="card-title">Revenue by medical center</div>
+      <table class="roomy sortable"><thead><tr><th>Center</th><th class="num">Revenue ฿</th><th class="num">Share</th><th class="num">Coupons</th><th class="num">Avg price ฿</th><th class="num">MoM</th><th class="num">YoY</th></tr></thead><tbody>
       ${d.centers.map(c => `<tr><td class="strong">${esc(c.center)}</td>
         <td class="num barcell"><span class="minibar" style="width:${(c.revenue/maxCentre*100).toFixed(1)}%"></span><b>${num(Math.round(c.revenue))}</b></td>
         <td class="num">${pct(c.revenue/t.revenue)}</td>
         <td class="num">${num(c.coupons)}</td>
-        <td class="num">${num(Math.round(c.revenue/(c.coupons||1)))}</td></tr>`).join('')}
+        <td class="num">${num(Math.round(c.revenue/(c.coupons||1)))}</td>
+        <td class="num">${delta(c.mom,`฿${num(Math.round(c.prevRevenue||0))} in the previous period`)}</td>
+        <td class="num">${delta(c.yoy,`฿${num(Math.round(c.yoyRevenue||0))} a year earlier`)}</td></tr>`).join('')}
       </tbody></table>
     </div>`}
   `;
