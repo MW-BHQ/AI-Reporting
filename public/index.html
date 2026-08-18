@@ -516,7 +516,7 @@ const S = {
   ecom: null, ecomKey: null, ecomLoading: false, ecomError: null, ecomScope: 'online',
   ecomc: null, ecomcKey: null, ecomcLoading: false, ecomcError: null,
   ecomch: null, ecomchKey: null, ecomchLoading: false, ecomchError: null, ecomMixMode: 'abs',
-  ecommig: null, ecommigKey: null, ecommigLoading: false, ecommigError: null,
+  ecommig: null, ecommigKey: null, ecommigLoading: false, ecommigError: null, migInit: false,
   audiencesLoading: false, audiencesError: null,
   me: null, users: null,
   charts: {},
@@ -694,6 +694,16 @@ document.querySelectorAll('.nav-item').forEach(item => {
       $('from').value = fmtISO(start); $('to').value = fmtISO(y);
       [...$('presets').children].forEach(b => b.classList.remove('active'));
       S.gbpInit = true;
+    }
+    // Migration needs a long run-up: a customer has to buy, leave, and come
+    // back before anything appears, so a one-month default shows almost nothing.
+    if (S.view === 'ecommigration' && !S.migInit) {
+      const today = new Date();
+      $('from').value = '2025-01-01';
+      $('to').value = fmtISO(today);
+      [...$('presets').children].forEach(b => b.classList.remove('active'));
+      S.ecommig = null; S.ecommigKey = null;
+      S.migInit = true;
     }
     render();
   });
@@ -1770,7 +1780,7 @@ function renderEcomMigration() {
       const v = (m.byType || {})[t] || 0;
       if (!v) return;
       const hgt = (v / maxM) * HH; y -= hgt;
-      seg += `<rect x="${(i*bw).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1,bw-3).toFixed(1)}" height="${hgt.toFixed(1)}" fill="${typeColour(t)}"><title>${esc(m.month)} · moved to ${esc(t)}: ${v}</title></rect>`;
+      seg += `<rect x="${(i*bw).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1,bw-3).toFixed(1)}" height="${hgt.toFixed(1)}" fill="${typeColour(t)}" data-tip="${esc(m.month)}\n${v} customer${v===1?'':'s'} moved to ${esc(t)}" style="cursor:help;"></rect>`;
     });
     return seg;
   }).join('');
@@ -1778,15 +1788,21 @@ function renderEcomMigration() {
   const maxFlow = Math.max(...d.flows.map(f => f.count), 1);
 
   $('viewRoot').innerHTML = `
-    <div class="grid g-4" style="margin-bottom:14px;">
+    <div class="grid g-4" style="margin-bottom:6px;">
       <div class="stat"><div class="lab">Identifiable customers</div><div class="val">${num(t.customers)}</div>
         <div class="sub2">${pct(t.coverage)} of rows carry a customer key</div></div>
+      <div class="stat"><div class="lab">Bought once, never returned</div><div class="val">${num(t.onceOnly)}</div>
+        <div class="sub2">${pct(t.onceOnly/(t.customers||1))} of customers — cannot migrate</div></div>
       <div class="stat"><div class="lab">Came back another day</div><div class="val">${num(t.returning)}</div>
-        <div class="sub2">${pct(t.returning/(t.customers||1))} of customers</div></div>
+        <div class="sub2">${pct(t.returning/(t.customers||1))} of customers · everything below is drawn from these</div></div>
       <div class="stat"><div class="lab">Changed channel type</div><div class="val">${num(t.switchers)}</div>
-        <div class="sub2">${pct(t.switchRate)} of returning customers</div></div>
-      <div class="stat"><div class="lab">Stayed put</div><div class="val">${num(t.loyal)}</div>
-        <div class="sub2">returned but never switched type</div></div>
+        <div class="sub2">${pct(t.switchRate)} of returning customers · ${num(t.loyal)} stayed put</div></div>
+    </div>
+    <div class="note" style="margin:0 0 14px;">
+      The figures nest rather than add up: <b>${num(t.onceOnly)} bought once + ${num(t.returning)} came back = ${num(t.customers)} customers</b>,
+      and within the returners, <b>${num(t.switchers)} switched + ${num(t.loyal)} stayed = ${num(t.returning)}</b>.
+      Most customers buy a single package and are never seen again, so they can neither switch nor stay — which is why
+      the migration numbers are small next to the customer count.
     </div>
 
     ${d.unclassified && d.unclassified.length ? `<div class="card" style="border-left:3px solid #D97B1F;margin-bottom:14px;">
@@ -1805,13 +1821,12 @@ function renderEcomMigration() {
       <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:6px;">
         <span>${esc(d.months[0]||'')}</span><span>${esc(d.months[d.months.length-1]||'')}</span>
       </div>
-      <div class="legend">
-        <span class="lg"><i style="background:#F0A93B"></i>Online → elsewhere</span>
-        <span class="lg"><i style="background:#7B61FF"></i>Elsewhere → online</span>
-        <span class="lg"><i style="background:#C3CBE0"></i>Other moves</span>
-      </div>
+      <div class="legend">${destTypes.map(t=>`<span class="lg"><i style="background:${typeColour(t)}"></i>moved to ${esc(t)}</span>`).join('')}</div>
       `}
-      <div class="note">Each customer appears once, in the month they first bought through a different type of channel than the one they started on.</div>
+      <div class="note">Each bar is the month a customer <b>first bought through a different type of channel</b> than the one
+      they started on, coloured by where they went. Every customer appears at most once. Hover any block for the count.<br>
+      <b>First-time buyers are not here</b> — a migration needs a before and an after, so only customers who bought on
+      two or more different dates can appear at all.</div>
     </div>
 
     <div class="grid g-2-1 mt">

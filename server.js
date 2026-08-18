@@ -3190,6 +3190,10 @@ async function buildMigration(from, to) {
     flows, origins,
     totals: {
       customers: byCustomer.size,
+      // Bought on exactly one date and never came back. Without this the four
+      // headline figures look like they should sum to the customer count, and
+      // they cannot: switchers and stayers are both subsets of the returners.
+      onceOnly: byCustomer.size - multiDate,
       returning: multiDate,
       switchers, loyal,
       switchRate: multiDate ? switchers / multiDate : 0,
