@@ -250,50 +250,62 @@
   table.sortable thead th.sorted[data-sort="desc"]::after{content:'↓';}
   /* the trailing chevron-only column and any empty header get no marker */
   table.sortable thead th:empty::after{content:'';}
-  /* ---------------- monthly report (print-first) ---------------- */
-  .mr{background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px 26px;}
-  .mr-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
-    border-bottom:2px solid #1F3864;padding-bottom:12px;margin-bottom:18px;}
-  .mr-title{font-size:30px;font-weight:700;color:#9E2A2B;letter-spacing:-.02em;}
-  .mr-sub{font-size:19px;font-weight:500;color:#1F3864;}
-  .mr-scope{margin-left:auto;font-size:11px;color:var(--muted);}
-  .mr-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-bottom:20px;}
-  .mr-kpi{padding:0 16px;border-right:1px solid var(--line);}
-  .mr-kpi:last-child{border-right:0;} .mr-kpi:first-child{padding-left:0;}
-  .mr-kpi-t{font-size:13px;font-weight:700;color:#1F3864;text-align:center;margin-bottom:8px;}
-  .mr-kpi-row{display:flex;align-items:center;justify-content:center;gap:12px;}
-  .mr-kpi-v{font-size:22px;font-weight:600;color:#1F3864;font-variant-numeric:tabular-nums;}
-  .mr-kpi-yoy{text-align:center;font-size:11px;}
-  .mr-yoy-l{font-size:10px;color:#1F3864;font-weight:600;}
-  .mr-up{color:#2E9E6F;font-weight:700;} .mr-down{color:#D9534F;font-weight:700;}
+  /* ---------------- monthly report (print-first) ----------------
+     A report, not a tool: quieter than the interactive tabs, but on the same
+     palette rather than a separate corporate one. The whole page runs on a
+     single hue plus one accent, so the only strong colour on screen is the
+     current period and the direction arrows. */
+  .mr{background:var(--card,#FBFCFE);border:1px solid var(--line);border-radius:16px;padding:26px 28px;}
+  .mr-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
+    padding-bottom:14px;margin-bottom:20px;border-bottom:1px solid var(--line);}
+  .mr-title{font-size:27px;font-weight:600;color:var(--ink);letter-spacing:-.025em;}
+  .mr-sub{font-size:17px;font-weight:400;color:var(--violet);}
+  .mr-scope{margin-left:auto;font-size:11px;color:var(--faint);}
+  .mr-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;}
+  /* Cards, not table cells divided by rules — the KPI row is the first thing
+     read and the vertical hairlines in the original made it feel like a ledger. */
+  .mr-kpi{background:var(--glass-2);border:1px solid var(--line);border-radius:13px;padding:14px 16px;}
+  .mr-kpi-t{font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:9px;}
+  .mr-kpi-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
+  .mr-kpi-v{font-size:23px;font-weight:600;color:var(--ink);letter-spacing:-.02em;
+    font-variant-numeric:tabular-nums;}
+  .mr-kpi-yoy{text-align:right;font-size:11.5px;white-space:nowrap;}
+  .mr-yoy-l{font-size:9px;color:var(--faint);letter-spacing:.08em;text-transform:uppercase;}
+  .mr-up{color:#2E9E6F;font-weight:600;} .mr-down{color:#D9534F;font-weight:600;}
   .mr-flat{color:var(--faint);}
-  .mr-kpi-p{font-size:10.5px;color:var(--muted);text-align:center;margin-top:5px;}
-  .mr-tag{display:inline-block;background:#1F3864;color:#fff;border-radius:4px;
-    padding:1px 6px;margin-left:6px;font-size:9px;white-space:nowrap;}
+  .mr-kpi-p{font-size:10.5px;color:var(--faint);margin-top:7px;}
+  .mr-tag{display:inline-block;background:var(--violet-soft);color:var(--violet);border-radius:20px;
+    padding:1px 8px;margin-left:6px;font-size:9.5px;font-weight:500;white-space:nowrap;}
   .mr-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
-  .mr-panel{border:1px solid var(--line);border-radius:10px;padding:30px 14px 12px;position:relative;}
-  .mr-panel-t{position:absolute;top:-1px;left:-1px;background:#1F3864;color:#fff;
-    font-size:11.5px;font-weight:600;padding:5px 14px;border-radius:10px 0 10px 0;}
-  .mr-legend{display:flex;gap:16px;justify-content:center;font-size:10px;color:var(--muted);margin-top:4px;}
-  .mr-legend i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:5px;}
-  .mr-donut{display:flex;align-items:center;gap:18px;flex-wrap:wrap;justify-content:center;}
-  .mr-donut-key{font-size:11px;color:var(--ink-2);}
-  .mr-donut-key div{display:flex;align-items:center;gap:7px;margin-bottom:5px;white-space:nowrap;}
-  .mr-donut-key i{width:9px;height:9px;border-radius:2px;flex:none;}
-  .mr-donut-key b{margin-left:auto;padding-left:12px;color:var(--ink);}
-  .mr-promo-box{border:1.5px dashed var(--line);border-radius:8px;min-height:210px;
-    display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;
-    color:var(--faint);font-size:11.5px;max-width:340px;margin:0 auto;}
-  .mr-foot{margin-top:16px;padding-top:10px;border-top:1px solid var(--line);
-    font-size:10.5px;color:var(--muted);text-align:right;}
+  /* Quiet card titles in the house style, instead of the dark filled tabs — those
+     read as five competing headlines on one page. */
+  .mr-panel{background:var(--glass-2);border:1px solid var(--line);border-radius:13px;padding:16px 16px 12px;}
+  .mr-panel-t{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:12px;}
+  .mr-legend{display:flex;gap:16px;justify-content:center;font-size:10.5px;color:var(--muted);margin-top:6px;}
+  .mr-legend i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:6px;
+    vertical-align:-1px;}
+  .mr-legend i.ghost{background:var(--violet-soft);border:1px solid #C9C1F7;}
+  .mr-donut{display:flex;align-items:center;gap:20px;flex-wrap:wrap;justify-content:center;}
+  .mr-donut-key{font-size:11.5px;color:var(--ink-2);min-width:150px;}
+  .mr-donut-key div{display:flex;align-items:center;gap:8px;margin-bottom:6px;white-space:nowrap;}
+  .mr-donut-key i{width:9px;height:9px;border-radius:2.5px;flex:none;}
+  .mr-donut-key b{margin-left:auto;padding-left:14px;color:var(--ink);font-variant-numeric:tabular-nums;}
+  .mr-promo-box{border:1.5px dashed var(--line);border-radius:11px;min-height:210px;
+    display:flex;align-items:center;justify-content:center;text-align:center;padding:22px;
+    color:var(--faint);font-size:11.5px;max-width:340px;margin:0 auto;background:var(--card,#fff);}
+  .mr-foot{margin-top:18px;padding-top:11px;border-top:1px solid var(--line);
+    font-size:10.5px;color:var(--faint);display:flex;justify-content:space-between;gap:10px;}
   @media print{
-    .mr{border:0;border-radius:0;padding:0;}
+    .mr{border:0;border-radius:0;padding:0;background:#fff;}
+    /* Tints can vanish on a mono printer, so the ghost bars keep their outline
+       and the panels lose their fill. */
+    .mr-panel,.mr-kpi{background:#fff;break-inside:avoid;}
     .mr-grid{gap:10px;}
-    .mr-panel{break-inside:avoid;}
   }
   @media(max-width:900px){
-    .mr-kpis{grid-template-columns:repeat(2,1fr);row-gap:16px;}
-    .mr-kpi{border-right:0;padding:0 8px;}
+    .mr-kpis{grid-template-columns:repeat(2,1fr);}
     .mr-grid{grid-template-columns:1fr;}
   }
   .dlt{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 5px;border-radius:5px;
@@ -1856,8 +1868,10 @@ const fmtAmt = (v) => v === null || v === undefined ? '—' : (v >= 100 ? Math.r
 // ============================================================ E-COMMERCE
 // One colour per channel TYPE, so the same group reads the same in every chart
 // and table on the migration tab.
+// Offline is teal rather than green: green is the "improving" indicator, and
+// having it also mean a channel type made one screen say two things with one hue.
 const TYPE_COLORS = {
-  'Online': '#7B61FF', 'Offline': '#4ABE8C', 'B2B': '#F0A93B',
+  'Online': '#7B61FF', 'Offline': '#2FA8A0', 'B2B': '#F0A93B',
   'Special Campaign': '#59A5F5', 'Complementary': '#E0719B',
   'Extra': '#5BC8C0', 'Unclassified': '#A9B4CE',
 };
@@ -1872,7 +1886,7 @@ const delta = (v, label) => {
 };
 const typeColour = (t) => TYPE_COLORS[t] || '#A9B4CE';
 
-const CH_COLORS = ['#7B61FF','#4ABE8C','#F0A93B','#59A5F5','#E0719B','#8C97B4','#5BC8C0','#C08BE8'];
+const CH_COLORS = ['#7B61FF','#2FA8A0','#F0A93B','#59A5F5','#E0719B','#8C97B4','#5BC8C0','#C08BE8'];
 function renderEcomMonthly() {
   const d = S.ecommon;
   if (!d && !S.ecommonLoading && !S.ecommonError) {
@@ -1918,20 +1932,27 @@ function renderEcomMonthly() {
       ${rows.map((r,i)=>{
         const cx = pad + i*gw + gw/2;
         const a = r[keyPrev], b = r[keyNow];
-        const bar = (v,off,fill) => v>0 ? `<rect x="${(cx+off-bw/2).toFixed(1)}" y="${yOf(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H-yOf(v)).toFixed(1)}" fill="${fill}"><title>${esc(r.name)} ${off<0?prevYr:yr}: ${fmt(v)}</title></rect>
-          <text x="${(cx+off).toFixed(1)}" y="${(yOf(v)-3).toFixed(1)}" text-anchor="middle" font-size="7.5" fill="${off<0?'#1F3864':'#9E2A2B'}">${fmt(v)}</text>` : '';
-        return bar(a,-bw*0.6,'#1F3864') + bar(b,bw*0.6,'#9E2A2B') +
+        // Last year is a ghost — soft fill, thin outline — so the eye lands on
+        // this year without having to work out which colour is which. In the
+        // original both periods were fully saturated and competed for attention.
+        const bar = (v,off,prior) => v>0 ? `<rect x="${(cx+off-bw/2).toFixed(1)}" y="${yOf(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H-yOf(v)).toFixed(1)}" rx="1.5"
+            fill="${prior?'var(--violet-soft)':'var(--violet)'}" ${prior?'stroke="#C9C1F7" stroke-width=".8"':''}
+            data-tip="${esc(r.name)} · ${prior?prevYr:yr}\n${fmt(v)}" style="cursor:help;"></rect>
+          <text x="${(cx+off).toFixed(1)}" y="${(yOf(v)-3).toFixed(1)}" text-anchor="middle" font-size="7.5" font-weight="${prior?'400':'600'}" fill="${prior?'var(--faint)':'var(--violet)'}">${fmt(v)}</text>` : '';
+        return bar(a,-bw*0.6,true) + bar(b,bw*0.6,false) +
           `<text x="${cx.toFixed(1)}" y="${H+13}" text-anchor="middle" font-size="8" fill="#4C5878">${esc(r.name.length>13?r.name.slice(0,12)+'…':r.name)}</text>`;
       }).join('')}
     </svg>
-    <div class="mr-legend"><span><i style="background:#1F3864"></i>${prevYr}</span><span><i style="background:#9E2A2B"></i>${yr}</span></div>`;
+    <div class="mr-legend"><span><i class="ghost"></i>${prevYr}</span><span><i style="background:var(--violet)"></i>${yr}</span></div>`;
   };
 
   // Donut rather than a true pie: the centre hole gives the total somewhere to live.
   const donut = (() => {
     const rows = d.channels.slice(0, 8);
     const tot = rows.reduce((a,r)=>a+r.revenue,0) || 1;
-    const shades = ['#1F3864','#2E4F86','#3E66A8','#5B82C0','#8AA6D4','#B3C4E3','#D3DCEF','#E9EEF7'];
+    // Parts of a whole is ordered data, so a single-hue ramp rather than eight
+    // competing colours — and it stays readable printed in greyscale.
+    const shades = ['#5B48D6','#7C6BF5','#9A8CF8','#B3A8FA','#C8C0FC','#DAD4FD','#E9E5FE','#F3F1FF'];
     let acc = -Math.PI/2, R = 78, r0 = 44, cx = 100, cy = 100;
     const segs = rows.map((row,i)=>{
       const frac = row.revenue/tot, a0 = acc, a1 = acc + frac*Math.PI*2; acc = a1;
@@ -1939,7 +1960,7 @@ function renderEcomMonthly() {
       const p = (rad,ang)=>`${(cx+rad*Math.cos(ang)).toFixed(2)},${(cy+rad*Math.sin(ang)).toFixed(2)}`;
       const mid = (a0+a1)/2;
       return {path:`<path d="M ${p(R,a0)} A ${R} ${R} 0 ${large} 1 ${p(R,a1)} L ${p(r0,a1)} A ${r0} ${r0} 0 ${large} 0 ${p(r0,a0)} Z" fill="${shades[i%shades.length]}" data-tip="${esc(row.name)}\n฿${num(Math.round(row.revenue))} · ${pct(frac)}"></path>`,
-        label: frac>=0.06 ? `<text x="${(cx+((R+r0)/2)*Math.cos(mid)).toFixed(1)}" y="${(cy+((R+r0)/2)*Math.sin(mid)+3).toFixed(1)}" text-anchor="middle" font-size="8.5" fill="${i<4?'#fff':'#1F3864'}" font-weight="600">${(frac*100).toFixed(1)}%</text>` : '',
+        label: frac>=0.06 ? `<text x="${(cx+((R+r0)/2)*Math.cos(mid)).toFixed(1)}" y="${(cy+((R+r0)/2)*Math.sin(mid)+3).toFixed(1)}" text-anchor="middle" font-size="8.5" fill="${i<4?'#fff':'var(--ink-2)'}" font-weight="600">${(frac*100).toFixed(1)}%</text>` : '',
         row, colour: shades[i%shades.length]};
     });
     return `<div class="mr-donut">
@@ -1988,7 +2009,8 @@ function renderEcomMonthly() {
         </div>
       </div>
 
-      <div class="mr-foot">Digital Marketing Report · Bangkok Hospital · generated ${esc(new Date().toISOString().slice(0,10))}</div>
+      <div class="mr-foot"><span>Digital Marketing Report · Bangkok Hospital</span>
+        <span>${d.scope==='all'?'All channel types':'Online channels only'} · generated ${esc(new Date().toISOString().slice(0,10))}</span></div>
     </div>`;
 }
 

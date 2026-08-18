@@ -40,6 +40,28 @@ for (const [name, expected] of Object.entries(REQUIRED_FIELDS)) {
                  : ok(`fields:${name}`, `${expected.length} fields`);
 }
 
+// ---------------------------------------------------------------- palette
+// The rule worth enforcing is semantic separation, not a particular brand hue:
+// a category colour must never be the same as the up/down indicators, because
+// green once meant both "Offline" and "improving" on the same screen.
+const SEMANTIC = ["2E9E6F", "D9534F"];              // up, down
+const typeBlock = html.match(/const TYPE_COLORS = \{([\s\S]*?)\};/);
+if (!typeBlock) fail("palette:types", "TYPE_COLORS not found");
+else {
+  const hexes = [...typeBlock[1].matchAll(/#([0-9A-Fa-f]{6})/g)].map((m) => m[1].toUpperCase());
+  const clash = hexes.filter((x) => SEMANTIC.includes(x));
+  const dupes = hexes.filter((x, i) => hexes.indexOf(x) !== i);
+  clash.length ? fail("palette:types", `category reuses an up/down colour: #${clash.join(", #")}`)
+    : dupes.length ? fail("palette:types", `duplicate category colours: #${dupes.join(", #")}`)
+    : ok("palette:types", `${hexes.length} distinct, none semantic`);
+}
+// The monthly report is styled from tokens so it stays in step with the rest of
+// the app; a stray navy or maroon means the old Looker palette crept back in.
+const mrBlock = html.slice(html.indexOf("monthly report (print-first)"), html.indexOf(".dlt{display:inline-block;"));
+const strays = [...mrBlock.matchAll(/#(1F3864|9E2A2B|2E4F86|3E66A8)\b/g)].map((m) => m[0]);
+strays.length ? fail("palette:monthly", `legacy report hues in the monthly styles: ${[...new Set(strays)].join(", ")}`)
+              : ok("palette:monthly", "monthly report uses house tokens");
+
 // ---------------------------------------------------------------- taxonomy
 // Every channel in the data must be classified, or the dashboard silently
 // buckets it as "Unclassified" — a taxonomy gap that reads like a segment.
