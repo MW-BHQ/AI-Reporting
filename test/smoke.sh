@@ -67,6 +67,7 @@ check "ecommerce"  GET "/api/ecommerce?from=$FROM&to=$TO"
 check "ecom centres" GET "/api/ecommerce/centres?from=$FROM&to=$TO"
 check "ecom channels" GET "/api/ecommerce/channels?from=$FROM&to=$TO"
 check "ecom migration" GET "/api/ecommerce/migration?from=$FROM&to=$TO"
+check "ecom churn"   GET "/api/ecommerce/churn?from=$FROM&to=$TO"
 echo "--- audiences field integrity (a dropped Windsor field must fail here) ---"
 AUD="/api/audiences?from=$FROM&to=$TO"
 expect_field "aud ad account"   "$AUD" "d.audiences[0].accounts[0]"
@@ -113,6 +114,14 @@ expect_field "mig flow dir"     "$MIG" "d.flows[0]&&d.flows[0].from==='Online'&&
 expect_field "mig monthly"      "$MIG" "d.monthly.some(m=>(m.byType||{}).Offline===1)?'ok':undefined"
 # Movement between online storefronts must be reported separately from leaving online.
 expect_field "mig online block" "$MIG" "d.online&&typeof d.online.switchRate==='number'?'ok':undefined"
+# Churn over a 30-day window ending 2026-08-31: the July-only buyers are lost,
+# and the identity churned + active must equal the customer count.
+CHN="/api/ecommerce/churn?from=$FROM&to=2026-08-31&window=30"
+expect_field "churn identity"   "$CHN" "d.totals.churned+d.totals.active===d.totals.customers?'ok':undefined"
+expect_field "churn split"      "$CHN" "d.totals.oneAndDone+d.totals.lapsed===d.totals.churned?'ok':undefined"
+expect_field "churn by channel" "$CHN" "d.channels.length>0?'ok':undefined"
+expect_field "churn by centre"  "$CHN" "d.centres.length>0?'ok':undefined"
+expect_field "churn cutoff"     "$CHN" "d.cutoff==='2026-08-01'?'ok':undefined"
 expect_field "awareness=CPM"    "$AUD" "d.audiences.every(a=>a.objectiveClass!=='awareness'||a.primary.kpi==='cpm')||'BAD'"
 # Regression guard for the 3.20 bug: with no positive catalog metric anywhere,
 # nothing may be classified as CPAS. `undefined !== null` once made every row

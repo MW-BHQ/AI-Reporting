@@ -435,6 +435,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17l5-6 4 3 5-7 4 4"/><circle cx="8" cy="11" r="1"/><circle cx="12" cy="14" r="1"/></svg>
         Channels
       </div>
+      <div class="nav-item sub" data-view="ecomchurn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7l6 6 4-4 8 8"/><path d="M21 12v5h-5"/></svg>
+        Churn
+      </div>
       <div class="nav-item sub" data-view="ecommigration">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h11l-3-3M20 16H9l3 3"/></svg>
         Migration
@@ -516,7 +520,9 @@ const S = {
   ecom: null, ecomKey: null, ecomLoading: false, ecomError: null, ecomScope: 'online',
   ecomc: null, ecomcKey: null, ecomcLoading: false, ecomcError: null,
   ecomch: null, ecomchKey: null, ecomchLoading: false, ecomchError: null, ecomMixMode: 'abs',
-  ecommig: null, ecommigKey: null, ecommigLoading: false, ecommigError: null, migInit: false,
+  ecommig: null, ecommigKey: null, ecommigLoading: false, ecommigError: null,
+  longRangeOn: false, rangeBefore: null,
+  ecomchurn: null, ecomchurnKey: null, ecomchurnLoading: false, ecomchurnError: null, churnWindow: 365,
   audiencesLoading: false, audiencesError: null,
   me: null, users: null,
   charts: {},
@@ -697,13 +703,28 @@ document.querySelectorAll('.nav-item').forEach(item => {
     }
     // Migration needs a long run-up: a customer has to buy, leave, and come
     // back before anything appears, so a one-month default shows almost nothing.
-    if (S.view === 'ecommigration' && !S.migInit) {
-      const today = new Date();
-      $('from').value = '2025-01-01';
-      $('to').value = fmtISO(today);
+    // Migration and Churn both need a long run-up — a customer has to buy,
+    // leave and come back before anything appears — so they carry their own
+    // range. Leaving them restores the previous one, unless the person has
+    // since chosen a range themselves.
+    const wantsLongRange = S.view === 'ecommigration' || S.view === 'ecomchurn';
+    const LONG_FROM = '2025-01-01';
+    if (wantsLongRange && !S.longRangeOn) {
+      S.rangeBefore = { from: $('from').value, to: $('to').value,
+                        preset: (document.querySelector('#presets .active') || {}).dataset };
+      $('from').value = LONG_FROM;
+      $('to').value = fmtISO(new Date());
       [...$('presets').children].forEach(b => b.classList.remove('active'));
-      S.ecommig = null; S.ecommigKey = null;
-      S.migInit = true;
+      S.longRangeOn = true;
+    } else if (!wantsLongRange && S.longRangeOn) {
+      const untouched = $('from').value === LONG_FROM;
+      S.longRangeOn = false;
+      if (untouched) {
+        setLastMonth();
+        [...$('presets').children].forEach(b =>
+          b.classList.toggle('active', b.dataset.lastmonth === '1'));
+        ['ecom','ecomc','ecomch'].forEach(k => { S[k] = null; S[k + 'Key'] = null; });
+      }
     }
     render();
   });
@@ -725,6 +746,7 @@ const TITLES = {
   ecomcentre: ['E-commerce · By centre', 'Which centres sell, and through which channel'],
   ecomchannels: ['E-commerce · Channels', 'How each channel performs over time, and what it is distinctively good at'],
   ecommigration: ['E-commerce · Migration', 'Do customers who start online later buy offline'],
+  ecomchurn: ['E-commerce · Churn', 'Which channels and centres are losing their customers'],
 };
 
 // ============================================================ fetching
@@ -749,6 +771,17 @@ async function loadEcomChannels(refresh = false) {
   S.ecomch = await res.json(); S.ecomchKey = key;
   setStatus('ok', S.ecomch.cached ? `cached ${S.ecomch.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
   return S.ecomch;
+}
+
+async function loadEcomChurn(refresh = false) {
+  const key = `${$('from').value}|${$('to').value}|${S.churnWindow}`;
+  if (!refresh && S.ecomchurnKey === key && S.ecomchurn) return S.ecomchurn;
+  setStatus('busy', 'finding lapsed customers…');
+  const res = await fetch(`/api/ecommerce/churn?from=${$('from').value}&to=${$('to').value}&window=${S.churnWindow}${refresh?'&refresh=1':''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,220)}`);
+  S.ecomchurn = await res.json(); S.ecomchurnKey = key;
+  setStatus('ok', S.ecomchurn.cached ? `cached ${S.ecomchurn.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.ecomchurn;
 }
 
 async function loadEcomMigration(refresh = false) {
@@ -894,6 +927,7 @@ $('loadBtn').addEventListener('click', async () => {
     else if (S.view === 'ecomcentre') { S.ecomcError = null; await loadEcomCentres(true); }
     else if (S.view === 'ecomchannels') { S.ecomchError = null; await loadEcomChannels(true); }
     else if (S.view === 'ecommigration') { S.ecommigError = null; await loadEcomMigration(true); }
+    else if (S.view === 'ecomchurn') { S.ecomchurnError = null; await loadEcomChurn(true); }
     else if (S.view === 'users') { S.users = null; await loadUsers(); }
     else if (S.view === 'topics' && S.topicTerm) { await loadTopic(S.topicTerm); }
     render();
@@ -930,10 +964,12 @@ function render() {
   const seg = $('scopeSeg');
   seg.classList.toggle('hidden', !isEcom);
   if (isEcom) {
-    const locked = S.view === 'ecommigration';
+    const locked = S.view === 'ecommigration' || S.view === 'ecomchurn';
     seg.classList.toggle('locked', locked);
     seg.title = locked
-      ? 'Migration always spans every channel type — a switch from one type to another cannot be seen inside a single type.'
+      ? (S.view === 'ecomchurn'
+          ? 'Churn always spans every channel type — a customer who moved to the clinic has not been lost, and filtering to online would count them as churned.'
+          : 'Migration always spans every channel type — a switch from one type to another cannot be seen inside a single type.')
       : '';
     seg.querySelectorAll('button').forEach(b => {
       const on = locked ? b.dataset.scope === 'all' : b.dataset.scope === S.ecomScope;
@@ -953,6 +989,7 @@ function render() {
   else if (S.view === 'ecomcentre') renderEcomCentres();
   else if (S.view === 'ecomchannels') renderEcomChannels();
   else if (S.view === 'ecommigration') renderEcomMigration();
+  else if (S.view === 'ecomchurn') renderEcomChurn();
   else if (S.view === 'users') renderUsers();
   else renderTopics();
 }
@@ -1756,6 +1793,108 @@ const TYPE_COLORS = {
 const typeColour = (t) => TYPE_COLORS[t] || '#A9B4CE';
 
 const CH_COLORS = ['#7B61FF','#4ABE8C','#F0A93B','#59A5F5','#E0719B','#8C97B4','#5BC8C0','#C08BE8'];
+function renderEcomChurn() {
+  const d = S.ecomchurn;
+  if (!d && !S.ecomchurnLoading && !S.ecomchurnError) {
+    S.ecomchurnLoading = true;
+    loadEcomChurn().catch(e => { S.ecomchurnError = e.message || String(e); })
+      .finally(() => { S.ecomchurnLoading = false; render(); });
+  }
+  if (S.ecomchurnError) { const m = S.ecomchurnError; $('viewRoot').innerHTML = errorState(m); S.ecomchurnError = null; return; }
+  if (!d) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">Finding lapsed customers…</div></div></div>`; return; }
+  if (d.empty) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in this range</div></div></div>`; return; }
+
+  const t = d.totals;
+  const win = `<div class="seg">
+      ${[180,365,540].map(w=>`<button data-window="${w}"${S.churnWindow===w?' class="on"':''}>${w===365?'1 year':(w===180?'6 months':'18 months')}</button>`).join('')}
+    </div>`;
+
+  const tbl = (rows, label, colour) => {
+    const maxC = Math.max(...rows.map(r => r.churned), 1);
+    return `<table class="roomy sortable">
+      <colgroup><col style="width:24%"><col style="width:13%"><col style="width:11%"><col style="width:12%">
+        <col style="width:14%"><col style="width:13%"><col style="width:13%"></colgroup>
+      <thead><tr>
+        <th>${label}</th><th class="num">Customers</th><th class="num">Still active</th>
+        <th class="num"><span data-tip="Customers whose most recent purchase anywhere was here, and who have not bought since.">Lost</span></th>
+        <th class="num">Churn rate</th>
+        <th class="num"><span data-tip="Total lifetime spend of the customers lost here — what walked out of the door, not a forecast.">Value lost ฿</span></th>
+        <th class="num"><span data-tip="Share of the lost customers who only ever bought once. High means an acquisition-quality problem rather than a retention one.">One and done</span></th>
+      </tr></thead><tbody>
+      ${rows.map(r => `<tr>
+        <td class="strong trunc" style="max-width:0;" title="${esc(r.name)}">${r.name==='Unmapped'?'<span class="pill warn">unmapped</span>':esc(r.name)}</td>
+        <td class="num">${num(r.customers)}</td>
+        <td class="num">${num(r.active)}</td>
+        <td class="num barcell"><span class="minibar" style="width:${(r.churned/maxC*100).toFixed(1)}%;background:${colour}22;"></span><b>${num(r.churned)}</b></td>
+        <td class="num${r.churnRate>=0.9?' bad':(r.churnRate<=0.5?' good':'')}">${pct(r.churnRate)}</td>
+        <td class="num">${num(Math.round(r.lostRevenue))}</td>
+        <td class="num">${pct(r.oneAndDoneShare)}</td>
+      </tr>`).join('')}
+      </tbody></table>`;
+  };
+
+  const ls = d.lastSeen || [];
+  const W = 760, HH = 120;
+  const maxLS = Math.max(...ls.map(x => x.customers), 1);
+  const bw = W / Math.max(ls.length, 1);
+  const bars = ls.map((x, i) => `<rect x="${(i*bw).toFixed(1)}" y="${(HH - x.customers/maxLS*HH).toFixed(1)}" width="${Math.max(1,bw-3).toFixed(1)}" height="${(x.customers/maxLS*HH).toFixed(1)}" fill="#E8724F" opacity=".8" data-tip="${esc(x.month)}\n${num(x.customers)} customers last bought in this month and have not returned" style="cursor:help;"></rect>`).join('');
+
+  $('viewRoot').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+      <div class="note" style="margin:0;">Counted as of <b>${esc(d.referenceDate)}</b> — a customer is lost if their last
+      purchase was before <b>${esc(d.cutoff)}</b>.</div>
+      ${win}
+    </div>
+
+    <div class="grid g-4" style="margin-bottom:6px;">
+      <div class="stat"><div class="lab">Customers in range</div><div class="val">${num(t.customers)}</div>
+        <div class="sub2">${pct(t.coverage)} of rows carry a customer key</div></div>
+      <div class="stat"><div class="lab">Lost</div><div class="val">${num(t.churned)}</div>
+        <div class="sub2">${pct(t.churnRate)} of them</div></div>
+      <div class="stat"><div class="lab">Value walked out</div><div class="val">฿${num(Math.round(t.lostRevenue))}</div>
+        <div class="sub2">฿${num(Math.round(t.avgLostValue))} average per lost customer</div></div>
+      <div class="stat"><div class="lab">Only ever bought once</div><div class="val">${num(t.oneAndDone)}</div>
+        <div class="sub2">${pct(t.oneAndDone/(t.churned||1))} of the lost · ${num(t.lapsed)} bought repeatedly then stopped</div></div>
+    </div>
+    <div class="note" style="margin:0 0 14px;">
+      <b>Lost</b> means no purchase in the ${d.windowDays} days before ${esc(d.referenceDate)}, attributed to the channel and
+      centre of the customer's <b>last</b> purchase — where the relationship ended, which is the place you can act on.
+      The two kinds are worth separating: <b>${num(t.oneAndDone)} never came back after a single purchase</b>, which is an
+      acquisition-quality problem, while <b>${num(t.lapsed)} bought repeatedly and then stopped</b>, which is a retention one.
+    </div>
+
+    <div class="card">
+      <div class="card-title">Where they were last seen</div>
+      <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${bars}</svg>
+      <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:6px;">
+        <span>${esc((ls[0]||{}).month||'')}</span><span>${esc((ls[ls.length-1]||{}).month||'')}</span>
+      </div>
+      <div class="note">The month of each lost customer's final purchase. A tall recent bar is not necessarily bad —
+      those customers may simply be inside their normal repurchase cycle, which is what the window control adjusts.</div>
+    </div>
+
+    <div class="card mt">
+      <div class="card-title">Channels losing customers</div>
+      <div class="tscroll">${tbl(d.channels, 'Channel', '#E8724F')}</div>
+      <div class="note">Sorted by how many customers were lost. A channel with a high <b>one and done</b> share is bringing in
+      people who never come back — that is a targeting or offer question, not a service one.</div>
+    </div>
+
+    <div class="card mt">
+      <div class="card-title">Centres losing customers</div>
+      <div class="tscroll">${tbl(d.centres, 'Centre', '#E8724F')}</div>
+      <div class="note">Attributed to the centre of the last package bought.${
+        d.centres.some(c=>c.name==='Unmapped')
+          ? ' Rows whose package has no confirmed SKU appear as <b>unmapped</b> and cannot be assigned to a centre yet.' : ''}</div>
+    </div>`;
+
+  document.querySelectorAll('[data-window]').forEach(b => b.addEventListener('click', () => {
+    const w = +b.dataset.window;
+    if (S.churnWindow === w) return;
+    S.churnWindow = w; S.ecomchurn = null; S.ecomchurnKey = null; render();
+  }));
+}
+
 function renderEcomMigration() {
   const d = S.ecommig;
   if (!d && !S.ecommigLoading && !S.ecommigError) {

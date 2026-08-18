@@ -226,6 +226,7 @@ const TABS = [
   { id: "ecomcentre",label: "E-commerce · Centres" },
   { id: "ecomchannels", label: "E-commerce · Channels" },
   { id: "ecommigration", label: "E-commerce · Migration" },
+  { id: "ecomchurn",  label: "E-commerce · Churn" },
   { id: "users",     label: "Users", adminOnly: true },
 ];
 const TAB_IDS = TABS.filter((t) => !t.adminOnly).map((t) => t.id);
@@ -3213,6 +3214,109 @@ app.get("/api/ecommerce/migration", requireTab("ecommigration"), async (req, res
   } catch (err) {
     logJson("ERROR", "ecom_migration_failed", { error: String(err.message || err) });
     res.status(500).json({ error: err.message || "Migration failed" });
+  }
+});
+
+/**
+ * Churn: which channels and centres are losing customers.
+ *
+ * Definitions, stated because they decide the answer:
+ *  · Reference date is the END of the selected range, not today, so the view is
+ *    reproducible when someone looks at an older window.
+ *  · A customer is CHURNED if their most recent purchase is more than `window`
+ *    days before that reference date. 365 is the default because a health
+ *    check-up is an annual purchase — a shorter window would call an ordinary
+ *    annual customer lost.
+ *  · Churn is attributed to the channel and centre of their LAST purchase. That
+ *    is where the relationship ended, which is the actionable place, even if
+ *    they were acquired somewhere else.
+ *  · One-and-done (a single purchase ever) is reported separately from lapsed
+ *    (bought repeatedly, then stopped). They are different problems: the first
+ *    is an acquisition-quality issue, the second is a retention issue.
+ *  · Always spans every channel type. Restricting to online would count a
+ *    customer who simply moved to the clinic as lost.
+ */
+async function buildChurn(from, to, windowDays) {
+  const all = await ecomRows();
+  const rows = all.filter((r) => r.date >= from && r.date <= to);
+  if (!rows.length) return { empty: true, rangeHas: all.length };
+
+  const ref = new Date(`${to}T00:00:00Z`);
+  const cutoff = new Date(ref); cutoff.setUTCDate(cutoff.getUTCDate() - windowDays);
+  const cutoffIso = cutoff.toISOString().slice(0, 10);
+
+  const byCustomer = new Map();
+  let noKey = 0;
+  for (const r of rows) {
+    if (!r.customer) { noKey++; continue; }
+    let c = byCustomer.get(r.customer);
+    if (!c) { c = { purchases: 0, dates: new Set(), first: r, last: r, revenue: 0 }; byCustomer.set(r.customer, c); }
+    c.purchases++; c.dates.add(r.date); c.revenue += r.price;
+    if (r.date < c.first.date) c.first = r;
+    if (r.date >= c.last.date) c.last = r;
+  }
+
+  const chan = new Map(), centre = new Map(), byMonth = new Map();
+  let churned = 0, active = 0, oneAndDone = 0, lapsed = 0, lostRevenue = 0;
+
+  const bump = (map, key, isChurn, cust) => {
+    let e = map.get(key);
+    if (!e) { e = { name: key, customers: 0, churned: 0, active: 0, lostRevenue: 0, oneAndDone: 0 }; map.set(key, e); }
+    e.customers++;
+    if (isChurn) {
+      e.churned++; e.lostRevenue += cust.revenue;
+      if (cust.dates.size === 1) e.oneAndDone++;
+    } else e.active++;
+  };
+
+  for (const [, c] of byCustomer) {
+    const isChurn = c.last.date < cutoffIso;
+    if (isChurn) {
+      churned++; lostRevenue += c.revenue;
+      if (c.dates.size === 1) oneAndDone++; else lapsed++;
+      const m = c.last.date.slice(0, 7);
+      byMonth.set(m, (byMonth.get(m) || 0) + 1);
+    } else active++;
+    // Attributed to where they were last seen.
+    bump(chan, c.last.channel || "(unknown)", isChurn, c);
+    bump(centre, c.last.center || "Unmapped", isChurn, c);
+  }
+
+  const shape = (map) => [...map.values()].map((e) => ({
+    ...e,
+    churnRate: e.customers ? e.churned / e.customers : 0,
+    avgLostValue: e.churned ? e.lostRevenue / e.churned : 0,
+    oneAndDoneShare: e.churned ? e.oneAndDone / e.churned : 0,
+  })).sort((a, b) => b.churned - a.churned);
+
+  const months = [...byMonth.keys()].sort();
+  return {
+    windowDays, referenceDate: to, cutoff: cutoffIso,
+    totals: {
+      customers: byCustomer.size, churned, active,
+      churnRate: byCustomer.size ? churned / byCustomer.size : 0,
+      oneAndDone, lapsed, lostRevenue,
+      avgLostValue: churned ? lostRevenue / churned : 0,
+      rowsWithoutKey: noKey,
+      coverage: rows.length ? 1 - noKey / rows.length : 1,
+    },
+    channels: shape(chan),
+    centres: shape(centre),
+    lastSeen: months.map((m) => ({ month: m, customers: byMonth.get(m) })),
+  };
+}
+
+app.get("/api/ecommerce/churn", requireTab("ecomchurn"), async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  const windowDays = Math.min(Math.max(parseInt(req.query.window, 10) || 365, 30), 1095);
+  try {
+    const out = await withCache(`ecomchurn:${windowDays}:${from}:${to}`, req.query.refresh === "1",
+      () => buildChurn(from, to, windowDays));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "ecom_churn_failed", { error: String(err.message || err) });
+    res.status(500).json({ error: err.message || "Churn failed" });
   }
 });
 
