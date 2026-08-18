@@ -3107,8 +3107,16 @@ async function buildMigration(from, to) {
 
   const months = [...new Set(rows.map((r) => r.date.slice(0, 7)))].sort();
   const flow = new Map();          // "Online→Offline" => count of customers
-  const monthly = new Map();       // month => { toOffline, toOnline, other }
-  months.forEach((m) => monthly.set(m, { month: m, toOffline: 0, toOnline: 0, other: 0 }));
+  // Switches are counted by the TYPE they moved TO, so the chart can be
+  // coloured with the same palette used for types everywhere else.
+  const monthly = new Map();
+  months.forEach((m) => monthly.set(m, { month: m, byType: {}, total: 0 }));
+
+  // Movement between online storefronts is a different question from moving
+  // off the internet entirely, and gets its own matrix.
+  const onlineFlow = new Map();
+  const onlineChannelsSeen = new Set();
+  let onlineMulti = 0, onlineSingle = 0;
 
   let multiDate = 0, switchers = 0, loyal = 0;
   const originCounts = new Map(), originSwitched = new Map();
@@ -3129,11 +3137,24 @@ async function buildMigration(from, to) {
     const key = `${origin}→${jump.type}`;
     flow.set(key, (flow.get(key) || 0) + 1);
     const m = monthly.get(jump.date.slice(0, 7));
-    if (m) {
-      if (origin === "Online" && jump.type !== "Online") m.toOffline++;
-      else if (origin !== "Online" && jump.type === "Online") m.toOnline++;
-      else m.other++;
-    }
+    if (m) { m.byType[jump.type] = (m.byType[jump.type] || 0) + 1; m.total++; }
+  }
+
+  // Second pass: within-online movement, over the same returning customers.
+  for (const [, list] of byCustomer) {
+    const online = list.filter((r) => r.type === "Online");
+    if (!online.length) continue;
+    const dates = [...new Set(online.map((r) => r.date))];
+    if (dates.length < 2) { if (online.length) onlineSingle++; continue; }
+    online.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    const first = online[0].channel;
+    onlineChannelsSeen.add(first);
+    const moved = online.find((r) => r.channel !== first);
+    if (!moved) { onlineSingle++; continue; }
+    onlineMulti++;
+    onlineChannelsSeen.add(moved.channel);
+    const k = `${first}→${moved.channel}`;
+    onlineFlow.set(k, (onlineFlow.get(k) || 0) + 1);
   }
 
   const flows = [...flow.entries()]
@@ -3151,10 +3172,21 @@ async function buildMigration(from, to) {
       revenue: rows.filter((r) => r.channel === name).reduce((a, r) => a + r.price, 0),
     })).sort((a, b) => b.revenue - a.revenue);
 
+  const onlineFlows = [...onlineFlow.entries()]
+    .map(([k, count]) => ({ from: k.split("→")[0], to: k.split("→")[1], count }))
+    .sort((a, b) => b.count - a.count);
+
   return {
     months,
     unclassified,
     monthly: months.map((m) => monthly.get(m)),
+    online: {
+      channels: [...onlineChannelsSeen].sort(),
+      flows: onlineFlows,
+      switchers: onlineMulti,
+      loyal: onlineSingle,
+      switchRate: (onlineMulti + onlineSingle) ? onlineMulti / (onlineMulti + onlineSingle) : 0,
+    },
     flows, origins,
     totals: {
       customers: byCustomer.size,

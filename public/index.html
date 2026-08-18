@@ -237,13 +237,19 @@
   .afshare{color:var(--faint);font-size:10.5px;}
   .afpkg{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:10.5px;
     color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  table.sortable thead th{cursor:pointer;user-select:none;position:relative;}
+  /* Every sortable header carries a faint chevron so it reads as clickable;
+     the active one turns violet and points. Previously the marker appeared only
+     after sorting, so nothing invited the first click. */
+  table.sortable thead th{cursor:pointer;user-select:none;white-space:nowrap;}
   table.sortable thead th:hover{color:var(--ink-2);}
-  table.sortable thead th.sorted::after{content:'';position:absolute;right:2px;top:50%;
-    margin-top:-2px;border-left:3.5px solid transparent;border-right:3.5px solid transparent;}
-  table.sortable thead th.sorted[data-sort="asc"]::after{border-bottom:4px solid var(--violet);}
-  table.sortable thead th.sorted[data-sort="desc"]::after{border-top:4px solid var(--violet);}
-  table.sortable thead th.num.sorted::after{right:-7px;}
+  table.sortable thead th::after{content:'↕';margin-left:5px;font-size:9px;
+    color:var(--faint);opacity:.55;font-weight:400;}
+  table.sortable thead th:hover::after{opacity:1;}
+  table.sortable thead th.sorted::after{color:var(--violet);opacity:1;font-weight:700;}
+  table.sortable thead th.sorted[data-sort="asc"]::after{content:'↑';}
+  table.sortable thead th.sorted[data-sort="desc"]::after{content:'↓';}
+  /* the trailing chevron-only column and any empty header get no marker */
+  table.sortable thead th:empty::after{content:'';}
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;}
   .seg button{border:0;background:transparent;padding:5px 12px;font-size:11.5px;color:var(--muted);
     cursor:pointer;font-family:inherit;}
@@ -1730,6 +1736,15 @@ const rankDots = (r) => {
 };
 const fmtAmt = (v) => v === null || v === undefined ? '—' : (v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(2));
 // ============================================================ E-COMMERCE
+// One colour per channel TYPE, so the same group reads the same in every chart
+// and table on the migration tab.
+const TYPE_COLORS = {
+  'Online': '#7B61FF', 'Offline': '#4ABE8C', 'B2B': '#F0A93B',
+  'Special Campaign': '#59A5F5', 'Complementary': '#E0719B',
+  'Extra': '#5BC8C0', 'Unclassified': '#A9B4CE',
+};
+const typeColour = (t) => TYPE_COLORS[t] || '#A9B4CE';
+
 const CH_COLORS = ['#7B61FF','#4ABE8C','#F0A93B','#59A5F5','#E0719B','#8C97B4','#5BC8C0','#C08BE8'];
 function renderEcomMigration() {
   const d = S.ecommig;
@@ -1744,14 +1759,20 @@ function renderEcomMigration() {
 
   const t = d.totals;
   const W = 760, HH = 150;
-  const maxM = Math.max(...d.monthly.map(m => Math.max(m.toOffline, m.toOnline, m.other)), 1);
+  // Stacked by the type each customer moved TO, in the shared type palette.
+  const destTypes = [...new Set(d.monthly.flatMap(m => Object.keys(m.byType || {})))]
+    .sort((a, b) => (a === 'Online' ? -1 : b === 'Online' ? 1 : a.localeCompare(b)));
+  const maxM = Math.max(...d.monthly.map(m => m.total || 0), 1);
   const bw = W / Math.max(d.monthly.length, 1);
   const bars = d.monthly.map((m, i) => {
-    const x = i * bw, w = Math.max(1, bw/3 - 1.5);
-    const h1 = (m.toOffline/maxM)*HH, h2 = (m.toOnline/maxM)*HH, h3 = (m.other/maxM)*HH;
-    return `<rect x="${x.toFixed(1)}" y="${(HH-h1).toFixed(1)}" width="${w.toFixed(1)}" height="${h1.toFixed(1)}" fill="#F0A93B"><title>${esc(m.month)} · online → elsewhere: ${m.toOffline}</title></rect>
-      <rect x="${(x+w+1.5).toFixed(1)}" y="${(HH-h2).toFixed(1)}" width="${w.toFixed(1)}" height="${h2.toFixed(1)}" fill="#7B61FF"><title>${esc(m.month)} · elsewhere → online: ${m.toOnline}</title></rect>
-      <rect x="${(x+2*(w+1.5)).toFixed(1)}" y="${(HH-h3).toFixed(1)}" width="${w.toFixed(1)}" height="${h3.toFixed(1)}" fill="#C3CBE0"><title>${esc(m.month)} · other moves: ${m.other}</title></rect>`;
+    let y = HH, seg = '';
+    destTypes.forEach(t => {
+      const v = (m.byType || {})[t] || 0;
+      if (!v) return;
+      const hgt = (v / maxM) * HH; y -= hgt;
+      seg += `<rect x="${(i*bw).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1,bw-3).toFixed(1)}" height="${hgt.toFixed(1)}" fill="${typeColour(t)}"><title>${esc(m.month)} · moved to ${esc(t)}: ${v}</title></rect>`;
+    });
+    return seg;
   }).join('');
 
   const maxFlow = Math.max(...d.flows.map(f => f.count), 1);
@@ -1798,10 +1819,10 @@ function renderEcomMigration() {
         <div class="card-title">Where they go</div>
         <table class="roomy"><thead><tr><th>From</th><th>To</th><th class="num">Customers</th><th></th></tr></thead><tbody>
         ${d.flows.map(f => `<tr>
-          <td class="strong">${esc(f.from)}</td>
-          <td class="strong">${esc(f.to)}</td>
+          <td class="strong" style="white-space:nowrap;"><i class="swatch" style="background:${typeColour(f.from)}"></i>${esc(f.from)}</td>
+          <td class="strong" style="white-space:nowrap;"><i class="swatch" style="background:${typeColour(f.to)}"></i>${esc(f.to)}</td>
           <td class="num">${num(f.count)}</td>
-          <td style="width:34%;"><span style="display:block;height:9px;border-radius:4px;background:${f.from==='Online'?'#F0A93B':'#7B61FF'};width:${(f.count/maxFlow*100).toFixed(1)}%;opacity:.8;"></span></td>
+          <td style="width:34%;"><span style="display:block;height:9px;border-radius:4px;background:${typeColour(f.to)};width:${(f.count/maxFlow*100).toFixed(1)}%;opacity:.85;"></span></td>
         </tr>`).join('')}
         </tbody></table>
       </div>
@@ -1809,7 +1830,7 @@ function renderEcomMigration() {
         <div class="card-title">Stickiness by starting point</div>
         <table class="roomy"><thead><tr><th>Started on</th><th class="num">Returning</th><th class="num">Switched</th><th class="num">Switch rate</th></tr></thead><tbody>
         ${d.origins.map(o => `<tr>
-          <td class="strong">${esc(o.type)}</td>
+          <td class="strong" style="white-space:nowrap;"><i class="swatch" style="background:${typeColour(o.type)}"></i>${esc(o.type)}</td>
           <td class="num">${num(o.customers)}</td>
           <td class="num">${num(o.switched)}</td>
           <td class="num${o.switchRate>=0.5?' bad':(o.switchRate<=0.2?' good':'')}">${pct(o.switchRate)}</td>
@@ -1818,6 +1839,30 @@ function renderEcomMigration() {
         <div class="note">A high switch rate is not automatically bad — it can mean the channel introduces people to the hospital who then buy where it suits them.</div>
       </div>
     </div>
+
+    ${d.online && d.online.flows.length ? `<div class="card mt">
+      <div class="card-title">Switching between online storefronts</div>
+      <div class="grid g-3" style="margin-bottom:12px;">
+        <div class="stat"><div class="lab">Returning online buyers</div><div class="val">${num(d.online.switchers + d.online.loyal)}</div></div>
+        <div class="stat"><div class="lab">Tried a second storefront</div><div class="val">${num(d.online.switchers)}</div>
+          <div class="sub2">${pct(d.online.switchRate)} of them</div></div>
+        <div class="stat"><div class="lab">Stayed on one</div><div class="val">${num(d.online.loyal)}</div></div>
+      </div>
+      <table class="roomy sortable"><thead><tr>
+        <th>Started on</th><th>Moved to</th><th class="num">Customers</th><th></th>
+      </tr></thead><tbody>
+      ${(() => { const mx = Math.max(...d.online.flows.map(f=>f.count),1);
+        return d.online.flows.map(f => `<tr>
+        <td class="strong" style="white-space:nowrap;"><i class="swatch" style="background:${typeColour('Online')}"></i>${esc(f.from)}</td>
+        <td class="strong" style="white-space:nowrap;">${esc(f.to)}</td>
+        <td class="num">${num(f.count)}</td>
+        <td style="width:32%;"><span style="display:block;height:9px;border-radius:4px;background:${typeColour('Online')};width:${(f.count/mx*100).toFixed(1)}%;opacity:.85;"></span></td>
+      </tr>`).join(''); })()}
+      </tbody></table>
+      <div class="note">Movement <b>within</b> the online group — Shopee to Lazada and so on — which the type-level view above
+      treats as no change at all. A buyer who shops around between storefronts is a different problem from one who leaves
+      the internet: it usually means price or promotion, not preference for a channel.</div>
+    </div>` : ''}
 
     <div class="card mt">
       <div class="card-title">How this is counted</div>

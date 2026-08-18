@@ -110,7 +110,9 @@ MIG="/api/ecommerce/migration?from=$FROM&to=2026-08-31"
 expect_field "mig switchers"    "$MIG" "d.totals.switchers===1?'1':undefined"
 expect_field "mig loyal"        "$MIG" "d.totals.loyal===1?'1':undefined"
 expect_field "mig flow dir"     "$MIG" "d.flows[0]&&d.flows[0].from==='Online'&&d.flows[0].to==='Offline'?'ok':undefined"
-expect_field "mig monthly"      "$MIG" "d.monthly.some(m=>m.toOffline===1)?'ok':undefined"
+expect_field "mig monthly"      "$MIG" "d.monthly.some(m=>(m.byType||{}).Offline===1)?'ok':undefined"
+# Movement between online storefronts must be reported separately from leaving online.
+expect_field "mig online block" "$MIG" "d.online&&typeof d.online.switchRate==='number'?'ok':undefined"
 expect_field "awareness=CPM"    "$AUD" "d.audiences.every(a=>a.objectiveClass!=='awareness'||a.primary.kpi==='cpm')||'BAD'"
 # Regression guard for the 3.20 bug: with no positive catalog metric anywhere,
 # nothing may be classified as CPAS. `undefined !== null` once made every row
