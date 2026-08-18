@@ -264,7 +264,11 @@
   .mr-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;}
   /* Cards, not table cells divided by rules — the KPI row is the first thing
      read and the vertical hairlines in the original made it feel like a ledger. */
-  .mr-kpi{background:var(--glass-2);border:1px solid var(--line);border-radius:13px;padding:14px 16px;}
+  .mr-kpi{background:var(--glass-2);border:1px solid var(--line);border-radius:13px;padding:14px 16px;
+    border-top:2.5px solid var(--violet);}
+  .mr-kpi:nth-child(2){border-top-color:#4B8DF8;}
+  .mr-kpi:nth-child(3){border-top-color:#2FA8A0;}
+  .mr-kpi:nth-child(4){border-top-color:#F2A93B;}
   .mr-kpi-t{font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;
     color:var(--muted);margin-bottom:9px;}
   .mr-kpi-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
@@ -286,11 +290,11 @@
   .mr-legend{display:flex;gap:16px;justify-content:center;font-size:10.5px;color:var(--muted);margin-top:6px;}
   .mr-legend i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:6px;
     vertical-align:-1px;}
-  .mr-legend i.ghost{background:var(--violet-soft);border:1px solid #C9C1F7;}
+  .mr-legend i.ghost{background:#E7E3FB;border:1px solid #CFC8F5;}
   .mr-donut{display:flex;align-items:center;gap:20px;flex-wrap:wrap;justify-content:center;}
   .mr-donut-key{font-size:11.5px;color:var(--ink-2);min-width:150px;}
   .mr-donut-key div{display:flex;align-items:center;gap:8px;margin-bottom:6px;white-space:nowrap;}
-  .mr-donut-key i{width:9px;height:9px;border-radius:2.5px;flex:none;}
+  .mr-donut-key i{width:10px;height:10px;border-radius:3px;flex:none;}
   .mr-donut-key b{margin-left:auto;padding-left:14px;color:var(--ink);font-variant-numeric:tabular-nums;}
   .mr-promo-box{border:1.5px dashed var(--line);border-radius:11px;min-height:210px;
     display:flex;align-items:center;justify-content:center;text-align:center;padding:22px;
@@ -1900,6 +1904,16 @@ function renderEcomMonthly() {
     <div style="font-size:12.5px;color:var(--muted);">Move the date range so it ends inside a month that has data.</div></div></div>`; return; }
 
   const yr = +d.month.slice(0,4), prevYr = yr - 1;
+  // "1 Jan – 07-31" was unreadable; dates in a printed capsule need a month name.
+  const dayMonYear = (dt) => {
+    // Bangkok is UTC+7, so toISOString() rolls back a day before 07:00 local.
+    const b = new Date(dt.getTime() + 7 * 3600 * 1000);
+    return `${b.getUTCDate()} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][b.getUTCMonth()]} ${b.getUTCFullYear()}`;
+  };
+  const dayMon = (iso) => {
+    const [, m, day] = iso.split('-');
+    return `${+day} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m-1]}`;
+  };
   const arrow = (v) => v === null || v === undefined
     ? '<span class="mr-flat">—</span>'
     : `<span class="${v>=0?'mr-up':'mr-down'}">${v>=0?'▲':'▼'} ${Math.abs(v*100).toFixed(2)}%</span>`;
@@ -1921,50 +1935,61 @@ function renderEcomMonthly() {
     if (!vals.length) return '<div class="note">No data for this month.</div>';
     const max = Math.max(...vals), min = Math.min(...vals);
     const lo = Math.pow(10, Math.floor(Math.log10(min))), hi = Math.pow(10, Math.ceil(Math.log10(max)));
-    const H = 190, W = 760, pad = 26;
+    const H = 190, W = 760, pad = 34;
     const yOf = (v) => v <= 0 ? H : H - (Math.log10(v/lo) / Math.log10(hi/lo)) * (H - 14);
     const gw = (W - pad) / rows.length, bw = Math.min(22, gw/2.6);
     const ticks = [];
     for (let t = lo; t <= hi; t *= 10) ticks.push(t);
-    return `<svg viewBox="0 0 ${W} ${H+34}" width="100%" height="${H+34}" style="display:block;">
+    return `<svg viewBox="0 0 ${W} ${H+40}" width="100%" height="${H+40}" style="display:block;">
       ${ticks.map(t=>`<line x1="${pad}" y1="${yOf(t).toFixed(1)}" x2="${W}" y2="${yOf(t).toFixed(1)}" stroke="#E6EAF2"/>
-        <text x="${pad-4}" y="${(yOf(t)+3).toFixed(1)}" text-anchor="end" font-size="7.5" fill="#AEB7CC">${fmt(t)}</text>`).join('')}
+        <text x="${pad-6}" y="${(yOf(t)+3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--faint)">${fmt(t)}</text>`).join('')}
       ${rows.map((r,i)=>{
         const cx = pad + i*gw + gw/2;
         const a = r[keyPrev], b = r[keyNow];
-        // Last year is a ghost — soft fill, thin outline — so the eye lands on
-        // this year without having to work out which colour is which. In the
-        // original both periods were fully saturated and competed for attention.
-        const bar = (v,off,prior) => v>0 ? `<rect x="${(cx+off-bw/2).toFixed(1)}" y="${yOf(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H-yOf(v)).toFixed(1)}" rx="1.5"
-            fill="${prior?'var(--violet-soft)':'var(--violet)'}" ${prior?'stroke="#C9C1F7" stroke-width=".8"':''}
-            data-tip="${esc(r.name)} · ${prior?prevYr:yr}\n${fmt(v)}" style="cursor:help;"></rect>
-          <text x="${(cx+off).toFixed(1)}" y="${(yOf(v)-3).toFixed(1)}" text-anchor="middle" font-size="7.5" font-weight="${prior?'400':'600'}" fill="${prior?'var(--faint)':'var(--violet)'}">${fmt(v)}</text>` : '';
+        // Last year stays a ghost so the eye lands on this year. This year is
+        // coloured by DIRECTION, so the chart answers its own question — grown
+        // or shrunk — instead of using colour as decoration. Where there is no
+        // prior figure to compare against it stays violet rather than implying
+        // growth from nothing.
+        const dir = a > 0 ? (b >= a ? 'grew' : 'fell') : 'new';
+        const fillNow = dir === 'grew' ? '#3BAF7A' : (dir === 'fell' ? '#E8724F' : 'var(--violet)');
+        const chg = a > 0 ? ` · ${b>=a?'+':''}${(((b-a)/a)*100).toFixed(0)}% vs ${prevYr}` : ` · no ${prevYr} figure`;
+        const bar = (v,off,prior) => v>0 ? `<rect x="${(cx+off-bw/2).toFixed(1)}" y="${yOf(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H-yOf(v)).toFixed(1)}" rx="2"
+            fill="${prior?'#E7E3FB':fillNow}" ${prior?'stroke="#CFC8F5" stroke-width=".8"':''}
+            data-tip="${esc(r.name)} · ${prior?prevYr:yr}\n${fmt(v)}${prior?'':chg}" style="cursor:help;"></rect>
+          <text x="${(cx+off).toFixed(1)}" y="${(yOf(v)-3).toFixed(1)}" text-anchor="middle" font-size="9.5" font-weight="${prior?'400':'700'}" fill="${prior?'var(--faint)':fillNow}">${fmt(v)}</text>` : '';
         return bar(a,-bw*0.6,true) + bar(b,bw*0.6,false) +
-          `<text x="${cx.toFixed(1)}" y="${H+13}" text-anchor="middle" font-size="8" fill="#4C5878">${esc(r.name.length>13?r.name.slice(0,12)+'…':r.name)}</text>`;
+          `<text x="${cx.toFixed(1)}" y="${H+17}" text-anchor="middle" font-size="11" font-weight="500" fill="var(--ink-2)">${esc(r.name.length>11?r.name.slice(0,10)+'…':r.name)}</text>`;
       }).join('')}
     </svg>
-    <div class="mr-legend"><span><i class="ghost"></i>${prevYr}</span><span><i style="background:var(--violet)"></i>${yr}</span></div>`;
+    <div class="mr-legend"><span><i class="ghost"></i>${prevYr}</span>
+      <span><i style="background:#3BAF7A"></i>${yr} — grew</span>
+      <span><i style="background:#E8724F"></i>${yr} — fell</span></div>`;
   };
 
   // Donut rather than a true pie: the centre hole gives the total somewhere to live.
   const donut = (() => {
     const rows = d.channels.slice(0, 8);
     const tot = rows.reduce((a,r)=>a+r.revenue,0) || 1;
-    // Parts of a whole is ordered data, so a single-hue ramp rather than eight
-    // competing colours — and it stays readable printed in greyscale.
-    const shades = ['#5B48D6','#7C6BF5','#9A8CF8','#B3A8FA','#C8C0FC','#DAD4FD','#E9E5FE','#F3F1FF'];
+    // Channels get their own hue, the same one they carry on the Overview and
+    // Channels tabs, so Shopee reads as Shopee everywhere. A single-hue ramp was
+    // tidier but forced a legend lookup for every slice.
+    const shades = CH_COLORS;
     let acc = -Math.PI/2, R = 78, r0 = 44, cx = 100, cy = 100;
     const segs = rows.map((row,i)=>{
       const frac = row.revenue/tot, a0 = acc, a1 = acc + frac*Math.PI*2; acc = a1;
       const large = (a1-a0) > Math.PI ? 1 : 0;
       const p = (rad,ang)=>`${(cx+rad*Math.cos(ang)).toFixed(2)},${(cy+rad*Math.sin(ang)).toFixed(2)}`;
       const mid = (a0+a1)/2;
-      return {path:`<path d="M ${p(R,a0)} A ${R} ${R} 0 ${large} 1 ${p(R,a1)} L ${p(r0,a1)} A ${r0} ${r0} 0 ${large} 0 ${p(r0,a0)} Z" fill="${shades[i%shades.length]}" data-tip="${esc(row.name)}\n฿${num(Math.round(row.revenue))} · ${pct(frac)}"></path>`,
-        label: frac>=0.06 ? `<text x="${(cx+((R+r0)/2)*Math.cos(mid)).toFixed(1)}" y="${(cy+((R+r0)/2)*Math.sin(mid)+3).toFixed(1)}" text-anchor="middle" font-size="8.5" fill="${i<4?'#fff':'var(--ink-2)'}" font-weight="600">${(frac*100).toFixed(1)}%</text>` : '',
+      return {path:`<path d="M ${p(R,a0)} A ${R} ${R} 0 ${large} 1 ${p(R,a1)} L ${p(r0,a1)} A ${r0} ${r0} 0 ${large} 0 ${p(r0,a0)} Z" fill="${shades[i%shades.length]}" stroke="var(--card,#fff)" stroke-width="1.5" data-tip="${esc(row.name)}\n฿${num(Math.round(row.revenue))} · ${pct(frac)}" style="cursor:help;"></path>`,
+        label: frac>=0.06 ? `<text x="${(cx+((R+r0)/2)*Math.cos(mid)).toFixed(1)}" y="${(cy+((R+r0)/2)*Math.sin(mid)+3).toFixed(1)}" text-anchor="middle" font-size="8.5" fill="#fff" font-weight="700">${(frac*100).toFixed(1)}%</text>` : '',
         row, colour: shades[i%shades.length]};
     });
     return `<div class="mr-donut">
-      <svg viewBox="0 0 200 200" width="200" height="200">${segs.map(s=>s.path).join('')}${segs.map(s=>s.label).join('')}</svg>
+      <svg viewBox="0 0 200 200" width="200" height="200">${segs.map(s=>s.path).join('')}${segs.map(s=>s.label).join('')}
+        <text x="100" y="96" text-anchor="middle" font-size="9" fill="var(--faint)" letter-spacing=".08em">TOTAL</text>
+        <text x="100" y="112" text-anchor="middle" font-size="15" font-weight="600" fill="var(--ink)">฿${num(Math.round(tot/1000))}K</text>
+      </svg>
       <div class="mr-donut-key">${segs.map(s=>`<div><i style="background:${s.colour}"></i>${esc(s.row.name)}<b>${pct(s.row.share)}</b></div>`).join('')}</div>
     </div>`;
   })();
@@ -1974,15 +1999,14 @@ function renderEcomMonthly() {
       <div class="mr-head">
         <div class="mr-title">E-Commerce</div>
         <div class="mr-sub">${esc(d.monthLabel)} Performance</div>
-        <div class="mr-scope no-print">${d.scope==='all'?'All channel types':'Online channels only'}</div>
       </div>
 
       <div class="mr-kpis">
         ${kpi('Total Sales (Month)', '฿'+num(Math.round(d.mtd.revenue)), 'THB',
               prevYr, num(Math.round(d.mtd.prev.revenue)), d.mtd.change,
-              d.windows.month.from.slice(8)+'–'+d.windows.month.to.slice(8)+' '+d.monthLabel.split(' ')[0])}
+              dayMon(d.windows.month.from)+' – '+dayMon(d.windows.month.to))}
         ${kpi('Total Sales (YTD)', '฿'+num(Math.round(d.ytd.revenue)), 'THB',
-              prevYr, num(Math.round(d.ytd.prev.revenue)), d.ytd.change, '1 Jan – '+d.windows.ytd.to.slice(5))}
+              prevYr, num(Math.round(d.ytd.prev.revenue)), d.ytd.change, '1 Jan – '+dayMon(d.windows.ytd.to))}
         ${kpi('Total Unit Sold', num(d.mtd.units), 'Coupons',
               prevYr, num(d.mtd.prev.units), d.mtd.unitsChange, '')}
         ${kpi('Average Order Value', '฿'+num(Math.round(d.mtd.aov)), 'THB',
@@ -2001,7 +2025,7 @@ function renderEcomMonthly() {
         </div>
         <div class="mr-panel">
           <div class="mr-panel-t">Unit Sold Performance by Center</div>
-          ${logBars(d.centres.slice(0,10), 'units', 'unitsPrev', (v)=>String(Math.round(v)))}
+          ${logBars([...d.centres].sort((a,b)=>b.units-a.units).slice(0,10), 'units', 'unitsPrev', (v)=>String(Math.round(v)))}
         </div>
         <div class="mr-panel mr-promo">
           <div class="mr-panel-t">Campaign creative</div>
@@ -2010,7 +2034,7 @@ function renderEcomMonthly() {
       </div>
 
       <div class="mr-foot"><span>Digital Marketing Report · Bangkok Hospital</span>
-        <span>${d.scope==='all'?'All channel types':'Online channels only'} · generated ${esc(new Date().toISOString().slice(0,10))}</span></div>
+        <span>Generated ${esc(dayMonYear(new Date()))}</span></div>
     </div>`;
 }
 
