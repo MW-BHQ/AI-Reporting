@@ -227,6 +227,7 @@ const TABS = [
   { id: "ecomchannels", label: "E-commerce · Channels" },
   { id: "ecommigration", label: "E-commerce · Migration" },
   { id: "ecomchurn",  label: "E-commerce · Churn" },
+  { id: "ecommonthly", label: "E-commerce · Monthly report" },
   { id: "users",     label: "Users", adminOnly: true },
 ];
 const TAB_IDS = TABS.filter((t) => !t.adminOnly).map((t) => t.id);
@@ -3412,6 +3413,101 @@ app.get("/api/ecommerce/churn", requireTab("ecomchurn"), async (req, res) => {
   } catch (err) {
     logJson("ERROR", "ecom_churn_failed", { error: String(err.message || err) });
     res.status(500).json({ error: err.message || "Churn failed" });
+  }
+});
+
+/**
+ * The monthly one-pager: a fixed month against the same month a year earlier,
+ * plus year-to-date, laid out to be printed rather than explored.
+ *
+ * The month comes from the END of the selected range, so choosing LM gives last
+ * month without a second control. YTD runs 1 January of that year to the end of
+ * the month, and its comparison is the identical span a year back — not the full
+ * prior year, which would flatter every figure.
+ */
+async function buildMonthly(month, scope) {
+  const all = await ecomRows();
+  const rows = scope === "all" ? all : all.filter((r) => r.type === "Online");
+  const y = +month.slice(0, 4), m = +month.slice(5, 7);
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const win = {
+    month: { from: `${month}-01`, to: `${month}-${String(lastDay).padStart(2, "0")}` },
+    ytd: { from: `${y}-01-01`, to: `${month}-${String(lastDay).padStart(2, "0")}` },
+  };
+  const prevY = y - 1;
+  const prevLast = new Date(Date.UTC(prevY, m, 0)).getUTCDate();
+  const pm = `${prevY}-${String(m).padStart(2, "0")}`;
+  win.monthPrev = { from: `${pm}-01`, to: `${pm}-${String(prevLast).padStart(2, "0")}` };
+  win.ytdPrev = { from: `${prevY}-01-01`, to: `${pm}-${String(prevLast).padStart(2, "0")}` };
+
+  const agg = (w) => {
+    const orders = new Set();
+    let revenue = 0, units = 0;
+    for (const r of rows) {
+      if (r.date < w.from || r.date > w.to) continue;
+      revenue += r.price; units++; orders.add(r.orderId);
+    }
+    return { revenue, units, orders: orders.size, aov: orders.size ? revenue / orders.size : 0 };
+  };
+  const groupBy = (w, keyFn) => {
+    const g = new Map();
+    for (const r of rows) {
+      if (r.date < w.from || r.date > w.to) continue;
+      const k = keyFn(r);
+      const e = g.get(k) || { revenue: 0, units: 0 };
+      e.revenue += r.price; e.units++;
+      g.set(k, e);
+    }
+    return g;
+  };
+
+  const mtd = agg(win.month), mtdPrev = agg(win.monthPrev);
+  const ytd = agg(win.ytd), ytdPrev = agg(win.ytdPrev);
+
+  const cNow = groupBy(win.month, (r) => r.center || "Unmapped");
+  const cPrev = groupBy(win.monthPrev, (r) => r.center || "Unmapped");
+  const centreNames = [...new Set([...cNow.keys(), ...cPrev.keys()])];
+  const centres = centreNames.map((name) => ({
+    name,
+    revenue: (cNow.get(name) || {}).revenue || 0,
+    revenuePrev: (cPrev.get(name) || {}).revenue || 0,
+    units: (cNow.get(name) || {}).units || 0,
+    unitsPrev: (cPrev.get(name) || {}).units || 0,
+  })).sort((a, b) => b.revenue - a.revenue);
+
+  const chNow = groupBy(win.month, (r) => r.channel);
+  const chTotal = [...chNow.values()].reduce((a, e) => a + e.revenue, 0);
+  const channels = [...chNow.entries()]
+    .map(([name, e]) => ({ name, revenue: e.revenue, units: e.units,
+      share: chTotal ? e.revenue / chTotal : 0 }))
+    .sort((a, b) => b.revenue - a.revenue);
+
+  return {
+    month, monthLabel: new Date(Date.UTC(y, m - 1, 1))
+      .toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }),
+    scope: scope === "all" ? "all" : "online",
+    windows: win,
+    mtd: { ...mtd, prev: mtdPrev, change: pctChange(mtd.revenue, mtdPrev.revenue),
+           unitsChange: pctChange(mtd.units, mtdPrev.units),
+           aovChange: pctChange(mtd.aov, mtdPrev.aov) },
+    ytd: { ...ytd, prev: ytdPrev, change: pctChange(ytd.revenue, ytdPrev.revenue) },
+    centres, channels,
+    empty: mtd.revenue === 0 && mtdPrev.revenue === 0,
+  };
+}
+
+app.get("/api/ecommerce/monthly", requireTab("ecommonthly"), async (req, res) => {
+  const { to } = req.query;
+  if (!isoDate(to)) return res.status(400).json({ error: "to must be YYYY-MM-DD" });
+  const month = /^\d{4}-\d{2}$/.test(String(req.query.month || "")) ? req.query.month : to.slice(0, 7);
+  try {
+    const scope = req.query.scope === "all" ? "all" : "online";
+    const out = await withCache(`ecommonthly:${scope}:${month}`, req.query.refresh === "1",
+      () => buildMonthly(month, scope));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "ecom_monthly_failed", { error: String(err.message || err) });
+    res.status(500).json({ error: err.message || "Monthly report failed" });
   }
 });
 

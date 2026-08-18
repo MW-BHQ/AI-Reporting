@@ -250,6 +250,52 @@
   table.sortable thead th.sorted[data-sort="desc"]::after{content:'↓';}
   /* the trailing chevron-only column and any empty header get no marker */
   table.sortable thead th:empty::after{content:'';}
+  /* ---------------- monthly report (print-first) ---------------- */
+  .mr{background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px 26px;}
+  .mr-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+    border-bottom:2px solid #1F3864;padding-bottom:12px;margin-bottom:18px;}
+  .mr-title{font-size:30px;font-weight:700;color:#9E2A2B;letter-spacing:-.02em;}
+  .mr-sub{font-size:19px;font-weight:500;color:#1F3864;}
+  .mr-scope{margin-left:auto;font-size:11px;color:var(--muted);}
+  .mr-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-bottom:20px;}
+  .mr-kpi{padding:0 16px;border-right:1px solid var(--line);}
+  .mr-kpi:last-child{border-right:0;} .mr-kpi:first-child{padding-left:0;}
+  .mr-kpi-t{font-size:13px;font-weight:700;color:#1F3864;text-align:center;margin-bottom:8px;}
+  .mr-kpi-row{display:flex;align-items:center;justify-content:center;gap:12px;}
+  .mr-kpi-v{font-size:22px;font-weight:600;color:#1F3864;font-variant-numeric:tabular-nums;}
+  .mr-kpi-yoy{text-align:center;font-size:11px;}
+  .mr-yoy-l{font-size:10px;color:#1F3864;font-weight:600;}
+  .mr-up{color:#2E9E6F;font-weight:700;} .mr-down{color:#D9534F;font-weight:700;}
+  .mr-flat{color:var(--faint);}
+  .mr-kpi-p{font-size:10.5px;color:var(--muted);text-align:center;margin-top:5px;}
+  .mr-tag{display:inline-block;background:#1F3864;color:#fff;border-radius:4px;
+    padding:1px 6px;margin-left:6px;font-size:9px;white-space:nowrap;}
+  .mr-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .mr-panel{border:1px solid var(--line);border-radius:10px;padding:30px 14px 12px;position:relative;}
+  .mr-panel-t{position:absolute;top:-1px;left:-1px;background:#1F3864;color:#fff;
+    font-size:11.5px;font-weight:600;padding:5px 14px;border-radius:10px 0 10px 0;}
+  .mr-legend{display:flex;gap:16px;justify-content:center;font-size:10px;color:var(--muted);margin-top:4px;}
+  .mr-legend i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:5px;}
+  .mr-donut{display:flex;align-items:center;gap:18px;flex-wrap:wrap;justify-content:center;}
+  .mr-donut-key{font-size:11px;color:var(--ink-2);}
+  .mr-donut-key div{display:flex;align-items:center;gap:7px;margin-bottom:5px;white-space:nowrap;}
+  .mr-donut-key i{width:9px;height:9px;border-radius:2px;flex:none;}
+  .mr-donut-key b{margin-left:auto;padding-left:12px;color:var(--ink);}
+  .mr-promo-box{border:1.5px dashed var(--line);border-radius:8px;min-height:210px;
+    display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;
+    color:var(--faint);font-size:11.5px;max-width:340px;margin:0 auto;}
+  .mr-foot{margin-top:16px;padding-top:10px;border-top:1px solid var(--line);
+    font-size:10.5px;color:var(--muted);text-align:right;}
+  @media print{
+    .mr{border:0;border-radius:0;padding:0;}
+    .mr-grid{gap:10px;}
+    .mr-panel{break-inside:avoid;}
+  }
+  @media(max-width:900px){
+    .mr-kpis{grid-template-columns:repeat(2,1fr);row-gap:16px;}
+    .mr-kpi{border-right:0;padding:0 8px;}
+    .mr-grid{grid-template-columns:1fr;}
+  }
   .dlt{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 5px;border-radius:5px;
     margin-left:5px;cursor:help;white-space:nowrap;}
   .dlt.up{background:rgba(74,190,140,.14);color:#2E9E6F;}
@@ -441,6 +487,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17l5-6 4 3 5-7 4 4"/><circle cx="8" cy="11" r="1"/><circle cx="12" cy="14" r="1"/></svg>
         Channels
       </div>
+      <div class="nav-item sub" data-view="ecommonthly">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+        Monthly report
+      </div>
       <div class="nav-item sub" data-view="ecomchurn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7l6 6 4-4 8 8"/><path d="M21 12v5h-5"/></svg>
         Churn
@@ -529,6 +579,7 @@ const S = {
   ecommig: null, ecommigKey: null, ecommigLoading: false, ecommigError: null,
   longRangeOn: false, rangeBefore: null,
   ecomchurn: null, ecomchurnKey: null, ecomchurnLoading: false, ecomchurnError: null, churnWindow: 365,
+  ecommon: null, ecommonKey: null, ecommonLoading: false, ecommonError: null,
   audiencesLoading: false, audiencesError: null,
   me: null, users: null,
   charts: {},
@@ -753,6 +804,7 @@ const TITLES = {
   ecomchannels: ['E-commerce · Channels', 'How each channel performs over time, and what it is distinctively good at'],
   ecommigration: ['E-commerce · Migration', 'Do customers who start online later buy offline'],
   ecomchurn: ['E-commerce · Churn', 'Which channels and centres are losing their customers'],
+  ecommonthly: ['E-commerce · Monthly report', 'One page for the month, built to be printed'],
 };
 
 // ============================================================ fetching
@@ -777,6 +829,17 @@ async function loadEcomChannels(refresh = false) {
   S.ecomch = await res.json(); S.ecomchKey = key;
   setStatus('ok', S.ecomch.cached ? `cached ${S.ecomch.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
   return S.ecomch;
+}
+
+async function loadEcomMonthly(refresh = false) {
+  const key = `${$('to').value}|${S.ecomScope}`;
+  if (!refresh && S.ecommonKey === key && S.ecommon) return S.ecommon;
+  setStatus('busy', 'building the monthly report…');
+  const res = await fetch(`/api/ecommerce/monthly?to=${$('to').value}&scope=${S.ecomScope}${refresh?'&refresh=1':''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,220)}`);
+  S.ecommon = await res.json(); S.ecommonKey = key;
+  setStatus('ok', S.ecommon.cached ? `cached ${S.ecommon.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.ecommon;
 }
 
 async function loadEcomChurn(refresh = false) {
@@ -934,6 +997,7 @@ $('loadBtn').addEventListener('click', async () => {
     else if (S.view === 'ecomchannels') { S.ecomchError = null; await loadEcomChannels(true); }
     else if (S.view === 'ecommigration') { S.ecommigError = null; await loadEcomMigration(true); }
     else if (S.view === 'ecomchurn') { S.ecomchurnError = null; await loadEcomChurn(true); }
+    else if (S.view === 'ecommonthly') { S.ecommonError = null; await loadEcomMonthly(true); }
     else if (S.view === 'users') { S.users = null; await loadUsers(); }
     else if (S.view === 'topics' && S.topicTerm) { await loadTopic(S.topicTerm); }
     render();
@@ -996,6 +1060,7 @@ function render() {
   else if (S.view === 'ecomchannels') renderEcomChannels();
   else if (S.view === 'ecommigration') renderEcomMigration();
   else if (S.view === 'ecomchurn') renderEcomChurn();
+  else if (S.view === 'ecommonthly') renderEcomMonthly();
   else if (S.view === 'users') renderUsers();
   else renderTopics();
 }
@@ -1808,6 +1873,125 @@ const delta = (v, label) => {
 const typeColour = (t) => TYPE_COLORS[t] || '#A9B4CE';
 
 const CH_COLORS = ['#7B61FF','#4ABE8C','#F0A93B','#59A5F5','#E0719B','#8C97B4','#5BC8C0','#C08BE8'];
+function renderEcomMonthly() {
+  const d = S.ecommon;
+  if (!d && !S.ecommonLoading && !S.ecommonError) {
+    S.ecommonLoading = true;
+    loadEcomMonthly().catch(e => { S.ecommonError = e.message || String(e); })
+      .finally(() => { S.ecommonLoading = false; render(); });
+  }
+  if (S.ecommonError) { const m = S.ecommonError; $('viewRoot').innerHTML = errorState(m); S.ecommonError = null; return; }
+  if (!d) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">Building the monthly report…</div></div></div>`; return; }
+  if (d.empty) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in ${esc(d.monthLabel)}</div>
+    <div style="font-size:12.5px;color:var(--muted);">Move the date range so it ends inside a month that has data.</div></div></div>`; return; }
+
+  const yr = +d.month.slice(0,4), prevYr = yr - 1;
+  const arrow = (v) => v === null || v === undefined
+    ? '<span class="mr-flat">—</span>'
+    : `<span class="${v>=0?'mr-up':'mr-down'}">${v>=0?'▲':'▼'} ${Math.abs(v*100).toFixed(2)}%</span>`;
+
+  const kpi = (label, value, unit, prevLabel, prevValue, change, note) => `
+    <div class="mr-kpi">
+      <div class="mr-kpi-t">${esc(label)}</div>
+      <div class="mr-kpi-row">
+        <div class="mr-kpi-v">${value}</div>
+        <div class="mr-kpi-yoy"><div class="mr-yoy-l">YoY</div>${arrow(change)}</div>
+      </div>
+      <div class="mr-kpi-p">${prevYr} : <b>${prevValue}</b> ${esc(unit)}${note?`<span class="mr-tag">${esc(note)}</span>`:''}</div>
+    </div>`;
+
+  // Log scale, because these centres span three orders of magnitude and a linear
+  // axis would flatten everything below the largest one into nothing.
+  const logBars = (rows, keyNow, keyPrev, fmt) => {
+    const vals = rows.flatMap(r => [r[keyNow], r[keyPrev]]).filter(v => v > 0);
+    if (!vals.length) return '<div class="note">No data for this month.</div>';
+    const max = Math.max(...vals), min = Math.min(...vals);
+    const lo = Math.pow(10, Math.floor(Math.log10(min))), hi = Math.pow(10, Math.ceil(Math.log10(max)));
+    const H = 190, W = 760, pad = 26;
+    const yOf = (v) => v <= 0 ? H : H - (Math.log10(v/lo) / Math.log10(hi/lo)) * (H - 14);
+    const gw = (W - pad) / rows.length, bw = Math.min(22, gw/2.6);
+    const ticks = [];
+    for (let t = lo; t <= hi; t *= 10) ticks.push(t);
+    return `<svg viewBox="0 0 ${W} ${H+34}" width="100%" height="${H+34}" style="display:block;">
+      ${ticks.map(t=>`<line x1="${pad}" y1="${yOf(t).toFixed(1)}" x2="${W}" y2="${yOf(t).toFixed(1)}" stroke="#E6EAF2"/>
+        <text x="${pad-4}" y="${(yOf(t)+3).toFixed(1)}" text-anchor="end" font-size="7.5" fill="#AEB7CC">${fmt(t)}</text>`).join('')}
+      ${rows.map((r,i)=>{
+        const cx = pad + i*gw + gw/2;
+        const a = r[keyPrev], b = r[keyNow];
+        const bar = (v,off,fill) => v>0 ? `<rect x="${(cx+off-bw/2).toFixed(1)}" y="${yOf(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H-yOf(v)).toFixed(1)}" fill="${fill}"><title>${esc(r.name)} ${off<0?prevYr:yr}: ${fmt(v)}</title></rect>
+          <text x="${(cx+off).toFixed(1)}" y="${(yOf(v)-3).toFixed(1)}" text-anchor="middle" font-size="7.5" fill="${off<0?'#1F3864':'#9E2A2B'}">${fmt(v)}</text>` : '';
+        return bar(a,-bw*0.6,'#1F3864') + bar(b,bw*0.6,'#9E2A2B') +
+          `<text x="${cx.toFixed(1)}" y="${H+13}" text-anchor="middle" font-size="8" fill="#4C5878">${esc(r.name.length>13?r.name.slice(0,12)+'…':r.name)}</text>`;
+      }).join('')}
+    </svg>
+    <div class="mr-legend"><span><i style="background:#1F3864"></i>${prevYr}</span><span><i style="background:#9E2A2B"></i>${yr}</span></div>`;
+  };
+
+  // Donut rather than a true pie: the centre hole gives the total somewhere to live.
+  const donut = (() => {
+    const rows = d.channels.slice(0, 8);
+    const tot = rows.reduce((a,r)=>a+r.revenue,0) || 1;
+    const shades = ['#1F3864','#2E4F86','#3E66A8','#5B82C0','#8AA6D4','#B3C4E3','#D3DCEF','#E9EEF7'];
+    let acc = -Math.PI/2, R = 78, r0 = 44, cx = 100, cy = 100;
+    const segs = rows.map((row,i)=>{
+      const frac = row.revenue/tot, a0 = acc, a1 = acc + frac*Math.PI*2; acc = a1;
+      const large = (a1-a0) > Math.PI ? 1 : 0;
+      const p = (rad,ang)=>`${(cx+rad*Math.cos(ang)).toFixed(2)},${(cy+rad*Math.sin(ang)).toFixed(2)}`;
+      const mid = (a0+a1)/2;
+      return {path:`<path d="M ${p(R,a0)} A ${R} ${R} 0 ${large} 1 ${p(R,a1)} L ${p(r0,a1)} A ${r0} ${r0} 0 ${large} 0 ${p(r0,a0)} Z" fill="${shades[i%shades.length]}" data-tip="${esc(row.name)}\n฿${num(Math.round(row.revenue))} · ${pct(frac)}"></path>`,
+        label: frac>=0.06 ? `<text x="${(cx+((R+r0)/2)*Math.cos(mid)).toFixed(1)}" y="${(cy+((R+r0)/2)*Math.sin(mid)+3).toFixed(1)}" text-anchor="middle" font-size="8.5" fill="${i<4?'#fff':'#1F3864'}" font-weight="600">${(frac*100).toFixed(1)}%</text>` : '',
+        row, colour: shades[i%shades.length]};
+    });
+    return `<div class="mr-donut">
+      <svg viewBox="0 0 200 200" width="200" height="200">${segs.map(s=>s.path).join('')}${segs.map(s=>s.label).join('')}</svg>
+      <div class="mr-donut-key">${segs.map(s=>`<div><i style="background:${s.colour}"></i>${esc(s.row.name)}<b>${pct(s.row.share)}</b></div>`).join('')}</div>
+    </div>`;
+  })();
+
+  $('viewRoot').innerHTML = `
+    <div class="mr">
+      <div class="mr-head">
+        <div class="mr-title">E-Commerce</div>
+        <div class="mr-sub">${esc(d.monthLabel)} Performance</div>
+        <div class="mr-scope no-print">${d.scope==='all'?'All channel types':'Online channels only'}</div>
+      </div>
+
+      <div class="mr-kpis">
+        ${kpi('Total Sales (Month)', '฿'+num(Math.round(d.mtd.revenue)), 'THB',
+              prevYr, num(Math.round(d.mtd.prev.revenue)), d.mtd.change,
+              d.windows.month.from.slice(8)+'–'+d.windows.month.to.slice(8)+' '+d.monthLabel.split(' ')[0])}
+        ${kpi('Total Sales (YTD)', '฿'+num(Math.round(d.ytd.revenue)), 'THB',
+              prevYr, num(Math.round(d.ytd.prev.revenue)), d.ytd.change, '1 Jan – '+d.windows.ytd.to.slice(5))}
+        ${kpi('Total Unit Sold', num(d.mtd.units), 'Coupons',
+              prevYr, num(d.mtd.prev.units), d.mtd.unitsChange, '')}
+        ${kpi('Average Order Value', '฿'+num(Math.round(d.mtd.aov)), 'THB',
+              prevYr, num(Math.round(d.mtd.prev.aov)), d.mtd.aovChange, '')}
+      </div>
+
+      <div class="mr-grid">
+        <div class="mr-panel">
+          <div class="mr-panel-t">Sales Performance by Center</div>
+          ${logBars(d.centres.slice(0,10), 'revenue', 'revenuePrev',
+            (v)=> v>=1e6 ? (v/1e6).toFixed(v>=1e7?0:1)+'M' : (v>=1e3 ? Math.round(v/1e3)+'K' : Math.round(v)))}
+        </div>
+        <div class="mr-panel">
+          <div class="mr-panel-t">Performance by Channel</div>
+          ${donut}
+        </div>
+        <div class="mr-panel">
+          <div class="mr-panel-t">Unit Sold Performance by Center</div>
+          ${logBars(d.centres.slice(0,10), 'units', 'unitsPrev', (v)=>String(Math.round(v)))}
+        </div>
+        <div class="mr-panel mr-promo">
+          <div class="mr-panel-t">Campaign creative</div>
+          <div class="mr-promo-box">Promotional image — drop the campaign artwork in here before circulating</div>
+        </div>
+      </div>
+
+      <div class="mr-foot">Digital Marketing Report · Bangkok Hospital · generated ${esc(new Date().toISOString().slice(0,10))}</div>
+    </div>`;
+}
+
 function renderEcomChurn() {
   const d = S.ecomchurn;
   if (!d && !S.ecomchurnLoading && !S.ecomchurnError) {
@@ -3081,7 +3265,12 @@ function drawChart(canvasId, rows, series) {
 $('printBtn').addEventListener('click', () => {
   const [t] = TITLES[S.view];
   const extra = S.view === 'campaigns' && S.campaign ? ` — ${S.campaign.topic || S.campaign.code}` : '';
-  $('printTitle').textContent = t + extra;
+  // The monthly report carries its own printed masthead, so the generic
+  // dashboard header would only repeat it.
+  const isMonthly = S.view === 'ecommonthly';
+  const ph = document.querySelector('.print-head');
+  if (ph) ph.style.display = isMonthly ? 'none' : '';
+  $('printTitle').textContent = isMonthly ? '' : t + extra;
   $('printRange').textContent = `${$('from').value} to ${$('to').value} · generated ${new Date().toLocaleString()}`;
   window.print();
 });
