@@ -138,9 +138,12 @@ expect_field "monthly centres"  "$MON" "d.centres.length>0?'ok':undefined"
 expect_field "monthly channels" "$MON" "d.channels.length>0&&Math.abs(d.channels.reduce((a,c)=>a+c.share,0)-1)<0.001?'shares-sum-1':undefined"
 ROAS="/api/ecommerce/roas?from=$FROM&to=$TO"
 expect_field "roas by channel"  "$ROAS" "d.byChannel.length>0?'ok':undefined"
-expect_field "roas matched pct" "$ROAS" "typeof d.totals.matchedShare==='number'?'ok':undefined"
-# Unmatched spend must be reported separately, never spread across channels.
-expect_field "roas keeps unmatched" "$ROAS" "('unmatchedSpend' in d.totals)?'ok':undefined"
+expect_field "roas selling pct" "$ROAS" "typeof d.totals.sellingShare==='number'?'ok':undefined"
+# Only spend aimed at a selling page may be divided into revenue; the rest must
+# be reported separately rather than inflating or deflating the ratio.
+expect_field "roas splits spend" "$ROAS" "d.totals.sellingSpend+d.totals.otherSpend===d.totals.allSpend?'ok':undefined"
+expect_field "roas intents"     "$ROAS" "d.intents.length>0?'ok':undefined"
+expect_field "roas destinations" "$ROAS" "d.destinations.length>0?'ok':undefined"
 expect_field "roas monthly rows" "$ROAS" "d.monthly.every(m=>'spend' in m && 'revenue' in m)?'ok':undefined"
 expect_field "awareness=CPM"    "$AUD" "d.audiences.every(a=>a.objectiveClass!=='awareness'||a.primary.kpi==='cpm')||'BAD'"
 # Regression guard for the 3.20 bug: with no positive catalog metric anywhere,
