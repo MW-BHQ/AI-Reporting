@@ -49,6 +49,9 @@ expect_field() {
 }
 
 FROM=2026-07-01; TO=2026-07-31
+echo "--- client boot ---"
+node "$(dirname "$0")/boot.js" || FAIL=$((FAIL+1))
+echo
 echo "--- static audit ---"
 node "$(dirname "$0")/audit.js" || FAIL=$((FAIL+1))
 echo
