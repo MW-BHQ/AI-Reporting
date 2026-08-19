@@ -507,6 +507,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
         Monthly report
       </div>
+      <div class="nav-item sub" data-view="ecomroas">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v20M17 6.5c0-1.9-2.2-2.9-5-2.9s-5 .9-5 2.7 2.4 2.4 5 3 5 1.3 5 3.2-2.2 2.9-5 2.9-5-1-5-2.9"/></svg>
+        ROAS
+      </div>
       <div class="nav-item sub" data-view="ecomchurn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7l6 6 4-4 8 8"/><path d="M21 12v5h-5"/></svg>
         Churn
@@ -596,6 +600,7 @@ const S = {
   longRangeOn: false, rangeBefore: null,
   ecomchurn: null, ecomchurnKey: null, ecomchurnLoading: false, ecomchurnError: null, churnWindow: 365,
   ecommon: null, ecommonKey: null, ecommonLoading: false, ecommonError: null,
+  ecomroas: null, ecomroasKey: null, ecomroasLoading: false, ecomroasError: null,
   audiencesLoading: false, audiencesError: null,
   me: null, users: null,
   charts: {},
@@ -819,6 +824,7 @@ const TITLES = {
   ecomcentre: ['E-commerce · Centers', 'Which centers sell, and through which channel'],
   ecomchannels: ['E-commerce · Channels', 'How each channel performs over time, and what it is distinctively good at'],
   ecommigration: ['E-commerce · Migration', 'Do customers who start online later buy offline'],
+  ecomroas: ['E-commerce · ROAS', 'Meta spend against storefront revenue — a ballpark, by design'],
   ecomchurn: ['E-commerce · Churn', 'Which channels and centres are losing their customers'],
   ecommonthly: ['E-commerce · Monthly report', 'One page for the month, built to be printed'],
 };
@@ -845,6 +851,17 @@ async function loadEcomChannels(refresh = false) {
   S.ecomch = await res.json(); S.ecomchKey = key;
   setStatus('ok', S.ecomch.cached ? `cached ${S.ecomch.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
   return S.ecomch;
+}
+
+async function loadEcomRoas(refresh = false) {
+  const key = `${$('from').value}|${$('to').value}`;
+  if (!refresh && S.ecomroasKey === key && S.ecomroas) return S.ecomroas;
+  setStatus('busy', 'matching ad spend to storefronts…');
+  const res = await fetch(`/api/ecommerce/roas?from=${$('from').value}&to=${$('to').value}${refresh?'&refresh=1':''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,220)}`);
+  S.ecomroas = await res.json(); S.ecomroasKey = key;
+  setStatus('ok', S.ecomroas.cached ? `cached ${S.ecomroas.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.ecomroas;
 }
 
 async function loadEcomMonthly(refresh = false) {
@@ -1014,6 +1031,7 @@ $('loadBtn').addEventListener('click', async () => {
     else if (S.view === 'ecommigration') { S.ecommigError = null; await loadEcomMigration(true); }
     else if (S.view === 'ecomchurn') { S.ecomchurnError = null; await loadEcomChurn(true); }
     else if (S.view === 'ecommonthly') { S.ecommonError = null; await loadEcomMonthly(true); }
+    else if (S.view === 'ecomroas') { S.ecomroasError = null; await loadEcomRoas(true); }
     else if (S.view === 'users') { S.users = null; await loadUsers(); }
     else if (S.view === 'topics' && S.topicTerm) { await loadTopic(S.topicTerm); }
     render();
@@ -1050,7 +1068,7 @@ function render() {
   const seg = $('scopeSeg');
   seg.classList.toggle('hidden', !isEcom);
   if (isEcom) {
-    const locked = S.view === 'ecommigration' || S.view === 'ecomchurn';
+    const locked = S.view === 'ecommigration' || S.view === 'ecomchurn' || S.view === 'ecomroas';
     seg.classList.toggle('locked', locked);
     seg.title = locked
       ? (S.view === 'ecomchurn'
@@ -1077,6 +1095,7 @@ function render() {
   else if (S.view === 'ecommigration') renderEcomMigration();
   else if (S.view === 'ecomchurn') renderEcomChurn();
   else if (S.view === 'ecommonthly') renderEcomMonthly();
+  else if (S.view === 'ecomroas') renderEcomRoas();
   else if (S.view === 'users') renderUsers();
   else renderTopics();
 }
@@ -1890,7 +1909,166 @@ const delta = (v, label) => {
 };
 const typeColour = (t) => TYPE_COLORS[t] || '#A9B4CE';
 
-const CH_COLORS = ['#7B61FF','#2FA8A0','#F0A93B','#59A5F5','#E0719B','#8C97B4','#5BC8C0','#C08BE8'];
+/**
+ * Each storefront in its own brand colour, so a channel is recognisable before
+ * the label is read. Two deliberate choices worth knowing:
+ *  · Shopee's red is its orange-leaning #EE4D2D rather than a true red, which
+ *    keeps it clear of the "declined" coral used on the monthly bars.
+ *  · Lazada uses its brighter blue, not its brand navy: beside the hospital
+ *    site's navy the two were indistinguishable in a stacked bar.
+ *  · Both LINE properties are green, so Chatbot takes LINE's own bright #06C755
+ *    and Shopping a deeper emerald — and the success green stays muted so a
+ *    brand green never reads as "improving".
+ */
+const CHANNEL_CI = {
+  'Shopee': '#EE4D2D',
+  'Lazada': '#1A73E8',
+  'Bangkok Hospital Website': '#1F3864',
+  'Line Shopping': '#0B8A4B',
+  'Line Chatbot': '#06C755',
+  'Shop.BeDee': '#00B3A4',
+  'Health Plaza': '#7B61FF',
+  'เวชระเบียน': '#8C97B4',
+  'ทันตกรรม': '#59A5F5',
+  'HPC 1': '#C08BE8',
+  'เปียโน': '#E0719B',
+  'Contact Center': '#F0A93B',
+  'พลาซ่า': '#A0733F',
+  'Agent': '#5E7A5A',
+  'Insurance': '#2F7D82',
+  'Partnership': '#7A4A6B',
+  'Run with the Flow': '#B07A2B',
+  'คูปองอภินันทนาการ': '#9A8CF8',
+  'Complementary (Discount Coupon)': '#C9C1F7',
+  'Extra': '#5BC8C0',
+};
+// Fallback for anything not yet given a brand colour, keyed off the name so the
+// same unknown channel keeps the same colour between renders.
+const CH_FALLBACK = ['#7B61FF','#2FA8A0','#F0A93B','#59A5F5','#E0719B','#8C97B4','#5BC8C0','#C08BE8'];
+const channelColour = (name) => {
+  if (CHANNEL_CI[name]) return CHANNEL_CI[name];
+  let hash = 0;
+  for (let i = 0; i < String(name).length; i++) hash = (hash * 31 + String(name).charCodeAt(i)) % 9973;
+  return CH_FALLBACK[hash % CH_FALLBACK.length];
+};
+const CH_COLORS = Object.values(CHANNEL_CI);
+function renderEcomRoas() {
+  const d = S.ecomroas;
+  if (!d && !S.ecomroasLoading && !S.ecomroasError) {
+    S.ecomroasLoading = true;
+    loadEcomRoas().catch(e => { S.ecomroasError = e.message || String(e); })
+      .finally(() => { S.ecomroasLoading = false; render(); });
+  }
+  if (S.ecomroasError) { const m = S.ecomroasError; $('viewRoot').innerHTML = errorState(m); S.ecomroasError = null; return; }
+  if (!d) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">Matching ad spend to storefronts…</div></div></div>`; return; }
+  if (d.metaUnavailable) { $('viewRoot').innerHTML = errorState('Meta Ads was unavailable this run — press Refresh to retry.'); return; }
+  if (!d.months.length) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No spend or sales in this range</div></div></div>`; return; }
+
+  const t = d.totals;
+  const roasTxt = (v) => v === null ? '<span style="color:var(--faint)">—</span>' : `${v.toFixed(1)}×`;
+  const colour = channelColour;
+
+  // Spend and revenue on one axis would make spend invisible, so the two are
+  // drawn as mirrored bars from a shared baseline — revenue up, spend down.
+  const W = 760, HH = 190, mid = HH * 0.62;
+  const maxRev = Math.max(...d.monthly.map(m => m.revenue), 1);
+  const maxSp = Math.max(...d.monthly.map(m => m.spend + m.unmatchedSpend), 1);
+  const bw = W / Math.max(d.monthly.length, 1);
+  const bars = d.monthly.map((m, i) => {
+    const x = i * bw + 3, w = Math.max(1, bw - 8);
+    const rh = (m.revenue / maxRev) * (mid - 6);
+    const sh = (m.spend / maxSp) * (HH - mid - 16);
+    const uh = (m.unmatchedSpend / maxSp) * (HH - mid - 16);
+    return `<rect x="${x.toFixed(1)}" y="${(mid-rh).toFixed(1)}" width="${w.toFixed(1)}" height="${rh.toFixed(1)}" rx="2" fill="var(--violet)" opacity=".85"
+        data-tip="${esc(m.month)}\nRevenue ฿${num(Math.round(m.revenue))}" style="cursor:help;"></rect>
+      <rect x="${x.toFixed(1)}" y="${mid.toFixed(1)}" width="${w.toFixed(1)}" height="${sh.toFixed(1)}" rx="2" fill="#E8724F" opacity=".9"
+        data-tip="${esc(m.month)}\nMatched Meta spend ฿${num(Math.round(m.spend))}" style="cursor:help;"></rect>
+      <rect x="${x.toFixed(1)}" y="${(mid+sh).toFixed(1)}" width="${w.toFixed(1)}" height="${uh.toFixed(1)}" rx="2" fill="var(--faint)" opacity=".55"
+        data-tip="${esc(m.month)}\nMeta spend with no storefront in its name ฿${num(Math.round(m.unmatchedSpend))}" style="cursor:help;"></rect>
+      <text x="${(x+w/2).toFixed(1)}" y="${(mid-rh-4).toFixed(1)}" text-anchor="middle" font-size="8.5" fill="var(--violet)" font-weight="600">${m.roas===null?'':m.roas.toFixed(1)+'×'}</text>`;
+  }).join('');
+
+  const maxChRev = Math.max(...d.byChannel.map(c => c.revenue), 1);
+
+  $('viewRoot').innerHTML = `
+    <div class="card" style="border-left:3px solid var(--amber);margin-bottom:14px;">
+      <div class="card-title" style="margin-bottom:6px;">Read this as a ballpark, not a return</div>
+      <div class="note" style="margin:0;">
+        Meta does not report which marketplace an ad sent someone to, so spend is matched to a storefront by
+        <b>name</b> — the ad account or campaign mentioning Shopee, Lazada, BeDee and so on. <b>${pct(t.matchedShare)}
+        of Meta spend in this range could be matched</b>; the rest is brand and awareness work with no storefront in
+        its name and is shown separately rather than spread across channels by guesswork.<br><br>
+        The revenue side is <b>all</b> revenue in that storefront, not just revenue the ads caused — organic
+        marketplace traffic, returning customers and every other marketing effort are included. So these figures are
+        <b>revenue per baht of Meta spend</b>, not incremental return. They will read high. What is useful is the
+        movement month to month and the comparison between channels; the absolute number is not a payback figure.
+      </div>
+    </div>
+
+    <div class="grid g-4" style="margin-bottom:14px;">
+      <div class="stat"><div class="lab">Matched Meta spend</div><div class="val">฿${num(Math.round(t.matchedSpend))}</div>
+        <div class="sub2">${pct(t.matchedShare)} of all Meta spend in range</div></div>
+      <div class="stat"><div class="lab">Storefront revenue</div><div class="val">฿${num(Math.round(t.revenue))}</div></div>
+      <div class="stat"><div class="lab">Revenue per ฿1 spend</div><div class="val">${roasTxt(t.roas)}</div>
+        <div class="sub2">not incremental — see above</div></div>
+      <div class="stat"><div class="lab">Unmatched spend</div><div class="val">฿${num(Math.round(t.unmatchedSpend))}</div>
+        <div class="sub2">no storefront named in the campaign</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Revenue and spend by month</div>
+      <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" style="display:block;overflow:visible;">
+        <line x1="0" y1="${mid}" x2="${W}" y2="${mid}" stroke="var(--line)"/>${bars}</svg>
+      <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:4px;">
+        <span>${esc(d.months[0])}</span><span>${esc(d.months[d.months.length-1])}</span>
+      </div>
+      <div class="legend">
+        <span class="lg"><i style="background:var(--violet)"></i>Storefront revenue (above the line)</span>
+        <span class="lg"><i style="background:#E8724F"></i>Matched Meta spend (below)</span>
+        <span class="lg"><i style="background:var(--faint)"></i>Unmatched spend</span>
+      </div>
+      <div class="note">The ratio above each month is revenue divided by matched spend. Revenue and spend are drawn from a
+      shared baseline at different scales — on one axis the spend bars would be invisible — so compare each series
+      against itself over time, not the two heights against each other.</div>
+    </div>
+
+    <div class="card mt">
+      <div class="card-title">By storefront</div>
+      <div class="tscroll"><table class="roomy sortable">
+      <colgroup><col style="width:22%"><col style="width:16%"><col style="width:16%"><col style="width:13%">
+        <col style="width:11%"><col style="width:11%"><col style="width:11%"></colgroup>
+      <thead><tr>
+        <th>Storefront</th><th class="num">Matched spend ฿</th><th class="num">Revenue ฿</th>
+        <th class="num"><span data-tip="Revenue divided by matched Meta spend. Not incremental return.">Per ฿1</span></th>
+        <th class="num">Link clicks</th><th class="num">Cost per click ฿</th><th class="num">Share of revenue</th>
+      </tr></thead><tbody>
+      ${d.byChannel.map(c => `<tr>
+        <td class="strong" style="white-space:nowrap;"><i class="swatch" style="background:${colour(c.channel)}"></i>${esc(c.channel)}</td>
+        <td class="num">${c.spend>0?num(Math.round(c.spend)):'<span style="color:var(--faint)" title="No Meta campaign named this storefront">—</span>'}</td>
+        <td class="num barcell"><span class="minibar" style="width:${(c.revenue/maxChRev*100).toFixed(1)}%"></span><b>${num(Math.round(c.revenue))}</b></td>
+        <td class="num strong">${roasTxt(c.roas)}</td>
+        <td class="num">${c.clicks?num(c.clicks):'—'}</td>
+        <td class="num">${c.costPerClick===null?'—':num(Math.round(c.costPerClick*100)/100)}</td>
+        <td class="num">${pct(c.revenue/(t.revenue||1))}</td>
+      </tr>`).join('')}
+      </tbody></table></div>
+      <div class="note">A storefront showing revenue but no spend is selling without any Meta campaign naming it — either
+      it runs on organic and marketplace traffic, or its campaigns are named in a way this cannot match.</div>
+    </div>
+
+    ${d.unmatched && d.unmatched.length ? `<div class="card mt">
+      <div class="card-title">Campaigns that could not be matched</div>
+      <table class="roomy sortable"><thead><tr><th>Campaign</th><th class="num">Spend ฿</th></tr></thead><tbody>
+      ${d.unmatched.map(u => `<tr>
+        <td class="trunc" style="max-width:0;" title="${esc(u.campaign)}">${esc(u.campaign)}</td>
+        <td class="num">${num(Math.round(u.spend))}</td></tr>`).join('')}
+      </tbody></table>
+      <div class="note">Largest first. Most of these are brand and awareness campaigns that genuinely do not point at one
+      storefront. If any of them <b>should</b> be attributed, renaming it to include the storefront — or telling me the
+      naming pattern — is enough for it to be counted.</div>
+    </div>` : ''}`;
+}
+
 function renderEcomMonthly() {
   const d = S.ecommon;
   if (!d && !S.ecommonLoading && !S.ecommonError) {
@@ -1974,7 +2152,7 @@ function renderEcomMonthly() {
     // Channels get their own hue, the same one they carry on the Overview and
     // Channels tabs, so Shopee reads as Shopee everywhere. A single-hue ramp was
     // tidier but forced a legend lookup for every slice.
-    const shades = CH_COLORS;
+    const shades = rows.map(r => channelColour(r.name));
     let acc = -Math.PI/2, R = 78, r0 = 44, cx = 100, cy = 100;
     const segs = rows.map((row,i)=>{
       const frac = row.revenue/tot, a0 = acc, a1 = acc + frac*Math.PI*2; acc = a1;
@@ -2291,7 +2469,7 @@ function renderEcomChannels() {
   if (!d) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">Comparing channels…</div></div></div>`; return; }
   if (d.empty) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in this range</div></div></div>`; return; }
 
-  const months = d.months, colour = (ch) => CH_COLORS[d.channels.findIndex(c => c.channel === ch) % CH_COLORS.length];
+  const months = d.months, colour = channelColour;
   const W = 760, HH = 180;
   const maxM = Math.max(...d.monthly.map(m => m.total), 1);
   const bw = W / Math.max(months.length, 1);
@@ -2557,7 +2735,7 @@ function renderEcom() {
   }
 
   const t = d.totals, order = d.channelOrder;
-  const colour = (ch) => CH_COLORS[order.indexOf(ch) % CH_COLORS.length];
+  const colour = channelColour;
   const maxDay = Math.max(...d.daily.map(x => x.total), 1);
 
   // Stacked daily bars: each day's revenue split by the channel that earned it.

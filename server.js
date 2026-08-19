@@ -228,6 +228,7 @@ const TABS = [
   { id: "ecommigration", label: "E-commerce · Migration" },
   { id: "ecomchurn",  label: "E-commerce · Churn" },
   { id: "ecommonthly", label: "E-commerce · Monthly report" },
+  { id: "ecomroas",   label: "E-commerce · ROAS" },
   { id: "users",     label: "Users", adminOnly: true },
 ];
 const TAB_IDS = TABS.filter((t) => !t.adminOnly).map((t) => t.id);
@@ -3508,6 +3509,137 @@ app.get("/api/ecommerce/monthly", requireTab("ecommonthly"), async (req, res) =>
   } catch (err) {
     logJson("ERROR", "ecom_monthly_failed", { error: String(err.message || err) });
     res.status(500).json({ error: err.message || "Monthly report failed" });
+  }
+});
+
+/**
+ * ROAS: Meta spend against e-commerce revenue, by channel and month.
+ *
+ * A BALLPARK by construction, and the view says so. Two limits decide what it
+ * can mean:
+ *  1. Ads are matched to a storefront by NAME — the ad account or campaign
+ *     mentioning Shopee, Lazada, BeDee and so on. Meta does not report which
+ *     marketplace an ad drove, so anything without a storefront in its name is
+ *     reported as unmatched rather than spread across channels by guesswork.
+ *  2. The revenue side is ALL revenue in that channel, not just revenue the ads
+ *     caused. Organic marketplace traffic, returning customers and other
+ *     marketing are included. So this is revenue per baht of Meta spend, NOT
+ *     incremental return: it reads high, and the signal is the trend and the
+ *     comparison between channels rather than the absolute figure.
+ */
+const AD_CHANNEL_HINTS = [
+  ["Shopee", /shopee/i],
+  ["Lazada", /lazada/i],
+  ["Shop.BeDee", /bedee/i],
+  ["Line Shopping", /line\s*shop|myshop/i],
+  ["Line Chatbot", /line\s*(bot|chat|oa)|chatbot/i],
+  ["Health Plaza", /health\s*plaza/i],
+  ["Bangkok Hospital Website", /\bwebsite\b|\bweb\b|bangkokhospital\.com/i],
+];
+function adChannel(accountName, campaignName) {
+  const hay = `${accountName || ""} ${campaignName || ""}`;
+  for (const [channel, re] of AD_CHANNEL_HINTS) if (re.test(hay)) return channel;
+  return null;
+}
+
+async function buildRoas(from, to) {
+  const [rows, ads] = await Promise.all([
+    ecomRows(),
+    windsor("facebook", ["date", "campaign", "account_name", "spend", "impressions",
+      "actions_link_click"], from, to).catch((e) => {
+      logJson("WARNING", "roas_meta_unavailable", { error: String(e.message || e) });
+      return null;
+    }),
+  ]);
+  if (ads === null) return { metaUnavailable: true };
+
+  const months = new Set();
+  const spend = new Map();
+  let matchedSpend = 0, unmatchedSpend = 0;
+  const unmatchedCampaigns = new Map();
+
+  for (const a of ads) {
+    const date = String(a.date || "").slice(0, 10);
+    if (!date) continue;
+    const m = date.slice(0, 7);
+    months.add(m);
+    const ch = adChannel(a.account_name, a.campaign);
+    const key = `${m}|${ch || "__unmatched"}`;
+    const e = spend.get(key) || { spend: 0, clicks: 0, impressions: 0 };
+    e.spend += n(a.spend); e.clicks += n(a.actions_link_click); e.impressions += n(a.impressions);
+    spend.set(key, e);
+    if (ch) matchedSpend += n(a.spend);
+    else {
+      unmatchedSpend += n(a.spend);
+      const c = String(a.campaign || "(unnamed)");
+      unmatchedCampaigns.set(c, (unmatchedCampaigns.get(c) || 0) + n(a.spend));
+    }
+  }
+
+  const rev = new Map();
+  for (const r of rows) {
+    if (r.date < from || r.date > to) continue;
+    if (r.type !== "Online") continue;   // only storefronts an ad could plausibly drive
+    const m = r.date.slice(0, 7);
+    months.add(m);
+    rev.set(`${m}|${r.channel}`, (rev.get(`${m}|${r.channel}`) || 0) + r.price);
+  }
+
+  const monthList = [...months].sort();
+  const channelNames = [...new Set([
+    ...[...spend.keys()].map((k) => k.split("|")[1]).filter((c) => c !== "__unmatched"),
+    ...[...rev.keys()].map((k) => k.split("|")[1]),
+  ])];
+
+  const byChannel = channelNames.map((ch) => {
+    let sp = 0, rv = 0, clicks = 0;
+    const series = monthList.map((m) => {
+      const s2 = spend.get(`${m}|${ch}`) || { spend: 0, clicks: 0 };
+      const r2 = rev.get(`${m}|${ch}`) || 0;
+      sp += s2.spend; rv += r2; clicks += s2.clicks;
+      return { month: m, spend: s2.spend, revenue: r2, roas: s2.spend > 0 ? r2 / s2.spend : null };
+    });
+    return { channel: ch, spend: sp, revenue: rv, clicks,
+             roas: sp > 0 ? rv / sp : null,
+             costPerClick: clicks > 0 ? sp / clicks : null, series };
+  }).sort((a, b) => b.revenue - a.revenue);
+
+  const monthly = monthList.map((m) => {
+    let sp = 0, rv = 0;
+    for (const ch of channelNames) {
+      sp += (spend.get(`${m}|${ch}`) || { spend: 0 }).spend;
+      rv += rev.get(`${m}|${ch}`) || 0;
+    }
+    const un = (spend.get(`${m}|__unmatched`) || { spend: 0 }).spend;
+    return { month: m, spend: sp, unmatchedSpend: un, revenue: rv, roas: sp > 0 ? rv / sp : null };
+  });
+
+  const totalSpend = byChannel.reduce((a, c) => a + c.spend, 0);
+  const totalRev = byChannel.reduce((a, c) => a + c.revenue, 0);
+  return {
+    months: monthList, byChannel, monthly,
+    totals: {
+      matchedSpend: totalSpend, unmatchedSpend, revenue: totalRev,
+      roas: totalSpend > 0 ? totalRev / totalSpend : null,
+      matchedShare: (matchedSpend + unmatchedSpend) > 0
+        ? matchedSpend / (matchedSpend + unmatchedSpend) : 0,
+    },
+    unmatched: [...unmatchedCampaigns.entries()]
+      .map(([campaign, sp]) => ({ campaign, spend: sp }))
+      .sort((a, b) => b.spend - a.spend).slice(0, 12),
+  };
+}
+
+app.get("/api/ecommerce/roas", requireTab("ecomroas"), async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  try {
+    const out = await withCache(`ecomroas:${from}:${to}`, req.query.refresh === "1",
+      () => buildRoas(from, to));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "ecom_roas_failed", { error: String(err.message || err) });
+    res.status(500).json({ error: err.message || "ROAS failed" });
   }
 });
 
