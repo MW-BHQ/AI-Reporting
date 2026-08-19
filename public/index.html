@@ -312,6 +312,31 @@
     .mr-kpis{grid-template-columns:repeat(2,1fr);}
     .mr-grid{grid-template-columns:1fr;}
   }
+  /* ---------------- users: one card per person ----------------
+     Fourteen tabs will not fit a checkbox matrix, so permissions are grouped the
+     way the sidebar groups them and shown as toggle chips. */
+  .u-card{border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:12px;
+    background:var(--glass-2);}
+  .u-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;
+    flex-wrap:wrap;padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid var(--line);}
+  .u-email{font-size:13.5px;font-weight:600;color:var(--ink);word-break:break-all;}
+  .u-note{font-size:11px;color:var(--muted);margin-top:2px;}
+  .u-count{font-size:10.5px;color:var(--faint);margin-top:4px;}
+  .u-act{display:flex;gap:8px;flex:none;}
+  .u-group{margin-bottom:10px;}
+  .u-gname{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);
+    margin-bottom:6px;display:flex;align-items:center;gap:7px;}
+  .u-all{border:0;background:transparent;color:var(--violet);font-size:10px;cursor:pointer;
+    font-family:inherit;padding:0;text-transform:none;letter-spacing:0;}
+  .u-all:hover{text-decoration:underline;}
+  .u-chips{display:flex;flex-wrap:wrap;gap:7px;}
+  .u-chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;cursor:pointer;
+    border:1px solid var(--line);border-radius:20px;padding:4px 11px;color:var(--muted);
+    background:var(--card,#fff);user-select:none;}
+  .u-chip:hover{border-color:var(--violet);}
+  .u-chip.on{background:var(--violet-soft);border-color:var(--violet);color:var(--violet);font-weight:500;}
+  .u-chip input{margin:0;accent-color:var(--violet);}
+  @media(max-width:600px){ .u-head{flex-direction:column;} .u-act{width:100%;} }
   .dlt{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 5px;border-radius:5px;
     margin-left:5px;cursor:help;white-space:nowrap;}
   .dlt.up{background:rgba(74,190,140,.14);color:#2E9E6F;}
@@ -602,7 +627,7 @@ const S = {
   ecommon: null, ecommonKey: null, ecommonLoading: false, ecommonError: null,
   ecomroas: null, ecomroasKey: null, ecomroasLoading: false, ecomroasError: null,
   audiencesLoading: false, audiencesError: null,
-  me: null, users: null,
+  me: null, users: null, usersLoading: false, usersError: null,
   charts: {},
 };
 
@@ -1646,16 +1671,56 @@ async function loadUsers() {
 
 function renderUsers() {
   const d = S.users;
+  if (S.usersError) { const m = S.usersError; $('viewRoot').innerHTML = errorState(m); S.usersError = null; return; }
   if (!d) {
-    $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">Loading access list…</div></div></div>`;
-    loadUsers().then(render).catch(e => { $('viewRoot').innerHTML = errorState(e.message); });
+    $('viewRoot').innerHTML = loadPrompt('users', 'Reads who can see which tab. Editing here changes what colleagues see, not whether they can sign in.');
     return;
   }
   const tabs = (d.allTabs || []).filter(t => !t.adminOnly);
 
-  const row = (u) => `<tr data-email="${esc(u.email)}">
-    <td class="strong">${esc(u.email)}${u.note?`<div style="font-size:10.5px;color:var(--faint);font-weight:400;">${esc(u.note)}</div>`:''}</td>
-    ${tabs.map(t=>`<td class="num"><input type="checkbox" data-tab="${esc(t.id)}" ${(u.tabs||[]).includes(t.id)?'checked':''}></td>`).join('')}
+  /**
+   * One card per person rather than a checkbox matrix. With fourteen tabs the
+   * matrix was wider than the screen and every column heading had to be read
+   * sideways; grouping the toggles the way the sidebar groups them means a
+   * permission set can be scanned instead of counted.
+   */
+  const GROUPS = [
+    { name: 'Reporting', ids: ['overview','campaigns','gbp','topics'] },
+    { name: 'Meta Ads', ids: ['benchmark','audiences','audit'] },
+    { name: 'E-commerce', ids: ['ecom','ecomcentre','ecomchannels','ecomroas','ecommonthly','ecomchurn','ecommigration'] },
+  ];
+  const grouped = GROUPS.map(g => ({ ...g, items: g.ids.map(id => tabs.find(t => t.id === id)).filter(Boolean) }));
+  const ungrouped = tabs.filter(t => !GROUPS.some(g => g.ids.includes(t.id)));
+  if (ungrouped.length) grouped.push({ name: 'Other', items: ungrouped });
+
+  const shortLabel = (t) => String(t.label).replace(/^E-commerce\s*·\s*/, '');
+
+  const chips = (u) => grouped.map(g => `<div class="u-group">
+      <div class="u-gname">${esc(g.name)}
+        <button class="u-all" data-group="${esc(g.name)}" data-email="${esc(u.email)}">all</button>
+        <button class="u-all" data-group="${esc(g.name)}" data-email="${esc(u.email)}" data-none="1">none</button>
+      </div>
+      <div class="u-chips">${g.items.map(t => {
+        const on = (u.tabs||[]).includes(t.id);
+        return `<label class="u-chip${on?' on':''}" data-group="${esc(g.name)}">
+          <input type="checkbox" data-tab="${esc(t.id)}" ${on?'checked':''}>${esc(shortLabel(t))}</label>`;
+      }).join('')}</div>
+    </div>`).join('');
+
+  const row = (u) => `<div class="u-card" data-email="${esc(u.email)}">
+    <div class="u-head">
+      <div><div class="u-email">${esc(u.email)}</div>
+        ${u.note?`<div class="u-note">${esc(u.note)}</div>`:''}
+        <div class="u-count">${num((u.tabs||[]).length)} of ${num(tabs.length)} tabs</div></div>
+      <div class="u-act">
+        <button class="btn btn-primary" data-save="${esc(u.email)}" style="padding:6px 14px;font-size:11.5px;">Save</button>
+        <button class="btn btn-ghost" data-del="${esc(u.email)}" style="padding:6px 12px;font-size:11.5px;color:var(--rose);">Remove</button>
+      </div>
+    </div>
+    ${chips(u)}
+  </div>`;
+  const LEGACY_ROW = (u) => `<tr data-email="${esc(u.email)}">
+    <td class="strong">${esc(u.email)}</td>
     <td class="num"><button class="btn btn-ghost" data-save="${esc(u.email)}" style="padding:5px 10px;font-size:11px;">Save</button></td>
     <td class="num"><button class="btn btn-ghost" data-del="${esc(u.email)}" style="padding:5px 10px;font-size:11px;color:var(--rose);">Remove</button></td>
   </tr>`;
@@ -1696,16 +1761,33 @@ function renderUsers() {
 
     <div class="card mt">
       <h2>Configured users · ${(d.users||[]).length}</h2>
-      <table><thead><tr><th>User</th>${tabs.map(t=>`<th class="num">${esc(t.label)}</th>`).join('')}<th></th><th></th></tr></thead>
-      <tbody>${(d.users||[]).map(row).join('')||`<tr><td colspan="${tabs.length+3}" class="num">No users configured yet — everyone with IAP access sees the default tabs.</td></tr>`}</tbody></table>
-      <div class="note">Tick the tabs a person should see, then Save that row. Tabs they lack are hidden from their sidebar, and the matching API refuses their requests too — the hiding isn't the only barrier.</div>
+      ${(d.users||[]).map(row).join('') ||
+        `<div class="note">No users configured yet — everyone with IAP access sees the default tabs.</div>`}
+      <div class="note">Toggle the tabs a person should see, then Save that card. Tabs they lack are hidden from their
+      sidebar <b>and</b> the matching API refuses their requests, so the hiding is not the only barrier.</div>
     </div>
   `;
 
   const collect = (email) => {
-    const tr = document.querySelector(`tr[data-email="${CSS.escape(email)}"]`);
-    return [...tr.querySelectorAll('input[data-tab]')].filter(i=>i.checked).map(i=>i.dataset.tab);
+    const card = document.querySelector(`.u-card[data-email="${CSS.escape(email)}"]`);
+    if (!card) return [];
+    return [...card.querySelectorAll('input[data-tab]')].filter(i => i.checked).map(i => i.dataset.tab);
   };
+  // Reflect the toggle immediately; a re-render here would discard any other
+  // unsaved changes on the card.
+  document.querySelectorAll('.u-chip input[data-tab]').forEach(cb =>
+    cb.addEventListener('change', () => cb.closest('.u-chip').classList.toggle('on', cb.checked)));
+  document.querySelectorAll('.u-all').forEach(btn => btn.addEventListener('click', () => {
+    const card = document.querySelector(`.u-card[data-email="${CSS.escape(btn.dataset.email)}"]`);
+    if (!card) return;
+    const want = !btn.dataset.none;
+    card.querySelectorAll(`.u-chip[data-group="${CSS.escape(btn.dataset.group)}"]`).forEach(chip => {
+      const cb = chip.querySelector('input[data-tab]');
+      cb.checked = want;
+      chip.classList.toggle('on', want);
+    });
+  }));
+
   const post = async (body) => {
     const res = await fetch('/api/users', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(body) });
     if (!res.ok) throw new Error(`${res.status}: ${(await res.text()).slice(0,160)}`);
@@ -1952,15 +2034,52 @@ const channelColour = (name) => {
   return CH_FALLBACK[hash % CH_FALLBACK.length];
 };
 const CH_COLORS = Object.values(CHANNEL_CI);
+/**
+ * Every view except Overview waits for a deliberate click before fetching.
+ *
+ * Arriving on a tab used to fire the request, so a stray click in the rail could
+ * set off a Windsor pull or a full read of an 85k-row sheet. Overview is the one
+ * exception, because that is where the dashboard opens.
+ */
+const VIEW_LOADERS = {
+  audiences:     { load: () => loadAudiences(),     err: 'audiencesError', busy: 'audiencesLoading', what: 'Meta ad sets' },
+  ecom:          { load: () => loadEcom(),          err: 'ecomError',      busy: 'ecomLoading',      what: 'the Orders sheet' },
+  ecomcentre:    { load: () => loadEcomCentres(),   err: 'ecomcError',     busy: 'ecomcLoading',     what: 'sales by center' },
+  ecomchannels:  { load: () => loadEcomChannels(),  err: 'ecomchError',    busy: 'ecomchLoading',    what: 'channel performance' },
+  ecommigration: { load: () => loadEcomMigration(), err: 'ecommigError',   busy: 'ecommigLoading',   what: 'customer journeys' },
+  ecomchurn:     { load: () => loadEcomChurn(),     err: 'ecomchurnError', busy: 'ecomchurnLoading', what: 'lapsed customers' },
+  ecommonthly:   { load: () => loadEcomMonthly(),   err: 'ecommonError',   busy: 'ecommonLoading',   what: 'the monthly report' },
+  ecomroas:      { load: () => loadEcomRoas(),      err: 'ecomroasError',  busy: 'ecomroasLoading',  what: 'ad spend against revenue' },
+  users:         { load: () => loadUsers(),         err: 'usersError',     busy: 'usersLoading',     what: 'the access list' },
+};
+
+function loadPrompt(view, note) {
+  const cfg = VIEW_LOADERS[view];
+  if (cfg && S[cfg.busy]) {
+    return `<div class="card"><div class="state"><div class="big">Loading ${esc(cfg.what)}…</div></div></div>`;
+  }
+  return `<div class="card"><div class="state">
+    <div class="big">Ready to load</div>
+    <div style="max-width:470px;font-size:12.5px;color:var(--muted);">${note}</div>
+    <button class="btn btn-primary" data-load="${esc(view)}" style="margin-top:4px;">Load</button>
+  </div></div>`;
+}
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-load]');
+  if (!btn) return;
+  const cfg = VIEW_LOADERS[btn.dataset.load];
+  if (!cfg || S[cfg.busy]) return;
+  S[cfg.busy] = true;
+  render();
+  cfg.load().catch(err => { S[cfg.err] = err.message || String(err); })
+    .finally(() => { S[cfg.busy] = false; render(); });
+});
+
 function renderEcomRoas() {
   const d = S.ecomroas;
-  if (!d && !S.ecomroasLoading && !S.ecomroasError) {
-    S.ecomroasLoading = true;
-    loadEcomRoas().catch(e => { S.ecomroasError = e.message || String(e); })
-      .finally(() => { S.ecomroasLoading = false; render(); });
-  }
   if (S.ecomroasError) { const m = S.ecomroasError; $('viewRoot').innerHTML = errorState(m); S.ecomroasError = null; return; }
-  if (!d) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">Reading ad objectives and destinations…</div></div></div>`; return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecomroas', 'Reads Meta ad spend and joins it to storefront revenue for the selected range.'); return; }
   if (d.metaUnavailable) { $('viewRoot').innerHTML = errorState('Meta Ads was unavailable this run — press Refresh to retry.'); return; }
   if (!d.months || !d.months.length) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No spend or sales in this range</div></div></div>`; return; }
 
@@ -1991,6 +2110,45 @@ function renderEcomRoas() {
 
   const maxChRev = Math.max(...d.byChannel.map(c => c.revenue), 1);
   const maxDest = Math.max(...(d.destinations||[]).map(x => x.spend), 1);
+
+  $('viewRoot').innerHTML = `
+    ${d.accounts && d.accounts.length ? `<div class="card">
+      <div class="card-title">Ad accounts</div>
+      <div class="tscroll"><table class="roomy sortable">
+      <colgroup><col style="width:30%"><col style="width:15%"><col style="width:13%"><col style="width:12%">
+        <col style="width:10%"><col style="width:10%"><col style="width:10%"></colgroup>
+      <thead><tr>
+        <th>Account</th><th>Sells on</th><th class="num">Spend ฿</th><th class="num">Storefront revenue ฿</th>
+        <th class="num">Per ฿1</th><th class="num">Clicks</th><th class="num">Months</th>
+      </tr></thead><tbody>
+      ${(() => { const mx = Math.max(...d.accounts.map(a=>a.spend),1);
+        return d.accounts.map(a => `<tr>
+        <td class="strong trunc" style="max-width:0;" title="${esc(a.account)}">${esc(a.account)}</td>
+        <td>${a.channel
+          ? `<span class="pill" style="background:${channelColour(a.channel)}1f;color:${channelColour(a.channel)};">${esc(a.channel)}</span>`
+          : '<span style="color:var(--faint);font-size:11px;">not a storefront account</span>'}</td>
+        <td class="num barcell"><span class="minibar" style="width:${(a.spend/mx*100).toFixed(1)}%"></span><b>${num(Math.round(a.spend))}</b></td>
+        <td class="num">${a.revenue===null?'<span style="color:var(--faint)">—</span>':num(Math.round(a.revenue))}</td>
+        <td class="num strong">${a.roas===null?'<span style="color:var(--faint)">—</span>':a.roas.toFixed(1)+'×'}</td>
+        <td class="num">${a.clicks?num(a.clicks):'—'}</td>
+        <td class="num">${num(a.months)}</td>
+      </tr>`).join(''); })()}
+      </tbody></table></div>
+      <div class="note">Start here. An account dedicated to one marketplace is the firmest signal available —
+      every baht in it was spent selling there, with no campaign name to read or link to inspect.
+      <b>${num(d.marketplace.accounts)} of ${num(d.accounts.length)} accounts sell on a storefront</b>, carrying
+      <b>${pct(d.marketplace.spendShare)} of Meta spend</b> in this range. Where two accounts sell on the same
+      storefront, that storefront's revenue is counted once, not once per account — so the per-฿1 figure on each
+      row shows the whole storefront against that account's spend alone, and only the roll-up below is a clean ratio.</div>
+    </div>
+
+    <div class="grid g-3 mt" style="margin-bottom:14px;">
+      <div class="stat"><div class="lab">Marketplace ad spend</div><div class="val">฿${num(Math.round(d.marketplace.spend))}</div>
+        <div class="sub2">${esc(d.marketplace.channels.join(' · ')||'none')}</div></div>
+      <div class="stat"><div class="lab">Revenue on those storefronts</div><div class="val">฿${num(Math.round(d.marketplace.revenue))}</div></div>
+      <div class="stat"><div class="lab">Revenue per ฿1 of that spend</div><div class="val">${d.marketplace.roas===null?'—':d.marketplace.roas.toFixed(1)+'×'}</div>
+        <div class="sub2">all revenue on those storefronts, not just ad-driven</div></div>
+    </div>` : ''}
 
   $('viewRoot').innerHTML = `
     <div class="card" style="border-left:3px solid var(--amber);margin-bottom:14px;">
@@ -2098,13 +2256,8 @@ function renderEcomRoas() {
 
 function renderEcomMonthly() {
   const d = S.ecommon;
-  if (!d && !S.ecommonLoading && !S.ecommonError) {
-    S.ecommonLoading = true;
-    loadEcomMonthly().catch(e => { S.ecommonError = e.message || String(e); })
-      .finally(() => { S.ecommonLoading = false; render(); });
-  }
   if (S.ecommonError) { const m = S.ecommonError; $('viewRoot').innerHTML = errorState(m); S.ecommonError = null; return; }
-  if (!d) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">Building the monthly report…</div></div></div>`; return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecommonthly', 'Builds the printable one-pager for the month the date range ends in.'); return; }
   if (d.empty) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in ${esc(d.monthLabel)}</div>
     <div style="font-size:12.5px;color:var(--muted);">Move the date range so it ends inside a month that has data.</div></div></div>`; return; }
 
@@ -2245,13 +2398,8 @@ function renderEcomMonthly() {
 
 function renderEcomChurn() {
   const d = S.ecomchurn;
-  if (!d && !S.ecomchurnLoading && !S.ecomchurnError) {
-    S.ecomchurnLoading = true;
-    loadEcomChurn().catch(e => { S.ecomchurnError = e.message || String(e); })
-      .finally(() => { S.ecomchurnLoading = false; render(); });
-  }
   if (S.ecomchurnError) { const m = S.ecomchurnError; $('viewRoot').innerHTML = errorState(m); S.ecomchurnError = null; return; }
-  if (!d) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">Finding lapsed customers…</div></div></div>`; return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecomchurn', 'Reads the whole Orders sheet to find customers who stopped buying.'); return; }
   if (d.empty) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in this range</div></div></div>`; return; }
 
   const t = d.totals;
@@ -2347,13 +2495,8 @@ function renderEcomChurn() {
 
 function renderEcomMigration() {
   const d = S.ecommig;
-  if (!d && !S.ecommigLoading && !S.ecommigError) {
-    S.ecommigLoading = true;
-    loadEcomMigration().catch(e => { S.ecommigError = e.message || String(e); })
-      .finally(() => { S.ecommigLoading = false; render(); });
-  }
   if (S.ecommigError) { const m = S.ecommigError; $('viewRoot').innerHTML = errorState(m); S.ecommigError = null; return; }
-  if (!d) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">Tracing customer journeys…</div></div></div>`; return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecommigration', 'Reads the whole Orders sheet to follow customers between channel types.'); return; }
   if (d.empty) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in this range</div></div></div>`; return; }
 
   const t = d.totals;
@@ -2487,13 +2630,8 @@ function renderEcomMigration() {
 
 function renderEcomChannels() {
   const d = S.ecomch;
-  if (!d && !S.ecomchLoading && !S.ecomchError) {
-    S.ecomchLoading = true;
-    loadEcomChannels().catch(e => { S.ecomchError = e.message || String(e); })
-      .finally(() => { S.ecomchLoading = false; render(); });
-  }
   if (S.ecomchError) { const m = S.ecomchError; $('viewRoot').innerHTML = errorState(m); S.ecomchError = null; return; }
-  if (!d) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">Comparing channels…</div></div></div>`; return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecomchannels', 'Reads the Orders sheet and compares every channel across the selected months.'); return; }
   if (d.empty) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in this range</div></div></div>`; return; }
 
   const months = d.months, colour = channelColour;
@@ -2663,13 +2801,8 @@ function renderEcomChannels() {
 
 function renderEcomCentres() {
   const d = S.ecomc;
-  if (!d && !S.ecomcLoading && !S.ecomcError) {
-    S.ecomcLoading = true;
-    loadEcomCentres().catch(e => { S.ecomcError = e.message || String(e); })
-      .finally(() => { S.ecomcLoading = false; render(); });
-  }
   if (S.ecomcError) { const m = S.ecomcError; $('viewRoot').innerHTML = errorState(m); S.ecomcError = null; return; }
-  if (!d) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">Grouping sales by centre…</div></div></div>`; return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecomcentre', 'Reads the Orders sheet and groups sales by medical center.'); return; }
   if (d.empty) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in this range</div>
     <div style="font-size:12.5px;color:var(--muted);">The Orders sheet holds ${num(d.rangeHas)} row(s).</div></div></div>`; return; }
 
@@ -2742,17 +2875,8 @@ function renderEcomCentres() {
 
 function renderEcom() {
   const d = S.ecom;
-  if (!d && !S.ecomLoading && !S.ecomError) {
-    S.ecomLoading = true;
-    loadEcom().catch(e => { S.ecomError = e.message || String(e); })
-      .finally(() => { S.ecomLoading = false; render(); });
-  }
   if (S.ecomError) { const m = S.ecomError; $('viewRoot').innerHTML = errorState(m); S.ecomError = null; return; }
-  if (!d) {
-    $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">Reading the Orders sheet…</div>
-      <div style="font-size:12.5px;color:var(--muted);">Normalised coupon rows from every sales channel.</div></div></div>`;
-    return;
-  }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecom', 'Reads the normalised Orders sheet — coupon rows from every sales channel — for the selected range.'); return; }
   if (d.empty) {
     $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in this date range</div>
       <div style="font-size:12.5px;color:var(--muted);max-width:460px;">
@@ -2888,23 +3012,13 @@ function renderAudiences() {
   // view loads identically whether it was clicked, opened from a #audiences
   // link, reloaded in place, or reached with the back button. The earlier
   // click-only hook left a permanent "Pulling…" placeholder on page reload.
-  if (!d && !S.audiencesLoading && !S.audiencesError) {
-    S.audiencesLoading = true;
-    loadAudiences()
-      .catch(err => { S.audiencesError = err.message || String(err); })
-      .finally(() => { S.audiencesLoading = false; render(); });
-  }
   if (S.audiencesError) {
     const msg = S.audiencesError;
     $('viewRoot').innerHTML = errorState(msg);
     S.audiencesError = null; // let Refresh or a revisit try again
     return;
   }
-  if (!d) {
-    $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">Pulling Meta ad sets…</div>
-      <div style="font-size:12.5px;color:var(--muted);">Every ad set in range, grouped by audience name. Large accounts can take up to a minute.</div></div></div>`;
-    return;
-  }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('audiences', 'Pulls every Meta ad set in the range from Windsor and groups them by audience name. A large request — it can take up to a minute.'); return; }
   if (d.unavailable || !d.audiences) {
     $('viewRoot').innerHTML = errorState('Meta Ads was unavailable this run — try Refresh.');
     return;

@@ -144,6 +144,11 @@ expect_field "roas selling pct" "$ROAS" "typeof d.totals.sellingShare==='number'
 expect_field "roas splits spend" "$ROAS" "d.totals.sellingSpend+d.totals.otherSpend===d.totals.allSpend?'ok':undefined"
 expect_field "roas intents"     "$ROAS" "d.intents.length>0?'ok':undefined"
 expect_field "roas destinations" "$ROAS" "d.destinations.length>0?'ok':undefined"
+# Account level is the primary read: every account listed, storefront ones flagged.
+expect_field "roas accounts"    "$ROAS" "d.accounts.length>0?'ok':undefined"
+expect_field "roas mk block"    "$ROAS" "d.marketplace&&Array.isArray(d.marketplace.channels)?'ok':undefined"
+# Two accounts on one storefront must not count its revenue twice.
+expect_field "roas no dbl count" "$ROAS" "d.marketplace.channels.length===new Set(d.marketplace.channels).size?'ok':undefined"
 expect_field "roas monthly rows" "$ROAS" "d.monthly.every(m=>'spend' in m && 'revenue' in m)?'ok':undefined"
 expect_field "awareness=CPM"    "$AUD" "d.audiences.every(a=>a.objectiveClass!=='awareness'||a.primary.kpi==='cpm')||'BAD'"
 # Regression guard for the 3.20 bug: with no positive catalog metric anywhere,

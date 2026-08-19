@@ -3532,6 +3532,29 @@ app.get("/api/ecommerce/monthly", requireTab("ecommonthly"), async (req, res) =>
  * are reached through CPAS and Instant Experience instead, so the honest answer
  * for them is "no direct link", not a fabricated ratio.
  */
+/**
+ * Ad accounts that exist to sell on one marketplace. This is the firmest signal
+ * there is: the account is dedicated to a storefront, so every baht in it was
+ * spent selling there — no campaign-name reading, no URL inspection, and CPAS
+ * accounts whose ads point at a Facebook Instant Experience are handled by
+ * definition rather than by exception.
+ *
+ * Across 2025 to Jul 2026 exactly three exist — BHQ Shopee x EGG (฿420.5k),
+ * BHQ Shopee x ADA (฿75.2k) and Bangkok Hospital_TH1JHJMNT9 x Lazada CPAS
+ * (฿14.0k) — which is ฿510k of ฿4.46m total Meta spend, about 11%. The other
+ * ฿3.95m is hospital marketing that was never selling a marketplace package.
+ */
+const ECOM_AD_ACCOUNTS = [
+  [/shopee/i, "Shopee"],
+  [/lazada/i, "Lazada"],
+  [/bedee/i, "Shop.BeDee"],
+  [/line\s*shop|lineshopping/i, "Line Shopping"],
+];
+const accountChannel = (name) => {
+  for (const [re, ch] of ECOM_AD_ACCOUNTS) if (re.test(String(name || ""))) return ch;
+  return null;
+};
+
 const AD_DESTINATIONS = [
   // marketplaces, if a campaign ever does link straight to one
   { kind: "marketplace", channel: "Shopee", label: "Shopee", re: /shopee\./i },
@@ -3605,6 +3628,7 @@ async function buildRoas(from, to) {
   if (ads === null) return { metaUnavailable: true };
 
   const months = new Set();
+  const accounts = new Map();           // ad account => spend, clicks, months
   const spend = new Map();              // `${month}|${channel}` => selling spend
   const intents = new Map();            // intent => spend
   const dests = new Map();              // destination label => { spend, kind, channel }
@@ -3617,6 +3641,12 @@ async function buildRoas(from, to) {
     months.add(m);
     const sp = n(a.spend);
     const c = classifyAd(a);
+
+    const acctName = String(a.account_name || "(unnamed account)");
+    const acct = accounts.get(acctName) ||
+      { account: acctName, channel: accountChannel(acctName), spend: 0, clicks: 0, months: new Set() };
+    acct.spend += sp; acct.clicks += n(a.actions_link_click); acct.months.add(m);
+    accounts.set(acctName, acct);
 
     intents.set(c.intent, (intents.get(c.intent) || 0) + sp);
     const dk = c.dest.label;
@@ -3673,8 +3703,37 @@ async function buildRoas(from, to) {
   const totalSpend = byChannel.reduce((a, c) => a + c.spend, 0);
   const totalRev = byChannel.reduce((a, c) => a + c.revenue, 0);
   const allSpend = sellingSpend + otherSpend;
+  // Marketplace roll-up: spend straight from the dedicated account, revenue from
+  // that storefront. This is the figure to start with — it needs no inference.
+  const revByChannel = new Map();
+  for (const [k, v] of rev) {
+    const ch = k.split("|")[1];
+    revByChannel.set(ch, (revByChannel.get(ch) || 0) + v);
+  }
+  const accountRows = [...accounts.values()].map((a) => {
+    const revenue = a.channel ? (revByChannel.get(a.channel) || 0) : null;
+    return { account: a.account, channel: a.channel, spend: a.spend, clicks: a.clicks,
+             months: a.months.size, revenue,
+             roas: a.channel && a.spend > 0 ? (revenue || 0) / a.spend : null,
+             costPerClick: a.clicks > 0 ? a.spend / a.clicks : null };
+  }).sort((a, b) => (a.channel ? 0 : 1) - (b.channel ? 0 : 1) || b.spend - a.spend);
+
+  const mkAccounts = accountRows.filter((a) => a.channel);
+  const mkSpend = mkAccounts.reduce((x, a) => x + a.spend, 0);
+  // Revenue is per storefront, so sum the DISTINCT storefronts rather than the
+  // accounts — two Shopee accounts must not count Shopee revenue twice.
+  const mkChannels = [...new Set(mkAccounts.map((a) => a.channel))];
+  const mkRevenue = mkChannels.reduce((x, ch) => x + (revByChannel.get(ch) || 0), 0);
+
   return {
     months: monthList, byChannel, monthly,
+    accounts: accountRows,
+    marketplace: {
+      accounts: mkAccounts.length, channels: mkChannels,
+      spend: mkSpend, revenue: mkRevenue,
+      roas: mkSpend > 0 ? mkRevenue / mkSpend : null,
+      spendShare: allSpend > 0 ? mkSpend / allSpend : 0,
+    },
     intents: [...intents.entries()].map(([intent, sp]) => ({
       intent, spend: sp, share: allSpend > 0 ? sp / allSpend : 0,
     })).sort((a, b) => b.spend - a.spend),
