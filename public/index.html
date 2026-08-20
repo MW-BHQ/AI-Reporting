@@ -2179,27 +2179,55 @@ function renderGads() {
     <div class="card mt">
       <div class="card-title">Campaigns</div>
       <div class="tscroll"><table class="roomy sortable">
-      <colgroup><col style="width:34%"><col style="width:11%"><col style="width:11%"><col style="width:10%">
-        <col style="width:9%"><col style="width:8%"><col style="width:8%"><col style="width:9%"></colgroup>
+      <colgroup><col style="width:30%"><col style="width:11%"><col style="width:9%"><col style="width:10%">
+        <col style="width:9%"><col style="width:8%"><col style="width:7%"><col style="width:8%"><col style="width:8%"></colgroup>
       <thead><tr>
-        <th>Campaign</th><th>Account</th><th class="num">Spend ฿</th><th class="num">Impressions</th>
-        <th class="num">Clicks</th><th class="num">CTR</th><th class="num">CPC ฿</th><th class="num">Days live</th>
+        <th>Campaign</th><th>Account</th><th>Type</th><th class="num">Spend ฿</th>
+        <th class="num">Impressions</th><th class="num">Clicks</th><th class="num">CTR</th>
+        <th class="num">CPC ฿</th><th class="num">Days live</th>
       </tr></thead><tbody>
-      ${d.campaigns.map(c => `<tr>
-        <td class="trunc" style="max-width:0;" title="${esc(c.campaign)}">${c.code?`<span class="pill" style="font-size:9.5px;">${esc(c.code)}</span> `:''}${esc(c.campaign)}</td>
+      ${d.campaigns.map((c, i) => `<tr class="ra-row${c.groups.length?' has-kids':''}" data-camp="g-${i}">
+        <td class="trunc" style="max-width:0;" title="${esc(c.campaign)}">${c.groups.length?'<span class="ra-chev">›</span>':'<span class="ra-chev blank"></span>'}${c.code?`<span class="pill" style="font-size:9.5px;">${esc(c.code)}</span> `:''}${esc(c.campaign)}</td>
         <td class="trunc" style="max-width:0;font-size:11.5px;color:var(--muted);" title="${esc(c.account)}">${esc(c.account)}</td>
+        <td style="font-size:10.5px;color:var(--muted);white-space:nowrap;">${esc(c.type||'—')}</td>
         <td class="num barcell"><span class="minibar" style="width:${(c.spend/maxC*100).toFixed(1)}%"></span><b>${num(Math.round(c.spend))}</b></td>
         <td class="num">${num(c.impressions)}</td>
         <td class="num">${num(c.clicks)}</td>
         <td class="num">${pct(c.ctr)}</td>
         <td class="num">${c.cpc===null?'—':num(Math.round(c.cpc*100)/100)}</td>
-        <td class="num">${num(c.days)}</td>
-      </tr>`).join('')}
+        <td class="num" data-tip="Distinct days with spend inside the selected range, not the campaign's full flight.">${num(c.days)}</td>
+      </tr>
+      ${c.groups.length ? `<tr class="ra-kids hidden" data-kids="g-${i}"><td colspan="9">
+        <div class="ra-kidwrap">
+          <div class="ra-kidhead">${num(c.groups.length)} ad group${c.groups.length===1?'':'s'}</div>
+          <table class="roomy"><thead><tr>
+            <th>Ad group</th><th class="num">Spend ฿</th><th class="num">Share</th><th class="num">Impressions</th>
+            <th class="num">Clicks</th><th class="num">CTR</th><th class="num">CPC ฿</th><th class="num">Days live</th>
+          </tr></thead><tbody>
+          ${c.groups.map(g => `<tr>
+            <td class="trunc i18n" style="max-width:0;" title="${esc(g.group)}">${esc(g.group)}</td>
+            <td class="num strong">${num(Math.round(g.spend))}</td>
+            <td class="num">${pct(g.share)}</td>
+            <td class="num">${num(g.impressions)}</td>
+            <td class="num">${num(g.clicks)}</td>
+            <td class="num">${pct(g.ctr)}</td>
+            <td class="num">${g.cpc===null?'—':num(Math.round(g.cpc*100)/100)}</td>
+            <td class="num">${num(g.days)}</td>
+          </tr>`).join('')}
+          </tbody></table>
+        </div></td></tr>` : ''}`).join('')}
       </tbody></table></div>
-      <div class="note">A campaign whose name starts with a <b>YYMMDD-NN</b> code joins the Campaign tab automatically,
-      where its spend sits beside the Meta spend on the same code and against the GA4 visits that code produced.
+      <div class="note">Click a campaign to see its ad groups. A campaign whose name starts with a <b>YYMMDD-NN</b> code
+      joins the Campaign tab automatically, where its spend sits beside the Meta spend on the same code and against the
+      GA4 visits that code produced.
       ${t.coded < t.campaigns ? `<b>${num(t.campaigns - t.coded)} campaign${t.campaigns-t.coded===1?'':'s'} carry no code</b> and cannot be joined — mostly the always-on search accounts.` : ''}</div>
     </div>`;
+
+  document.querySelectorAll('.ra-row.has-kids').forEach(row => row.addEventListener('click', () => {
+    const kids = document.querySelector(`.ra-kids[data-kids="${CSS.escape(row.dataset.camp)}"]`);
+    if (!kids) return;
+    row.classList.toggle('open', !kids.classList.toggle('hidden'));
+  }));
 }
 
 function renderEcomRoas() {
@@ -3721,7 +3749,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.56.0';
+const CLIENT_BUILD = '3.57.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

@@ -75,6 +75,9 @@ check "ecom churn"   GET "/api/ecommerce/churn?from=$FROM&to=$TO"
 check "ecom monthly" GET "/api/ecommerce/monthly?to=$TO"
 check "ecom roas"    GET "/api/ecommerce/roas?from=$FROM&to=$TO"
 echo "--- audiences field integrity (a dropped Windsor field must fail here) ---"
+CAMPD="/api/campaign?code=260701-08&from=$FROM&to=$TO"
+# Google Ads must reach campaign analysis through the shared platform registry.
+expect_field "campaign platforms" "$CAMPD" "(d.byPlatform||[]).filter(function(p){return p.platform==='Google Ads' && p.connected;}).length?'ok':undefined"
 AUD="/api/audiences?from=$FROM&to=$TO"
 expect_field "aud ad account"   "$AUD" "d.audiences[0].accounts[0]"
 expect_field "aud frequency"    "$AUD" "d.audiences[0].frequency"
@@ -95,8 +98,12 @@ expect_field "uses matches rows"  "$AUD" "d.audiences.every(a=>a.uses===a.campai
 GADS="/api/google-ads?from=$FROM&to=$TO"
 expect_field "gads accounts"    "$GADS" "d.accounts.length>0?'ok':undefined"
 # The leading YYMMDD-NN code is what lets a Google campaign join the Campaign tab.
-expect_field "gads code parsed" "$GADS" "d.campaigns.some(c=>c.code==='260701-13')?'ok':undefined"
+expect_field "gads code parsed" "$GADS" "d.campaigns.some(c=>c.code==='260701-08')?'ok':undefined"
 expect_field "gads uncoded ok"  "$GADS" "d.campaigns.some(c=>c.code===null)?'ok':undefined"
+# Ad groups are Google's ad sets; their spend must reconcile to the campaign.
+expect_field "gads adgroups"    "$GADS" "d.campaigns.every(c=>Array.isArray(c.groups))?'ok':undefined"
+expect_field "gads group sum"   "$GADS" "d.campaigns.every(c=>!c.groups.length||Math.abs(c.groups.reduce((a,g)=>a+g.spend,0)-c.spend)<1)?'ok':undefined"
+# Google Ads must reach the Campaign tab through the shared platform registry.
 ECOM="/api/ecommerce?from=$FROM&to=$TO"
 expect_field "ecom channels"    "$ECOM" "d.channels.length===2?'2':undefined"
 expect_field "ecom stacked day" "$ECOM" "d.daily[0].byChannel.Shopee===5000?'ok':undefined"

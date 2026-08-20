@@ -486,15 +486,28 @@ const IMPRESSION_SOURCE_BY_CHANNEL = {
  * rows. To add one later (Google Ads, TikTok Ads, LINE Ads) authorise it in
  * Windsor and add a single line below; nothing else needs to change.
  */
-const AD_PLATFORMS = [
-  { id: "facebook", label: "Meta Ads", campaignKey: "campaign" },
-];
 const AD_METRIC_FIELDS = ["impressions", "clicks", "spend"];
+
+/**
+ * Ad platforms folded into campaign analysis. `extra` lists fields that exist
+ * only on that platform: Google Ads has no campaign_objective and none of the
+ * actions_* metrics, and asking for them makes the whole request fail rather
+ * than returning nulls — which is why the platforms cannot share one field list.
+ */
+const AD_PLATFORMS = [
+  { id: "facebook", label: "Meta Ads", campaignKey: "campaign",
+    extra: ["campaign_objective", "actions_link_click", "actions_landing_page_view",
+            "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d"] },
+  { id: "google_ads", label: "Google Ads", campaignKey: "campaign", extra: [] },
+];
 
 // utm_source patterns that indicate traffic came from a given ad platform, used
 // to attribute spend to a utm variant. Extend alongside AD_PLATFORMS.
 const PLATFORM_SOURCE_HINTS = {
   "Meta Ads": [/facebook/i, /meta/i, /(^|[^a-z])fb([^a-z]|$)/i, /instagram/i, /(^|[^a-z])ig([^a-z]|$)/i],
+  // GA4 records Google Ads traffic as google/cpc, and YouTube buys arrive as
+  // youtube or the auto-tagged gclid source.
+  "Google Ads": [/^google$/i, /googleads/i, /youtube/i, /(^|[^a-z])gclid([^a-z]|$)/i],
 };
 const PAID_MEDIUM_RE = /(cpc|ppc|paid|display|video|banner)/i;
 
@@ -860,9 +873,7 @@ async function buildCampaign(code, from, to) {
      * the only fair comparison against GA4 sessions, and the gap between them is
      * what exposes a missing utm tag.
      */
-    jobs[`ad_${p.id}`] = windsor(p.id, [p.campaignKey, "campaign_objective", ...AD_METRIC_FIELDS,
-      "actions_link_click", "actions_landing_page_view",
-      "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d"], from, to);
+    jobs[`ad_${p.id}`] = windsor(p.id, [p.campaignKey, ...AD_METRIC_FIELDS, ...(p.extra || [])], from, to);
   }
   const { data, errors } = await runJobs(jobs);
 
@@ -3726,7 +3737,8 @@ app.get("/api/ecommerce/roas", requireTab("ecomroas"), async (req, res) => {
  */
 async function buildGoogleAds(from, to) {
   const rows = await windsor("google_ads",
-    ["date", "account_name", "campaign", "spend", "impressions", "clicks"], from, to)
+    ["date", "account_name", "campaign", "adgroup", "campaign_type", "conversions",
+     "spend", "impressions", "clicks"], from, to)
     .catch((e) => {
       logJson("WARNING", "gads_unavailable", { error: String(e.message || e) });
       return null;
@@ -3747,11 +3759,24 @@ async function buildGoogleAds(from, to) {
 
     const cn = String(r.campaign || "(unnamed)");
     const c = campaigns.get(cn) ||
-      { campaign: cn, account: an, spend: 0, impressions: 0, clicks: 0, dates: new Set(),
+      { campaign: cn, account: an, type: r.campaign_type || null,
+        spend: 0, impressions: 0, clicks: 0, conversions: 0,
+        dates: new Set(), groups: new Map(),
         // The leading code is what lets a Google campaign join the Campaign tab.
         code: (String(r.campaign || "").match(/^(\d{6}-\d{1,3})/) || [])[1] || null };
     c.spend += sp; c.impressions += imp; c.clicks += clk;
+    c.conversions += n(r.conversions);
+    if (!c.type && r.campaign_type) c.type = r.campaign_type;
     if (r.date) c.dates.add(String(r.date).slice(0, 10));
+
+    // Ad group is Google's equivalent of Meta's ad set, so a campaign opens the
+    // same way on both platforms.
+    const gn = String(r.adgroup || "(no ad group)");
+    const g = c.groups.get(gn) ||
+      { group: gn, spend: 0, impressions: 0, clicks: 0, conversions: 0, dates: new Set() };
+    g.spend += sp; g.impressions += imp; g.clicks += clk; g.conversions += n(r.conversions);
+    if (r.date) g.dates.add(String(r.date).slice(0, 10));
+    c.groups.set(gn, g);
     campaigns.set(cn, c);
 
     if (r.date) {
@@ -3768,11 +3793,17 @@ async function buildGoogleAds(from, to) {
     cpm: o.impressions > 0 ? (o.spend / o.impressions) * 1000 : null });
 
   const campaignList = [...campaigns.values()]
-    .map((c) => shape({ ...c, days: c.dates.size, dates: undefined }))
+    .map((c) => shape({ ...c, days: c.dates.size, dates: undefined,
+      groups: [...c.groups.values()]
+        .filter((g) => g.spend > 0)
+        .map((g) => shape({ ...g, days: g.dates.size, dates: undefined,
+          share: c.spend > 0 ? g.spend / c.spend : 0 }))
+        .sort((x, y) => y.spend - x.spend) }))
     .sort((a, b) => b.spend - a.spend);
 
   return {
     totals: shape({ spend, impressions, clicks,
+      conversions: campaignList.reduce((a, c) => a + c.conversions, 0),
       accounts: accounts.size, campaigns: campaignList.length,
       coded: campaignList.filter((c) => c.code).length }),
     accounts: [...accounts.values()]
