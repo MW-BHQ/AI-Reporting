@@ -66,6 +66,7 @@ check "gbp"        GET "/api/gbp?from=$FROM&to=$TO"
 check "benchmark"  GET "/api/benchmark?to=$TO"
 check "untagged"   GET "/api/untagged?from=$FROM&to=$TO"
 check "audiences"  GET "/api/audiences?from=$FROM&to=$TO"
+check "google ads" GET "/api/google-ads?from=$FROM&to=$TO"
 check "ecommerce"  GET "/api/ecommerce?from=$FROM&to=$TO"
 check "ecom centres" GET "/api/ecommerce/centres?from=$FROM&to=$TO"
 check "ecom channels" GET "/api/ecommerce/channels?from=$FROM&to=$TO"
@@ -91,6 +92,11 @@ expect_field "campaign cost/res" "$AUD" "d.audiences[0].campaigns[0].resultLabel
 expect_field "no empty campaigns" "$AUD" "d.audiences.every(a=>a.campaigns.every(c=>c.spend>0||c.impressions>0))?'clean':undefined"
 expect_field "uses matches rows"  "$AUD" "d.audiences.every(a=>a.uses===a.campaigns.length)?'match':undefined"
 # Guard: a reach/awareness buy must never be priced per LPV.
+GADS="/api/google-ads?from=$FROM&to=$TO"
+expect_field "gads accounts"    "$GADS" "d.accounts.length>0?'ok':undefined"
+# The leading YYMMDD-NN code is what lets a Google campaign join the Campaign tab.
+expect_field "gads code parsed" "$GADS" "d.campaigns.some(c=>c.code==='260701-13')?'ok':undefined"
+expect_field "gads uncoded ok"  "$GADS" "d.campaigns.some(c=>c.code===null)?'ok':undefined"
 ECOM="/api/ecommerce?from=$FROM&to=$TO"
 expect_field "ecom channels"    "$ECOM" "d.channels.length===2?'2':undefined"
 expect_field "ecom stacked day" "$ECOM" "d.daily[0].byChannel.Shopee===5000?'ok':undefined"
@@ -149,6 +155,13 @@ expect_field "roas active only" "$ROAS" "d.accounts.every(a=>a.campaigns.every(c
 # Every campaign carries its ad sets, and their spend must sum to the campaign.
 expect_field "roas adsets"      "$ROAS" "d.accounts.every(a=>a.campaigns.every(c=>Array.isArray(c.adsets)))?'ok':undefined"
 expect_field "roas adset sum"   "$ROAS" "d.accounts.every(a=>a.campaigns.every(c=>!c.adsets.length||Math.abs(c.adsets.reduce((x,s)=>x+s.spend,0)-c.spend)<1))?'ok':undefined"
+# Days live counts DISTINCT dates. Windsor returns one row per campaign x adset
+# x date, so a counter reports six ad sets over seven days as 42.
+expect_field "roas days sane"   "$ROAS" "d.accounts.every(a=>a.campaigns.every(c=>c.days<=Math.max(...c.adsets.map(s=>s.days),0)||!c.adsets.length))?'ok':undefined"
+expect_field "roas days vs range" "$ROAS" "d.accounts.every(a=>a.campaigns.every(c=>c.days<=32))?'ok':undefined"
+# Days live counts distinct dates, so it can never exceed the days in the range
+# nor be less than any of the campaign's own ad sets.
+expect_field "roas days sane"   "$ROAS" "d.accounts.every(a=>a.campaigns.every(c=>c.days<=62&&c.adsets.every(s=>s.days<=c.days)))?'ok':undefined"
 # Two accounts share Shopee, so the total must not count its revenue twice.
 expect_field "roas no dbl count" "$ROAS" "d.channels.length===new Set(d.channels).size?'ok':undefined"
 expect_field "awareness=CPM"    "$AUD" "d.audiences.every(a=>a.objectiveClass!=='awareness'||a.primary.kpi==='cpm')||'BAD'"

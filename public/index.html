@@ -539,6 +539,13 @@
       </div>
 
       <div class="nav-sep"></div>
+      <div class="nav-group">Google Ads</div>
+      <div class="nav-item sub" data-view="gads">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 3L3 15a3.5 3.5 0 006 3.5L16 6.5"/><circle cx="18.5" cy="17" r="3.2"/></svg>
+        Overview
+      </div>
+
+      <div class="nav-sep"></div>
       <div class="nav-group">E-commerce</div>
       <div class="nav-item sub" data-view="ecom">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h2l2.2 10.2a2 2 0 002 1.6h7.1a2 2 0 002-1.55L21 8H7"/><circle cx="10.5" cy="20" r="1.2"/><circle cx="18" cy="20" r="1.2"/></svg>
@@ -650,6 +657,7 @@ const S = {
   ecomchurn: null, ecomchurnKey: null, ecomchurnLoading: false, ecomchurnError: null, churnWindow: 365,
   ecommon: null, ecommonKey: null, ecommonLoading: false, ecommonError: null,
   ecomroas: null, ecomroasKey: null, ecomroasLoading: false, ecomroasError: null,
+  gads: null, gadsKey: null, gadsLoading: false, gadsError: null,
   audiencesLoading: false, audiencesError: null,
   me: null, users: null, usersLoading: false, usersError: null,
   charts: {},
@@ -868,6 +876,7 @@ const TITLES = {
   audit: ['Tagging audit', 'How much traffic and spend the campaign view cannot attribute'],
   benchmark: ['Benchmarks', 'Latest complete month against trailing 3, 6 and 12-month norms'],
   gbp: ['Google Business Profile', 'Reviews and ratings by listing'],
+  gads: ['Google Ads', 'Spend, campaigns and accounts — newly connected, so start by looking'],
   audiences: ['Audiences', 'Meta audience sets ranked by cost per first-degree result'],
   ecom: ['E-commerce', 'Package sales across every online sales channel'],
   ecomcentre: ['E-commerce · Centers', 'Which centers sell, and through which channel'],
@@ -900,6 +909,17 @@ async function loadEcomChannels(refresh = false) {
   S.ecomch = await res.json(); S.ecomchKey = key;
   setStatus('ok', S.ecomch.cached ? `cached ${S.ecomch.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
   return S.ecomch;
+}
+
+async function loadGads(refresh = false) {
+  const key = `${$('from').value}|${$('to').value}`;
+  if (!refresh && S.gadsKey === key && S.gads) return S.gads;
+  setStatus('busy', 'reading Google Ads…');
+  const res = await fetch(`/api/google-ads?from=${$('from').value}&to=${$('to').value}${refresh?'&refresh=1':''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,220)}`);
+  S.gads = await res.json(); S.gadsKey = key;
+  setStatus('ok', S.gads.cached ? `cached ${S.gads.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.gads;
 }
 
 async function loadEcomRoas(refresh = false) {
@@ -1081,6 +1101,7 @@ $('loadBtn').addEventListener('click', async () => {
     else if (S.view === 'ecomchurn') { S.ecomchurnError = null; await loadEcomChurn(true); }
     else if (S.view === 'ecommonthly') { S.ecommonError = null; await loadEcomMonthly(true); }
     else if (S.view === 'ecomroas') { S.ecomroasError = null; await loadEcomRoas(true); }
+    else if (S.view === 'gads') { S.gadsError = null; await loadGads(true); }
     else if (S.view === 'users') { S.users = null; await loadUsers(); }
     else if (S.view === 'topics' && S.topicTerm) { await loadTopic(S.topicTerm); }
     render();
@@ -1145,6 +1166,7 @@ function render() {
   else if (S.view === 'ecomchurn') renderEcomChurn();
   else if (S.view === 'ecommonthly') renderEcomMonthly();
   else if (S.view === 'ecomroas') renderEcomRoas();
+  else if (S.view === 'gads') renderGads();
   else if (S.view === 'users') renderUsers();
   else renderTopics();
 }
@@ -2073,6 +2095,7 @@ const VIEW_LOADERS = {
   ecommigration: { load: () => loadEcomMigration(), err: 'ecommigError',   busy: 'ecommigLoading',   what: 'customer journeys' },
   ecomchurn:     { load: () => loadEcomChurn(),     err: 'ecomchurnError', busy: 'ecomchurnLoading', what: 'lapsed customers' },
   ecommonthly:   { load: () => loadEcomMonthly(),   err: 'ecommonError',   busy: 'ecommonLoading',   what: 'the monthly report' },
+  gads:          { load: () => loadGads(),          err: 'gadsError',      busy: 'gadsLoading',      what: 'Google Ads' },
   ecomroas:      { load: () => loadEcomRoas(),      err: 'ecomroasError',  busy: 'ecomroasLoading',  what: 'ad spend against revenue' },
   users:         { load: () => loadUsers(),         err: 'usersError',     busy: 'usersLoading',     what: 'the access list' },
 };
@@ -2099,6 +2122,85 @@ document.addEventListener('click', (e) => {
   cfg.load().catch(err => { S[cfg.err] = err.message || String(err); })
     .finally(() => { S[cfg.busy] = false; render(); });
 });
+
+function renderGads() {
+  const d = S.gads;
+  if (S.gadsError) { const m = S.gadsError; $('viewRoot').innerHTML = errorState(m); S.gadsError = null; return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('gads', 'Reads Google Ads spend, campaigns and accounts for the selected range.'); return; }
+  if (d.unavailable) { $('viewRoot').innerHTML = errorState('Google Ads was unavailable this run — press Refresh to retry.'); return; }
+  if (!d.campaigns.length) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No Google Ads spend in this range</div></div></div>`; return; }
+
+  const t = d.totals;
+  const W = 760, HH = 130;
+  const maxM = Math.max(...d.monthly.map(m => m.spend), 1);
+  const bw = W / Math.max(d.monthly.length, 1);
+  const bars = d.monthly.map((m, i) => `<rect x="${(i*bw).toFixed(1)}" y="${(HH - m.spend/maxM*HH).toFixed(1)}"
+      width="${Math.max(1,bw-4).toFixed(1)}" height="${(m.spend/maxM*HH).toFixed(1)}" rx="2" fill="var(--blue)" opacity=".85"
+      data-tip="${esc(m.month)}\n฿${num(Math.round(m.spend))} · ${num(m.clicks)} clicks" style="cursor:help;"></rect>`).join('');
+  const maxA = Math.max(...d.accounts.map(a => a.spend), 1);
+  const maxC = Math.max(...d.campaigns.map(c => c.spend), 1);
+
+  $('viewRoot').innerHTML = `
+    <div class="grid g-4" style="margin-bottom:14px;">
+      <div class="stat"><div class="lab">Spend</div><div class="val">฿${num(Math.round(t.spend))}</div>
+        <div class="sub2">${num(t.accounts)} accounts · ${num(t.campaigns)} campaigns</div></div>
+      <div class="stat"><div class="lab">Clicks</div><div class="val">${num(t.clicks)}</div>
+        <div class="sub2">${pct(t.ctr)} CTR</div></div>
+      <div class="stat"><div class="lab">Cost per click</div><div class="val">฿${t.cpc===null?'—':(Math.round(t.cpc*100)/100)}</div></div>
+      <div class="stat"><div class="lab">Carrying a campaign code</div><div class="val">${num(t.coded)} of ${num(t.campaigns)}</div>
+        <div class="sub2">${pct(t.coded/(t.campaigns||1))} can join the Campaign tab</div></div>
+    </div>
+
+    ${d.monthly.length > 1 ? `<div class="card">
+      <div class="card-title">Spend by month</div>
+      <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${bars}</svg>
+      <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:6px;">
+        <span>${esc(d.monthly[0].month)}</span><span>${esc(d.monthly[d.monthly.length-1].month)}</span></div>
+    </div>` : ''}
+
+    <div class="card mt">
+      <div class="card-title">Accounts</div>
+      <table class="roomy sortable"><thead><tr>
+        <th>Account</th><th class="num">Spend ฿</th><th class="num">Campaigns</th><th class="num">Impressions</th>
+        <th class="num">Clicks</th><th class="num">CTR</th><th class="num">CPC ฿</th>
+      </tr></thead><tbody>
+      ${d.accounts.map(a => `<tr>
+        <td class="strong">${esc(a.account)}</td>
+        <td class="num barcell"><span class="minibar" style="width:${(a.spend/maxA*100).toFixed(1)}%"></span><b>${num(Math.round(a.spend))}</b></td>
+        <td class="num">${num(a.campaigns)}</td>
+        <td class="num">${num(a.impressions)}</td>
+        <td class="num">${num(a.clicks)}</td>
+        <td class="num">${pct(a.ctr)}</td>
+        <td class="num">${a.cpc===null?'—':num(Math.round(a.cpc*100)/100)}</td>
+      </tr>`).join('')}
+      </tbody></table>
+    </div>
+
+    <div class="card mt">
+      <div class="card-title">Campaigns</div>
+      <div class="tscroll"><table class="roomy sortable">
+      <colgroup><col style="width:34%"><col style="width:11%"><col style="width:11%"><col style="width:10%">
+        <col style="width:9%"><col style="width:8%"><col style="width:8%"><col style="width:9%"></colgroup>
+      <thead><tr>
+        <th>Campaign</th><th>Account</th><th class="num">Spend ฿</th><th class="num">Impressions</th>
+        <th class="num">Clicks</th><th class="num">CTR</th><th class="num">CPC ฿</th><th class="num">Days live</th>
+      </tr></thead><tbody>
+      ${d.campaigns.map(c => `<tr>
+        <td class="trunc" style="max-width:0;" title="${esc(c.campaign)}">${c.code?`<span class="pill" style="font-size:9.5px;">${esc(c.code)}</span> `:''}${esc(c.campaign)}</td>
+        <td class="trunc" style="max-width:0;font-size:11.5px;color:var(--muted);" title="${esc(c.account)}">${esc(c.account)}</td>
+        <td class="num barcell"><span class="minibar" style="width:${(c.spend/maxC*100).toFixed(1)}%"></span><b>${num(Math.round(c.spend))}</b></td>
+        <td class="num">${num(c.impressions)}</td>
+        <td class="num">${num(c.clicks)}</td>
+        <td class="num">${pct(c.ctr)}</td>
+        <td class="num">${c.cpc===null?'—':num(Math.round(c.cpc*100)/100)}</td>
+        <td class="num">${num(c.days)}</td>
+      </tr>`).join('')}
+      </tbody></table></div>
+      <div class="note">A campaign whose name starts with a <b>YYMMDD-NN</b> code joins the Campaign tab automatically,
+      where its spend sits beside the Meta spend on the same code and against the GA4 visits that code produced.
+      ${t.coded < t.campaigns ? `<b>${num(t.campaigns - t.coded)} campaign${t.campaigns-t.coded===1?'':'s'} carry no code</b> and cannot be joined — mostly the always-on search accounts.` : ''}</div>
+    </div>`;
+}
 
 function renderEcomRoas() {
   const d = S.ecomroas;
@@ -3619,7 +3721,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.55.0';
+const CLIENT_BUILD = '3.56.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

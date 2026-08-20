@@ -222,6 +222,7 @@ const TABS = [
   { id: "audit",     label: "Tagging audit" },
   { id: "topics",    label: "Topic Explorer" },
   { id: "audiences", label: "Audiences" },
+  { id: "gads",      label: "Google Ads" },
   { id: "ecom",      label: "E-commerce" },
   { id: "ecomcentre",label: "E-commerce · Centres" },
   { id: "ecomchannels", label: "E-commerce · Channels" },
@@ -405,6 +406,17 @@ async function windsor(connector, fields, from, to, { accounts, filters, options
   return Array.isArray(json) ? json : json.data || [];
 }
 
+/**
+ * LINE was disconnected from Windsor in Aug 2026 and replaced with Google Ads.
+ * Every call site already treated a null result as "unavailable", so the
+ * connector is simply skipped rather than removed: set LINE_ENABLED=1 if it is
+ * ever reconnected and the whole LINE path returns without a code change.
+ * Left as a flag rather than deleted because the request-ID join and the
+ * same-day broadcast heuristic took real work to get right.
+ */
+const LINE_ENABLED = process.env.LINE_ENABLED === "1";
+const lineWindsor = (...args) => (LINE_ENABLED ? windsor("line", ...args) : Promise.resolve(null));
+
 /** Parallel jobs. A failure yields null (not []) so it reads as "unavailable". */
 async function runJobs(jobs) {
   const names = Object.keys(jobs);
@@ -524,13 +536,13 @@ async function buildOverview(from, to) {
       ["date", "location_title", "impressions", "call_clicks", "website_clicks", "direction_requests"], from, to),
     fbOrganic: windsor("facebook_organic", ["date", "page_impressions", "post_engagements"], from, to),
     ttOrganic: windsor("tiktok_organic", ["date", "video_views", "likes", "comments", "shares"], from, to),
-    line: windsor("line", ["date", "message__broadcast", "message__targeting", "message__api_broadcast",
+    line: lineWindsor(["date", "message__broadcast", "message__targeting", "message__api_broadcast",
       "message__api_narrowcast", "message__api_multicast", "message__api_push",
       "followers__followers", "followers__targeted_reaches"], from, to),
     // Separate call: the message-event table carries actual opens/clicks, which
     // is a real impression rather than a send count. LINE returns null for any
     // value under 20, so small sends legitimately come back empty.
-    lineEvents: windsor("line", ["date", "message_delivered", "message_unique_impression", "message_unique_click"], from, to),
+    lineEvents: lineWindsor(["date", "message_delivered", "message_unique_impression", "message_unique_click"], from, to),
   });
 
   const ga4 = data.ga4;
@@ -974,9 +986,9 @@ async function buildCampaign(code, from, to) {
     if (norm(c).startsWith(needle)) lineReqIds.push(...(entry.lineRequestIds || []));
   }
   let lineMessages = null;
-  if (lineReqIds.length) {
+  if (LINE_ENABLED && lineReqIds.length) {
     try {
-      const rows = await windsor("line",
+      const rows = await lineWindsor(
         ["message_request_id", "message_send_time", "message_delivered", "message_unique_impression", "message_unique_click"],
         from, to, { options: { message_request_ids: [...new Set(lineReqIds)].join(",") } });
       const list = (rows || []).filter((r) => r.message_request_id).map((r) => ({
@@ -1164,7 +1176,7 @@ async function buildCampaign(code, from, to) {
     ];
     for (const flds of attempts) {
       try {
-        const rows = await windsor("line", ["date", ...flds], codeDate, codeDate);
+        const rows = await lineWindsor(["date", ...flds], codeDate, codeDate);
         if (!rows || !rows.length) continue;
         const sum = (name) => rows.reduce((a, r) => a + n(r[name] !== undefined ? r[name] : r[`message__${name.replace(/^message__/, "")}`]), 0);
         const broadcasts = sum(flds[0]) + sum(flds[2]);
@@ -1394,6 +1406,8 @@ const BENCH_BUCKET = process.env.BENCHMARK_BUCKET || process.env.ACCESS_BUCKET |
 // emails are replaced with irreversible keys before they ever reach it.
 const ECOM_SHEET_ID = process.env.ECOM_SHEET_ID || "";
 const ECOM_TAB = process.env.ECOM_TAB || "Orders";
+
+
 
 /**
  * Sales channels grouped the way the business thinks about them, supplied by
@@ -1981,6 +1995,10 @@ async function buildUntagged(from, to) {
       from, to, { accounts: [GA4_ACCOUNT] }),
     meta: windsor("facebook", ["campaign", "account_name", "campaign_objective", "impressions", "clicks", "spend",
       "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d"], from, to),
+    // Google Ads campaign names follow the same YYMMDD-NN code convention as
+    // Meta, so they key into the existing campaign analysis without any new
+    // matching logic.
+    gads: windsor("google_ads", ["campaign", "account_name", "impressions", "clicks", "spend"], from, to),
   });
 
   if (data.ga4 === null) {
@@ -2015,21 +2033,37 @@ async function buildUntagged(from, to) {
 
   // ---- spend side ----
   let spendTotal = null, spendUnmatched = null, unmatchedCampaigns = null, spendUnmatchedSiteOutcome = 0;
-  if (data.meta !== null) {
+  let spendByPlatform = null;
+  if (data.meta !== null || data.gads !== null) {
     const agg = new Map();
-    for (const r of data.meta) {
+    const add = (r, platform) => {
       const name = r.campaign;
-      if (!name) continue;
-      if (!agg.has(name)) agg.set(name, {
-        name, account: r.account_name || "", objective: r.campaign_objective || null,
+      if (!name) return;
+      const key = `${platform}|${name}`;
+      if (!agg.has(key)) agg.set(key, {
+        name, platform, account: r.account_name || "",
+        objective: r.campaign_objective || null,
+        // Google Ads reports no objective, so its goal is inferred from the name
+        // alone — the same fallback the Meta path uses when the field is absent.
         goal: goalOf(r.campaign_objective, name),
         impressions: 0, clicks: 0, spend: 0, leads: 0, messages: 0,
       });
-      const a = agg.get(name);
+      const a = agg.get(key);
       a.impressions += n(r.impressions); a.clicks += n(r.clicks); a.spend += n(r.spend);
       a.leads += n(r.actions_lead);
       a.messages += n(r.actions_onsite_conversion_messaging_conversation_started_7d);
-    }
+    };
+    if (data.meta !== null) for (const r of data.meta) add(r, "Meta");
+    if (data.gads !== null) for (const r of data.gads) add(r, "Google Ads");
+
+    spendByPlatform = ["Meta", "Google Ads"].map((p) => {
+      const rows = [...agg.values()].filter((c) => c.platform === p);
+      return { platform: p, spend: rows.reduce((a, c) => a + c.spend, 0),
+               clicks: rows.reduce((a, c) => a + c.clicks, 0),
+               impressions: rows.reduce((a, c) => a + c.impressions, 0),
+               campaigns: rows.length,
+               available: p === "Meta" ? data.meta !== null : data.gads !== null };
+    }).filter((p) => p.available);
     const all = [...agg.values()];
     spendTotal = all.reduce((a, c) => a + c.spend, 0);
     // A Meta campaign is joinable if its leading code prefixes a tagged utm value.
@@ -2054,7 +2088,9 @@ async function buildUntagged(from, to) {
       return {
         ...c, goalLabel: def.label, resultLabel: def.resultLabel, resultSource: def.source,
         resultCount: raw, costPerResult: c.spend && per ? c.spend / per : null,
-        measurableWithoutUtm: def.source === "Meta",
+        // Google reports no in-platform result, so a Google campaign without a
+        // utm has genuinely lost its outcome whatever its objective.
+        measurableWithoutUtm: c.platform === "Meta" && def.source === "Meta",
       };
     }).sort((a, b) => b.spend - a.spend).slice(0, 30);
     const siteOutcome = unmatchedCampaigns.filter((c) => !c.measurableWithoutUtm);
@@ -2076,6 +2112,7 @@ async function buildUntagged(from, to) {
       unmatchedSiteOutcome: spendUnmatchedSiteOutcome,
       unmatchedSiteOutcomeShare: spendTotal ? (spendUnmatchedSiteOutcome / spendTotal) * 100 : null,
       unmatchedCampaigns,
+      byPlatform: spendByPlatform,
     },
     taggedCodes: codesSeen.size,
     errors,
@@ -3596,19 +3633,21 @@ async function buildRoas(from, to) {
     // A campaign counts as active in the range if it spent anything in it.
     const name = String(r.campaign || "(unnamed campaign)");
     const c = acc.campaigns.get(name) ||
-      { campaign: name, spend: 0, impressions: 0, clicks: 0, days: 0, first: date, last: date,
+      { campaign: name, spend: 0, impressions: 0, clicks: 0, dates: new Set(), first: date, last: date,
         adsets: new Map() };
     c.spend += sp; c.impressions += imp; c.clicks += clk;
-    if (sp > 0) c.days++;
+    // A Set, because the feed returns one row per campaign x ad set x date:
+    // incrementing a counter multiplied the day count by the number of ad sets.
+    if (sp > 0) c.dates.add(date);
     if (date < c.first) c.first = date;
     if (date > c.last) c.last = date;
 
     // Ad set name is the audience in practice, so a campaign can be opened to
     // see which audiences carried it.
     const aname = String(r.adset_name || "(unnamed ad set)");
-    const as = c.adsets.get(aname) || { adset: aname, spend: 0, impressions: 0, clicks: 0, days: 0 };
+    const as = c.adsets.get(aname) || { adset: aname, spend: 0, impressions: 0, clicks: 0, dates: new Set() };
     as.spend += sp; as.impressions += imp; as.clicks += clk;
-    if (sp > 0) as.days++;
+    if (sp > 0) as.dates.add(date);
     c.adsets.set(aname, as);
     acc.campaigns.set(name, c);
   }
@@ -3619,11 +3658,13 @@ async function buildRoas(from, to) {
     const campaigns = [...a.campaigns.values()]
       .filter((c) => c.spend > 0)             // only what actually ran in the range
       .map((c) => ({ ...c,
+        days: c.dates.size, dates: undefined,
         cpc: c.clicks > 0 ? c.spend / c.clicks : null,
         cpm: c.impressions > 0 ? (c.spend / c.impressions) * 1000 : null,
         adsets: [...c.adsets.values()]
           .filter((a) => a.spend > 0)
           .map((a) => ({ ...a,
+            days: a.dates.size, dates: undefined,
             cpc: a.clicks > 0 ? a.spend / a.clicks : null,
             cpm: a.impressions > 0 ? (a.spend / a.impressions) * 1000 : null,
             share: c.spend > 0 ? a.spend / c.spend : 0 }))
@@ -3674,6 +3715,83 @@ app.get("/api/ecommerce/roas", requireTab("ecomroas"), async (req, res) => {
   } catch (err) {
     logJson("ERROR", "ecom_roas_failed", { error: String(err.message || err) });
     res.status(500).json({ error: err.message || "ROAS failed" });
+  }
+});
+
+/**
+ * Google Ads, newly connected in place of LINE. Deliberately a plain read to
+ * start with — accounts, campaigns and a monthly trend — because nothing is yet
+ * known about how these campaigns are structured or named beyond the fact that
+ * they carry the same YYMMDD-NN codes as Meta.
+ */
+async function buildGoogleAds(from, to) {
+  const rows = await windsor("google_ads",
+    ["date", "account_name", "campaign", "spend", "impressions", "clicks"], from, to)
+    .catch((e) => {
+      logJson("WARNING", "gads_unavailable", { error: String(e.message || e) });
+      return null;
+    });
+  if (rows === null) return { unavailable: true };
+
+  const accounts = new Map(), campaigns = new Map(), months = new Map();
+  let spend = 0, impressions = 0, clicks = 0;
+  for (const r of rows) {
+    const sp = n(r.spend), imp = n(r.impressions), clk = n(r.clicks);
+    spend += sp; impressions += imp; clicks += clk;
+
+    const an = String(r.account_name || "(unnamed)");
+    const a = accounts.get(an) || { account: an, spend: 0, impressions: 0, clicks: 0, campaigns: new Set() };
+    a.spend += sp; a.impressions += imp; a.clicks += clk;
+    if (r.campaign) a.campaigns.add(String(r.campaign));
+    accounts.set(an, a);
+
+    const cn = String(r.campaign || "(unnamed)");
+    const c = campaigns.get(cn) ||
+      { campaign: cn, account: an, spend: 0, impressions: 0, clicks: 0, dates: new Set(),
+        // The leading code is what lets a Google campaign join the Campaign tab.
+        code: (String(r.campaign || "").match(/^(\d{6}-\d{1,3})/) || [])[1] || null };
+    c.spend += sp; c.impressions += imp; c.clicks += clk;
+    if (r.date) c.dates.add(String(r.date).slice(0, 10));
+    campaigns.set(cn, c);
+
+    if (r.date) {
+      const m = String(r.date).slice(0, 7);
+      const mm = months.get(m) || { month: m, spend: 0, impressions: 0, clicks: 0 };
+      mm.spend += sp; mm.impressions += imp; mm.clicks += clk;
+      months.set(m, mm);
+    }
+  }
+
+  const shape = (o) => ({ ...o,
+    ctr: o.impressions > 0 ? o.clicks / o.impressions : null,
+    cpc: o.clicks > 0 ? o.spend / o.clicks : null,
+    cpm: o.impressions > 0 ? (o.spend / o.impressions) * 1000 : null });
+
+  const campaignList = [...campaigns.values()]
+    .map((c) => shape({ ...c, days: c.dates.size, dates: undefined }))
+    .sort((a, b) => b.spend - a.spend);
+
+  return {
+    totals: shape({ spend, impressions, clicks,
+      accounts: accounts.size, campaigns: campaignList.length,
+      coded: campaignList.filter((c) => c.code).length }),
+    accounts: [...accounts.values()]
+      .map((a) => shape({ ...a, campaigns: a.campaigns.size }))
+      .sort((a, b) => b.spend - a.spend),
+    campaigns: campaignList,
+    monthly: [...months.values()].map(shape).sort((a, b) => (a.month < b.month ? -1 : 1)),
+  };
+}
+
+app.get("/api/google-ads", requireTab("gads"), async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  try {
+    const out = await withCache(`gads:${from}:${to}`, req.query.refresh === "1", () => buildGoogleAds(from, to));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "gads_failed", { error: String(err.message || err) });
+    res.status(500).json({ error: err.message || "Google Ads failed" });
   }
 });
 

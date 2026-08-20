@@ -66,6 +66,16 @@ function windsorRows(connector, fields) {
 global.fetch = async (url, opts = {}) => {
   const u = String(url);
 
+  if (u.includes("connectors.windsor.ai/google_ads")) {
+    return jsonRes({ data: [
+      { date:"2026-07-05", account_name:"BGH x ADA", campaign:"260701-13_BGH_Search", spend:1200, impressions:5000, clicks:300 },
+      { date:"2026-07-06", account_name:"BHQ X AIQ", campaign:"aiq_bhq_gg_search_uae", spend:800, impressions:2000, clicks:120 },
+    ]});
+  }
+  // LINE is disconnected; any call reaching here is a regression.
+  if (u.includes("connectors.windsor.ai/line")) {
+    return jsonRes({ error: "LINE connector is not connected" }, 400);
+  }
   if (u.includes("connectors.windsor.ai")) {
     const connector = u.split("connectors.windsor.ai/")[1].split("?")[0];
     if (process.env.MOCK_FAIL_CONNECTOR === connector) return jsonRes({ error: "simulated failure" }, 500);
