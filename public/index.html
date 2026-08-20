@@ -337,6 +337,24 @@
   .u-chip.on{background:var(--violet-soft);border-color:var(--violet);color:var(--violet);font-weight:500;}
   .u-chip input{margin:0;accent-color:var(--violet);}
   @media(max-width:600px){ .u-head{flex-direction:column;} .u-act{width:100%;} }
+  .stalebar{position:sticky;top:0;z-index:60;background:#FFF4E5;border-bottom:1px solid #F0D9B5;
+    color:#8A5A12;font-size:12.5px;padding:9px 18px;display:flex;align-items:center;gap:10px;
+    flex-wrap:wrap;}
+  .stalebar button{border:1px solid #E0BE86;background:#fff;color:#8A5A12;border-radius:8px;
+    padding:3px 12px;font-size:12px;cursor:pointer;font-family:inherit;}
+  .stalebar span{color:#A9793A;font-size:11.5px;}
+  .stale-note{font-size:10px;color:var(--amber);margin-top:2px;}
+  .ra-hero .lab{color:var(--violet)!important;}
+  .ra-hero .v{color:var(--violet);font-size:26px!important;}
+  .stat.stat-hero{background:var(--violet-soft);border-color:#C9C1F7;}
+  .stat.stat-hero .val{color:var(--violet);}
+  .ra-row.has-kids{cursor:pointer;}
+  .ra-row.has-kids:hover{background:var(--violet-soft);}
+  .ra-chev{display:inline-block;width:13px;color:var(--faint);transition:transform .12s;}
+  .ra-chev.blank{opacity:0;}
+  .ra-row.open .ra-chev{transform:rotate(90deg);color:var(--violet);}
+  .ra-kidwrap{background:var(--glass-2);border-radius:10px;padding:12px 14px;margin:2px 0 8px;}
+  .ra-kidhead{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
   .ra-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;}
   .ra-name{font-size:14px;font-weight:600;color:var(--ink);}
   .ra-id{font-size:10.5px;color:var(--faint);margin-top:2px;font-variant-numeric:tabular-nums;}
@@ -2108,9 +2126,10 @@ function renderEcomRoas() {
         <span class="pill" style="background:${channelColour(a.channel)}1f;color:${channelColour(a.channel)};">${esc(a.channel)}</span>
       </div>
       <div class="ra-kpis">
+        <div class="ra-hero"><div class="lab">Revenue per ฿1</div>
+          <div class="v">${a.roas===null?'—':a.roas.toFixed(1)+'×'}</div></div>
         <div><div class="lab">Spend</div><div class="v">฿${num(Math.round(a.spend))}</div></div>
         <div><div class="lab">${esc(a.channel)} revenue</div><div class="v">฿${num(Math.round(a.revenue))}</div></div>
-        <div><div class="lab">Per ฿1</div><div class="v">${roasTxt(a.roas)}</div></div>
         <div><div class="lab">Link clicks</div><div class="v">${num(a.clicks)}</div></div>
         <div><div class="lab">Cost per click</div><div class="v">${a.cpc===null?'—':'฿'+(Math.round(a.cpc*100)/100)}</div></div>
       </div>
@@ -2121,26 +2140,46 @@ function renderEcomRoas() {
           <th>Campaign active in range</th><th class="num">Spend ฿</th><th class="num">Impressions</th>
           <th class="num">Clicks</th><th class="num">CPC ฿</th><th class="num">CPM ฿</th><th class="num">Days live</th>
         </tr></thead><tbody>
-        ${a.campaigns.map(c => `<tr>
-          <td class="trunc" style="max-width:0;" title="${esc(c.campaign)} · ${esc(c.first)} to ${esc(c.last)}">${esc(c.campaign)}</td>
+        ${a.campaigns.map((c, ci) => `<tr class="ra-row${c.adsets.length?' has-kids':''}" data-camp="${esc(a.id)}-${ci}">
+          <td class="trunc" style="max-width:0;" title="${esc(c.campaign)} · ${esc(c.first)} to ${esc(c.last)}">${c.adsets.length?'<span class="ra-chev">›</span>':'<span class="ra-chev blank"></span>'}${esc(c.campaign)}</td>
           <td class="num barcell"><span class="minibar" style="width:${(c.spend/maxSp*100).toFixed(1)}%"></span><b>${num(Math.round(c.spend))}</b></td>
           <td class="num">${num(c.impressions)}</td>
           <td class="num">${num(c.clicks)}</td>
           <td class="num">${c.cpc===null?'—':num(Math.round(c.cpc*100)/100)}</td>
           <td class="num">${c.cpm===null?'—':num(Math.round(c.cpm))}</td>
           <td class="num">${num(c.days)}</td>
-        </tr>`).join('')}
+        </tr>
+        ${c.adsets.length ? `<tr class="ra-kids hidden" data-kids="${esc(a.id)}-${ci}"><td colspan="7">
+          <div class="ra-kidwrap">
+            <div class="ra-kidhead">${num(c.adsets.length)} audience${c.adsets.length===1?'':'s'} in this campaign</div>
+            <table class="roomy"><thead><tr>
+              <th>Ad set / audience</th><th class="num">Spend ฿</th><th class="num">Share</th>
+              <th class="num">Impressions</th><th class="num">Clicks</th><th class="num">CPC ฿</th><th class="num">Days live</th>
+            </tr></thead><tbody>
+            ${c.adsets.map(s => `<tr>
+              <td class="trunc i18n" style="max-width:0;" title="${esc(s.adset)}">${esc(s.adset)}</td>
+              <td class="num strong">${num(Math.round(s.spend))}</td>
+              <td class="num">${pct(s.share)}</td>
+              <td class="num">${num(s.impressions)}</td>
+              <td class="num">${num(s.clicks)}</td>
+              <td class="num">${s.cpc===null?'—':num(Math.round(s.cpc*100)/100)}</td>
+              <td class="num">${num(s.days)}</td>
+            </tr>`).join('')}
+            </tbody></table>
+          </div></td></tr>` : ''}`).join('')}
         </tbody></table></div>
     </div>`;
   };
 
   $('viewRoot').innerHTML = `
     <div class="grid g-4" style="margin-bottom:12px;">
+      <div class="stat stat-hero"><div class="lab">Revenue per ฿1</div>
+        <div class="val">${t.roas===null?'—':t.roas.toFixed(1)+'×'}</div>
+        <div class="sub2">storefront revenue ÷ marketplace ad spend</div></div>
       <div class="stat"><div class="lab">Marketplace ad spend</div><div class="val">฿${num(Math.round(t.spend))}</div>
         <div class="sub2">${num(t.activeAccounts)} account${t.activeAccounts===1?'':'s'} active · ${num(t.campaigns)} campaigns</div></div>
       <div class="stat"><div class="lab">Storefront revenue</div><div class="val">฿${num(Math.round(t.revenue))}</div>
         <div class="sub2">${esc(d.channels.join(' · ')||'none')}</div></div>
-      <div class="stat"><div class="lab">Revenue per ฿1</div><div class="val">${roasTxt(t.roas)}</div></div>
       <div class="stat"><div class="lab">Months in range</div><div class="val">${num(d.months.length)}</div></div>
     </div>
 
@@ -2154,6 +2193,15 @@ function renderEcomRoas() {
     </div>
 
     ${d.accounts.map(card).join('')}`;
+
+  // Rows are toggled directly rather than re-rendered, so the open/closed state
+  // of the other campaigns is not lost each time one is clicked.
+  document.querySelectorAll('.ra-row.has-kids').forEach(row => row.addEventListener('click', () => {
+    const kids = document.querySelector(`.ra-kids[data-kids="${CSS.escape(row.dataset.camp)}"]`);
+    if (!kids) return;
+    const open = kids.classList.toggle('hidden');
+    row.classList.toggle('open', !open);
+  }));
 }
 
 function renderEcomMonthly() {
@@ -3563,8 +3611,30 @@ if (typeof Chart !== 'undefined') {
   });
 }
 
+/**
+ * Stamped at release and checked against the server's own version.
+ *
+ * A deploy has twice landed package.json without index.html, which leaves a new
+ * server answering an old page — the symptoms are baffling (a tab throws
+ * "cannot read properties of undefined", the nav is in last week's order) and
+ * nothing in the UI hints at the cause. Comparing the two makes it obvious.
+ */
+const CLIENT_BUILD = '3.55.0';
+
 fetch('/api/version').then(r => r.json()).then(v => {
-  $('verLabel').textContent = 'v' + v.version + (v.modelArmor ? ' · armor on' : '');
+  const stale = v.version && v.version !== CLIENT_BUILD;
+  $('verLabel').innerHTML = 'v' + esc(v.version) + (v.modelArmor ? ' · armor on' : '') +
+    (stale ? `<div class="stale-note">page is v${esc(CLIENT_BUILD)}</div>` : '');
+  if (stale) {
+    const bar = document.createElement('div');
+    bar.className = 'stalebar';
+    bar.innerHTML = `This page is <b>v${esc(CLIENT_BUILD)}</b> but the server is running
+      <b>v${esc(v.version)}</b>. Tabs may fail until they match.
+      <button id="hardReload">Reload</button>
+      <span>If reloading does not fix it, the deploy updated the server without the page.</span>`;
+    document.body.prepend(bar);
+    document.getElementById('hardReload').addEventListener('click', () => location.reload(true));
+  }
 }).catch(() => { $('verLabel').textContent = 'unknown'; });
 
 // Identity decides the nav before anything renders, so a user never glimpses a

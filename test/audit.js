@@ -40,6 +40,16 @@ for (const [name, expected] of Object.entries(REQUIRED_FIELDS)) {
                  : ok(`fields:${name}`, `${expected.length} fields`);
 }
 
+// ---------------------------------------------------------------- build stamp
+// The client carries its own version so a partial deploy (new server, old page)
+// announces itself. That only works if the stamp is bumped with package.json.
+const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+const stamp = (html.match(/const CLIENT_BUILD = '([\d.]+)'/) || [])[1];
+!stamp ? fail("build stamp", "CLIENT_BUILD not found in index.html")
+  : stamp !== pkg.version
+    ? fail("build stamp", `index.html says ${stamp}, package.json says ${pkg.version}`)
+    : ok("build stamp", `client and package agree at ${stamp}`);
+
 // ---------------------------------------------------------------- palette
 // The rule worth enforcing is semantic separation, not a particular brand hue:
 // a category colour must never be the same as the up/down indicators, because

@@ -3556,7 +3556,8 @@ async function buildRoas(from, to) {
   const [rows, ads] = await Promise.all([
     ecomRows(),
     windsor("facebook",
-      ["account_id", "account_name", "campaign", "date", "spend", "impressions", "actions_link_click"],
+      ["account_id", "account_name", "campaign", "adset_name", "date", "spend", "impressions",
+       "actions_link_click"],
       from, to, { filters: [{ field: "account_id", operation: "in", value: ids }] })
       .catch((e) => {
         logJson("WARNING", "roas_meta_unavailable", { error: String(e.message || e) });
@@ -3595,11 +3596,20 @@ async function buildRoas(from, to) {
     // A campaign counts as active in the range if it spent anything in it.
     const name = String(r.campaign || "(unnamed campaign)");
     const c = acc.campaigns.get(name) ||
-      { campaign: name, spend: 0, impressions: 0, clicks: 0, days: 0, first: date, last: date };
+      { campaign: name, spend: 0, impressions: 0, clicks: 0, days: 0, first: date, last: date,
+        adsets: new Map() };
     c.spend += sp; c.impressions += imp; c.clicks += clk;
     if (sp > 0) c.days++;
     if (date < c.first) c.first = date;
     if (date > c.last) c.last = date;
+
+    // Ad set name is the audience in practice, so a campaign can be opened to
+    // see which audiences carried it.
+    const aname = String(r.adset_name || "(unnamed ad set)");
+    const as = c.adsets.get(aname) || { adset: aname, spend: 0, impressions: 0, clicks: 0, days: 0 };
+    as.spend += sp; as.impressions += imp; as.clicks += clk;
+    if (sp > 0) as.days++;
+    c.adsets.set(aname, as);
     acc.campaigns.set(name, c);
   }
 
@@ -3608,8 +3618,16 @@ async function buildRoas(from, to) {
     const revenue = monthList.reduce((x, m) => x + (rev.get(`${m}|${a.channel}`) || 0), 0);
     const campaigns = [...a.campaigns.values()]
       .filter((c) => c.spend > 0)             // only what actually ran in the range
-      .map((c) => ({ ...c, cpc: c.clicks > 0 ? c.spend / c.clicks : null,
-                     cpm: c.impressions > 0 ? (c.spend / c.impressions) * 1000 : null }))
+      .map((c) => ({ ...c,
+        cpc: c.clicks > 0 ? c.spend / c.clicks : null,
+        cpm: c.impressions > 0 ? (c.spend / c.impressions) * 1000 : null,
+        adsets: [...c.adsets.values()]
+          .filter((a) => a.spend > 0)
+          .map((a) => ({ ...a,
+            cpc: a.clicks > 0 ? a.spend / a.clicks : null,
+            cpm: a.impressions > 0 ? (a.spend / a.impressions) * 1000 : null,
+            share: c.spend > 0 ? a.spend / c.spend : 0 }))
+          .sort((x, y) => y.spend - x.spend) }))
       .sort((x, y) => y.spend - x.spend);
     return {
       id: a.id, account: a.liveName || a.name, channel: a.channel,
