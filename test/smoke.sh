@@ -140,19 +140,14 @@ expect_field "monthly ytd"      "$MON" "d.windows.ytd.from==='2026-01-01'?'ok':u
 expect_field "monthly centres"  "$MON" "d.centres.length>0?'ok':undefined"
 expect_field "monthly channels" "$MON" "d.channels.length>0&&Math.abs(d.channels.reduce((a,c)=>a+c.share,0)-1)<0.001?'shares-sum-1':undefined"
 ROAS="/api/ecommerce/roas?from=$FROM&to=$TO"
-expect_field "roas by channel"  "$ROAS" "d.byChannel.length>0?'ok':undefined"
-expect_field "roas selling pct" "$ROAS" "typeof d.totals.sellingShare==='number'?'ok':undefined"
-# Only spend aimed at a selling page may be divided into revenue; the rest must
 # be reported separately rather than inflating or deflating the ratio.
-expect_field "roas splits spend" "$ROAS" "d.totals.sellingSpend+d.totals.otherSpend===d.totals.allSpend?'ok':undefined"
-expect_field "roas intents"     "$ROAS" "d.intents.length>0?'ok':undefined"
-expect_field "roas destinations" "$ROAS" "d.destinations.length>0?'ok':undefined"
-# Account level is the primary read: every account listed, storefront ones flagged.
-expect_field "roas accounts"    "$ROAS" "d.accounts.length>0?'ok':undefined"
-expect_field "roas mk block"    "$ROAS" "d.marketplace&&Array.isArray(d.marketplace.channels)?'ok':undefined"
-# Two accounts on one storefront must not count its revenue twice.
-expect_field "roas no dbl count" "$ROAS" "d.marketplace.channels.length===new Set(d.marketplace.channels).size?'ok':undefined"
-expect_field "roas monthly rows" "$ROAS" "d.monthly.every(m=>'spend' in m && 'revenue' in m)?'ok':undefined"
+# Exactly the three marketplace accounts, matched on id so a rename cannot drop one.
+expect_field "roas 3 accounts"  "$ROAS" "d.accounts.length===3?'ok':undefined"
+expect_field "roas account ids" "$ROAS" "d.accounts.every(a=>/^\\d{15}$/.test(a.id))?'ok':undefined"
+# Campaigns listed must have actually spent in the range.
+expect_field "roas active only" "$ROAS" "d.accounts.every(a=>a.campaigns.every(c=>c.spend>0))?'ok':undefined"
+# Two accounts share Shopee, so the total must not count its revenue twice.
+expect_field "roas no dbl count" "$ROAS" "d.channels.length===new Set(d.channels).size?'ok':undefined"
 expect_field "awareness=CPM"    "$AUD" "d.audiences.every(a=>a.objectiveClass!=='awareness'||a.primary.kpi==='cpm')||'BAD'"
 # Regression guard for the 3.20 bug: with no positive catalog metric anywhere,
 # nothing may be classified as CPAS. `undefined !== null` once made every row

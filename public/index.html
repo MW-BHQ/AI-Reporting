@@ -337,6 +337,12 @@
   .u-chip.on{background:var(--violet-soft);border-color:var(--violet);color:var(--violet);font-weight:500;}
   .u-chip input{margin:0;accent-color:var(--violet);}
   @media(max-width:600px){ .u-head{flex-direction:column;} .u-act{width:100%;} }
+  .ra-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+  .ra-name{font-size:14px;font-weight:600;color:var(--ink);}
+  .ra-id{font-size:10.5px;color:var(--faint);margin-top:2px;font-variant-numeric:tabular-nums;}
+  .ra-kpis{display:flex;flex-wrap:wrap;gap:26px;margin:14px 0 16px;}
+  .ra-kpis .lab{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);}
+  .ra-kpis .v{font-size:17px;font-weight:600;color:var(--ink);margin-top:2px;font-variant-numeric:tabular-nums;}
   .dlt{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 5px;border-radius:5px;
     margin-left:5px;cursor:help;white-space:nowrap;}
   .dlt.up{background:rgba(74,190,140,.14);color:#2E9E6F;}
@@ -520,6 +526,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h2l2.2 10.2a2 2 0 002 1.6h7.1a2 2 0 002-1.55L21 8H7"/><circle cx="10.5" cy="20" r="1.2"/><circle cx="18" cy="20" r="1.2"/></svg>
         Overview
       </div>
+      <div class="nav-item sub" data-view="ecommonthly">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+        Monthly report
+      </div>
       <div class="nav-item sub" data-view="ecomcentre">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V9l5-4 5 4v11"/><path d="M14 20V12h6v8"/><path d="M2 20h20"/></svg>
         Centers
@@ -527,10 +537,6 @@
       <div class="nav-item sub" data-view="ecomchannels">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17l5-6 4 3 5-7 4 4"/><circle cx="8" cy="11" r="1"/><circle cx="12" cy="14" r="1"/></svg>
         Channels
-      </div>
-      <div class="nav-item sub" data-view="ecommonthly">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
-        Monthly report
       </div>
       <div class="nav-item sub" data-view="ecomroas">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v20M17 6.5c0-1.9-2.2-2.9-5-2.9s-5 .9-5 2.7 2.4 2.4 5 3 5 1.3 5 3.2-2.2 2.9-5 2.9-5-1-5-2.9"/></svg>
@@ -2079,178 +2085,75 @@ document.addEventListener('click', (e) => {
 function renderEcomRoas() {
   const d = S.ecomroas;
   if (S.ecomroasError) { const m = S.ecomroasError; $('viewRoot').innerHTML = errorState(m); S.ecomroasError = null; return; }
-  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecomroas', 'Reads Meta ad spend and joins it to storefront revenue for the selected range.'); return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecomroas', 'Reads the three marketplace ad accounts and joins their spend to storefront revenue.'); return; }
   if (d.metaUnavailable) { $('viewRoot').innerHTML = errorState('Meta Ads was unavailable this run — press Refresh to retry.'); return; }
-  if (!d.months || !d.months.length) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No spend or sales in this range</div></div></div>`; return; }
 
   const t = d.totals;
-  const colour = channelColour;
-  const roasTxt = (v) => v === null || v === undefined ? '<span style="color:var(--faint)">—</span>' : `${v.toFixed(1)}×`;
-  const INTENT_LABEL = { purchase:'Selling a package', lead:'Collecting leads', message:'Starting conversations',
-    traffic:'Sending traffic', engagement:'Post engagement', awareness:'Awareness', other:'Other' };
-  const INTENT_COLOUR = { purchase:'var(--violet)', lead:'#4B8DF8', message:'#2FA8A0',
-    traffic:'#9A8CF8', engagement:'#F0A93B', awareness:'#C3CBE0', other:'var(--faint)' };
+  const roasTxt = (v) => v === null ? '<span style="color:var(--faint)">—</span>' : `${v.toFixed(1)}×`;
 
-  // Revenue above a shared baseline, spend below: on one axis ฿10M of revenue
-  // makes the spend bars invisible.
-  const W = 760, HH = 190, mid = HH * 0.62;
-  const maxRev = Math.max(...d.monthly.map(m => m.revenue), 1);
-  const maxSp = Math.max(...d.monthly.map(m => m.spend), 1);
-  const bw = W / Math.max(d.monthly.length, 1);
-  const bars = d.monthly.map((m, i) => {
-    const x = i * bw + 3, w = Math.max(1, bw - 8);
-    const rh = (m.revenue / maxRev) * (mid - 14);
-    const sh = (m.spend / maxSp) * (HH - mid - 8);
-    return `<rect x="${x.toFixed(1)}" y="${(mid-rh).toFixed(1)}" width="${w.toFixed(1)}" height="${rh.toFixed(1)}" rx="2" fill="var(--violet)" opacity=".85"
-        data-tip="${esc(m.month)}\nStorefront revenue ฿${num(Math.round(m.revenue))}" style="cursor:help;"></rect>
-      <rect x="${x.toFixed(1)}" y="${mid.toFixed(1)}" width="${w.toFixed(1)}" height="${sh.toFixed(1)}" rx="2" fill="#E8724F" opacity=".9"
-        data-tip="${esc(m.month)}\nSelling spend ฿${num(Math.round(m.spend))}" style="cursor:help;"></rect>
-      <text x="${(x+w/2).toFixed(1)}" y="${(mid-rh-4).toFixed(1)}" text-anchor="middle" font-size="8.5" fill="var(--violet)" font-weight="600">${m.roas===null?'':m.roas.toFixed(0)+'×'}</text>`;
-  }).join('');
-
-  const maxChRev = Math.max(...d.byChannel.map(c => c.revenue), 1);
-  const maxDest = Math.max(...(d.destinations||[]).map(x => x.spend), 1);
+  const card = (a) => {
+    if (!a.active) return `<div class="card mt">
+      <div class="ra-head">
+        <div><div class="ra-name">${esc(a.account)}</div>
+          <div class="ra-id">${esc(a.id)}</div></div>
+        <span class="pill" style="background:${channelColour(a.channel)}1f;color:${channelColour(a.channel)};">${esc(a.channel)}</span>
+      </div>
+      <div class="note" style="margin:10px 0 0;">No spend in this range — the account exists but ran nothing.</div>
+    </div>`;
+    const maxSp = Math.max(...a.campaigns.map(c => c.spend), 1);
+    return `<div class="card mt">
+      <div class="ra-head">
+        <div><div class="ra-name">${esc(a.account)}</div>
+          <div class="ra-id">${esc(a.id)} · ${num(a.campaigns.length)} campaign${a.campaigns.length===1?'':'s'} active</div></div>
+        <span class="pill" style="background:${channelColour(a.channel)}1f;color:${channelColour(a.channel)};">${esc(a.channel)}</span>
+      </div>
+      <div class="ra-kpis">
+        <div><div class="lab">Spend</div><div class="v">฿${num(Math.round(a.spend))}</div></div>
+        <div><div class="lab">${esc(a.channel)} revenue</div><div class="v">฿${num(Math.round(a.revenue))}</div></div>
+        <div><div class="lab">Per ฿1</div><div class="v">${roasTxt(a.roas)}</div></div>
+        <div><div class="lab">Link clicks</div><div class="v">${num(a.clicks)}</div></div>
+        <div><div class="lab">Cost per click</div><div class="v">${a.cpc===null?'—':'฿'+(Math.round(a.cpc*100)/100)}</div></div>
+      </div>
+      <div class="tscroll"><table class="roomy sortable">
+        <colgroup><col style="width:38%"><col style="width:12%"><col style="width:11%"><col style="width:11%">
+          <col style="width:10%"><col style="width:9%"><col style="width:9%"></colgroup>
+        <thead><tr>
+          <th>Campaign active in range</th><th class="num">Spend ฿</th><th class="num">Impressions</th>
+          <th class="num">Clicks</th><th class="num">CPC ฿</th><th class="num">CPM ฿</th><th class="num">Days live</th>
+        </tr></thead><tbody>
+        ${a.campaigns.map(c => `<tr>
+          <td class="trunc" style="max-width:0;" title="${esc(c.campaign)} · ${esc(c.first)} to ${esc(c.last)}">${esc(c.campaign)}</td>
+          <td class="num barcell"><span class="minibar" style="width:${(c.spend/maxSp*100).toFixed(1)}%"></span><b>${num(Math.round(c.spend))}</b></td>
+          <td class="num">${num(c.impressions)}</td>
+          <td class="num">${num(c.clicks)}</td>
+          <td class="num">${c.cpc===null?'—':num(Math.round(c.cpc*100)/100)}</td>
+          <td class="num">${c.cpm===null?'—':num(Math.round(c.cpm))}</td>
+          <td class="num">${num(c.days)}</td>
+        </tr>`).join('')}
+        </tbody></table></div>
+    </div>`;
+  };
 
   $('viewRoot').innerHTML = `
-    ${d.accounts && d.accounts.length ? `<div class="card">
-      <div class="card-title">Ad accounts</div>
-      <div class="tscroll"><table class="roomy sortable">
-      <colgroup><col style="width:30%"><col style="width:15%"><col style="width:13%"><col style="width:12%">
-        <col style="width:10%"><col style="width:10%"><col style="width:10%"></colgroup>
-      <thead><tr>
-        <th>Account</th><th>Sells on</th><th class="num">Spend ฿</th><th class="num">Storefront revenue ฿</th>
-        <th class="num">Per ฿1</th><th class="num">Clicks</th><th class="num">Months</th>
-      </tr></thead><tbody>
-      ${(() => { const mx = Math.max(...d.accounts.map(a=>a.spend),1);
-        return d.accounts.map(a => `<tr>
-        <td class="strong trunc" style="max-width:0;" title="${esc(a.account)}">${esc(a.account)}</td>
-        <td>${a.channel
-          ? `<span class="pill" style="background:${channelColour(a.channel)}1f;color:${channelColour(a.channel)};">${esc(a.channel)}</span>`
-          : '<span style="color:var(--faint);font-size:11px;">not a storefront account</span>'}</td>
-        <td class="num barcell"><span class="minibar" style="width:${(a.spend/mx*100).toFixed(1)}%"></span><b>${num(Math.round(a.spend))}</b></td>
-        <td class="num">${a.revenue===null?'<span style="color:var(--faint)">—</span>':num(Math.round(a.revenue))}</td>
-        <td class="num strong">${a.roas===null?'<span style="color:var(--faint)">—</span>':a.roas.toFixed(1)+'×'}</td>
-        <td class="num">${a.clicks?num(a.clicks):'—'}</td>
-        <td class="num">${num(a.months)}</td>
-      </tr>`).join(''); })()}
-      </tbody></table></div>
-      <div class="note">Start here. An account dedicated to one marketplace is the firmest signal available —
-      every baht in it was spent selling there, with no campaign name to read or link to inspect.
-      <b>${num(d.marketplace.accounts)} of ${num(d.accounts.length)} accounts sell on a storefront</b>, carrying
-      <b>${pct(d.marketplace.spendShare)} of Meta spend</b> in this range. Where two accounts sell on the same
-      storefront, that storefront's revenue is counted once, not once per account — so the per-฿1 figure on each
-      row shows the whole storefront against that account's spend alone, and only the roll-up below is a clean ratio.</div>
+    <div class="grid g-4" style="margin-bottom:12px;">
+      <div class="stat"><div class="lab">Marketplace ad spend</div><div class="val">฿${num(Math.round(t.spend))}</div>
+        <div class="sub2">${num(t.activeAccounts)} account${t.activeAccounts===1?'':'s'} active · ${num(t.campaigns)} campaigns</div></div>
+      <div class="stat"><div class="lab">Storefront revenue</div><div class="val">฿${num(Math.round(t.revenue))}</div>
+        <div class="sub2">${esc(d.channels.join(' · ')||'none')}</div></div>
+      <div class="stat"><div class="lab">Revenue per ฿1</div><div class="val">${roasTxt(t.roas)}</div></div>
+      <div class="stat"><div class="lab">Months in range</div><div class="val">${num(d.months.length)}</div></div>
     </div>
 
-    <div class="grid g-3 mt" style="margin-bottom:14px;">
-      <div class="stat"><div class="lab">Marketplace ad spend</div><div class="val">฿${num(Math.round(d.marketplace.spend))}</div>
-        <div class="sub2">${esc(d.marketplace.channels.join(' · ')||'none')}</div></div>
-      <div class="stat"><div class="lab">Revenue on those storefronts</div><div class="val">฿${num(Math.round(d.marketplace.revenue))}</div></div>
-      <div class="stat"><div class="lab">Revenue per ฿1 of that spend</div><div class="val">${d.marketplace.roas===null?'—':d.marketplace.roas.toFixed(1)+'×'}</div>
-        <div class="sub2">all revenue on those storefronts, not just ad-driven</div></div>
-    </div>` : ''}
-
-    <div class="card" style="border-left:3px solid var(--amber);margin-bottom:14px;">
-      <div class="card-title" style="margin-bottom:6px;">What this number is, and what it is not</div>
-      <div class="note" style="margin:0;">
-        Ads are classified by their <b>Meta optimisation goal</b> and the <b>page the click lands on</b> — both facts Meta
-        reports — rather than by campaign name, which is a convention someone typed. Only ads that could plausibly sell
-        something count towards the ratio: catalogue conversions, and traffic aimed at a package or campaign page.
-        Lead forms, WhatsApp conversations, article reads and awareness buys are listed separately, not folded in.<br><br>
-        The revenue side is <b>all</b> revenue in that storefront, not only revenue the ads caused. So this is
-        <b>revenue per baht of selling spend</b>, not incremental return — it reads high by construction. The movement
-        month to month and the gap between channels are the useful parts; the absolute figure is not a payback number.
-      </div>
+    <div class="note" style="margin:0 0 4px;">
+      Only the three ad accounts that sell on a marketplace are here, matched on <b>account id</b> rather than name so a
+      rename cannot silently drop one. Revenue is <b>all</b> revenue on that storefront for the range, not only what the
+      ads caused, so treat the ratio as a scale check rather than a payback figure — the useful reading is how it moves
+      and how the accounts compare.
+      ${d.channels.length < d.accounts.filter(a=>a.active).length
+        ? ' Two accounts sell on the same storefront, so that storefront\'s revenue is counted once in the total above and shown in full on each card.' : ''}
     </div>
 
-    <div class="grid g-4" style="margin-bottom:14px;">
-      <div class="stat"><div class="lab">Meta spend, all objectives</div><div class="val">฿${num(Math.round(t.allSpend))}</div></div>
-      <div class="stat"><div class="lab">Spend that could sell</div><div class="val">฿${num(Math.round(t.sellingSpend))}</div>
-        <div class="sub2">${pct(t.sellingShare)} of the total</div></div>
-      <div class="stat"><div class="lab">Storefront revenue</div><div class="val">฿${num(Math.round(t.revenue))}</div></div>
-      <div class="stat"><div class="lab">Revenue per ฿1 selling spend</div><div class="val">${roasTxt(t.roas)}</div>
-        <div class="sub2">not incremental — see above</div></div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Revenue and selling spend by month</div>
-      <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" style="display:block;overflow:visible;">
-        <line x1="0" y1="${mid}" x2="${W}" y2="${mid}" stroke="var(--line)"/>${bars}</svg>
-      <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:4px;">
-        <span>${esc(d.months[0])}</span><span>${esc(d.months[d.months.length-1])}</span>
-      </div>
-      <div class="legend">
-        <span class="lg"><i style="background:var(--violet)"></i>Storefront revenue</span>
-        <span class="lg"><i style="background:#E8724F"></i>Selling spend</span>
-      </div>
-      <div class="note">The ratio above each month is revenue ÷ selling spend. The two series use different scales from a
-      shared baseline, so read each against itself over time rather than comparing the heights.</div>
-    </div>
-
-    <div class="card mt">
-      <div class="card-title">Where the money went, by objective</div>
-      <div style="display:flex;height:26px;border-radius:7px;overflow:hidden;margin-bottom:10px;">
-        ${(d.intents||[]).map(x=>`<div style="width:${(x.share*100).toFixed(2)}%;background:${INTENT_COLOUR[x.intent]||'var(--faint)'};" data-tip="${esc(INTENT_LABEL[x.intent]||x.intent)}\n฿${num(Math.round(x.spend))} · ${pct(x.share)}"></div>`).join('')}
-      </div>
-      <div class="legend">${(d.intents||[]).map(x=>`<span class="lg"><i style="background:${INTENT_COLOUR[x.intent]||'var(--faint)'}"></i>${esc(INTENT_LABEL[x.intent]||x.intent)} ${pct(x.share)}</span>`).join('')}</div>
-      <div class="note">Taken from each ad set's optimisation goal. Only the selling slice is used in the ratio above —
-      this is what the rest of the budget was bought for.</div>
-    </div>
-
-    <div class="card mt">
-      <div class="card-title">By storefront</div>
-      <div class="tscroll"><table class="roomy sortable">
-      <colgroup><col style="width:24%"><col style="width:16%"><col style="width:17%"><col style="width:11%">
-        <col style="width:11%"><col style="width:11%"><col style="width:10%"></colgroup>
-      <thead><tr>
-        <th>Storefront</th><th class="num">Selling spend ฿</th><th class="num">Revenue ฿</th>
-        <th class="num"><span data-tip="Revenue divided by selling spend. Not incremental return.">Per ฿1</span></th>
-        <th class="num">Link clicks</th><th class="num">Cost per click ฿</th><th class="num">Share of revenue</th>
-      </tr></thead><tbody>
-      ${d.byChannel.map(c => `<tr>
-        <td class="strong" style="white-space:nowrap;"><i class="swatch" style="background:${colour(c.channel)}"></i>${esc(c.channel)}</td>
-        <td class="num">${c.spend>0?num(Math.round(c.spend)):'<span style="color:var(--faint)" title="No selling-intent Meta spend reached this storefront">—</span>'}</td>
-        <td class="num barcell"><span class="minibar" style="width:${(c.revenue/maxChRev*100).toFixed(1)}%"></span><b>${num(Math.round(c.revenue))}</b></td>
-        <td class="num strong">${roasTxt(c.roas)}</td>
-        <td class="num">${c.clicks?num(c.clicks):'—'}</td>
-        <td class="num">${c.costPerClick===null||c.costPerClick===undefined?'—':num(Math.round(c.costPerClick*100)/100)}</td>
-        <td class="num">${pct(c.revenue/(t.revenue||1))}</td>
-      </tr>`).join('')}
-      </tbody></table></div>
-      <div class="note">Revenue with no spend beside it means that storefront sold without any selling-intent Meta ad
-      pointing at it — marketplace and organic traffic, or ads whose destination Meta does not expose.</div>
-    </div>
-
-    ${(d.destinations||[]).length ? `<div class="card mt">
-      <div class="card-title">Where the clicks actually land</div>
-      <table class="roomy sortable"><thead><tr>
-        <th>Destination</th><th class="num">Spend ฿</th><th class="num">Share</th><th></th>
-      </tr></thead><tbody>
-      ${d.destinations.map(x => `<tr>
-        <td class="strong">${esc(x.label)}${x.channel?'':' <span class="pill grey">no storefront</span>'}</td>
-        <td class="num">${num(Math.round(x.spend))}</td>
-        <td class="num">${pct(x.spend/(t.allSpend||1))}</td>
-        <td style="width:28%;"><span style="display:block;height:9px;border-radius:4px;background:${x.channel?colour(x.channel):'var(--faint)'};width:${(x.spend/maxDest*100).toFixed(1)}%;opacity:.85;"></span></td>
-      </tr>`).join('')}
-      </tbody></table>
-      <div class="note">Read from the ad's destination URL. A <b>short link</b> hides its target from Meta, so that spend
-      cannot be attributed to a storefront even though it may well reach one — the same is true of lead forms and
-      instant experiences, which never leave Meta at all.</div>
-    </div>` : ''}
-
-    ${(d.urlFaults||[]).length ? `<div class="card mt" style="border-left:3px solid var(--amber);">
-      <div class="card-title">Tagging faults found in live ad links</div>
-      <table class="roomy"><thead><tr><th>Problem</th><th>Campaign</th><th class="num">Spend ฿</th></tr></thead><tbody>
-      ${d.urlFaults.map(f => `<tr>
-        <td class="strong">${esc((f.faults||[]).join(' · '))}</td>
-        <td class="trunc" style="max-width:0;" title="${esc(f.url||'')}">${esc(f.campaign||'')}</td>
-        <td class="num">${num(Math.round(f.spend))}</td></tr>`).join('')}
-      </tbody></table>
-      <div class="note">Picked up while reading destination URLs, not from a separate check. A repeated
-      <code>utm_campaign</code> means GA4 records whichever value it reads first, so the visit is attributed to the wrong
-      campaign — and a URL pasted inside itself sends the click to a page that does not exist. Hover a campaign to see
-      the full link.</div>
-    </div>` : ''}`;
+    ${d.accounts.map(card).join('')}`;
 }
 
 function renderEcomMonthly() {

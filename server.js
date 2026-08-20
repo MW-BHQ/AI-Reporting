@@ -3533,215 +3533,115 @@ app.get("/api/ecommerce/monthly", requireTab("ecommonthly"), async (req, res) =>
  * for them is "no direct link", not a fabricated ratio.
  */
 /**
- * Ad accounts that exist to sell on one marketplace. This is the firmest signal
- * there is: the account is dedicated to a storefront, so every baht in it was
- * spent selling there — no campaign-name reading, no URL inspection, and CPAS
- * accounts whose ads point at a Facebook Instant Experience are handled by
- * definition rather than by exception.
+ * The three ad accounts that exist to sell on a marketplace, by account id.
  *
- * Across 2025 to Jul 2026 exactly three exist — BHQ Shopee x EGG (฿420.5k),
- * BHQ Shopee x ADA (฿75.2k) and Bangkok Hospital_TH1JHJMNT9 x Lazada CPAS
- * (฿14.0k) — which is ฿510k of ฿4.46m total Meta spend, about 11%. The other
- * ฿3.95m is hospital marketing that was never selling a marketplace package.
+ * Matching on the id rather than the name is deliberate: an account rename would
+ * silently drop it from the report, and the ids were given by the marketing team
+ * so they are authoritative. Every baht in one of these accounts was spent
+ * selling on that storefront — no campaign name to interpret, no landing page to
+ * inspect, and CPAS ads that point at a Facebook Instant Experience are covered
+ * by definition rather than by exception.
+ *
+ * Everything else in Meta is hospital marketing and is deliberately out of scope
+ * here; mixing it in was what made the earlier version unreadable.
  */
 const ECOM_AD_ACCOUNTS = [
-  [/shopee/i, "Shopee"],
-  [/lazada/i, "Lazada"],
-  [/bedee/i, "Shop.BeDee"],
-  [/line\s*shop|lineshopping/i, "Line Shopping"],
+  { id: "663327782377238", name: "Bangkok Hospital x Lazada", channel: "Lazada" },
+  { id: "859997291728794", name: "BHQ Shopee x EGG",          channel: "Shopee" },
+  { id: "523705615907093", name: "BHQ Shopee x ADA",          channel: "Shopee" },
 ];
-const accountChannel = (name) => {
-  for (const [re, ch] of ECOM_AD_ACCOUNTS) if (re.test(String(name || ""))) return ch;
-  return null;
-};
-
-const AD_DESTINATIONS = [
-  // marketplaces, if a campaign ever does link straight to one
-  { kind: "marketplace", channel: "Shopee", label: "Shopee", re: /shopee\./i },
-  { kind: "marketplace", channel: "Lazada", label: "Lazada", re: /lazada\./i },
-  { kind: "marketplace", channel: "Line Shopping", label: "LINE Shopping", re: /shop\.line|lineshopping/i },
-  { kind: "marketplace", channel: "Shop.BeDee", label: "BeDee", re: /bedee/i },
-  // the hospital's own site, split by what the page is for
-  { kind: "package", channel: "Bangkok Hospital Website", label: "Website · package page", re: /bangkokhospital\.com.*\/package\//i },
-  { kind: "campaign", channel: "Bangkok Hospital Website", label: "Website · campaign page", re: /bangkokhospital\.com.*\/campaign\//i },
-  { kind: "membership", channel: "Bangkok Hospital Website", label: "Website · Better Club", re: /bangkokhospital\.com.*better-club/i },
-  { kind: "login", channel: "Bangkok Hospital Website", label: "Website · login or account", re: /bangkokhospital\.com.*\/(auth|my-account)/i },
-  { kind: "content", channel: "Bangkok Hospital Website", label: "Website · article", re: /bangkokhospital\.com.*\/content\//i },
-  { kind: "site", channel: "Bangkok Hospital Website", label: "Website · other page", re: /bangkokhospital\.com/i },
-  // everything that never reaches a storefront
-  { kind: "shortlink", channel: null, label: "Short link (destination hidden)", re: /bkhos\.co/i },
-  { kind: "instant", channel: null, label: "Instant Experience", re: /canvas_doc|fb\.com\/canvas/i },
-  { kind: "leadform", channel: null, label: "Lead form on Meta", re: /fb\.me/i },
-  { kind: "form", channel: null, label: "External form", re: /docs\.google\.com|forms\.gle|typeform/i },
-];
-
-/** Intent from what Meta was told to optimise for. */
-const GOAL_INTENT = {
-  OFFSITE_CONVERSIONS: "purchase",
-  LANDING_PAGE_VIEWS: "traffic",
-  LINK_CLICKS: "traffic",
-  LEAD_GENERATION: "lead",
-  QUALITY_LEAD: "lead",
-  CONVERSATIONS: "message",
-  POST_ENGAGEMENT: "awareness",
-  PAGE_LIKES: "awareness",
-  THRUPLAY: "awareness",
-  REACH: "awareness",
-  IMPRESSIONS: "awareness",
-  AD_RECALL_LIFT: "awareness",
-};
-
-function classifyAd(row) {
-  const url = String(row.website_destination_url || "");
-  const destType = String(row.adset_destination_type || "").toUpperCase();
-  const goal = String(row.adsset_optimization_goal || "").toUpperCase();
-  const intent = GOAL_INTENT[goal] || "other";
-
-  let dest = url ? AD_DESTINATIONS.find((d) => d.re.test(url)) : null;
-  if (!dest && destType === "ON_AD") dest = { kind: "leadform", channel: null, label: "Lead form on Meta" };
-  if (!dest && destType === "WHATSAPP") dest = { kind: "whatsapp", channel: null, label: "WhatsApp" };
-  if (!dest && destType === "ON_POST") dest = { kind: "post", channel: null, label: "Stayed on the post" };
-  if (!dest) dest = { kind: "unknown", channel: null, label: url ? "Other destination" : "No destination reported" };
-
-  // A CPAS account sells through the marketplace catalogue, so its Instant
-  // Experience ads do end at a storefront even though the URL cannot show it.
-  let channel = dest.channel;
-  if (!channel && /shopee/i.test(String(row.account_name || ""))) channel = "Shopee";
-
-  // Purchase intent is either Meta optimising for a conversion, or a click
-  // aimed at a page that sells something.
-  const sells = intent === "purchase" || dest.kind === "package" ||
-                dest.kind === "marketplace" || dest.kind === "campaign";
-  return { intent, dest, channel, sells };
-}
 
 async function buildRoas(from, to) {
+  const ids = ECOM_AD_ACCOUNTS.map((a) => a.id);
   const [rows, ads] = await Promise.all([
     ecomRows(),
-    windsor("facebook", ["date", "campaign", "account_name", "spend", "impressions",
-      "actions_link_click", "adsset_optimization_goal", "adset_destination_type",
-      "website_destination_url"], from, to).catch((e) => {
-      logJson("WARNING", "roas_meta_unavailable", { error: String(e.message || e) });
-      return null;
-    }),
+    windsor("facebook",
+      ["account_id", "account_name", "campaign", "date", "spend", "impressions", "actions_link_click"],
+      from, to, { filters: [{ field: "account_id", operation: "in", value: ids }] })
+      .catch((e) => {
+        logJson("WARNING", "roas_meta_unavailable", { error: String(e.message || e) });
+        return null;
+      }),
   ]);
   if (ads === null) return { metaUnavailable: true };
 
-  const months = new Set();
-  const accounts = new Map();           // ad account => spend, clicks, months
-  const spend = new Map();              // `${month}|${channel}` => selling spend
-  const intents = new Map();            // intent => spend
-  const dests = new Map();              // destination label => { spend, kind, channel }
-  let sellingSpend = 0, otherSpend = 0;
-
-  for (const a of ads) {
-    const date = String(a.date || "").slice(0, 10);
-    if (!date) continue;
-    const m = date.slice(0, 7);
-    months.add(m);
-    const sp = n(a.spend);
-    const c = classifyAd(a);
-
-    const acctName = String(a.account_name || "(unnamed account)");
-    const acct = accounts.get(acctName) ||
-      { account: acctName, channel: accountChannel(acctName), spend: 0, clicks: 0, months: new Set() };
-    acct.spend += sp; acct.clicks += n(a.actions_link_click); acct.months.add(m);
-    accounts.set(acctName, acct);
-
-    intents.set(c.intent, (intents.get(c.intent) || 0) + sp);
-    const dk = c.dest.label;
-    const de = dests.get(dk) || { label: dk, kind: c.dest.kind, channel: c.channel, spend: 0, clicks: 0 };
-    de.spend += sp; de.clicks += n(a.actions_link_click);
-    dests.set(dk, de);
-
-    if (c.sells && c.channel) {
-      sellingSpend += sp;
-      const key = `${m}|${c.channel}`;
-      const e = spend.get(key) || { spend: 0, clicks: 0 };
-      e.spend += sp; e.clicks += n(a.actions_link_click);
-      spend.set(key, e);
-    } else otherSpend += sp;
-  }
-
+  // Revenue per storefront per month, from the normalised sheet.
   const rev = new Map();
+  const months = new Set();
   for (const r of rows) {
     if (r.date < from || r.date > to) continue;
-    if (r.type !== "Online") continue;
     const m = r.date.slice(0, 7);
     months.add(m);
     rev.set(`${m}|${r.channel}`, (rev.get(`${m}|${r.channel}`) || 0) + r.price);
   }
 
-  const monthList = [...months].sort();
-  const channelNames = [...new Set([
-    ...[...spend.keys()].map((k) => k.split("|")[1]),
-    ...[...rev.keys()].map((k) => k.split("|")[1]),
-  ])];
-
-  const byChannel = channelNames.map((ch) => {
-    let sp = 0, rv = 0, clicks = 0;
-    const series = monthList.map((m) => {
-      const s2 = spend.get(`${m}|${ch}`) || { spend: 0, clicks: 0 };
-      const r2 = rev.get(`${m}|${ch}`) || 0;
-      sp += s2.spend; rv += r2; clicks += s2.clicks;
-      return { month: m, spend: s2.spend, revenue: r2, roas: s2.spend > 0 ? r2 / s2.spend : null };
-    });
-    return { channel: ch, spend: sp, revenue: rv, clicks,
-             roas: sp > 0 ? rv / sp : null,
-             costPerClick: clicks > 0 ? sp / clicks : null, series };
-  }).sort((a, b) => b.revenue - a.revenue);
-
-  const monthly = monthList.map((m) => {
-    let sp = 0, rv = 0;
-    for (const ch of channelNames) {
-      sp += (spend.get(`${m}|${ch}`) || { spend: 0 }).spend;
-      rv += rev.get(`${m}|${ch}`) || 0;
-    }
-    return { month: m, spend: sp, revenue: rv, roas: sp > 0 ? rv / sp : null };
-  });
-
-  const totalSpend = byChannel.reduce((a, c) => a + c.spend, 0);
-  const totalRev = byChannel.reduce((a, c) => a + c.revenue, 0);
-  const allSpend = sellingSpend + otherSpend;
-  // Marketplace roll-up: spend straight from the dedicated account, revenue from
-  // that storefront. This is the figure to start with — it needs no inference.
-  const revByChannel = new Map();
-  for (const [k, v] of rev) {
-    const ch = k.split("|")[1];
-    revByChannel.set(ch, (revByChannel.get(ch) || 0) + v);
+  const perAccount = new Map();
+  for (const a of ECOM_AD_ACCOUNTS) {
+    perAccount.set(a.id, { ...a, spend: 0, impressions: 0, clicks: 0,
+                           campaigns: new Map(), byMonth: new Map() });
   }
-  const accountRows = [...accounts.values()].map((a) => {
-    const revenue = a.channel ? (revByChannel.get(a.channel) || 0) : null;
-    return { account: a.account, channel: a.channel, spend: a.spend, clicks: a.clicks,
-             months: a.months.size, revenue,
-             roas: a.channel && a.spend > 0 ? (revenue || 0) / a.spend : null,
-             costPerClick: a.clicks > 0 ? a.spend / a.clicks : null };
-  }).sort((a, b) => (a.channel ? 0 : 1) - (b.channel ? 0 : 1) || b.spend - a.spend);
+  for (const r of ads) {
+    const acc = perAccount.get(String(r.account_id || ""));
+    if (!acc) continue;                       // a filter miss should never reach here
+    const date = String(r.date || "").slice(0, 10);
+    if (!date) continue;
+    const m = date.slice(0, 7);
+    months.add(m);
+    const sp = n(r.spend), imp = n(r.impressions), clk = n(r.actions_link_click);
+    acc.spend += sp; acc.impressions += imp; acc.clicks += clk;
+    acc.byMonth.set(m, (acc.byMonth.get(m) || 0) + sp);
+    if (r.account_name) acc.liveName = String(r.account_name);
 
-  const mkAccounts = accountRows.filter((a) => a.channel);
-  const mkSpend = mkAccounts.reduce((x, a) => x + a.spend, 0);
-  // Revenue is per storefront, so sum the DISTINCT storefronts rather than the
-  // accounts — two Shopee accounts must not count Shopee revenue twice.
-  const mkChannels = [...new Set(mkAccounts.map((a) => a.channel))];
-  const mkRevenue = mkChannels.reduce((x, ch) => x + (revByChannel.get(ch) || 0), 0);
+    // A campaign counts as active in the range if it spent anything in it.
+    const name = String(r.campaign || "(unnamed campaign)");
+    const c = acc.campaigns.get(name) ||
+      { campaign: name, spend: 0, impressions: 0, clicks: 0, days: 0, first: date, last: date };
+    c.spend += sp; c.impressions += imp; c.clicks += clk;
+    if (sp > 0) c.days++;
+    if (date < c.first) c.first = date;
+    if (date > c.last) c.last = date;
+    acc.campaigns.set(name, c);
+  }
+
+  const monthList = [...months].sort();
+  const accounts = [...perAccount.values()].map((a) => {
+    const revenue = monthList.reduce((x, m) => x + (rev.get(`${m}|${a.channel}`) || 0), 0);
+    const campaigns = [...a.campaigns.values()]
+      .filter((c) => c.spend > 0)             // only what actually ran in the range
+      .map((c) => ({ ...c, cpc: c.clicks > 0 ? c.spend / c.clicks : null,
+                     cpm: c.impressions > 0 ? (c.spend / c.impressions) * 1000 : null }))
+      .sort((x, y) => y.spend - x.spend);
+    return {
+      id: a.id, account: a.liveName || a.name, channel: a.channel,
+      spend: a.spend, impressions: a.impressions, clicks: a.clicks,
+      revenue, roas: a.spend > 0 ? revenue / a.spend : null,
+      cpc: a.clicks > 0 ? a.spend / a.clicks : null,
+      active: a.spend > 0,
+      campaigns,
+      series: monthList.map((m) => ({
+        month: m,
+        spend: a.byMonth.get(m) || 0,
+        revenue: rev.get(`${m}|${a.channel}`) || 0,
+      })),
+    };
+  }).sort((x, y) => y.spend - x.spend);
+
+  // One storefront can have two accounts, so revenue is summed over DISTINCT
+  // storefronts — otherwise Shopee's revenue would be counted twice.
+  const liveChannels = [...new Set(accounts.filter((a) => a.active).map((a) => a.channel))];
+  const totalSpend = accounts.reduce((x, a) => x + a.spend, 0);
+  const totalRev = liveChannels.reduce((x, ch) =>
+    x + monthList.reduce((y, m) => y + (rev.get(`${m}|${ch}`) || 0), 0), 0);
 
   return {
-    months: monthList, byChannel, monthly,
-    accounts: accountRows,
-    marketplace: {
-      accounts: mkAccounts.length, channels: mkChannels,
-      spend: mkSpend, revenue: mkRevenue,
-      roas: mkSpend > 0 ? mkRevenue / mkSpend : null,
-      spendShare: allSpend > 0 ? mkSpend / allSpend : 0,
-    },
-    intents: [...intents.entries()].map(([intent, sp]) => ({
-      intent, spend: sp, share: allSpend > 0 ? sp / allSpend : 0,
-    })).sort((a, b) => b.spend - a.spend),
-    destinations: [...dests.values()].sort((a, b) => b.spend - a.spend).slice(0, 14),
+    months: monthList,
+    accounts,
+    channels: liveChannels,
     totals: {
-      sellingSpend: totalSpend, otherSpend, allSpend, revenue: totalRev,
+      spend: totalSpend, revenue: totalRev,
       roas: totalSpend > 0 ? totalRev / totalSpend : null,
-      sellingShare: allSpend > 0 ? sellingSpend / allSpend : 0,
+      activeAccounts: accounts.filter((a) => a.active).length,
+      campaigns: accounts.reduce((x, a) => x + a.campaigns.length, 0),
     },
   };
 }
