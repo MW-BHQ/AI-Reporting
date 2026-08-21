@@ -67,6 +67,7 @@ check "benchmark"  GET "/api/benchmark?to=$TO"
 check "untagged"   GET "/api/untagged?from=$FROM&to=$TO"
 check "audiences"  GET "/api/audiences?from=$FROM&to=$TO"
 check "google ads" GET "/api/google-ads?from=$FROM&to=$TO"
+check "page"       GET "/api/page?url=/th/bangkok&from=$FROM&to=$TO"
 check "ecommerce"  GET "/api/ecommerce?from=$FROM&to=$TO"
 check "ecom centres" GET "/api/ecommerce/centres?from=$FROM&to=$TO"
 check "ecom channels" GET "/api/ecommerce/channels?from=$FROM&to=$TO"
@@ -95,6 +96,10 @@ expect_field "campaign cost/res" "$AUD" "d.audiences[0].campaigns[0].resultLabel
 expect_field "no empty campaigns" "$AUD" "d.audiences.every(a=>a.campaigns.every(c=>c.spend>0||c.impressions>0))?'clean':undefined"
 expect_field "uses matches rows"  "$AUD" "d.audiences.every(a=>a.uses===a.campaigns.length)?'match':undefined"
 # Guard: a reach/awareness buy must never be priced per LPV.
+PAGE="/api/page?url=https://www.bangkokhospital.com/th/bangkok%3Futm_source=x&from=$FROM&to=$TO"
+# A pasted URL is reduced to its path: host, query and anchor all dropped.
+expect_field "page path"        "$PAGE" "d.path==='/th/bangkok'?'ok':undefined"
+expect_field "page url needed"  "/api/page?from=$FROM&to=$TO" "d.error?'rejected':undefined"
 GADS="/api/google-ads?from=$FROM&to=$TO"
 expect_field "gads accounts"    "$GADS" "d.accounts.length>0?'ok':undefined"
 # The leading YYMMDD-NN code is what lets a Google campaign join the Campaign tab.

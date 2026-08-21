@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BHQ Signal Room · Bangkok Hospital</title>
+<title>BHQ War Room Dashboard · Bangkok Hospital</title>
 <link rel="icon" type="image/png" href="/brand/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -355,6 +355,10 @@
   .ra-row.open .ra-chev{transform:rotate(90deg);color:var(--violet);}
   .ra-kidwrap{background:var(--glass-2);border-radius:10px;padding:12px 14px;margin:2px 0 8px;}
   .ra-kidhead{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+  .pg-input{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+  .pg-input input{flex:1;min-width:260px;border:1px solid var(--line);border-radius:10px;
+    padding:9px 13px;font-size:13px;font-family:inherit;color:var(--ink);background:var(--card,#fff);}
+  .pg-input input:focus{outline:none;border-color:var(--violet);}
   .ra-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;}
   .ra-name{font-size:14px;font-weight:600;color:var(--ink);}
   .ra-id{font-size:10.5px;color:var(--faint);margin-top:2px;font-variant-numeric:tabular-nums;}
@@ -501,7 +505,7 @@
     <div class="brand">
       <img class="brand-logo" src="/brand/bh-wordmark.png" alt="Bangkok Hospital">
       <div class="brand-app">
-        <div class="brand-name">BHQ Signal Room</div>
+        <div class="brand-name">BHQ War Room Dashboard</div>
         <div class="brand-sub">Marketing Intelligence</div>
       </div>
     </div>
@@ -523,6 +527,10 @@
       <div class="nav-item" data-view="campaigns">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg>
         Campaigns
+      </div>
+      <div class="nav-item" data-view="pages">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+        Pages
       </div>
       <div class="nav-group">Meta Ads</div>
       <div class="nav-item sub" data-view="benchmark">
@@ -599,7 +607,7 @@
     <div class="print-head">
       <img src="/brand/bh-wordmark.png" alt="Bangkok Hospital">
       <div class="pmeta">
-        <div><b id="printTitle">BHQ Signal Room</b></div>
+        <div><b id="printTitle">BHQ War Room Dashboard</b></div>
         <div id="printRange"></div>
       </div>
     </div>
@@ -658,6 +666,7 @@ const S = {
   ecommon: null, ecommonKey: null, ecommonLoading: false, ecommonError: null,
   ecomroas: null, ecomroasKey: null, ecomroasLoading: false, ecomroasError: null,
   gads: null, gadsKey: null, gadsLoading: false, gadsError: null,
+  page: null, pageKey: null, pageLoading: false, pageError: null, pageUrl: '',
   audiencesLoading: false, audiencesError: null,
   me: null, users: null, usersLoading: false, usersError: null,
   charts: {},
@@ -876,6 +885,7 @@ const TITLES = {
   audit: ['Tagging audit', 'How much traffic and spend the campaign view cannot attribute'],
   benchmark: ['Benchmarks', 'Latest complete month against trailing 3, 6 and 12-month norms'],
   gbp: ['Google Business Profile', 'Reviews and ratings by listing'],
+  pages: ['Pages', 'How one page performs — paste the URL you want to look at'],
   gads: ['Google Ads', 'Spend, campaigns and accounts — newly connected, so start by looking'],
   audiences: ['Audiences', 'Meta audience sets ranked by cost per first-degree result'],
   ecom: ['E-commerce', 'Package sales across every online sales channel'],
@@ -909,6 +919,19 @@ async function loadEcomChannels(refresh = false) {
   S.ecomch = await res.json(); S.ecomchKey = key;
   setStatus('ok', S.ecomch.cached ? `cached ${S.ecomch.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
   return S.ecomch;
+}
+
+async function loadPage(refresh = false) {
+  const u = (S.pageUrl || '').trim();
+  if (!u) { S.page = null; return null; }
+  const key = `${u}|${$('from').value}|${$('to').value}`;
+  if (!refresh && S.pageKey === key && S.page) return S.page;
+  setStatus('busy', 'reading page performance…');
+  const res = await fetch(`/api/page?url=${encodeURIComponent(u)}&from=${$('from').value}&to=${$('to').value}${refresh?'&refresh=1':''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,220)}`);
+  S.page = await res.json(); S.pageKey = key;
+  setStatus('ok', S.page.cached ? `cached ${S.page.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.page;
 }
 
 async function loadGads(refresh = false) {
@@ -1102,6 +1125,7 @@ $('loadBtn').addEventListener('click', async () => {
     else if (S.view === 'ecommonthly') { S.ecommonError = null; await loadEcomMonthly(true); }
     else if (S.view === 'ecomroas') { S.ecomroasError = null; await loadEcomRoas(true); }
     else if (S.view === 'gads') { S.gadsError = null; await loadGads(true); }
+    else if (S.view === 'pages') { S.pageError = null; await loadPage(true); }
     else if (S.view === 'users') { S.users = null; await loadUsers(); }
     else if (S.view === 'topics' && S.topicTerm) { await loadTopic(S.topicTerm); }
     render();
@@ -1167,6 +1191,7 @@ function render() {
   else if (S.view === 'ecommonthly') renderEcomMonthly();
   else if (S.view === 'ecomroas') renderEcomRoas();
   else if (S.view === 'gads') renderGads();
+  else if (S.view === 'pages') renderPages();
   else if (S.view === 'users') renderUsers();
   else renderTopics();
 }
@@ -1477,7 +1502,7 @@ function renderCampaignBody(d) {
       </div>
     </div>
 
-    <div class="grid g-2-1 mt no-print">
+    <div class="mt no-print">
       <div class="card"><h2>Landing pages &middot; what this campaign pointed at</h2>
         <table><thead><tr><th>Page</th><th>Locale</th><th class="num">Visits</th></tr></thead><tbody>
         ${(d.landingPages||[]).map(l=>`<tr>
@@ -1486,9 +1511,6 @@ function renderCampaignBody(d) {
           <td class="num">${num(l.visits)}</td></tr>`).join('')||'<tr><td colspan="3" class="num">no landing page data</td></tr>'}
         </tbody></table>
         <div class="note">Top entry pages for this campaign &mdash; the quickest way to recall what actually ran.</div>
-      </div>
-      <div class="card"><h2>Registered short links</h2>
-        <div style="font-size:12px;color:var(--ink-2);line-height:2;">${(d.shortLinks||[]).length?d.shortLinks.slice(0,10).map(l=>`<code>${esc(l)}</code>`).join('<br>'):'<span style="color:var(--faint)">none registered in UTM Builder</span>'}</div>
       </div>
     </div>
 
@@ -2095,6 +2117,7 @@ const VIEW_LOADERS = {
   ecommigration: { load: () => loadEcomMigration(), err: 'ecommigError',   busy: 'ecommigLoading',   what: 'customer journeys' },
   ecomchurn:     { load: () => loadEcomChurn(),     err: 'ecomchurnError', busy: 'ecomchurnLoading', what: 'lapsed customers' },
   ecommonthly:   { load: () => loadEcomMonthly(),   err: 'ecommonError',   busy: 'ecommonLoading',   what: 'the monthly report' },
+  pages:         { load: () => loadPage(),          err: 'pageError',      busy: 'pageLoading',      what: 'page performance' },
   gads:          { load: () => loadGads(),          err: 'gadsError',      busy: 'gadsLoading',      what: 'Google Ads' },
   ecomroas:      { load: () => loadEcomRoas(),      err: 'ecomroasError',  busy: 'ecomroasLoading',  what: 'ad spend against revenue' },
   users:         { load: () => loadUsers(),         err: 'usersError',     busy: 'usersLoading',     what: 'the access list' },
@@ -2122,6 +2145,125 @@ document.addEventListener('click', (e) => {
   cfg.load().catch(err => { S[cfg.err] = err.message || String(err); })
     .finally(() => { S[cfg.busy] = false; render(); });
 });
+
+function renderPages() {
+  const d = S.page;
+  const box = (body) => `<div class="card">
+      <div class="card-title">Page</div>
+      <div class="pg-input">
+        <input id="pgUrl" type="text" placeholder="https://www.bangkokhospital.com/th/bangkok/package/…"
+          value="${esc(S.pageUrl || '')}" spellcheck="false">
+        <button class="btn btn-primary" id="pgGo">Analyse</button>
+      </div>
+      <div class="note">Paste any page URL. The host, query string and anchor are ignored — GA4 records a path — and
+      sub-pages beneath it are included, so a section URL gives the whole section.</div>
+    </div>${body || ''}`;
+
+  if (S.pageError) { const m = S.pageError; $('viewRoot').innerHTML = box(errorState(m)); S.pageError = null; wirePages(); return; }
+  if (!S.pageUrl) { $('viewRoot').innerHTML = box(`<div class="card mt"><div class="state">
+      <div class="big">Enter a page to analyse</div>
+      <div style="font-size:12.5px;color:var(--muted);max-width:440px;">Nothing is fetched until you do — this reads GA4
+      for the date range above.</div></div></div>`); wirePages(); return; }
+  if (S.pageLoading) { $('viewRoot').innerHTML = box(`<div class="card mt"><div class="state"><div class="big">Reading page performance…</div></div></div>`); wirePages(); return; }
+  if (!d) { $('viewRoot').innerHTML = box(`<div class="card mt"><div class="state">
+      <div class="big">Ready</div><button class="btn btn-primary" data-load="pages">Load</button></div></div>`); wirePages(); return; }
+  if (d.empty) { $('viewRoot').innerHTML = box(`<div class="card mt"><div class="state">
+      <div class="big">No sessions for ${esc(d.path)}</div>
+      <div style="font-size:12.5px;color:var(--muted);max-width:460px;">Either the page had no landing traffic in this
+      range, or the path differs from what GA4 records — check the locale segment, for example <code>/th/</code>.</div>
+    </div></div>`); wirePages(); return; }
+
+  const t = d.totals;
+  const W = 760, HH = 120;
+  const maxM = Math.max(...d.monthly.map(m => m.sessions), 1);
+  const bw = W / Math.max(d.monthly.length, 1);
+  const bars = d.monthly.map((m, i) => `<rect x="${(i*bw).toFixed(1)}" y="${(HH - m.sessions/maxM*HH).toFixed(1)}"
+      width="${Math.max(1,bw-4).toFixed(1)}" height="${(m.sessions/maxM*HH).toFixed(1)}" rx="2" fill="var(--violet)" opacity=".85"
+      data-tip="${esc(m.month)}\n${num(m.sessions)} sessions · ${num(m.keyEvents)} key events" style="cursor:help;"></rect>`).join('');
+  const maxS = Math.max(...d.sources.map(s => s.sessions), 1);
+
+  $('viewRoot').innerHTML = box(`
+    <div class="grid g-4 mt" style="margin-bottom:14px;">
+      <div class="stat"><div class="lab">Sessions</div><div class="val">${num(t.sessions)}</div>
+        <div class="sub2">${esc(d.path)}</div></div>
+      <div class="stat"><div class="lab">Engaged</div><div class="val">${num(t.engaged)}</div>
+        <div class="sub2">${pct(t.engagementRate)} of sessions</div></div>
+      <div class="stat"><div class="lab">Key events</div><div class="val">${num(t.keyEvents)}</div>
+        <div class="sub2">${pct(t.keyEventRate)} per session</div></div>
+      <div class="stat"><div class="lab">Sources</div><div class="val">${num(t.sources)}</div>
+        <div class="sub2">${num(t.campaigns)} tagged campaigns · ${num(t.pages)} URL variants</div></div>
+    </div>
+
+    ${d.monthly.length > 1 ? `<div class="card mt">
+      <div class="card-title">Sessions by month</div>
+      <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${bars}</svg>
+      <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:6px;">
+        <span>${esc(d.monthly[0].month)}</span><span>${esc(d.monthly[d.monthly.length-1].month)}</span></div>
+    </div>` : ''}
+
+    <div class="card mt">
+      <div class="card-title">Where the traffic came from</div>
+      <table class="roomy sortable"><thead><tr>
+        <th>Source / medium</th><th class="num">Sessions</th><th class="num">Share</th>
+        <th class="num">Engaged</th><th class="num">Engagement</th><th class="num">Key events</th><th class="num">Per session</th>
+      </tr></thead><tbody>
+      ${d.sources.map(s => `<tr>
+        <td class="strong">${esc(s.source)}</td>
+        <td class="num barcell"><span class="minibar" style="width:${(s.sessions/maxS*100).toFixed(1)}%"></span><b>${num(s.sessions)}</b></td>
+        <td class="num">${pct(s.sessions/(t.sessions||1))}</td>
+        <td class="num">${num(s.engaged)}</td>
+        <td class="num">${pct(s.engagementRate)}</td>
+        <td class="num">${num(s.keyEvents)}</td>
+        <td class="num">${pct(s.keyEventRate)}</td>
+      </tr>`).join('')}
+      </tbody></table>
+    </div>
+
+    ${d.campaigns.length ? `<div class="card mt">
+      <div class="card-title">Campaigns that sent traffic here</div>
+      <table class="roomy sortable"><thead><tr>
+        <th>utm_campaign</th><th class="num">Sessions</th><th class="num">Engagement</th><th class="num">Key events</th>
+      </tr></thead><tbody>
+      ${d.campaigns.map(c => `<tr>
+        <td class="trunc" style="max-width:0;" title="${esc(c.campaign)}">${esc(c.campaign)}</td>
+        <td class="num">${num(c.sessions)}</td>
+        <td class="num">${pct(c.engagementRate)}</td>
+        <td class="num">${num(c.keyEvents)}</td>
+      </tr>`).join('')}
+      </tbody></table>
+      <div class="note">Only tagged traffic appears here. The gap between total sessions and the sum of these rows is
+      traffic that arrived without a utm_campaign — organic, direct, or an untagged link.</div>
+    </div>` : ''}
+
+    ${d.variants.length > 1 ? `<div class="card mt">
+      <div class="card-title">URL variants collected</div>
+      <table class="roomy sortable"><thead><tr><th>Landing page</th><th class="num">Sessions</th></tr></thead><tbody>
+      ${d.variants.map(v => `<tr>
+        <td class="trunc" style="max-width:0;" title="${esc(v.page)}">${esc(v.page)}</td>
+        <td class="num">${num(v.sessions)}</td></tr>`).join('')}
+      </tbody></table>
+      <div class="note">Everything beneath the path you entered. If one of these is not what you meant, paste it directly
+      to narrow the analysis.</div>
+    </div>` : ''}`);
+  wirePages();
+}
+
+function wirePages() {
+  const input = document.getElementById('pgUrl');
+  const go = document.getElementById('pgGo');
+  if (!input || !go) return;
+  const run = () => {
+    const v = input.value.trim();
+    if (!v || v === S.pageUrl) { if (v !== S.pageUrl) return; }
+    S.pageUrl = v; S.page = null; S.pageKey = null;
+    if (!v) { render(); return; }
+    S.pageLoading = true; render();
+    loadPage().catch(e => { S.pageError = e.message || String(e); })
+      .finally(() => { S.pageLoading = false; render(); });
+  };
+  go.addEventListener('click', run);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') run(); });
+}
 
 function renderGads() {
   const d = S.gads;
@@ -3749,7 +3891,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.57.0';
+const CLIENT_BUILD = '3.58.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

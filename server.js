@@ -217,6 +217,7 @@ function topicFor(code, topics) {
 const TABS = [
   { id: "overview",  label: "Overview" },
   { id: "campaigns", label: "Campaigns" },
+  { id: "pages",     label: "Pages" },
   { id: "gbp",       label: "Google Profile" },
   { id: "benchmark", label: "Benchmarks" },
   { id: "audit",     label: "Tagging audit" },
@@ -3823,6 +3824,110 @@ app.get("/api/google-ads", requireTab("gads"), async (req, res) => {
   } catch (err) {
     logJson("ERROR", "gads_failed", { error: String(err.message || err) });
     res.status(500).json({ error: err.message || "Google Ads failed" });
+  }
+});
+
+/**
+ * Page performance for one URL the person types in.
+ *
+ * GA4 records the landing page as a path, so a pasted URL is reduced to its
+ * path before matching — host, protocol, query and fragment are all stripped.
+ * Matching is by PREFIX so a page with query-string variants or a trailing
+ * slash still collects, which is what someone pasting a link expects.
+ */
+function pagePath(input) {
+  let p = String(input || "").trim();
+  if (!p) return "";
+  const hadScheme = /^https?:\/\//i.test(p);
+  p = p.replace(/^https?:\/\//i, "");
+  // Only strip a host when there actually is one: with a scheme, or when the
+  // first segment looks like a domain. "th/bangkok" is a path, not a host.
+  if (hadScheme || /^[^/]*\.[a-z]{2,}(:\d+)?(\/|$)/i.test(p)) p = p.replace(/^[^/]*/, "");
+  p = p.split("#")[0].split("?")[0];
+  if (!p.startsWith("/")) p = "/" + p;
+  return p.replace(/\/+$/, "") || "/";
+}
+
+async function buildPage(url, from, to) {
+  const path = pagePath(url);
+  if (!path) return { empty: true, reason: "no path" };
+
+  const rows = await windsor("googleanalytics4",
+    ga4Fields(["landing_page", "date", "session_manual_source", "session_manual_medium",
+               "session_manual_campaign_name"],
+      ["sessions", "engaged_sessions", ...KEY_EVENT_FIELDS]),
+    from, to, { accounts: [GA4_ACCOUNT] });
+  if (rows === null) {
+    const e = new Error("GA4 unavailable"); e.status = 502; throw e;
+  }
+
+  const match = (lp) => {
+    const p = pagePath(lp);
+    return p === path || p.startsWith(path + "/");
+  };
+  const hits = rows.filter((r) => r.landing_page && match(r.landing_page));
+
+  const keyOf = (r) => KEY_EVENT_FIELDS.reduce((a, f) => a + n(r[f]), 0);
+  let sessions = 0, engaged = 0, keyEvents = 0;
+  const months = new Map(), sources = new Map(), campaigns = new Map(), variants = new Map();
+
+  for (const r of hits) {
+    const se = n(r.sessions), en = n(r.engaged_sessions), ke = keyOf(r);
+    sessions += se; engaged += en; keyEvents += ke;
+
+    const m = String(r.date || "").slice(0, 7);
+    if (m) {
+      const mm = months.get(m) || { month: m, sessions: 0, engaged: 0, keyEvents: 0 };
+      mm.sessions += se; mm.engaged += en; mm.keyEvents += ke;
+      months.set(m, mm);
+    }
+    const sm = `${r.session_manual_source || "(direct)"} / ${r.session_manual_medium || "(none)"}`;
+    const s = sources.get(sm) || { source: sm, sessions: 0, engaged: 0, keyEvents: 0 };
+    s.sessions += se; s.engaged += en; s.keyEvents += ke;
+    sources.set(sm, s);
+
+    const cn = r.session_manual_campaign_name;
+    if (cn) {
+      const c = campaigns.get(cn) || { campaign: cn, sessions: 0, engaged: 0, keyEvents: 0 };
+      c.sessions += se; c.engaged += en; c.keyEvents += ke;
+      campaigns.set(cn, c);
+    }
+    // Exact landing pages collected by the prefix, so a query-string or locale
+    // variant is visible rather than silently merged.
+    const lp = String(r.landing_page);
+    const v = variants.get(lp) || { page: lp, sessions: 0 };
+    v.sessions += se;
+    variants.set(lp, v);
+  }
+
+  const rate = (a, b) => (b > 0 ? a / b : null);
+  const shape = (o) => ({ ...o,
+    engagementRate: rate(o.engaged, o.sessions),
+    keyEventRate: rate(o.keyEvents, o.sessions) });
+
+  return {
+    path, url,
+    totals: shape({ sessions, engaged, keyEvents,
+      pages: variants.size, sources: sources.size, campaigns: campaigns.size }),
+    monthly: [...months.values()].map(shape).sort((a, b) => (a.month < b.month ? -1 : 1)),
+    sources: [...sources.values()].map(shape).sort((a, b) => b.sessions - a.sessions).slice(0, 15),
+    campaigns: [...campaigns.values()].map(shape).sort((a, b) => b.sessions - a.sessions).slice(0, 15),
+    variants: [...variants.values()].sort((a, b) => b.sessions - a.sessions).slice(0, 12),
+    empty: sessions === 0,
+  };
+}
+
+app.get("/api/page", requireTab("pages"), async (req, res) => {
+  const { from, to, url } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  if (!url) return res.status(400).json({ error: "url is required" });
+  try {
+    const out = await withCache(`page:${pagePath(url)}:${from}:${to}`, req.query.refresh === "1",
+      () => buildPage(url, from, to));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "page_failed", { error: String(err.message || err) });
+    res.status(err.status || 500).json({ error: err.message || "Page analysis failed" });
   }
 });
 
