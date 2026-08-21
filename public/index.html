@@ -197,7 +197,7 @@
   th.num{text-align:right;padding-right:0;}
   /* Long ad/campaign names truncate; the full string is on hover. */
   td.trunc{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  td.trunc:hover{cursor:help;}
+  td.trunc:hover{cursor:pointer;}
   td{padding:9px 0;border-bottom:1px solid var(--line);color:var(--ink-2);}
   td.strong{color:var(--ink);font-weight:500;}
   td.num{text-align:right;font-variant-numeric:tabular-nums;}
@@ -214,7 +214,7 @@
   .pill.grey{background:rgba(140,155,190,.14);color:var(--muted);}
   .ihint{display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;margin-left:4px;
     border-radius:50%;background:rgba(140,155,190,.2);color:var(--muted);font-size:9px;font-style:italic;
-    font-weight:700;cursor:help;vertical-align:middle;}
+    font-weight:700;cursor:pointer;vertical-align:middle;}
   .ihint:hover{background:var(--violet);color:#fff;}
   /* Q/E/C: header letters and the dot cells share one fixed column width, so
      each dot sits directly under its letter. */
@@ -377,7 +377,7 @@
   .ra-kpis .lab{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);}
   .ra-kpis .v{font-size:17px;font-weight:600;color:var(--ink);margin-top:2px;font-variant-numeric:tabular-nums;}
   .dlt{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 5px;border-radius:5px;
-    margin-left:5px;cursor:help;white-space:nowrap;}
+    margin-left:5px;cursor:pointer;white-space:nowrap;}
   .dlt.up{background:rgba(74,190,140,.14);color:#2E9E6F;}
   .dlt.down{background:#FFEDE7;color:#D9534F;}
   .dlt.flat{background:rgba(140,155,190,.14);color:var(--muted);}
@@ -398,7 +398,7 @@
   .qec-head,.qec{display:inline-flex;align-items:center;}
   .qec-head b{width:38px;text-align:center;font-weight:600;color:var(--muted);}
   .qec-cell{width:38px;display:inline-flex;align-items:center;justify-content:center;
-    color:var(--faint);font-size:10.5px;cursor:help;position:relative;}
+    color:var(--faint);font-size:10.5px;cursor:pointer;position:relative;}
   .qec-cell em{font-style:normal;color:#D97B1F;font-weight:600;position:absolute;
     left:calc(50% + 7px);top:50%;transform:translateY(-50%);}
   .dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none;}
@@ -2212,7 +2212,7 @@ function renderPages() {
   const bw = W / Math.max(d.monthly.length, 1);
   const bars = d.monthly.map((m, i) => `<rect x="${(i*bw).toFixed(1)}" y="${(HH - m.sessions/maxM*HH).toFixed(1)}"
       width="${Math.max(1,bw-4).toFixed(1)}" height="${(m.sessions/maxM*HH).toFixed(1)}" rx="2" fill="var(--violet)" opacity=".85"
-      data-tip="${esc(m.month)}\n${num(m.sessions)} sessions · ${num(m.keyEvents)} key events" style="cursor:help;"></rect>`).join('');
+      data-tip="${esc(m.month)}\n${num(m.sessions)} sessions · ${num(m.keyEvents)} key events" style="cursor:pointer;"></rect>`).join('');
   const maxS = Math.max(...d.sources.map(s => s.sessions), 1);
 
   $('viewRoot').innerHTML = box(`
@@ -2318,7 +2318,7 @@ function renderGads() {
   const bw = W / Math.max(d.monthly.length, 1);
   const bars = d.monthly.map((m, i) => `<rect x="${(i*bw).toFixed(1)}" y="${(HH - m.spend/maxM*HH).toFixed(1)}"
       width="${Math.max(1,bw-4).toFixed(1)}" height="${(m.spend/maxM*HH).toFixed(1)}" rx="2" fill="var(--blue)" opacity=".85"
-      data-tip="${esc(m.month)}\n฿${num(Math.round(m.spend))} · ${num(m.clicks)} clicks" style="cursor:help;"></rect>`).join('');
+      data-tip="${esc(m.month)}\n฿${num(Math.round(m.spend))} · ${num(m.clicks)} clicks" style="cursor:pointer;"></rect>`).join('');
   const maxA = Math.max(...d.accounts.map(a => a.spend), 1);
   const maxC = Math.max(...d.campaigns.map(c => c.spend), 1);
 
@@ -2576,7 +2576,7 @@ function renderEcomMonthly() {
         const chg = a > 0 ? ` · ${changeText((b-a)/a)} vs ${prevYr}` : ` · no ${prevYr} figure`;
         const bar = (v,off,prior) => v>0 ? `<rect x="${(cx+off-bw/2).toFixed(1)}" y="${yOf(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H-yOf(v)).toFixed(1)}" rx="2"
             fill="${prior?'#E7E3FB':fillNow}" ${prior?'stroke="#CFC8F5" stroke-width=".8"':''}
-            data-tip="${esc(r.name)} · ${prior?prevYr:yr}\n${fmt(v)}${prior?'':chg}" style="cursor:help;"></rect>
+            data-tip="${esc(r.name)} · ${prior?prevYr:yr}\n${fmt(v)}${prior?'':chg}" style="cursor:pointer;"></rect>
           <text x="${(cx+off).toFixed(1)}" y="${(yOf(v)-3).toFixed(1)}" text-anchor="middle" font-size="9.5" font-weight="${prior?'400':'700'}" fill="${prior?'var(--faint)':fillNow}">${fmt(v)}</text>` : '';
         return bar(a,-bw*0.6,true) + bar(b,bw*0.6,false) +
           `<text x="${cx.toFixed(1)}" y="${H+17}" text-anchor="middle" font-size="11" font-weight="500" fill="var(--ink-2)">${esc(r.name.length>11?r.name.slice(0,10)+'…':r.name)}</text>`;
@@ -2601,7 +2601,7 @@ function renderEcomMonthly() {
       const large = (a1-a0) > Math.PI ? 1 : 0;
       const p = (rad,ang)=>`${(cx+rad*Math.cos(ang)).toFixed(2)},${(cy+rad*Math.sin(ang)).toFixed(2)}`;
       const mid = (a0+a1)/2;
-      return {path:`<path d="M ${p(R,a0)} A ${R} ${R} 0 ${large} 1 ${p(R,a1)} L ${p(r0,a1)} A ${r0} ${r0} 0 ${large} 0 ${p(r0,a0)} Z" fill="${shades[i%shades.length]}" stroke="var(--card,#fff)" stroke-width="1.5" data-tip="${esc(row.name)}\n฿${num(Math.round(row.revenue))} · ${pct(frac)}" style="cursor:help;"></path>`,
+      return {path:`<path d="M ${p(R,a0)} A ${R} ${R} 0 ${large} 1 ${p(R,a1)} L ${p(r0,a1)} A ${r0} ${r0} 0 ${large} 0 ${p(r0,a0)} Z" fill="${shades[i%shades.length]}" stroke="var(--card,#fff)" stroke-width="1.5" data-tip="${esc(row.name)}\n฿${num(Math.round(row.revenue))} · ${pct(frac)}" style="cursor:pointer;"></path>`,
         label: frac>=0.06 ? `<text x="${(cx+((R+r0)/2)*Math.cos(mid)).toFixed(1)}" y="${(cy+((R+r0)/2)*Math.sin(mid)+3).toFixed(1)}" text-anchor="middle" font-size="8.5" fill="#fff" font-weight="700">${(frac*100).toFixed(1)}%</text>` : '',
         row, colour: shades[i%shades.length]};
     });
@@ -2697,7 +2697,7 @@ function renderEcomChurn() {
   const W = 760, HH = 120;
   const maxLS = Math.max(...ls.map(x => x.customers), 1);
   const bw = W / Math.max(ls.length, 1);
-  const bars = ls.map((x, i) => `<rect x="${(i*bw).toFixed(1)}" y="${(HH - x.customers/maxLS*HH).toFixed(1)}" width="${Math.max(1,bw-3).toFixed(1)}" height="${(x.customers/maxLS*HH).toFixed(1)}" fill="#E8724F" opacity=".8" data-tip="${esc(x.month)}\n${num(x.customers)} customers last bought in this month and have not returned" style="cursor:help;"></rect>`).join('');
+  const bars = ls.map((x, i) => `<rect x="${(i*bw).toFixed(1)}" y="${(HH - x.customers/maxLS*HH).toFixed(1)}" width="${Math.max(1,bw-3).toFixed(1)}" height="${(x.customers/maxLS*HH).toFixed(1)}" fill="#E8724F" opacity=".8" data-tip="${esc(x.month)}\n${num(x.customers)} customers last bought in this month and have not returned" style="cursor:pointer;"></rect>`).join('');
 
   $('viewRoot').innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
@@ -2774,7 +2774,7 @@ function renderEcomMigration() {
       const v = (m.byType || {})[t] || 0;
       if (!v) return;
       const hgt = (v / maxM) * HH; y -= hgt;
-      seg += `<rect x="${(i*bw).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1,bw-3).toFixed(1)}" height="${hgt.toFixed(1)}" fill="${typeColour(t)}" data-tip="${esc(m.month)}\n${v} customer${v===1?'':'s'} moved to ${esc(t)}" style="cursor:help;"></rect>`;
+      seg += `<rect x="${(i*bw).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1,bw-3).toFixed(1)}" height="${hgt.toFixed(1)}" fill="${typeColour(t)}" data-tip="${esc(m.month)}\n${v} customer${v===1?'':'s'} moved to ${esc(t)}" style="cursor:pointer;"></rect>`;
     });
     return seg;
   }).join('');
@@ -3931,7 +3931,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.61.1';
+const CLIENT_BUILD = '3.61.2';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

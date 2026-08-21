@@ -646,6 +646,11 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.61.2** — tooltip affordance changed from `cursor:help` to `cursor:pointer`
+across all 10 sites. The question-mark cursor is technically the correct
+semantic for a hint, but users read the hand as "this does something" and were
+not discovering the tooltips at all.
+
 **v3.61.1** — every percentage change now goes through one `changeText()`
 helper, which caps at **`>10×`** above +1000% and floors at `−100%`.
 
