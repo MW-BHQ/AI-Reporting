@@ -99,6 +99,10 @@ expect_field "uses matches rows"  "$AUD" "d.audiences.every(a=>a.uses===a.campai
 PAGE="/api/page?url=https://www.bangkokhospital.com/th/bangkok%3Futm_source=x&from=$FROM&to=$TO"
 # A pasted URL is reduced to its path: host, query and anchor all dropped.
 expect_field "page path"        "$PAGE" "d.path==='/th/bangkok'?'ok':undefined"
+# The GA4 pull must be filtered and split, or a year-long range exceeds the
+# response limit with "Data size is too big".
+expect_field "page yoy window"  "$PAGE" "d.windows&&d.windows.yoy&&d.windows.yoy.from?'ok':undefined"
+expect_field "page compare"     "$PAGE" "d.compare&&('yoy' in d.compare)&&('prev' in d.compare)?'ok':undefined"
 expect_field "page url needed"  "/api/page?from=$FROM&to=$TO" "d.error?'rejected':undefined"
 GADS="/api/google-ads?from=$FROM&to=$TO"
 expect_field "gads accounts"    "$GADS" "d.accounts.length>0?'ok':undefined"

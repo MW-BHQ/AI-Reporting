@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BHQ War Room Dashboard · Bangkok Hospital</title>
+<title>BHQ War Room · Bangkok Hospital</title>
 <link rel="icon" type="image/png" href="/brand/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -505,7 +505,7 @@
     <div class="brand">
       <img class="brand-logo" src="/brand/bh-wordmark.png" alt="Bangkok Hospital">
       <div class="brand-app">
-        <div class="brand-name">BHQ War Room Dashboard</div>
+        <div class="brand-name">BHQ War Room</div>
         <div class="brand-sub">Marketing Intelligence</div>
       </div>
     </div>
@@ -607,7 +607,7 @@
     <div class="print-head">
       <img src="/brand/bh-wordmark.png" alt="Bangkok Hospital">
       <div class="pmeta">
-        <div><b id="printTitle">BHQ War Room Dashboard</b></div>
+        <div><b id="printTitle">BHQ War Room</b></div>
         <div id="printRange"></div>
       </div>
     </div>
@@ -2185,14 +2185,21 @@ function renderPages() {
   $('viewRoot').innerHTML = box(`
     <div class="grid g-4 mt" style="margin-bottom:14px;">
       <div class="stat"><div class="lab">Sessions</div><div class="val">${num(t.sessions)}</div>
-        <div class="sub2">${esc(d.path)}</div></div>
+        <div class="sub2">${d.compare && d.compare.prev ? delta(d.compare.prev.change, `${num(d.compare.prev.sessions)} in the previous ${num(d.windows.days)} days`) + ' MoM' : ''}
+          ${d.compare && d.compare.yoy ? delta(d.compare.yoy.change, `${num(d.compare.yoy.sessions)} in ${esc(d.windows.yoy.from)} → ${esc(d.windows.yoy.to)}`) + ' YoY' : ''}</div></div>
       <div class="stat"><div class="lab">Engaged</div><div class="val">${num(t.engaged)}</div>
         <div class="sub2">${pct(t.engagementRate)} of sessions</div></div>
       <div class="stat"><div class="lab">Key events</div><div class="val">${num(t.keyEvents)}</div>
-        <div class="sub2">${pct(t.keyEventRate)} per session</div></div>
+        <div class="sub2">${pct(t.keyEventRate)} per session
+          ${d.compare && d.compare.yoy ? delta(d.compare.yoy.keyEventChange, `${num(d.compare.yoy.keyEvents)} a year earlier`) + ' YoY' : ''}</div></div>
       <div class="stat"><div class="lab">Sources</div><div class="val">${num(t.sources)}</div>
         <div class="sub2">${num(t.campaigns)} tagged campaigns · ${num(t.pages)} URL variants</div></div>
     </div>
+
+    ${d.compare && (d.compare.yoy || d.compare.prev) ? `<div class="note" style="margin:0 0 14px;">
+      <b>MoM</b> compares the ${num(d.windows.days)} days before this range; <b>YoY</b> compares
+      ${esc(d.windows.yoy.from)} → ${esc(d.windows.yoy.to)}. A page published recently will show no prior figure rather
+      than a fall.</div>` : ''}
 
     ${d.monthly.length > 1 ? `<div class="card mt">
       <div class="card-title">Sessions by month</div>
@@ -3891,7 +3898,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.58.0';
+const CLIENT_BUILD = '3.59.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

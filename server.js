@@ -3852,68 +3852,103 @@ async function buildPage(url, from, to) {
   const path = pagePath(url);
   if (!path) return { empty: true, reason: "no path" };
 
-  const rows = await windsor("googleanalytics4",
-    ga4Fields(["landing_page", "date", "session_manual_source", "session_manual_medium",
-               "session_manual_campaign_name"],
-      ["sessions", "engaged_sessions", ...KEY_EVENT_FIELDS]),
-    from, to, { accounts: [GA4_ACCOUNT] });
-  if (rows === null) {
-    const e = new Error("GA4 unavailable"); e.status = 502; throw e;
+  /**
+   * GA4 is filtered SERVER-SIDE on the landing page. Pulling landing_page
+   * crossed with date, source, medium and campaign across the whole property
+   * exceeds Windsor's response limit on any range longer than a month or two —
+   * "Data size is too big". Filtering first collapses it to the handful of rows
+   * that actually matter, and the dimensions are split across three small calls
+   * rather than one wide cross-product.
+   */
+  const filters = [{ field: "landing_page", operation: "contains", value: path }];
+  const metrics = ["sessions", "engaged_sessions", ...KEY_EVENT_FIELDS];
+  const pull = (dims, f, t) => windsor("googleanalytics4", ga4Fields(dims, metrics), f, t,
+    { accounts: [GA4_ACCOUNT], filters });
+
+  const cw = comparisonWindows(from, to);
+  const { data } = await runJobs({
+    byDate: pull(["landing_page", "date"], from, to),
+    bySource: pull(["landing_page", "session_manual_source", "session_manual_medium"], from, to),
+    byCampaign: pull(["landing_page", "session_manual_campaign_name"], from, to),
+    // Same page, same length of range, one year earlier.
+    yoy: pull(["landing_page"], cw.yoy.from, cw.yoy.to),
+    prev: pull(["landing_page"], cw.prev.from, cw.prev.to),
+  });
+  if (data.byDate === null) {
+    const e = new Error("GA4 unavailable for this page"); e.status = 502; throw e;
   }
 
+  // The filter is a `contains`, so confirm the row really sits at or beneath the
+  // path rather than merely mentioning it.
   const match = (lp) => {
     const p = pagePath(lp);
     return p === path || p.startsWith(path + "/");
   };
-  const hits = rows.filter((r) => r.landing_page && match(r.landing_page));
-
   const keyOf = (r) => KEY_EVENT_FIELDS.reduce((a, f) => a + n(r[f]), 0);
-  let sessions = 0, engaged = 0, keyEvents = 0;
-  const months = new Map(), sources = new Map(), campaigns = new Map(), variants = new Map();
+  const rows = (set) => (set || []).filter((r) => r.landing_page && match(r.landing_page));
+  const sum = (set) => rows(set).reduce((a, r) => ({
+    sessions: a.sessions + n(r.sessions),
+    engaged: a.engaged + n(r.engaged_sessions),
+    keyEvents: a.keyEvents + keyOf(r),
+  }), { sessions: 0, engaged: 0, keyEvents: 0 });
 
-  for (const r of hits) {
+  const now = sum(data.byDate);
+  const yoy = data.yoy === null ? null : sum(data.yoy);
+  const prev = data.prev === null ? null : sum(data.prev);
+
+  const months = new Map(), variants = new Map();
+  for (const r of rows(data.byDate)) {
     const se = n(r.sessions), en = n(r.engaged_sessions), ke = keyOf(r);
-    sessions += se; engaged += en; keyEvents += ke;
-
     const m = String(r.date || "").slice(0, 7);
     if (m) {
       const mm = months.get(m) || { month: m, sessions: 0, engaged: 0, keyEvents: 0 };
       mm.sessions += se; mm.engaged += en; mm.keyEvents += ke;
       months.set(m, mm);
     }
-    const sm = `${r.session_manual_source || "(direct)"} / ${r.session_manual_medium || "(none)"}`;
-    const s = sources.get(sm) || { source: sm, sessions: 0, engaged: 0, keyEvents: 0 };
-    s.sessions += se; s.engaged += en; s.keyEvents += ke;
-    sources.set(sm, s);
-
-    const cn = r.session_manual_campaign_name;
-    if (cn) {
-      const c = campaigns.get(cn) || { campaign: cn, sessions: 0, engaged: 0, keyEvents: 0 };
-      c.sessions += se; c.engaged += en; c.keyEvents += ke;
-      campaigns.set(cn, c);
-    }
-    // Exact landing pages collected by the prefix, so a query-string or locale
-    // variant is visible rather than silently merged.
     const lp = String(r.landing_page);
     const v = variants.get(lp) || { page: lp, sessions: 0 };
     v.sessions += se;
     variants.set(lp, v);
   }
 
+  const group = (set, keyFn, label) => {
+    const m = new Map();
+    for (const r of rows(set)) {
+      const k = keyFn(r);
+      if (k === null) continue;
+      const e = m.get(k) || { [label]: k, sessions: 0, engaged: 0, keyEvents: 0 };
+      e.sessions += n(r.sessions); e.engaged += n(r.engaged_sessions); e.keyEvents += keyOf(r);
+      m.set(k, e);
+    }
+    return [...m.values()];
+  };
+
   const rate = (a, b) => (b > 0 ? a / b : null);
   const shape = (o) => ({ ...o,
     engagementRate: rate(o.engaged, o.sessions),
     keyEventRate: rate(o.keyEvents, o.sessions) });
+  const change = (a, b) => (b > 0 ? (a - b) / b : null);
 
   return {
     path, url,
-    totals: shape({ sessions, engaged, keyEvents,
-      pages: variants.size, sources: sources.size, campaigns: campaigns.size }),
+    windows: cw,
+    totals: shape({ ...now,
+      pages: variants.size,
+      sources: group(data.bySource, (r) => `${r.session_manual_source || "(direct)"} / ${r.session_manual_medium || "(none)"}`, "source").length,
+      campaigns: group(data.byCampaign, (r) => r.session_manual_campaign_name || null, "campaign").length }),
+    compare: {
+      yoy: yoy && { ...yoy, sessions: yoy.sessions, change: change(now.sessions, yoy.sessions),
+                    keyEventChange: change(now.keyEvents, yoy.keyEvents) },
+      prev: prev && { ...prev, change: change(now.sessions, prev.sessions),
+                      keyEventChange: change(now.keyEvents, prev.keyEvents) },
+    },
     monthly: [...months.values()].map(shape).sort((a, b) => (a.month < b.month ? -1 : 1)),
-    sources: [...sources.values()].map(shape).sort((a, b) => b.sessions - a.sessions).slice(0, 15),
-    campaigns: [...campaigns.values()].map(shape).sort((a, b) => b.sessions - a.sessions).slice(0, 15),
+    sources: group(data.bySource, (r) => `${r.session_manual_source || "(direct)"} / ${r.session_manual_medium || "(none)"}`, "source")
+      .map(shape).sort((a, b) => b.sessions - a.sessions).slice(0, 15),
+    campaigns: group(data.byCampaign, (r) => r.session_manual_campaign_name || null, "campaign")
+      .map(shape).sort((a, b) => b.sessions - a.sessions).slice(0, 15),
     variants: [...variants.values()].sort((a, b) => b.sessions - a.sessions).slice(0, 12),
-    empty: sessions === 0,
+    empty: now.sessions === 0,
   };
 }
 
