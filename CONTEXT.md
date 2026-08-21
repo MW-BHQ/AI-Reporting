@@ -646,6 +646,36 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.62.0** — key events moved off Windsor's flattened columns onto the GA4
+Data API, and **`better_ai_start`** + **`better_ai_result`** added.
+
+Adding them to `KEY_EVENT_FIELDS` was impossible: GA4 caps a request at 10
+metrics and five pulls were already at 9, so `ga4Fields()` would have thrown on
+Overview, Campaign, three Benchmark windows and the Benchmark monthly roll-up.
+Key events are now fetched as ROWS (`eventName` × `keyEvents`) via a shared
+`ga4KeyEvents(dims, from, to)` helper and merged back onto each Windsor pull by
+`ga4JoinKey()`. There is no longer a ceiling — a tenth key event costs nothing.
+
+Nine Windsor pulls lost their `conversions_*` columns (Overview funnel, Campaign
+main/rev/daily, Benchmarks m3/m6/m12/monthly, Tagging audit, Monthly report),
+each gaining a paired Data API job. `KEY_EVENT_FIELDS` and `sumKeyEvents()` are
+gone; `KEY_EVENTS` (name + label) is the single definition.
+
+**The join is the fragile part.** GA4 writes dates as `YYYYMMDD` and untagged
+values as `(not set)`; Windsor writes `YYYY-MM-DD` and empty strings. If the two
+sides normalise differently the merge yields **zero, not an error** — every key
+event in the dashboard silently becomes 0 while the page renders fine.
+`ga4JoinKey()` is the only place that normalisation lives; keep it that way.
+
+Overview's breakdown is now filtered to the groupings the funnel counted, so it
+sums to `totals.keyEvents`. Unfiltered it reported every key event in the
+property — 108 against a headline of 27 in the fixture.
+
+**LINE:** connector left in place but off. `LINE_ENABLED` already defaulted to
+off, so check the Cloud Run env for `LINE_ENABLED=1`. The UI no longer renders a
+permanent "unavailable" LINE row, and copy that named LINE as a source has been
+updated. Re-enabling is one env var.
+
 **v3.61.2** — tooltip affordance changed from `cursor:help` to `cursor:pointer`
 across all 10 sites. The question-mark cursor is technically the correct
 semantic for a hint, but users read the hand as "this does something" and were

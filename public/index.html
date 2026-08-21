@@ -913,7 +913,7 @@ const TITLES = {
 async function loadOverview(refresh = false) {
   const key = `${$('from').value}|${$('to').value}`;
   if (!refresh && S.overviewKey === key && S.overview) return S.overview;
-  setStatus('busy', 'pulling GA4, Meta, Search Console, GMB, LINE…');
+  setStatus('busy', 'pulling GA4, Meta, Search Console, GMB…');
   const url = `/api/overview?from=${$('from').value}&to=${$('to').value}${refresh ? '&refresh=1' : ''}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,200)}`);
@@ -1214,7 +1214,7 @@ function renderOverview() {
   if (!d) {
     $('viewRoot').innerHTML = `<div class="card"><div class="state">
       <div class="big">Ready to pull</div>
-      <div style="max-width:400px;font-size:12.5px;">Pick a range and press <b>Load</b>. Sources: GA4 (Group), Meta Ads, Search Console, Google Business Profile, FB &amp; TikTok organic, LINE.</div>
+      <div style="max-width:400px;font-size:12.5px;">Pick a range and press <b>Load</b>. Sources: GA4 (Group), Meta Ads, Search Console, Google Business Profile, FB &amp; TikTok organic.</div>
     </div></div>`;
     return;
   }
@@ -1253,7 +1253,7 @@ function renderOverview() {
         <div class="stage-head"><span class="stage-name">Impressions</span>
           <span class="stage-val ${isNA(d.totals.impressions)?'na':''}">${num(d.totals.impressions)}</span></div>
         <div class="bar">${seg(impChannels, totalImp, 'impressions')}</div>
-        <div class="stage-note">Meta Ads + Search Console + organic social. Units differ per platform, so read this as scale rather than one audited total. GMB and LINE reach are listed separately below.</div>
+        <div class="stage-note">Meta Ads + Search Console + organic social. Units differ per platform, so read this as scale rather than one audited total. GMB reach is listed separately below.</div>
       </div>
       <div class="stage minor">
         <div class="stage-head"><span class="stage-name">Ad &amp; search clicks</span>
@@ -1304,7 +1304,7 @@ function renderOverview() {
         ${(d.reachOnly||[]).map(r=>`<tr><td class="strong">${esc(r.channel)}<div style="font-size:10.5px;color:var(--faint)">${esc(r.note)}${r.sub?' · '+esc(r.sub):''}</div></td>
           <td class="num" style="font-size:15px;font-weight:600;color:${isNA(r.impressions)?'var(--faint)':'var(--ink)'}">${num(r.impressions)}</td></tr>`).join('')}
         </tbody></table>
-        <div class="note">These platforms drive awareness and offline action (calls, directions) GA4 can't attribute as sessions, so they sit outside the funnel. LINE counts <b>messages sent</b>, which exceeds follower count because each follower receives several messages in a period &mdash; it is not unique people reached.</div>
+        <div class="note">These platforms drive awareness and offline action (calls, directions) GA4 can't attribute as sessions, so they sit outside the funnel.${(d.reachOnly||[]).some(r=>r.channel==='LINE')?' LINE counts <b>messages sent</b>, which exceeds follower count because each follower receives several messages in a period &mdash; it is not unique people reached.':''}</div>
       </div>
     </div>
 
@@ -3931,7 +3931,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.61.2';
+const CLIENT_BUILD = '3.62.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

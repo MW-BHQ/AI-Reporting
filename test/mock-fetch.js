@@ -97,7 +97,9 @@ const GA4_PAGES = [
   "/th/bangkok-heart/package/x-other",   // sibling: BEGINS_WITH catches it, match() must not
   "/th/somewhere-else/page",
 ];
-const GA4_EVENTS = ["appointments", "contact_us", "login"];  // login must be filtered out
+// Includes login (must be filtered out by the server's inListFilter) and the
+// two Better AI events, so a merge that silently returns zero is detectable.
+const GA4_EVENTS = ["appointments", "contact_us", "better_ai_start", "better_ai_result", "login"];
 const GA4_LANDING_DIM_NAME = process.env.GA4_LANDING_DIM || "landingPagePlusQueryString";
 
 function ga4Report(body) {
@@ -144,6 +146,7 @@ function ga4Report(body) {
       : d === "sessionManualSource" ? ["facebook"]
       : d === "sessionManualMedium" ? ["paid"]
       : d === "sessionManualCampaignName" ? campaigns
+      : d === "sessionDefaultChannelGroup" ? ["Organic Search", "Paid Social"]
       : pages;
     if (!opts.length) return;
     for (const v of opts) expand(i + 1, [...acc, v]);

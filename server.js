@@ -517,25 +517,119 @@ function sumOrNull(rows, field) {
 
 // --------------------------------------------------------- GA4 field config
 
-const KEY_EVENT_FIELDS = [
-  "conversions_add_to_cart",
-  "conversions_appointments",
-  "conversions_contact_us",
-  "conversions_find_doctors",
-  "conversions_view_cart",
-  "conversions_view_item",
-  "conversions_purchase",
+/**
+ * Key events, defined by their GA4 EVENT NAME.
+ *
+ * These used to be Windsor's flattened `conversions_<event>` columns, one
+ * metric each. That shape hit a wall at v3.62: GA4 allows 10 metrics per
+ * request and several pulls were already at 9, so adding better_ai_start and
+ * better_ai_result would have thrown on five call sites. Key events are now
+ * fetched from the GA4 Data API as ROWS (`eventName` x `keyEvents`), which has
+ * no such ceiling — the tenth and eleventh key event cost nothing.
+ *
+ * `login` is a key event in GA4 and is deliberately absent: it measures
+ * returning-user friction, not marketing outcome, and folding it in would
+ * inflate every key-event figure in the dashboard.
+ */
+const KEY_EVENTS = [
+  { name: "add_to_cart",      label: "Add to cart" },
+  { name: "appointments",     label: "Appointments" },
+  { name: "contact_us",       label: "Contact us" },
+  { name: "find_doctors",     label: "Find doctors" },
+  { name: "view_cart",        label: "View cart" },
+  { name: "view_item",        label: "View item" },
+  { name: "purchase",         label: "Purchase" },
+  { name: "better_ai_start",  label: "Better AI start" },
+  { name: "better_ai_result", label: "Better AI result" },
 ];
-const KEY_EVENT_LABELS = {
-  conversions_add_to_cart: "Add to cart",
-  conversions_appointments: "Appointments",
-  conversions_contact_us: "Contact us",
-  conversions_find_doctors: "Find doctors",
-  conversions_view_cart: "View cart",
-  conversions_view_item: "View item",
-  conversions_purchase: "Purchase",
+const KEY_EVENT_NAMES = KEY_EVENTS.map((e) => e.name);
+const KEY_EVENT_LABELS = Object.fromEntries(KEY_EVENTS.map((e) => [e.name, e.label]));
+
+/**
+ * Windsor dimension name -> GA4 Data API dimension name, for the dimensions a
+ * key-event pull is ever grouped by. Anything absent here is a programming
+ * error rather than a missing feature, so it throws loudly.
+ */
+const GA4_DIM_MAP = {
+  date: "date",
+  session_default_channel_group: "sessionDefaultChannelGroup",
+  session_manual_campaign_name: "sessionManualCampaignName",
+  session_manual_source: "sessionManualSource",
+  session_manual_medium: "sessionManualMedium",
 };
-const sumKeyEvents = (r) => KEY_EVENT_FIELDS.reduce((a, f) => a + n(r[f]), 0);
+
+/**
+ * The join key between a Windsor row and a Data API row.
+ *
+ * Both sides must normalise identically or the merge silently produces zeros:
+ * GA4 writes dates as YYYYMMDD and untagged values as "(not set)", Windsor
+ * writes YYYY-MM-DD and empty strings. \u0000 separates parts because it cannot
+ * occur in a campaign name.
+ */
+function ga4JoinKey(windsorDims, row, fromGa4) {
+  return windsorDims.map((d) => {
+    const raw = fromGa4 ? row[GA4_DIM_MAP[d]] : row[d];
+    if (d === "date") return fromGa4 ? ga4Date(raw) : String(raw || "");
+    const v = String(raw ?? "").trim();
+    return (v === "(not set)" || v === "(none)") ? "" : v;
+  }).join("\u0000");
+}
+
+/**
+ * Fetch key events grouped by the given WINDSOR dimension names, so a caller
+ * can pair this with its existing Windsor pull and merge on ga4JoinKey().
+ *
+ * Returns { total, byKey, byName, byKeyEvent, rows } — byKey for per-row
+ * merging, byName for unfiltered breakdown tables, byKeyEvent for a single
+ * named event at a grouping (e.g. contact_us per campaign), and rows when the
+ * caller needs to filter before aggregating. Never throws: a failure yields
+ * zeros and is logged, because a missing key-event count must not take down a
+ * whole tab.
+ */
+async function ga4KeyEvents(windsorDims, from, to) {
+  const empty = { total: 0, byKey: new Map(), byName: new Map(), byKeyEvent: new Map(), rows: [], failed: false };
+  for (const d of windsorDims) {
+    if (!GA4_DIM_MAP[d]) throw new Error(`ga4KeyEvents: no Data API mapping for dimension "${d}"`);
+  }
+  try {
+    const raw = await ga4RunReport({
+      dimensions: [...windsorDims.map((d) => GA4_DIM_MAP[d]), "eventName"],
+      metrics: ["keyEvents"],
+      from, to,
+      dimensionFilter: { filter: { fieldName: "eventName", inListFilter: { values: KEY_EVENT_NAMES } } },
+    });
+    const out = { total: 0, byKey: new Map(), byName: new Map(), byKeyEvent: new Map(), rows: [], failed: false };
+    for (const r of raw) {
+      const v = n(r.keyEvents);
+      const k = ga4JoinKey(windsorDims, r, true);
+      out.total += v;
+      out.byKey.set(k, (out.byKey.get(k) || 0) + v);
+      out.byName.set(r.eventName, (out.byName.get(r.eventName) || 0) + v);
+      out.byKeyEvent.set(`${k}\u0000${r.eventName}`, (out.byKeyEvent.get(`${k}\u0000${r.eventName}`) || 0) + v);
+      out.rows.push({ key: k, eventName: r.eventName, value: v });
+    }
+    return out;
+  } catch (e) {
+    logJson("WARNING", "key_events_unavailable", { error: String(e.message || e), dims: windsorDims });
+    return { ...empty, failed: true };
+  }
+}
+
+/**
+ * The per-event table the UI renders, in descending order. `keep` optionally
+ * restricts to a subset of join keys, which is how a campaign view counts only
+ * its own key events rather than the whole property's.
+ */
+const keyEventBreakdownFrom = (ke, keep) => {
+  const per = new Map();
+  for (const r of ke.rows) {
+    if (keep && !keep(r.key)) continue;
+    per.set(r.eventName, (per.get(r.eventName) || 0) + r.value);
+  }
+  return KEY_EVENTS
+    .map((e) => ({ id: e.name, label: e.label, value: per.get(e.name) || 0 }))
+    .sort((a, b) => b.value - a.value);
+};
 
 /**
  * GA4's Data API rejects any request asking for more than 10 metrics.
@@ -594,12 +688,10 @@ const PAID_MEDIUM_RE = /(cpc|ppc|paid|display|video|banner)/i;
 // ------------------------------------------------------------- /api/overview
 
 async function buildOverview(from, to) {
-  // GA4 caps a request at 10 metrics, so the pull is split in two and merged.
-  // Funnel call: 9 metrics (sessions, page views, 7 key events).
-  const ga4FunnelFields = ga4Fields(
-    ["date", "session_default_channel_group"],
-    ["sessions", "engaged_sessions", ...KEY_EVENT_FIELDS]
-  );
+  // Session metrics only: 2. Key events come from the Data API as rows, so this
+  // no longer sits at the 10-metric ceiling (see KEY_EVENTS).
+  const GA4_FUNNEL_DIMS = ["date", "session_default_channel_group"];
+  const ga4FunnelFields = ga4Fields(GA4_FUNNEL_DIMS, ["sessions", "engaged_sessions"]);
   // Commerce call: 5 metrics.
   const ga4EcomFields = ga4Fields(
     ["date", "session_default_channel_group"],
@@ -616,6 +708,7 @@ async function buildOverview(from, to) {
 
   const { data, errors } = await runJobs({
     ga4: windsor("googleanalytics4", ga4FunnelFields, from, to, { accounts: [GA4_ACCOUNT] }),
+    keyEvents: ga4KeyEvents(GA4_FUNNEL_DIMS, from, to),
     ga4Ecom: windsor("googleanalytics4", ga4EcomFields, from, to, { accounts: [GA4_ACCOUNT] }),
     ga4Items: windsor("googleanalytics4",
       ga4Fields(["item_name"], ["item_view_events", "items_added_to_cart", "items_purchased", "item_revenue"]),
@@ -640,6 +733,9 @@ async function buildOverview(from, to) {
 
   const ga4 = data.ga4;
   const ga4Available = ga4 !== null;
+  // runJobs turns a rejection into null; ga4KeyEvents already swallows its own
+  // errors, so this is only null if the job itself was never fulfilled.
+  const ke = data.keyEvents || { total: 0, byKey: new Map(), byName: new Map(), failed: true };
   const ecom = data.ga4Ecom;
 
   const impressions = {
@@ -683,7 +779,7 @@ async function buildOverview(from, to) {
       const c = chanMap.get(label);
       c.visits += n(r.sessions);
       c.engagement += n(r.engaged_sessions);
-      c.keyEvents += sumKeyEvents(r);
+      c.keyEvents += ke.byKey.get(ga4JoinKey(GA4_FUNNEL_DIMS, r, false)) || 0;
     }
   }
   // Ad clicks belong to the same channels that have ad impressions.
@@ -701,8 +797,10 @@ async function buildOverview(from, to) {
   // Platform reach with no GA4 channel equivalent.
   const reachOnly = [
     { channel: "Google Business Profile", impressions: impressions.gmb, note: "profile views" },
-    { channel: "LINE", impressions: impressions.line, note: lineBasis,
-      sub: lineFollowers ? `${lineFollowers.toLocaleString()} followers${lineReachable ? ` · ${lineReachable.toLocaleString()} targetable` : ""}` : null },
+    // LINE is listed only while the connector is on. Showing a permanent
+    // "unavailable" row trains people to ignore the panel.
+    ...(LINE_ENABLED ? [{ channel: "LINE", impressions: impressions.line, note: lineBasis,
+      sub: lineFollowers ? `${lineFollowers.toLocaleString()} followers${lineReachable ? ` · ${lineReachable.toLocaleString()} targetable` : ""}` : null }] : []),
   ];
 
   const totals = {
@@ -719,10 +817,15 @@ async function buildOverview(from, to) {
     keyEvents: ga4Available ? funnel.reduce((a, c) => a + c.keyEvents, 0) : null,
   };
 
+  /**
+   * Restricted to the (date x channel) groupings the funnel actually counted,
+   * so the breakdown table always sums to totals.keyEvents. Left unfiltered it
+   * reports every key event in the property, which is a larger number than the
+   * headline above it — a discrepancy nobody can explain and everybody notices.
+   */
+  const funnelKeys = new Set(ga4Available ? ga4.map((r) => ga4JoinKey(GA4_FUNNEL_DIMS, r, false)) : []);
   const keyEventBreakdown = ga4Available
-    ? KEY_EVENT_FIELDS.map((f) => ({ id: f, label: KEY_EVENT_LABELS[f], value: ga4.reduce((a, r) => a + n(r[f]), 0) }))
-        .sort((a, b) => b.value - a.value)
-    : null;
+    ? keyEventBreakdownFrom(ke, (k) => funnelKeys.has(k)) : null;
 
   // ---- ecommerce (from the second GA4 call) ----
   let ecommerce = null;
@@ -774,7 +877,7 @@ async function buildOverview(from, to) {
     if (!r.date) continue;
     const t = touch(r.date);
     t.visits += n(r.sessions);
-    t.keyEvents += sumKeyEvents(r);
+    t.keyEvents += ke.byKey.get(ga4JoinKey(GA4_FUNNEL_DIMS, r, false)) || 0;
   }
   if (ecom !== null) for (const r of ecom) {
     if (!r.date) continue;
@@ -901,23 +1004,21 @@ async function buildCampaign(code, from, to) {
   const needle = norm(code);
   // 9 metrics: sessions, page views, 7 key events. Revenue moves to a second
   // call because 11 metrics in one request is rejected by GA4.
+  const GA4_MAIN_DIMS = ["session_manual_campaign_name", "session_manual_source", "session_manual_medium"];
   const ga4MainFields = ga4Fields(
-    ["session_manual_campaign_name", "session_manual_source", "session_manual_medium"],
-    ["sessions", "engaged_sessions", ...KEY_EVENT_FIELDS]
+    GA4_MAIN_DIMS,
+    ["sessions", "engaged_sessions"]
   );
-  const ga4RevFields = ga4Fields(
-    ["session_manual_campaign_name", "session_manual_source", "session_manual_medium"],
-    ["purchase_revenue", "ecommerce_purchases"]
-  );
-  const ga4DailyFields = ga4Fields(
-    ["date", "session_manual_campaign_name"],
-    ["sessions", ...KEY_EVENT_FIELDS]
-  );
+  const ga4RevFields = ga4Fields(GA4_MAIN_DIMS, ["purchase_revenue", "ecommerce_purchases"]);
+  const GA4_DAILY_DIMS = ["date", "session_manual_campaign_name"];
+  const ga4DailyFields = ga4Fields(GA4_DAILY_DIMS, ["sessions"]);
 
   const jobs = {
     ga4: windsor("googleanalytics4", ga4MainFields, from, to, { accounts: [GA4_ACCOUNT] }),
     ga4Rev: windsor("googleanalytics4", ga4RevFields, from, to, { accounts: [GA4_ACCOUNT] }),
     ga4Daily: windsor("googleanalytics4", ga4DailyFields, from, to, { accounts: [GA4_ACCOUNT] }),
+    keyEvents: ga4KeyEvents(GA4_MAIN_DIMS, from, to),
+    keyEventsDaily: ga4KeyEvents(GA4_DAILY_DIMS, from, to),
     // Top landing pages for this campaign. Filtered SERVER-SIDE on the campaign
     // name: Windsor ignores its `filters` parameter (§3), so the Windsor version
     // of this pulled campaign x landing_page across all 44,463 pages of the
@@ -972,6 +1073,9 @@ async function buildCampaign(code, from, to) {
     jobs[`ad_${p.id}`] = windsor(p.id, [p.campaignKey, ...AD_METRIC_FIELDS, ...(p.extra || [])], from, to);
   }
   const { data, errors } = await runJobs(jobs);
+  const EMPTY_KE = { total: 0, byKey: new Map(), byName: new Map(), byKeyEvent: new Map(), rows: [], failed: true };
+  const ke = data.keyEvents || EMPTY_KE;
+  const keDaily = data.keyEventsDaily || EMPTY_KE;
 
   if (data.ga4 === null) {
     const e = new Error(`GA4 unavailable: ${errors.ga4}`);
@@ -1004,8 +1108,8 @@ async function buildCampaign(code, from, to) {
     const v = vMap.get(k);
     v.visits += n(r.sessions);
     v.engagement += n(r.engaged_sessions);
-    v.keyEvents += sumKeyEvents(r);
-    v.contacts += n(r.conversions_contact_us);
+    v.keyEvents += ke.byKey.get(k) || 0;
+    v.contacts += ke.byKeyEvent.get(`${k}\u0000contact_us`) || 0;
   }
 
   // Revenue keyed identically, so no allocation guesswork is needed.
@@ -1366,9 +1470,9 @@ async function buildCampaign(code, from, to) {
   totals.keyEventRate = totals.visits ? (totals.keyEvents / totals.visits) * 100 : null;
   totals.costPerKeyEvent = totals.spend && totals.keyEvents ? totals.spend / totals.keyEvents : null;
 
-  const keyEventBreakdown = KEY_EVENT_FIELDS
-    .map((f) => ({ id: f, label: KEY_EVENT_LABELS[f], value: matches.reduce((a, r) => a + n(r[f]), 0) }))
-    .sort((a, b) => b.value - a.value);
+  // Restricted to this campaign's groupings: ke covers the whole property.
+  const matchedKeys = new Set(matches.map(vkey));
+  const keyEventBreakdown = keyEventBreakdownFrom(ke, (k) => matchedKeys.has(k));
 
   let trend = [];
   if (data.ga4Daily !== null) {
@@ -1378,7 +1482,7 @@ async function buildCampaign(code, from, to) {
       if (!tm.has(r.date)) tm.set(r.date, { d: r.date, visits: 0, keyEvents: 0 });
       const t = tm.get(r.date);
       t.visits += n(r.sessions);
-      t.keyEvents += sumKeyEvents(r);
+      t.keyEvents += keDaily.byKey.get(ga4JoinKey(GA4_DAILY_DIMS, r, false)) || 0;
     }
     trend = [...tm.values()].sort((a, b) => a.d.localeCompare(b.d));
   }
@@ -1857,17 +1961,21 @@ async function buildBenchmark(anchorISO) {
     metaMonthly: windsor("facebook", META_MONTHLY_FIELDS, from, to),
     metaCampaigns: windsor("facebook", META_CAMPAIGN_FIELDS, from, to),
     ga4m3: windsor("googleanalytics4",
-      ga4Fields(["session_manual_campaign_name"], ["sessions", ...KEY_EVENT_FIELDS, "purchase_revenue"]),
+      ga4Fields(["session_manual_campaign_name"], ["sessions", "purchase_revenue"]),
       W.m3.from, W.m3.to, { accounts: [GA4_ACCOUNT] }),
     ga4m6: windsor("googleanalytics4",
-      ga4Fields(["session_manual_campaign_name"], ["sessions", ...KEY_EVENT_FIELDS, "purchase_revenue"]),
+      ga4Fields(["session_manual_campaign_name"], ["sessions", "purchase_revenue"]),
       W.m6.from, W.m6.to, { accounts: [GA4_ACCOUNT] }),
     ga4m12: windsor("googleanalytics4",
-      ga4Fields(["session_manual_campaign_name"], ["sessions", ...KEY_EVENT_FIELDS, "purchase_revenue"]),
+      ga4Fields(["session_manual_campaign_name"], ["sessions", "purchase_revenue"]),
       W.m12.from, W.m12.to, { accounts: [GA4_ACCOUNT] }),
     ga4Monthly: windsor("googleanalytics4",
-      ga4Fields(["date"], ["sessions", ...KEY_EVENT_FIELDS, "purchase_revenue"]),
+      ga4Fields(["date"], ["sessions", "purchase_revenue"]),
       from, to, { accounts: [GA4_ACCOUNT] }),
+    keM3: ga4KeyEvents(["session_manual_campaign_name"], W.m3.from, W.m3.to),
+    keM6: ga4KeyEvents(["session_manual_campaign_name"], W.m6.from, W.m6.to),
+    keM12: ga4KeyEvents(["session_manual_campaign_name"], W.m12.from, W.m12.to),
+    keMonthly: ga4KeyEvents(["date"], from, to),
   });
 
   if (data.metaMonthly === null) {
@@ -1920,25 +2028,33 @@ async function buildBenchmark(anchorISO) {
     const k = String(r.date || "").slice(0, 7);
     if (!monthIndex.has(k)) continue;
     const m = ensure("__all__").get(k);
-    m.visits += n(r.sessions); m.keyEvents += sumKeyEvents(r);
-    m.contacts += n(r.conversions_contact_us); m.revenue += n(r.purchase_revenue);
+    const dk = ga4JoinKey(["date"], r, false);
+    m.visits += n(r.sessions); m.keyEvents += keMonthly.byKey.get(dk) || 0;
+    m.contacts += keMonthly.byKeyEvent.get(`${dk}\u0000contact_us`) || 0;
+    m.revenue += n(r.purchase_revenue);
   }
 
   /** GA4 rows for a window, attributed to an account via campaign code stems. */
-  const ga4ForAccount = (rows, stems) => {
+  const ga4ForAccount = (rows, stems, kew) => {
     const t = BLANK();
     if (rows === null) return t;
     for (const r of rows) {
       const name = norm(r.session_manual_campaign_name);
       if (!name) continue;
       if (stems && ![...stems].some((st) => name.startsWith(st))) continue;
-      t.visits += n(r.sessions); t.keyEvents += sumKeyEvents(r);
-      t.contacts += n(r.conversions_contact_us); t.revenue += n(r.purchase_revenue);
+      const ck = ga4JoinKey(["session_manual_campaign_name"], r, false);
+      t.visits += n(r.sessions);
+      t.keyEvents += kew.byKey.get(ck) || 0;
+      t.contacts += kew.byKeyEvent.get(`${ck}\u0000contact_us`) || 0;
+      t.revenue += n(r.purchase_revenue);
     }
     return t;
   };
 
   const windowRows = { m3: data.ga4m3, m6: data.ga4m6, m12: data.ga4m12 };
+  const EMPTY_KE = { total: 0, byKey: new Map(), byName: new Map(), byKeyEvent: new Map(), rows: [], failed: true };
+  const windowKe = { m3: data.keM3 || EMPTY_KE, m6: data.keM6 || EMPTY_KE, m12: data.keM12 || EMPTY_KE };
+  const keMonthly = data.keMonthly || EMPTY_KE;
 
   function buildAccount(acct) {
     const isAll = acct === "__all__";
@@ -1957,7 +2073,7 @@ async function buildBenchmark(anchorISO) {
       // Site metrics for a single account come from the code-matched window pull,
       // not from the monthly series (which only carries them in the roll-up).
       if (!isAll) {
-        const g = ga4ForAccount(windowRows[key], stems);
+        const g = ga4ForAccount(windowRows[key], stems, windowKe[key]);
         t.visits = g.visits; t.keyEvents = g.keyEvents; t.contacts = g.contacts; t.revenue = g.revenue;
       }
       windows[key] = { months: slice.length, requested: wdef.months, avgMonthlySpend: t.spend / slice.length, ...derive(t) };
@@ -2100,8 +2216,9 @@ async function buildUntagged(from, to) {
   const { data, errors } = await runJobs({
     ga4: windsor("googleanalytics4",
       ga4Fields(["session_manual_campaign_name", "session_manual_source", "session_manual_medium"],
-        ["sessions", ...KEY_EVENT_FIELDS]),
+        ["sessions"]),
       from, to, { accounts: [GA4_ACCOUNT] }),
+    keyEvents: ga4KeyEvents(["session_manual_campaign_name", "session_manual_source", "session_manual_medium"], from, to),
     meta: windsor("facebook", ["campaign", "account_name", "campaign_objective", "impressions", "clicks", "spend",
       "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d"], from, to),
     // Google Ads campaign names follow the same YYMMDD-NN code convention as
@@ -2115,13 +2232,16 @@ async function buildUntagged(from, to) {
     e.status = 502; throw e;
   }
 
+  const keIdx = data.keyEvents || { total: 0, byKey: new Map(), byName: new Map(), byKeyEvent: new Map(), rows: [], failed: true };
+
   // ---- traffic side ----
   let taggedVisits = 0, taggedKeyEvents = 0;
   const buckets = new Map();
   const codesSeen = new Set();
   for (const r of data.ga4) {
     const visits = n(r.sessions);
-    const ke = sumKeyEvents(r);
+    const ke = keIdx.byKey.get(ga4JoinKey(
+      ["session_manual_campaign_name", "session_manual_source", "session_manual_medium"], r, false)) || 0;
     const kind = classifyCampaignValue(r.session_manual_campaign_name, r.session_manual_medium);
     if (kind === null) {
       if (looksLikeCode(r.session_manual_campaign_name)) {
@@ -2613,8 +2733,9 @@ async function buildAudiences(from, to) {
   let ga4ByCode = null;
   try {
     const ga4 = await windsor("googleanalytics4",
-      ga4Fields(["session_manual_campaign_name"], ["sessions", "engaged_sessions", ...KEY_EVENT_FIELDS]),
+      ga4Fields(["session_manual_campaign_name"], ["sessions", "engaged_sessions"]),
       from, to, { accounts: [GA4_ACCOUNT] });
+    const keCode = await ga4KeyEvents(["session_manual_campaign_name"], from, to);
     if (ga4) {
       ga4ByCode = new Map();
       for (const r of ga4) {
@@ -2623,7 +2744,7 @@ async function buildAudiences(from, to) {
         if (!ga4ByCode.has(code)) ga4ByCode.set(code, { visits: 0, keyEvents: 0 });
         const e = ga4ByCode.get(code);
         e.visits += n(r.sessions);
-        e.keyEvents += sumKeyEvents(r);
+        e.keyEvents += keCode.byKey.get(ga4JoinKey(["session_manual_campaign_name"], r, false)) || 0;
       }
     }
   } catch (e) {
@@ -3958,14 +4079,6 @@ function pagePath(input) {
   if (!p.startsWith("/")) p = "/" + p;
   return p.replace(/\/+$/, "") || "/";
 }
-
-/**
- * The seven key events, as GA4 event names rather than Windsor column names.
- * `login` is a key event in GA4 but is deliberately excluded (CONTEXT §4), so
- * the aggregate `keyEvents` metric cannot be used on its own — it would quietly
- * fold login in and inflate every figure on this tab.
- */
-const KEY_EVENT_NAMES = KEY_EVENT_FIELDS.map((f) => f.replace(/^conversions_/, ""));
 
 const GA4_LANDING_DIM = process.env.GA4_LANDING_DIM || "landingPagePlusQueryString";
 
