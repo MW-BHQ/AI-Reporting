@@ -584,7 +584,7 @@
       </div>
       <div class="nav-item sub" data-view="ecomroas">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v20M17 6.5c0-1.9-2.2-2.9-5-2.9s-5 .9-5 2.7 2.4 2.4 5 3 5 1.3 5 3.2-2.2 2.9-5 2.9-5-1-5-2.9"/></svg>
-        ROAS
+        Ad Performance
       </div>
       <div class="nav-item sub" data-view="ecomchurn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7l6 6 4-4 8 8"/><path d="M21 12v5h-5"/></svg>
@@ -904,7 +904,7 @@ const TITLES = {
   ecomcentre: ['E-commerce · Centers', 'Which centers sell, and through which channel'],
   ecomchannels: ['E-commerce · Channels', 'How each channel performs over time, and what it is distinctively good at'],
   ecommigration: ['E-commerce · Migration', 'Do customers who start online later buy offline'],
-  ecomroas: ['E-commerce · ROAS', 'Meta spend against storefront revenue — a ballpark, by design'],
+  ecomroas: ['E-commerce · Ad Performance', 'What the marketplace ad accounts spent, reached and earned in clicks'],
   ecomchurn: ['E-commerce · Churn', 'Which channels and centres are losing their customers'],
   ecommonthly: ['E-commerce · Monthly report', 'One page for the month, built to be printed'],
 };
@@ -2131,7 +2131,7 @@ const VIEW_LOADERS = {
   ecommonthly:   { load: () => loadEcomMonthly(),   err: 'ecommonError',   busy: 'ecommonLoading',   what: 'the monthly report' },
   pages:         { load: () => loadPage(),          err: 'pageError',      busy: 'pageLoading',      what: 'page performance' },
   gads:          { load: () => loadGads(),          err: 'gadsError',      busy: 'gadsLoading',      what: 'Google Ads' },
-  ecomroas:      { load: () => loadEcomRoas(),      err: 'ecomroasError',  busy: 'ecomroasLoading',  what: 'ad spend against revenue' },
+  ecomroas:      { load: () => loadEcomRoas(),      err: 'ecomroasError',  busy: 'ecomroasLoading',  what: 'marketplace ad performance' },
   users:         { load: () => loadUsers(),         err: 'usersError',     busy: 'usersLoading',     what: 'the access list' },
 };
 
@@ -2394,7 +2394,7 @@ function renderGads() {
 function renderEcomRoas() {
   const d = S.ecomroas;
   if (S.ecomroasError) { const m = S.ecomroasError; $('viewRoot').innerHTML = errorState(m); S.ecomroasError = null; return; }
-  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecomroas', 'Reads the three marketplace ad accounts and joins their spend to storefront revenue.'); return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecomroas', 'Reads the three marketplace ad accounts and lists every campaign live in this range.'); return; }
   if (d.metaUnavailable) { $('viewRoot').innerHTML = errorState('Meta Ads was unavailable this run — press Refresh to retry.'); return; }
 
   const t = d.totals;
@@ -2417,12 +2417,12 @@ function renderEcomRoas() {
         <span class="pill" style="background:${channelColour(a.channel)}1f;color:${channelColour(a.channel)};">${esc(a.channel)}</span>
       </div>
       <div class="ra-kpis">
-        <div class="ra-hero"><div class="lab">Revenue per ฿1</div>
-          <div class="v">${a.roas===null?'—':a.roas.toFixed(1)+'×'}</div></div>
-        <div><div class="lab">Spend</div><div class="v">฿${num(Math.round(a.spend))}</div></div>
-        <div><div class="lab">${esc(a.channel)} revenue</div><div class="v">฿${num(Math.round(a.revenue))}</div></div>
+        <div class="ra-hero"><div class="lab">Spend</div>
+          <div class="v">฿${num(Math.round(a.spend))}</div></div>
+        <div><div class="lab">Impressions</div><div class="v">${num(a.impressions)}</div></div>
         <div><div class="lab">Link clicks</div><div class="v">${num(a.clicks)}</div></div>
         <div><div class="lab">Cost per click</div><div class="v">${a.cpc===null?'—':'฿'+(Math.round(a.cpc*100)/100)}</div></div>
+        <div><div class="lab">Cost per 1,000</div><div class="v">${a.impressions>0?'฿'+num(Math.round(a.spend/a.impressions*1000)):'—'}</div></div>
       </div>
       <div class="tscroll"><table class="roomy sortable">
         <colgroup><col style="width:38%"><col style="width:12%"><col style="width:11%"><col style="width:11%">
@@ -2464,23 +2464,23 @@ function renderEcomRoas() {
 
   $('viewRoot').innerHTML = `
     <div class="grid g-4" style="margin-bottom:12px;">
-      <div class="stat stat-hero"><div class="lab">Revenue per ฿1</div>
-        <div class="val">${t.roas===null?'—':t.roas.toFixed(1)+'×'}</div>
-        <div class="sub2">storefront revenue ÷ marketplace ad spend</div></div>
-      <div class="stat"><div class="lab">Marketplace ad spend</div><div class="val">฿${num(Math.round(t.spend))}</div>
-        <div class="sub2">${num(t.activeAccounts)} account${t.activeAccounts===1?'':'s'} active · ${num(t.campaigns)} campaigns</div></div>
-      <div class="stat"><div class="lab">Storefront revenue</div><div class="val">฿${num(Math.round(t.revenue))}</div>
-        <div class="sub2">${esc(d.channels.join(' · ')||'none')}</div></div>
-      <div class="stat"><div class="lab">Months in range</div><div class="val">${num(d.months.length)}</div></div>
+      <div class="stat stat-hero"><div class="lab">Ad spend</div>
+        <div class="val">฿${num(Math.round(t.spend))}</div>
+        <div class="sub2">${num(t.activeAccounts)} account${t.activeAccounts===1?'':'s'} active · ${num(t.campaigns)} campaign${t.campaigns===1?'':'s'}</div></div>
+      <div class="stat"><div class="lab">Impressions</div><div class="val">${num(t.impressions)}</div></div>
+      <div class="stat"><div class="lab">Link clicks</div><div class="val">${num(t.clicks)}</div></div>
+      <div class="stat"><div class="lab">Cost per click</div>
+        <div class="val">${t.cpc===null?'—':'฿'+(Math.round(t.cpc*100)/100)}</div></div>
     </div>
 
     <div class="note" style="margin:0 0 4px;">
-      Only the three ad accounts that sell on a marketplace are here, matched on <b>account id</b> rather than name so a
-      rename cannot silently drop one. Revenue is <b>all</b> revenue on that storefront for the range, not only what the
-      ads caused, so treat the ratio as a scale check rather than a payback figure — the useful reading is how it moves
-      and how the accounts compare.
-      ${d.channels.length < d.accounts.filter(a=>a.active).length
-        ? ' Two accounts sell on the same storefront, so that storefront\'s revenue is counted once in the total above and shown in full on each card.' : ''}
+      What the marketplace ad accounts <b>did</b> — spend, reach and clicks for every campaign live in this range,
+      matched on <b>account id</b> rather than name so a rename cannot silently drop one.
+      ${t.revenue > 0 ? `For context, ${esc(d.channels.join(' and ')||'these storefronts')} took
+      <b>฿${num(Math.round(t.revenue))}</b> over the same period from <b>all</b> sources.
+      That figure is <b>not</b> attributable to these ads: every marketplace order carries the same
+      campaign name, so there is no way to tell an ad-driven order from an organic one. Dividing the two
+      would produce a number that looks like a return and is not one.` : ''}
     </div>
 
     ${d.accounts.map(card).join('')}`;
@@ -3910,7 +3910,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.60.2';
+const CLIENT_BUILD = '3.61.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

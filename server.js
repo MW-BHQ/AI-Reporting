@@ -309,7 +309,7 @@ const TABS = [
   { id: "ecommigration", label: "E-commerce · Migration" },
   { id: "ecomchurn",  label: "E-commerce · Churn" },
   { id: "ecommonthly", label: "E-commerce · Monthly report" },
-  { id: "ecomroas",   label: "E-commerce · ROAS" },
+  { id: "ecomroas",   label: "E-commerce · Ad Performance" },
   { id: "users",     label: "Users", adminOnly: true },
 ];
 const TAB_IDS = TABS.filter((t) => !t.adminOnly).map((t) => t.id);
@@ -3815,6 +3815,15 @@ async function buildRoas(from, to) {
       roas: totalSpend > 0 ? totalRev / totalSpend : null,
       activeAccounts: accounts.filter((a) => a.active).length,
       campaigns: accounts.reduce((x, a) => x + a.campaigns.length, 0),
+      // Ad-delivery totals. These are the figures the tab leads on, because
+      // unlike the revenue ratio they describe only what the ads themselves
+      // did. Summed from the accounts so they cannot drift from the cards.
+      clicks: accounts.reduce((x, a) => x + (a.clicks || 0), 0),
+      impressions: accounts.reduce((x, a) => x + (a.impressions || 0), 0),
+      cpc: (() => {
+        const c = accounts.reduce((x, a) => x + (a.clicks || 0), 0);
+        return c > 0 ? totalSpend / c : null;
+      })(),
     },
   };
 }

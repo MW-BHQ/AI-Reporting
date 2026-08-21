@@ -646,6 +646,30 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.61.0** — the ROAS tab is now **Ad Performance**, pivoted onto the ad
+campaigns instead of a revenue ratio. `445.8×` was the largest figure on the
+screen and meant nothing: the denominator was ฿11.3K from one campaign live
+**7 days**, the numerator ฿5.0M of *all* Shopee revenue over **31 days**,
+whether ads touched it or not. Different windows, different campaigns, no
+causal link. The card said "treat as a scale check", but nobody reads a caveat
+under a number rendered that large — the real risk was it reaching a management
+deck as "Meta returned 445×".
+
+Hero stats are now spend, impressions, link clicks and CPC, at both total and
+account level; per-account also shows CPM. All of those describe only what the
+ads did. Storefront revenue moved out of the stat cards into the note as prose,
+which states plainly that it is not attributable to these ads and says why —
+every marketplace order carries the same campaign name (§11), so an ad-driven
+order cannot be told from an organic one.
+
+**The tab id stays `ecomroas`.** Only labels changed. `requireTab("ecomroas")`
+gates the endpoint and per-user permissions are stored against that key, so
+renaming it would silently revoke access for everyone who has it.
+
+Same class of error as the `+42867%` MoM on Pages, seen the same day: **a ratio
+rendered as a headline without a guard on whether the denominator can carry
+one.** Worth checking for wherever a rate is displayed large.
+
 **v3.60.2** — small `AI` badge on the Topic Explorer nav item, so it is visible
 at a glance which tab's output is generated rather than read from a connector.
 Topic Explorer is the **only** one: Claude expands the topic into search terms
