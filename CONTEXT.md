@@ -646,6 +646,19 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.60.2** — small `AI` badge on the Topic Explorer nav item, so it is visible
+at a glance which tab's output is generated rather than read from a connector.
+Topic Explorer is the **only** one: Claude expands the topic into search terms
+across ten languages and clusters the results, while the figures themselves
+come from Search Console (§1 — the LLM is never on the data-refresh path).
+The tooltip says exactly that, because "AI" alone invites the reading that the
+numbers are invented.
+
+Styled from the existing `.pill` tokens rather than a new treatment. An earlier
+draft used CSS `color-mix`, which appears nowhere else in the file; dropped it,
+since a novel CSS feature is not worth a badge (cf. the Chart.js CDN lesson
+in §8).
+
 **v3.60.1** — `/api/campaign`'s `ga4Landing` report moved to the GA4 Data API
 (§4a). It was pulling `campaign × landing_page` across the whole property —
 all 44,463 pages — filtering client-side, and displaying **the top eight**.
