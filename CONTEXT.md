@@ -10,6 +10,34 @@ information. Re-discovering them costs days.
 
 ---
 
+## 0. Current state — read before anything else
+
+**Version 3.59.1.** Sections 1–9 below were written around v3.17 and remain
+accurate on the APIs, but the product has roughly doubled since. What changed:
+
+**Tabs now (14).** Overview · Google Profile · Campaigns · **Pages** ·
+Meta Ads (Benchmarks, Audiences, Tagging audit) · **Google Ads (Overview)** ·
+**E-commerce (Overview, Monthly report, Centers, Channels, ROAS, Churn,
+Migration)** · Topic Explorer · Users.
+
+**Connectors changed.** LINE was disconnected from Windsor in Aug 2026 and
+replaced by **Google Ads**. LINE code is behind `LINE_ENABLED` (default off),
+not deleted — see §6.
+
+**A second data source exists.** E-commerce reads a Google Sheet of normalised
+coupon orders, not Windsor — see §6a. ~85,500 rows, Jan 2024 to Jul 2026.
+
+**Testing is now four layers** and all four run on `npm test` — see §10. The
+boot test exists because a broken template literal passes every text-level
+check while breaking the whole app.
+
+**Three silent-failure classes have each bitten more than once.** Read §10
+before making edits: a find-and-replace that matches nothing, a partial deploy,
+and a per-row counter on a connector that returns one row per
+campaign × ad set × date.
+
+---
+
 ## 1. What this is
 
 A single Node/Express service on Cloud Run that serves a one-page dashboard and
@@ -62,6 +90,20 @@ expansion and query clustering in Topic Explorer.
 | Source | GitHub `MW-BHQ/AI-Reporting`, auto-deploy on commit |
 | Secrets | `windsor-api-key`, `anthropic-api-key` (Secret Manager) |
 
+### Environment variables
+
+| Var | Purpose |
+|---|---|
+| `ECOM_SHEET_ID` | the normalised e-commerce sheet; **all E-commerce tabs need it** |
+| `ECOM_TAB` | defaults to `Orders` |
+| `LINE_ENABLED` | `1` re-enables LINE; default off since Aug 2026 |
+| `ACCESS_BUCKET` | `ai-reporting-access`, persists the user list across deploys |
+| `BENCHMARK_BUCKET` | benchmark snapshots |
+| `GA4_ACCOUNT` | defaults to `484633959` |
+
+The Sheets read uses the runtime service account, so the sheet must be shared
+with it as Viewer and the **Sheets API enabled** on the project.
+
 ### Roles that were needed and are easy to miss
 
 - `roles/secretmanager.secretAccessor` — else the revision fails to start
@@ -109,6 +151,19 @@ https://connectors.windsor.ai/{connector}
 - **Filter operator is `eq`, not `equals`.** `equals` returns
   `Invalid operator: 'equals'`. Also supports `gt`. Format:
   `[["field","eq","value"]]`.
+- **DEAD END — `filters` does nothing on `googleanalytics4`.** Verified
+  21 Aug 2026. One day, `landing_page,date,sessions`, account 484633959, run
+  four ways: no filter; the object form `[{field,operation,value}]`; the
+  documented array form `[["landing_page","eq",…]]`; and a filter on a field
+  that **does not exist**. All four returned HTTP 200 and **byte-identical**
+  bodies — 1,799,637 bytes, 16,887 rows, 11,072 distinct landing pages. Windsor
+  parses the parameter, never rejects it, and discards it. A month is 482,355
+  rows. **Do not build anything on Windsor-side GA4 filtering.** The Pages tab
+  now uses the GA4 Data API directly (§4a).
+- Treat the same suspicion as the default for other connectors. `buildRoas`
+  passes an `account_id` filter to `facebook`; its client-side
+  `if (!acc) continue` guard is what actually limits ROAS to three accounts,
+  and removing it would silently fold in all 15.
 - **Filters apply per row**, not to the aggregate — `spend > 8000` matches no
   daily row even when the campaign total is far higher.
 - **Rate limits are real** and were hit repeatedly during development, LINE
@@ -181,6 +236,44 @@ because it's a strict subset of sessions and the funnel narrows properly.
 
 ---
 
+## 4a. GA4 Data API — the one non-Windsor path (v3.60.0)
+
+**Only `/api/page` uses this.** Everything else still goes through Windsor.
+This is a deliberate exception to the single-source rule in §1, taken because
+Windsor cannot filter GA4 at all (§3) and the Pages tab is unusable without it.
+
+| Item | Value |
+|---|---|
+| Endpoint | `analyticsdata.googleapis.com/v1beta/properties/484633959:runReport` |
+| Scope | `https://www.googleapis.com/auth/analytics.readonly` |
+| Auth | runtime service account, same `GoogleAuth` pattern as Sheets |
+| Requires | Analytics Data API enabled **and** the service account granted Viewer on the GA4 property |
+| Overrides | `GA4_API_BASE`, `GA4_LANDING_DIM` (default `landingPagePlusQueryString`) |
+
+Four differences from Windsor's field names, each of which is a silent wrong
+answer rather than an error if missed:
+
+1. **Dates are `YYYYMMDD`**, not `YYYY-MM-DD`. `slice(0,7)` for a month key
+   gives `2026072` on raw values — normalise with `ga4Date()` first.
+2. **camelCase metrics** — `engagedSessions`, not `engaged_sessions`.
+3. **`(not set)`, not empty string**, for untagged source/medium/campaign. Left
+   raw it renders as a source literally called "(not set)" and counts as a
+   tagged campaign. `ga4Val()` normalises it back.
+4. **No `conversions_<event>` columns.** Per-key-event counts need dimension
+   `eventName` + metric `keyEvents`, filtered to the seven names and summed.
+   The bare `keyEvents` metric **includes `login`**, which §4 deliberately
+   excludes, so using it alone inflates every figure on the tab.
+
+Sessions and key events therefore come from **paired reports merged by key** —
+adding `eventName` to the sessions report would multiply sessions across events.
+Ten small filtered reports replace five property-wide pulls.
+
+The server-side filter is `BEGINS_WITH` on the path, deliberately broader than
+needed; the existing `match()` still narrows to the page and its children, so a
+sibling like `/th/x/foo-2` is fetched but not counted.
+
+---
+
 ## 5. Meta Ads (`facebook`) — verified
 
 ### `clicks` is not link clicks
@@ -219,6 +312,29 @@ Fields: `query`, `page`, `country`, `clicks`, `impressions`, `position`, `date`,
 **`query × page × country` in one call OOM-killed the container.** It is split
 into two narrower calls (`query+page`, `query+country`) and merged.
 
+### Google Ads (`google_ads`) — connected Aug 2026
+
+Campaign names use the **same `YYMMDD-NN` convention as Meta**, so they join
+campaign analysis with no new matching logic. Registered in `AD_PLATFORMS`
+alongside facebook.
+
+**The platforms cannot share a field list.** Google Ads has no
+`campaign_objective` and none of the `actions_*` metrics, and requesting them
+makes the whole call fail rather than returning nulls — each platform declares
+its own `extra` fields. Useful fields: `adgroup`, `campaign_type`,
+`conversions`.
+
+Because Google reports no in-platform result, a Google campaign without a utm
+has genuinely lost its outcome, where a Meta lead-form campaign has not.
+
+### LINE — disconnected Aug 2026, code retained
+
+Removed from Windsor and replaced by Google Ads. Every call site routes through
+`lineWindsor()`, which resolves `null` unless `LINE_ENABLED=1`; all consumers
+already treated null as "unavailable". Kept rather than deleted because the
+request-ID join and same-day broadcast heuristic took real work. The test mock
+returns HTTP 400 for any LINE request, so a reintroduced call fails the suite.
+
 ### LINE — DEAD END for per-message metrics
 
 **Works** (the delivery table): `message__broadcast`, `message__targeting`,
@@ -251,6 +367,46 @@ ever start being logged, and will light up automatically.
 - Bucket by `review_create_time`, not `date`.
 - Google publishes the all-time average **rounded to one decimal**, which is why
   the running-rating opening balance carries slight imprecision.
+
+---
+
+## 6a. The e-commerce pipeline — a second data source
+
+E-commerce does **not** come from Windsor. It comes from a Google Sheet the
+marketing team maintains, fed by an Apps Script normaliser.
+
+**Monthly workflow.** The e-com team exports `report_order-*.xlsx` from the
+hospital's order system → it is imported to a tab named `Insert` → menu
+**กดตรงนี้ 👆🏻 ▸ Normalise Insert sheet** → clean rows are appended to `Orders`
+and `Insert` is deleted.
+
+**Sheet tabs, and what depends on them**
+
+| Tab | Role | Safe to delete? |
+|---|---|---|
+| `Orders` | 35 columns, one row per coupon. The dashboard reads this. | **No** |
+| `Package_Name` | the team's package master; resolves SKU, centre, order set | **No** |
+| `Package_Map` | crosswalk of export name + price → SKU, the team edits it | **No** |
+| `Load_Log` | audit trail of imports | rebuildable |
+| `Validation` | output of the validator | yes |
+
+**What the normaliser handles**, each because the raw export required it:
+merged multi-package orders split to one row per coupon; Buddhist-era dates
+(2569 → 2026); a grand-total footer row that would otherwise become data; order
+level fees allocated pro-rata by price; de-duplication on coupon number so a
+re-upload appends nothing; and **PII replaced with HMAC keys** — names, phones
+and emails never reach `Orders`, only `email_key` / `phone_key`, salted with a
+pepper in Script Properties that must never be regenerated.
+
+**Verified scale.** 85,528 rows, Jan 2024 → Jul 2026, 0 duplicates, 31 channels
+all classified, 98.5% carrying a customer key. Pre-2026 rows have no SKU at all,
+so **centre analysis is only meaningful inside 2026**; channel, migration,
+customer and package-name analysis work across all 31 months.
+
+**Channel taxonomy** lives in `CHANNEL_TYPE` (server) and `KNOWN_CHANNELS`
+(Apps Script) and must stay in step: Online 7 · Offline 11 · B2B 6 ·
+Special Campaign 3 · Complementary 3 · Extra 1. Three B2B/Special orders were
+₿8.3M of one month, which is why every e-commerce view defaults to Online only.
 
 ---
 
@@ -353,7 +509,52 @@ is deployment config so a bad edit can't lock everyone out.
 
 ---
 
-## 10. Testing
+## 10. Testing — four layers, all on `npm test`
+
+| File | Catches |
+|---|---|
+| `test/boot.js` | client parses and boots in jsdom; date range initialises |
+| `test/audit.js` | field lists by content, tab wiring, route guards, cache keys, table alignment, attribute escaping, palette, build stamp, release documented |
+| `test/smoke.sh` | every endpoint returns 200, plus ~60 field assertions |
+| `test/mock-fetch.js` | stubs Windsor, GA4, Sheets; returns 400 for LINE |
+
+### Three silent-failure classes that have each bitten more than once
+
+**1. A find-and-replace that matches nothing.** Python `str.replace` and
+`str_replace` fail silently when the anchor has drifted. Symptoms range from a
+missing legend to a whole tab shipping broken. **Always verify the edit landed**
+— grep for the new string, and for markup edits re-parse the client. Never chain
+a mutation behind `grep -c`: it exits 1 on zero matches and `&&` swallows the
+rest of the line.
+
+**2. Partial deploy.** `package.json` and `server.js` land, `public/index.html`
+does not. The badge shows the new version while the page is old, and the
+symptoms look like random bugs. `CLIENT_BUILD` in index.html is compared to
+`/api/version` on boot and shows an amber banner on mismatch; the audit asserts
+the stamp matches package.json.
+
+**3. Per-row counters on Windsor.** The facebook connector returns one row per
+campaign × ad set × date. Counting rows gave "42 days live" for a campaign that
+ran 7 days across 6 ad sets. Use a `Set` of dates.
+
+**4. A mock that answers the same however it is asked.** `windsorRows()` returns
+one row per field-set regardless of `filters`, so no test layer could tell a
+working filter from a discarded one. v3.59 shipped believing it filtered GA4
+server-side, pulled the whole property on every request, OOM-killed the
+container — and all four layers stayed green for two weeks, because the numbers
+were right. The output was correct; only the volume was insane.
+
+The rule: **a stub must be able to fail.** `ga4Report()` in `test/mock-fetch.js`
+reads the `dimensionFilter` it is sent and honours it, and its fixture includes
+a sibling page and a `login` event specifically so that dropping the filter,
+the `match()` narrowing, or the event list changes the numbers. If a mock
+cannot distinguish right from wrong behaviour, a green suite means nothing.
+
+Note also that `google-auth-library` exports `GoogleAuth` as a **read-only
+getter** — a plain assignment to stub it fails silently. Use
+`Object.defineProperty` and assert the swap took.
+
+### Original notes
 
 ```bash
 npm install && npm test        # bash test/smoke.sh
@@ -372,28 +573,54 @@ reproduces that class of bug in two seconds. **Run it before every deploy.**
 
 ## 11. Open issues
 
-**Blocking value:**
-- `ACCESS_BUCKET` unset → user permissions reset on cold start
-- Memory may still be 512 MiB → Topic Explorer can 503 on wide ranges
-- Google Ads not connected → an entire channel missing from every cost figure
+**~~Live blocker~~ — RESOLVED 21 Aug 2026 (v3.60.0).** The 503s were **the
+application**, and the reasoning that said otherwise is worth recording because
+it was wrong in an instructive way. "Boots clean, `/healthz` answers 200" only
+proves startup works; it says nothing about a request handler that allocates
+hundreds of MB. And the cache was never the problem — the memory went on a
+*transient* GA4 payload.
 
-**Data quality found in their account:**
-- `260701-08` — Meta reports ~432 landing page views in 3 days, GA4 records **zero**
-  sessions for the code. Confirmed tagging break on ~฿8.3K of spend.
-- ~50 campaigns arrive as bare numeric Meta IDs (no utm_campaign at all)
-- `__CAMPAIGN_NAME__` placeholder reached production (~75 sessions)
-- `260428-02_b _tra` — typo, space instead of a brand code
-- A campaign named `…_Engagement_THB 8344.46_NotUse` is still accruing spend
-- Dental GBP sits at **4.2** against 4.7–4.9 everywhere else
-- E-commerce: ~2.1K item views → 1 add-to-cart → 0 purchases. If those packages
-  are meant to sell online, that path looks broken.
+What the logs actually said: `latestCreated == latestReady`, 100% traffic, so
+nothing was stranded and the build was fine. Every 503 was the same request,
+`/api/page` for one campaign URL, one month, dying after 27–218s. Revision
+00073 logged `Memory limit of 512 MiB exceeded with 616 MiB used`; later
+revisions logged `Uncaught signal: 6` (SIGABRT), which is V8 aborting on heap
+exhaustion before Cloud Run's monitor reports it cleanly. Both are the same
+event. **A bare 503 with no JSON body means the container died** — §2 already
+said so.
 
-**Known inconsistency:**
-- Benchmarks CPC still uses `clicks` (all), while Campaigns now uses
-  `actions_link_click`. Left deliberately so historical comparisons stay stable —
-  decide whether to switch or show both.
+Root cause: Windsor silently ignores GA4 filters (§3), so `buildPage` was
+pulling all 482,355 rows of the property five times concurrently. Fixed by
+moving `/api/page` to the GA4 Data API (§4a).
 
----
+Two things were also true and both needed doing: memory had regressed to
+**512 MiB** despite §2 requiring ≥1 GiB, and is now **2 GiB**. Because deploys
+are managed by `gcp-cloud-build-deploy-cloud-run`, **re-check
+`resources.limits` after the next auto-deploy** — if it resets, pin memory in
+the build trigger rather than by hand, or this returns looking like a new bug.
+
+**Package_Map.** ~1,183 rows keyed on export name + price. Centre is ~98%
+filled (521 inferred by Claude and marked `GUESSED by Claude` in
+`center_source`, agreement measured at 86% against the team's own labels,
+81% excluding BIH which no package name can reveal). **SKU still needs the
+e-com team**, and only 2025–2026 packages matter.
+
+**Short links.** `bkhos.co/…` hides its destination, so ads using them cannot be
+classified in ROAS. A ฿15.6k Surgery campaign is affected. The short-link
+mapping would fix it.
+
+**Campaign attribution for e-commerce.** Every order row carries the campaign
+name "Annual campaign", so marketplace revenue cannot be tied to specific
+marketing activity. Needs a change at source.
+
+**Two zero-price rows** and one 2024 order where the payment total is 10× the
+sum of its coupon lines (`20240000251`, cancelled, Partnership) — both known,
+both harmless, both flagged by the validator.
+
+**Redemption and discount are computed but hidden.** Coupon status is not
+real-time and the SKU master has no reliable list price, so leading with either
+would imply a decision nobody can make. They return cheaply if the source
+improves.
 
 ## 12. Requested but not built
 
@@ -409,6 +636,31 @@ reproduces that class of bug in two seconds. **Run it before every deploy.**
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.60.0** — `/api/page` moved off Windsor onto the **GA4 Data API**, because
+Windsor's `filters` parameter does nothing on the googleanalytics4 connector
+(§3, proven with byte-identical responses including a filter on a nonexistent
+field). v3.59's "server-side filtering" never worked; the tab pulled the entire
+property — 482,355 rows for one month — five times concurrently and OOM-killed
+the container, surfacing as the 503 in §11. It was invisible because
+`buildPage` filtered client-side, so **the numbers were always correct**; only
+the volume was absurd.
+
+Ten small filtered reports now replace five property-wide pulls. Sessions and
+key events come from paired reports merged by key, so `login` stays out of the
+key-event totals (§4a). Response shape is unchanged — the client was not
+touched beyond the build stamp.
+
+`test/mock-fetch.js` now stubs the GA4 Data API and **honours the filter it is
+sent**, with a sibling page and a `login` event in the fixture so the narrowing
+logic is actually exercised. The old mock returned one row however it was
+asked, which is why four green layers missed this entirely (§10, class 4).
+
+Also corrected: the `// a filter miss should never reach here` comment in
+`buildRoas` said the opposite of the truth. That guard is load-bearing.
+
+Cloud Run memory raised 512 MiB → 2 GiB; it had regressed below the ≥1 GiB
+that §2 has required since the Topic Explorer OOM.
 
 **v3.59.1** — cleared the last two "Signal Room" strings, including the startup
 log line so logs identify the right build.

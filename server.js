@@ -102,6 +102,85 @@ async function sheetBatchGet(spreadsheetId, ranges) {
   return json.valueRanges || [];
 }
 
+// --------------------------------------------------- GA4 Data API (direct)
+
+/**
+ * A SECOND path to GA4 that bypasses Windsor, used only by the Pages tab.
+ *
+ * Windsor accepts a `filters` parameter on the googleanalytics4 connector,
+ * returns HTTP 200, and then ignores it completely. Verified 21 Aug 2026: the
+ * same one-day request with no filter, a valid `landing_page` filter, and a
+ * filter on a field that does not exist all returned byte-identical responses
+ * (1,799,637 bytes, 16,887 rows, 11,072 distinct landing pages). v3.59 was
+ * built on the belief that server-side filtering worked; it never did.
+ *
+ * The consequence was invisible because buildPage filtered client-side, so the
+ * numbers were always right — the endpoint was merely pulling the entire
+ * property (482,355 rows for one month) five times concurrently and running the
+ * container out of memory. That surfaced as a bare Cloud Run 503.
+ *
+ * The Data API applies dimensionFilter server-side for real, which turns those
+ * five property-wide pulls into a handful of rows. Everything else in this
+ * service still goes through Windsor; this is a deliberate, narrow exception.
+ */
+const GA4_DATA_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
+const GA4_API_BASE = process.env.GA4_API_BASE || "https://analyticsdata.googleapis.com/v1beta";
+
+let _ga4Auth = null;
+async function ga4Token() {
+  if (!_ga4Auth) _ga4Auth = new GoogleAuth({ scopes: [GA4_DATA_SCOPE] });
+  const client = await _ga4Auth.getClient();
+  const t = await client.getAccessToken();
+  const token = typeof t === "string" ? t : t && t.token;
+  if (!token) throw new Error("Could not obtain an access token for the GA4 Data API");
+  return token;
+}
+
+/**
+ * runReport, returning rows as flat objects keyed by the names asked for, so
+ * callers read `row.sessions` exactly as they did with Windsor.
+ *
+ * The Data API caps a response at 100,000 rows and defaults to 10,000, so the
+ * limit is explicit and a truncated response is reported rather than silently
+ * short. With a landing-page filter applied this should never come close.
+ */
+async function ga4RunReport({ dimensions, metrics, from, to, dimensionFilter, limit = 100000 }) {
+  const token = await ga4Token();
+  const body = {
+    dateRanges: [{ startDate: from, endDate: to }],
+    dimensions: dimensions.map((name) => ({ name })),
+    metrics: metrics.map((name) => ({ name })),
+    limit,
+    returnPropertyQuota: false,
+  };
+  if (dimensionFilter) body.dimensionFilter = dimensionFilter;
+
+  const res = await fetch(`${GA4_API_BASE}/properties/${GA4_ACCOUNT}:runReport`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    const err = new Error(`GA4 Data API ${res.status}: ${text.slice(0, 300)}`);
+    err.status = res.status === 403 ? 403 : 502;
+    throw err;
+  }
+  const json = await res.json();
+  const dimHeaders = (json.dimensionHeaders || []).map((h) => h.name);
+  const metHeaders = (json.metricHeaders || []).map((h) => h.name);
+  const rows = (json.rows || []).map((r) => {
+    const o = {};
+    dimHeaders.forEach((h, i) => { o[h] = (r.dimensionValues && r.dimensionValues[i] || {}).value ?? null; });
+    metHeaders.forEach((h, i) => { o[h] = (r.metricValues && r.metricValues[i] || {}).value ?? null; });
+    return o;
+  });
+  if (rows.length >= limit) {
+    logJson("WARNING", "ga4_report_truncated", { limit, dimensions, metrics, from, to });
+  }
+  return rows;
+}
+
 const CODE_RE = /^\d{6}-\d{1,3}/;   // 260605-01...
 const looksLikeCode = (v) => CODE_RE.test(String(v || "").trim());
 
@@ -3632,7 +3711,12 @@ async function buildRoas(from, to) {
   }
   for (const r of ads) {
     const acc = perAccount.get(String(r.account_id || ""));
-    if (!acc) continue;                       // a filter miss should never reach here
+    // LOAD-BEARING. Windsor accepts `filters` and ignores it (proven on the GA4
+    // connector 21 Aug 2026, see the GA4 Data API block above), so assume the
+    // account_id filter above does nothing and all 15 ad accounts arrive here.
+    // This line is what keeps ROAS to the three storefront accounts. The old
+    // comment claimed a filter miss "should never reach here" — it always does.
+    if (!acc) continue;
     const date = String(r.date || "").slice(0, 10);
     if (!date) continue;
     const m = date.slice(0, 7);
@@ -3848,80 +3932,165 @@ function pagePath(input) {
   return p.replace(/\/+$/, "") || "/";
 }
 
+/**
+ * The seven key events, as GA4 event names rather than Windsor column names.
+ * `login` is a key event in GA4 but is deliberately excluded (CONTEXT §4), so
+ * the aggregate `keyEvents` metric cannot be used on its own — it would quietly
+ * fold login in and inflate every figure on this tab.
+ */
+const KEY_EVENT_NAMES = KEY_EVENT_FIELDS.map((f) => f.replace(/^conversions_/, ""));
+
+const GA4_LANDING_DIM = process.env.GA4_LANDING_DIM || "landingPagePlusQueryString";
+
+/** GA4 reports dates as YYYYMMDD; the rest of this service speaks YYYY-MM-DD. */
+const ga4Date = (v) => {
+  const s = String(v || "");
+  return /^\d{8}$/.test(s) ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}` : s;
+};
+
+/**
+ * GA4 writes "(not set)" where Windsor wrote an empty string. Left as-is it
+ * would render as a real source called "(not set)" and be counted as a tagged
+ * campaign, so it is normalised back to empty here.
+ */
+const ga4Val = (v) => {
+  const s = String(v ?? "").trim();
+  return s === "(not set)" || s === "(none)" ? "" : s;
+};
+
 async function buildPage(url, from, to) {
   const path = pagePath(url);
   if (!path) return { empty: true, reason: "no path" };
 
   /**
-   * GA4 is filtered SERVER-SIDE on the landing page. Pulling landing_page
-   * crossed with date, source, medium and campaign across the whole property
-   * exceeds Windsor's response limit on any range longer than a month or two —
-   * "Data size is too big". Filtering first collapses it to the handful of rows
-   * that actually matter, and the dimensions are split across three small calls
-   * rather than one wide cross-product.
+   * Filtered SERVER-SIDE, for real this time.
+   *
+   * BEGINS_WITH is deliberately broader than we need: it also matches a sibling
+   * like "/th/x/foo-2" when the path is "/th/x/foo". That is fine and cheap —
+   * match() below narrows it to the page and its children exactly as before.
+   * The point of the server-side filter is volume, not precision.
    */
-  const filters = [{ field: "landing_page", operation: "contains", value: path }];
-  const metrics = ["sessions", "engaged_sessions", ...KEY_EVENT_FIELDS];
-  const pull = (dims, f, t) => windsor("googleanalytics4", ga4Fields(dims, metrics), f, t,
-    { accounts: [GA4_ACCOUNT], filters });
+  const dimensionFilter = {
+    filter: { fieldName: GA4_LANDING_DIM, stringFilter: { matchType: "BEGINS_WITH", value: path } },
+  };
+  const keyEventFilter = {
+    andGroup: { expressions: [
+      dimensionFilter,
+      { filter: { fieldName: "eventName", inListFilter: { values: KEY_EVENT_NAMES } } },
+    ] },
+  };
+
+  const sessionsBy = (dims, f, t) => ga4RunReport({
+    dimensions: [GA4_LANDING_DIM, ...dims], metrics: ["sessions", "engagedSessions"],
+    from: f, to: t, dimensionFilter,
+  });
+  // Key events must be counted per eventName and summed, so that `login` stays
+  // out. Adding eventName to the sessions report instead would multiply
+  // sessions across events, so these are separate reports merged by key.
+  const keyEventsBy = (dims, f, t) => ga4RunReport({
+    dimensions: [GA4_LANDING_DIM, ...dims, "eventName"], metrics: ["keyEvents"],
+    from: f, to: t, dimensionFilter: keyEventFilter,
+  });
 
   const cw = comparisonWindows(from, to);
-  const { data } = await runJobs({
-    byDate: pull(["landing_page", "date"], from, to),
-    bySource: pull(["landing_page", "session_manual_source", "session_manual_medium"], from, to),
-    byCampaign: pull(["landing_page", "session_manual_campaign_name"], from, to),
+  const { data, errors } = await runJobs({
+    dateS: sessionsBy(["date"], from, to),
+    dateK: keyEventsBy(["date"], from, to),
+    srcS: sessionsBy(["sessionManualSource", "sessionManualMedium"], from, to),
+    srcK: keyEventsBy(["sessionManualSource", "sessionManualMedium"], from, to),
+    cmpS: sessionsBy(["sessionManualCampaignName"], from, to),
+    cmpK: keyEventsBy(["sessionManualCampaignName"], from, to),
     // Same page, same length of range, one year earlier.
-    yoy: pull(["landing_page"], cw.yoy.from, cw.yoy.to),
-    prev: pull(["landing_page"], cw.prev.from, cw.prev.to),
+    yoyS: sessionsBy([], cw.yoy.from, cw.yoy.to),
+    yoyK: keyEventsBy([], cw.yoy.from, cw.yoy.to),
+    prevS: sessionsBy([], cw.prev.from, cw.prev.to),
+    prevK: keyEventsBy([], cw.prev.from, cw.prev.to),
   });
-  if (data.byDate === null) {
-    const e = new Error("GA4 unavailable for this page"); e.status = 502; throw e;
+  if (data.dateS === null) {
+    const e = new Error(`GA4 unavailable for this page: ${errors.dateS || "unknown"}`);
+    e.status = String(errors.dateS || "").includes("403") ? 403 : 502;
+    throw e;
   }
 
-  // The filter is a `contains`, so confirm the row really sits at or beneath the
-  // path rather than merely mentioning it.
+  // BEGINS_WITH is broad, so confirm the row really sits at or beneath the path
+  // rather than merely starting with the same characters.
   const match = (lp) => {
     const p = pagePath(lp);
     return p === path || p.startsWith(path + "/");
   };
-  const keyOf = (r) => KEY_EVENT_FIELDS.reduce((a, f) => a + n(r[f]), 0);
-  const rows = (set) => (set || []).filter((r) => r.landing_page && match(r.landing_page));
-  const sum = (set) => rows(set).reduce((a, r) => ({
-    sessions: a.sessions + n(r.sessions),
-    engaged: a.engaged + n(r.engaged_sessions),
-    keyEvents: a.keyEvents + keyOf(r),
-  }), { sessions: 0, engaged: 0, keyEvents: 0 });
+  const rows = (set) => (set || []).filter((r) => r[GA4_LANDING_DIM] && match(r[GA4_LANDING_DIM]));
 
-  const now = sum(data.byDate);
-  const yoy = data.yoy === null ? null : sum(data.yoy);
-  const prev = data.prev === null ? null : sum(data.prev);
-
-  const months = new Map(), variants = new Map();
-  for (const r of rows(data.byDate)) {
-    const se = n(r.sessions), en = n(r.engaged_sessions), ke = keyOf(r);
-    const m = String(r.date || "").slice(0, 7);
-    if (m) {
-      const mm = months.get(m) || { month: m, sessions: 0, engaged: 0, keyEvents: 0 };
-      mm.sessions += se; mm.engaged += en; mm.keyEvents += ke;
-      months.set(m, mm);
-    }
-    const lp = String(r.landing_page);
-    const v = variants.get(lp) || { page: lp, sessions: 0 };
-    v.sessions += se;
-    variants.set(lp, v);
-  }
-
-  const group = (set, keyFn, label) => {
+  /**
+   * Fold a key-event report down to one number per grouping key, then read it
+   * back while walking the sessions report. Sessions and key events come from
+   * separate reports, so a grouping present in one and absent from the other
+   * must contribute zero rather than drop the row.
+   */
+  const keyIndex = (set, keyFn) => {
     const m = new Map();
     for (const r of rows(set)) {
       const k = keyFn(r);
       if (k === null) continue;
+      m.set(k, (m.get(k) || 0) + n(r.keyEvents));
+    }
+    return m;
+  };
+  /** Totals for a window, from its paired sessions and key-event reports. */
+  const sum = (sSet, kSet) => {
+    if (sSet === null) return null;
+    const base = rows(sSet).reduce((a, r) => ({
+      sessions: a.sessions + n(r.sessions),
+      engaged: a.engaged + n(r.engagedSessions),
+    }), { sessions: 0, engaged: 0 });
+    const keyEvents = rows(kSet).reduce((a, r) => a + n(r.keyEvents), 0);
+    return { ...base, keyEvents };
+  };
+
+  const now = sum(data.dateS, data.dateK);
+  const yoy = sum(data.yoyS, data.yoyK);
+  const prev = sum(data.prevS, data.prevK);
+
+  const monthKey = (r) => ga4Date(r.date).slice(0, 7);
+  const monthKeyEvents = keyIndex(data.dateK, monthKey);
+
+  const months = new Map(), variants = new Map();
+  for (const r of rows(data.dateS)) {
+    const se = n(r.sessions), en = n(r.engagedSessions);
+    const m = monthKey(r);
+    if (m) {
+      const mm = months.get(m) || { month: m, sessions: 0, engaged: 0, keyEvents: 0 };
+      mm.sessions += se; mm.engaged += en;
+      months.set(m, mm);
+    }
+    // Normalised so "/x?utm=1" and "/x" are one variant, matching how the
+    // Windsor-era landing_page dimension behaved.
+    const lp = pagePath(r[GA4_LANDING_DIM]);
+    const v = variants.get(lp) || { page: lp, sessions: 0 };
+    v.sessions += se;
+    variants.set(lp, v);
+  }
+  for (const mm of months.values()) mm.keyEvents = monthKeyEvents.get(mm.month) || 0;
+
+  /** Group a sessions report, folding in key events from its paired report. */
+  const group = (sSet, kSet, keyFn, label) => {
+    const keys = keyIndex(kSet, keyFn);
+    const m = new Map();
+    for (const r of rows(sSet)) {
+      const k = keyFn(r);
+      if (k === null) continue;
       const e = m.get(k) || { [label]: k, sessions: 0, engaged: 0, keyEvents: 0 };
-      e.sessions += n(r.sessions); e.engaged += n(r.engaged_sessions); e.keyEvents += keyOf(r);
+      e.sessions += n(r.sessions); e.engaged += n(r.engagedSessions);
       m.set(k, e);
     }
+    for (const e of m.values()) e.keyEvents = keys.get(e[label]) || 0;
     return [...m.values()];
   };
+
+  const srcKey = (r) => `${ga4Val(r.sessionManualSource) || "(direct)"} / ${ga4Val(r.sessionManualMedium) || "(none)"}`;
+  const cmpKey = (r) => ga4Val(r.sessionManualCampaignName) || null;
+
+  const sources = group(data.srcS, data.srcK, srcKey, "source");
+  const campaigns = group(data.cmpS, data.cmpK, cmpKey, "campaign");
 
   const rate = (a, b) => (b > 0 ? a / b : null);
   const shape = (o) => ({ ...o,
@@ -3934,8 +4103,8 @@ async function buildPage(url, from, to) {
     windows: cw,
     totals: shape({ ...now,
       pages: variants.size,
-      sources: group(data.bySource, (r) => `${r.session_manual_source || "(direct)"} / ${r.session_manual_medium || "(none)"}`, "source").length,
-      campaigns: group(data.byCampaign, (r) => r.session_manual_campaign_name || null, "campaign").length }),
+      sources: sources.length,
+      campaigns: campaigns.length }),
     compare: {
       yoy: yoy && { ...yoy, sessions: yoy.sessions, change: change(now.sessions, yoy.sessions),
                     keyEventChange: change(now.keyEvents, yoy.keyEvents) },
@@ -3943,10 +4112,8 @@ async function buildPage(url, from, to) {
                       keyEventChange: change(now.keyEvents, prev.keyEvents) },
     },
     monthly: [...months.values()].map(shape).sort((a, b) => (a.month < b.month ? -1 : 1)),
-    sources: group(data.bySource, (r) => `${r.session_manual_source || "(direct)"} / ${r.session_manual_medium || "(none)"}`, "source")
-      .map(shape).sort((a, b) => b.sessions - a.sessions).slice(0, 15),
-    campaigns: group(data.byCampaign, (r) => r.session_manual_campaign_name || null, "campaign")
-      .map(shape).sort((a, b) => b.sessions - a.sessions).slice(0, 15),
+    sources: sources.map(shape).sort((a, b) => b.sessions - a.sessions).slice(0, 15),
+    campaigns: campaigns.map(shape).sort((a, b) => b.sessions - a.sessions).slice(0, 15),
     variants: [...variants.values()].sort((a, b) => b.sessions - a.sessions).slice(0, 12),
     empty: now.sessions === 0,
   };

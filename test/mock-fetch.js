@@ -11,6 +11,23 @@
  */
 const realFetch = global.fetch;
 
+/**
+ * Application Default Credentials do not exist in CI, and google-auth-library
+ * does not route its token fetch through global.fetch, so stubbing fetch alone
+ * is not enough. This module is preloaded with --require, before server.js
+ * destructures GoogleAuth, so replacing the export here is sufficient.
+ */
+// The export is a read-only getter, so a plain assignment fails silently.
+{
+  const gal = require("google-auth-library");
+  const MockGoogleAuth = class GoogleAuth {
+    constructor(opts = {}) { this.scopes = opts.scopes || []; }
+    async getClient() { return { getAccessToken: async () => ({ token: "mock-token" }) }; }
+  };
+  Object.defineProperty(gal, "GoogleAuth", { value: MockGoogleAuth, writable: true, configurable: true });
+  if (gal.GoogleAuth !== MockGoogleAuth) throw new Error("mock-fetch: failed to stub GoogleAuth");
+}
+
 const qp = (url, k) => { try { return new URL(url).searchParams.get(k); } catch { return null; } };
 const jsonRes = (body, status = 200) => ({
   ok: status >= 200 && status < 300,
@@ -63,8 +80,78 @@ function windsorRows(connector, fields) {
   return [row];
 }
 
+/**
+ * GA4 Data API runReport.
+ *
+ * This stub APPLIES the dimensionFilter it is given, unlike Windsor, which
+ * accepts one and silently ignores it. That difference is the whole point: the
+ * Pages tab shipped in v3.59 believing it had server-side filtering, pulled the
+ * entire property on every request, and OOM-killed the container — and every
+ * test layer stayed green because the old mock returned a single row whatever
+ * was asked of it. A mock that ignores filters cannot tell a working filter
+ * from a discarded one, so this one refuses to.
+ */
+const GA4_PAGES = [
+  "/th/bangkok-heart/package/x",
+  "/th/bangkok-heart/package/x/details",
+  "/th/bangkok-heart/package/x-other",   // sibling: BEGINS_WITH catches it, match() must not
+  "/th/somewhere-else/page",
+];
+const GA4_EVENTS = ["appointments", "contact_us", "login"];  // login must be filtered out
+
+function ga4Report(body) {
+  const dims = (body.dimensions || []).map((d) => d.name);
+  const mets = (body.metrics || []).map((m) => m.name);
+
+  // Read the filter the server actually sent, and honour it.
+  const flat = [];
+  const walk = (e) => {
+    if (!e) return;
+    if (e.filter) flat.push(e.filter);
+    for (const k of ["andGroup", "orGroup"]) if (e[k]) (e[k].expressions || []).forEach(walk);
+  };
+  walk(body.dimensionFilter);
+  const beginsWith = (flat.find((f) => f.stringFilter && f.stringFilter.matchType === "BEGINS_WITH") || {});
+  const prefix = beginsWith.stringFilter ? beginsWith.stringFilter.value : null;
+  const inList = flat.find((f) => f.inListFilter);
+  const allowedEvents = inList ? inList.inListFilter.values : null;
+
+  const pages = prefix ? GA4_PAGES.filter((p) => p.startsWith(prefix)) : GA4_PAGES;
+  const dates = ["20260714", "20260715"];
+  const rows = [];
+  const emit = (vals) => rows.push({
+    dimensionValues: vals.map((value) => ({ value })),
+    metricValues: mets.map((m) => ({ value: m === "keyEvents" ? "3" : m === "engagedSessions" ? "60" : "100" })),
+  });
+  const expand = (i, acc) => {
+    if (i === dims.length) return emit(acc);
+    const d = dims[i];
+    const opts = d === "date" ? dates
+      : d === "eventName" ? (allowedEvents || GA4_EVENTS)
+      : d === "sessionManualSource" ? ["facebook"]
+      : d === "sessionManualMedium" ? ["paid"]
+      : d === "sessionManualCampaignName" ? ["260701-08_bht_tra", "(not set)"]
+      : pages;
+    for (const v of opts) expand(i + 1, [...acc, v]);
+  };
+  if (pages.length) expand(0, []);
+  return {
+    dimensionHeaders: dims.map((name) => ({ name })),
+    metricHeaders: mets.map((name) => ({ name })),
+    rows,
+    rowCount: rows.length,
+  };
+}
+
 global.fetch = async (url, opts = {}) => {
   const u = String(url);
+
+  if (u.includes("analyticsdata.googleapis.com")) {
+    if (process.env.MOCK_FAIL_GA4 === "1") return jsonRes({ error: { message: "simulated GA4 failure" } }, 500);
+    let body = {};
+    try { body = JSON.parse(opts.body || "{}"); } catch { /* fall through to empty */ }
+    return jsonRes(ga4Report(body));
+  }
 
   if (u.includes("connectors.windsor.ai/google_ads")) {
     return jsonRes({ data: [
