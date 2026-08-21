@@ -1,6 +1,7 @@
 # CONTEXT — read this before changing anything
 
-Handoff document for BHQ Signal Room (formerly "Cross-Channel Control Room").
+Handoff document for **BHQ War Room** (formerly "BHQ Signal Room", originally
+"Cross-Channel Control Room").
 
 Everything below was **verified against the live APIs**, not inferred from
 documentation. Several entries exist specifically because the obvious approach
@@ -406,6 +407,51 @@ reproduces that class of bug in two seconds. **Run it before every deploy.**
 ---
 
 ## 13. Version history
+
+### Recent (August 2026)
+
+**v3.59.1** — cleared the last two "Signal Room" strings, including the startup
+log line so logs identify the right build.
+
+*Process failure worth remembering:* the version bump for this release silently
+did not run. The command was `grep -c "Signal Room" server.js && sed -i …`, and
+`grep -c` prints `0` but **exits 1** when there are no matches, so `&&`
+short-circuited and both `sed` commands were skipped. The shipped zip therefore
+held a changed `server.js` beside a `package.json` and `index.html` byte
+identical to the previous release. GitHub correctly created no commit for the
+unchanged files, which looked like "public/index.html and package.json won't
+update". **Never chain a mutation behind `grep -c`.**
+
+A second silent failure compounded it: `CONTEXT.md` was restored from an older
+zip after a container reset, so several anchor-based `str.replace` changelog
+edits matched nothing and did nothing. Anchor replacements fail silently by
+design — append to this section instead.
+
+**v3.59** — Pages tab: GA4 was returning "Data size is too big" on any long
+range. Cause was one query crossing landing_page × date × source × medium ×
+campaign across the whole property. **Windsor supports server-side GA4 filters**
+— `filters: [{field:"landing_page", operation:"contains", value:path}]`,
+verified live — so the pull is filtered first and split by dimension. YoY and
+MoM added on the back of it.
+
+**v3.58** — renamed to BHQ War Room; new Pages tab under Campaigns; removed the
+Registered short links card (the data still matches organic posts, only the list
+went).
+
+**v3.57** — Google Ads folded into campaign analysis via the AD_PLATFORMS
+registry. The platforms cannot share a field list: Google Ads has no
+`campaign_objective` and no `actions_*` metrics, and requesting them fails the
+whole call. Google campaigns expand to ad groups.
+
+**v3.56** — LINE disconnected from Windsor and replaced by Google Ads. LINE is
+behind `LINE_ENABLED` (default off) rather than deleted; the mock now returns
+HTTP 400 for any LINE call so a reintroduced one fails the suite.
+
+**v3.55.1** — "days live" counted rows, not dates. Windsor returns one row per
+campaign × ad set × date, so six ad sets over seven days read as 42. Any
+per-row counter on this connector is counting that cross-product.
+
+### Earlier
 
 v1 realtime cross-channel · v2 Topic Explorer (AI) · v2.1 Model Armor +
 structured logging · v3 SPA, light theme, funnel, e-commerce, campaigns ·

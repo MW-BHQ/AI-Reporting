@@ -50,6 +50,17 @@ const stamp = (html.match(/const CLIENT_BUILD = '([\d.]+)'/) || [])[1];
     ? fail("build stamp", `index.html says ${stamp}, package.json says ${pkg.version}`)
     : ok("build stamp", `client and package agree at ${stamp}`);
 
+// ---------------------------------------------------------------- release log
+// A version bump that silently fails produces a "new" release whose files are
+// byte-identical to the last one — git then creates no commit and the deploy
+// looks stuck. CONTEXT.md must mention the current version, which only happens
+// if the release was actually written up.
+const ctx = fs.readFileSync(path.join(root, "CONTEXT.md"), "utf8");
+const major = pkg.version.split(".").slice(0, 2).join(".");
+ctx.includes(pkg.version) || ctx.includes(`v${major} `)
+  ? ok("release documented", `CONTEXT.md mentions ${pkg.version.startsWith(major) ? "v" + major : pkg.version}`)
+  : fail("release documented", `CONTEXT.md has no entry for v${pkg.version}`);
+
 // ---------------------------------------------------------------- palette
 // The rule worth enforcing is semantic separation, not a particular brand hue:
 // a category colour must never be the same as the up/down indicators, because
