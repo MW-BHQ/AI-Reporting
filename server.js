@@ -1,5 +1,5 @@
 /**
- * BHQ Signal Room (Cross-Channel Control Room) — v3
+ * BHQ War Room (Cross-Channel Marketing Intelligence) — v3
  *
  * Single Cloud Run service. Serves the SPA and exposes:
  *   GET  /api/overview?from&to[&refresh=1]   funnel + channels + ecommerce + forecast
@@ -4081,6 +4081,6 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, "public")));
 
 app.listen(PORT, () => {
-  console.log(`BHQ Signal Room v${VERSION} listening on :${PORT}`);
+  console.log(`BHQ War Room v${VERSION} listening on :${PORT}`);
   gcpProjectId().then((id) => console.log(`[init] GCP project: ${id}`)).catch(() => {});
 });
