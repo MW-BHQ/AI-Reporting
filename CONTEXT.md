@@ -646,6 +646,31 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.61.1** — every percentage change now goes through one `changeText()`
+helper, which caps at **`>10×`** above +1000% and floors at `−100%`.
+
+The Pages tab was rendering `+42867%` (3 sessions → 1,289) as its largest
+figure. Above tenfold a percentage stops informing and starts reading as either
+a spectacular result or a broken dashboard; `>10×` says the same thing without
+pretending to five significant figures. The real baseline stays in each
+caller's tooltip, so nothing is hidden.
+
+I had claimed `delta()` was a single choke point. **It was not** — there were
+**four** independent renderers: `delta()`, `arrow()` in Monthly Report, the
+year-bar caption, and `mom()` in Channels. Each formatted its own percentage
+and only `delta()` was ever looked at. All four now share the formatter and
+keep their own colour and markup.
+
+`pct()` is deliberately NOT routed through it: that renders rates and shares,
+which legitimately run 0–100% and must never be capped.
+
+New audit rule **`change:capped`** fails the build if a fifth raw renderer
+appears. It exempts `changeText()` and `pct()` by name, and was verified by
+inserting a violation and confirming the rule catches it — the same "a check
+must be able to fail" discipline as §10 class 4. Note the exemption is anchored
+to `const pct = (v) =>`; a looser pattern matches an unrelated local `pct` at
+line 1233 and silently exempts the wrong thing.
+
 **v3.61.0** — the ROAS tab is now **Ad Performance**, pivoted onto the ad
 campaigns instead of a revenue ratio. `445.8×` was the largest figure on the
 screen and meant nothing: the denominator was ฿11.3K from one campaign live

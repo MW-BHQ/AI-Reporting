@@ -67,8 +67,7 @@ ctx.includes(pkg.version) || ctx.includes(`v${major} `)
 // green once meant both "Offline" and "improving" on the same screen.
 const SEMANTIC = ["2E9E6F", "D9534F"];              // up, down
 const typeBlock = html.match(/const TYPE_COLORS = \{([\s\S]*?)\};/);
-if (!typeBlock) fail("palette:types", "TYPE_COLORS not found");
-else {
+if (!typeBlock) fail("palette:types", "TYPE_COLORS not found");else {
   const hexes = [...typeBlock[1].matchAll(/#([0-9A-Fa-f]{6})/g)].map((m) => m[1].toUpperCase());
   const clash = hexes.filter((x) => SEMANTIC.includes(x));
   const dupes = hexes.filter((x, i) => hexes.indexOf(x) !== i);
@@ -167,6 +166,35 @@ for (const mm of html.matchAll(/(?:title|data-tip)="([^"]*\$\{[^"]*)"/g)) {
 }
 attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
                 : ok("attribute escaping", "upstream text escaped in attributes");
+
+/**
+ * Every percentage CHANGE must go through changeText(), which caps runaway
+ * values at ">10x". Four renderers formatted this independently until v3.61.1,
+ * and the Pages tab shipped "+42867%" as its largest figure because one of them
+ * had no cap. A fifth added later would reintroduce it silently.
+ *
+ * Two formatters are sanctioned and exempt: changeText() itself, and pct(),
+ * which renders RATES and SHARES — those legitimately run 0-100% and must not
+ * be capped. Bar widths always divide by a max, so they never match.
+ */
+{
+  const exempt = [
+    // Anchored to the arrow-function formatter: there are other locals called
+    // `pct` earlier in the file, and a loose pattern removes one of those and
+    // leaves the real one flagged.
+    /const pct = \(v\) => [^;]+;/,
+    /function changeText\([\s\S]*?\n\}/,
+  ];
+  let scan = html;
+  for (const re of exempt) scan = scan.replace(re, "");
+  const raw = [...scan.matchAll(/\(\s*(?:Math\.abs\()?\s*([A-Za-z_$][\w.$]*)\s*\*\s*100\s*\)?\s*\)\.toFixed\(/g)]
+    .map((m) => m[1])
+    .filter((v) => !/^(frac|share)$/.test(v));
+  raw.length
+    ? fail("change:capped", `percentage change rendered outside changeText(): ${raw.join(", ")}`)
+    : ok("change:capped", "all change renderers routed through changeText()");
+}
+
 
 console.log(failures ? `\n${failures} audit check(s) failed` : "\nstatic audit clean");
 process.exit(failures ? 1 : 0);

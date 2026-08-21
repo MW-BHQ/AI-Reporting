@@ -2063,11 +2063,32 @@ const TYPE_COLORS = {
 // Change chip: green up, orange down, muted when there is nothing to compare
 // against. "—" is deliberate rather than 0%, because no prior data and no change
 // are different facts.
+/**
+ * The single place a percentage change becomes text.
+ *
+ * Above tenfold a percentage stops informing and starts misleading. A page that
+ * went from 3 sessions to 1,289 is a true "+42867%", and that figure once sat
+ * as the largest thing on the Pages tab — fake-precise, and read by anyone
+ * senior as either a spectacular result or a broken dashboard. "grew >10x" says
+ * the same thing without pretending to five significant figures.
+ *
+ * Callers keep their own colour and markup; only the number is shared, so the
+ * four renderers that used to format this independently cannot drift apart.
+ * The real baseline stays in each caller's tooltip.
+ */
+const CHANGE_CAP = 10;              // +1000%
+function changeText(v, digits = 0) {
+  if (v === null || v === undefined) return null;
+  if (v >= CHANGE_CAP) return '>10\u00D7';
+  if (v <= -0.999) return '\u2212100%';   // gone to zero: -99.97% is noise
+  const sign = v > 0 ? '+' : '';
+  return `${sign}${(v * 100).toFixed(digits)}%`;
+}
+
 const delta = (v, label) => {
   if (v === null || v === undefined) return `<span class="dlt none" data-tip="No ${esc(label)} data to compare against">—</span>`;
   const cls = v > 0.005 ? 'up' : (v < -0.005 ? 'down' : 'flat');
-  const sign = v > 0 ? '+' : '';
-  return `<span class="dlt ${cls}" data-tip="${esc(label)}">${sign}${(v*100).toFixed(v>=1||v<=-1?0:1)}%</span>`;
+  return `<span class="dlt ${cls}" data-tip="${esc(label)}">${changeText(v, v >= 1 || v <= -1 ? 0 : 1)}</span>`;
 };
 const typeColour = (t) => TYPE_COLORS[t] || '#A9B4CE';
 
@@ -2515,7 +2536,7 @@ function renderEcomMonthly() {
   };
   const arrow = (v) => v === null || v === undefined
     ? '<span class="mr-flat">—</span>'
-    : `<span class="${v>=0?'mr-up':'mr-down'}">${v>=0?'▲':'▼'} ${Math.abs(v*100).toFixed(2)}%</span>`;
+    : `<span class="${v>=0?'mr-up':'mr-down'}">${v>=0?'▲':'▼'} ${changeText(v, 2).replace(/^[+−-]/,'')}</span>`;
 
   const kpi = (label, value, unit, prevLabel, prevValue, change, note) => `
     <div class="mr-kpi">
@@ -2552,7 +2573,7 @@ function renderEcomMonthly() {
         // growth from nothing.
         const dir = a > 0 ? (b >= a ? 'grew' : 'fell') : 'new';
         const fillNow = dir === 'grew' ? '#3BAF7A' : (dir === 'fell' ? '#E8724F' : 'var(--violet)');
-        const chg = a > 0 ? ` · ${b>=a?'+':''}${(((b-a)/a)*100).toFixed(0)}% vs ${prevYr}` : ` · no ${prevYr} figure`;
+        const chg = a > 0 ? ` · ${changeText((b-a)/a)} vs ${prevYr}` : ` · no ${prevYr} figure`;
         const bar = (v,off,prior) => v>0 ? `<rect x="${(cx+off-bw/2).toFixed(1)}" y="${yOf(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H-yOf(v)).toFixed(1)}" rx="2"
             fill="${prior?'#E7E3FB':fillNow}" ${prior?'stroke="#CFC8F5" stroke-width=".8"':''}
             data-tip="${esc(r.name)} · ${prior?prevYr:yr}\n${fmt(v)}${prior?'':chg}" style="cursor:help;"></rect>
@@ -2906,7 +2927,7 @@ function renderEcomChannels() {
       <polyline points="${pts}" fill="none" stroke="${colour(c.channel)}" stroke-width="1.6"/></svg>`;
   };
   const mom = (v) => v === null ? '<span style="color:var(--faint)">—</span>'
-    : `<span style="color:${v>=0.05?'#2E9E6F':(v<=-0.05?'#D9534F':'var(--muted)')};font-weight:${Math.abs(v)>=0.05?600:400};">${v>=0?'+':''}${(v*100).toFixed(0)}%</span>`;
+    : `<span style="color:${v>=0.05?'#2E9E6F':(v<=-0.05?'#D9534F':'var(--muted)')};font-weight:${Math.abs(v)>=0.05?600:400};">${changeText(v)}</span>`;
 
   $('viewRoot').innerHTML = `
     ${d.unclassified && d.unclassified.length ? `<div class="card" style="border-left:3px solid #D97B1F;margin-bottom:14px;">
@@ -3910,7 +3931,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.61.0';
+const CLIENT_BUILD = '3.61.1';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
