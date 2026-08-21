@@ -98,12 +98,14 @@ const GA4_PAGES = [
   "/th/somewhere-else/page",
 ];
 const GA4_EVENTS = ["appointments", "contact_us", "login"];  // login must be filtered out
+const GA4_LANDING_DIM_NAME = process.env.GA4_LANDING_DIM || "landingPagePlusQueryString";
 
 function ga4Report(body) {
   const dims = (body.dimensions || []).map((d) => d.name);
   const mets = (body.metrics || []).map((m) => m.name);
 
-  // Read the filter the server actually sent, and honour it.
+  // Read the filter the server actually sent, and honour it — per field, since
+  // /api/page filters on the landing page and /api/campaign on the campaign name.
   const flat = [];
   const walk = (e) => {
     if (!e) return;
@@ -111,12 +113,23 @@ function ga4Report(body) {
     for (const k of ["andGroup", "orGroup"]) if (e[k]) (e[k].expressions || []).forEach(walk);
   };
   walk(body.dimensionFilter);
-  const beginsWith = (flat.find((f) => f.stringFilter && f.stringFilter.matchType === "BEGINS_WITH") || {});
-  const prefix = beginsWith.stringFilter ? beginsWith.stringFilter.value : null;
-  const inList = flat.find((f) => f.inListFilter);
-  const allowedEvents = inList ? inList.inListFilter.values : null;
+  const beginsWith = {};       // fieldName -> required prefix
+  let allowedEvents = null;
+  for (const f of flat) {
+    if (f.stringFilter && f.stringFilter.matchType === "BEGINS_WITH") {
+      beginsWith[f.fieldName] = f.stringFilter.value;
+    }
+    if (f.inListFilter) allowedEvents = f.inListFilter.values;
+  }
+  const keep = (field, value) => {
+    const p = beginsWith[field];
+    if (!p) return true;
+    return String(value).toLowerCase().startsWith(String(p).toLowerCase());
+  };
 
-  const pages = prefix ? GA4_PAGES.filter((p) => p.startsWith(prefix)) : GA4_PAGES;
+  const pages = GA4_PAGES.filter((p) => keep(GA4_LANDING_DIM_NAME, p));
+  const campaigns = ["260701-08_bht_tra", "(not set)"]
+    .filter((c) => keep("sessionManualCampaignName", c));
   const dates = ["20260714", "20260715"];
   const rows = [];
   const emit = (vals) => rows.push({
@@ -130,11 +143,12 @@ function ga4Report(body) {
       : d === "eventName" ? (allowedEvents || GA4_EVENTS)
       : d === "sessionManualSource" ? ["facebook"]
       : d === "sessionManualMedium" ? ["paid"]
-      : d === "sessionManualCampaignName" ? ["260701-08_bht_tra", "(not set)"]
+      : d === "sessionManualCampaignName" ? campaigns
       : pages;
+    if (!opts.length) return;
     for (const v of opts) expand(i + 1, [...acc, v]);
   };
-  if (pages.length) expand(0, []);
+  expand(0, []);
   return {
     dimensionHeaders: dims.map((name) => ({ name })),
     metricHeaders: mets.map((name) => ({ name })),

@@ -238,9 +238,18 @@ because it's a strict subset of sessions and the funnel narrows properly.
 
 ## 4a. GA4 Data API — the one non-Windsor path (v3.60.0)
 
-**Only `/api/page` uses this.** Everything else still goes through Windsor.
+**Two endpoints use this**, and no others: `/api/page` (all reports) and
+`/api/campaign` (the `ga4Landing` top-landing-pages report only — the rest of
+that endpoint is still Windsor). Everything else goes through Windsor.
 This is a deliberate exception to the single-source rule in §1, taken because
-Windsor cannot filter GA4 at all (§3) and the Pages tab is unusable without it.
+Windsor cannot filter GA4 at all (§3) and both of those pulls are keyed on a
+dimension that must be filtered to stay a sane size.
+
+**The test for whether a pull belongs here:** does it filter on a
+high-cardinality dimension — `landing_page` (44,463 values) or a campaign name
+— and discard most of what comes back? If so it must be filtered server-side,
+which means the Data API. Pulls keyed only on campaign name without
+`landing_page` are bounded by campaign count (hundreds) and are fine on Windsor.
 
 | Item | Value |
 |---|---|
@@ -636,6 +645,24 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.60.1** — `/api/campaign`'s `ga4Landing` report moved to the GA4 Data API
+(§4a). It was pulling `campaign × landing_page` across the whole property —
+all 44,463 pages — filtering client-side, and displaying **the top eight**.
+Same shape as the v3.60.0 bug and equally invisible, since the eight rows were
+always correct; it never OOM-killed anything only because it asks for one
+metric rather than nine. Now filtered server-side with `BEGINS_WITH` on
+`sessionManualCampaignName`, `caseSensitive: false` to match the prefix
+convention in §7, with the existing `norm().startsWith()` guard kept behind it.
+Landing pages are normalised through `pagePath()` so query strings collapse and
+locale detection reads a clean path.
+
+The rest of `/api/campaign` stays on Windsor: those reports key on campaign
+name without `landing_page`, so they are bounded by campaign count.
+
+`test/mock-fetch.js`'s GA4 stub is now **per-field** — it was applying any
+`BEGINS_WITH` to the landing page regardless of which field the filter named,
+which would have passed this change while testing nothing.
 
 **v3.60.0** — `/api/page` moved off Windsor onto the **GA4 Data API**, because
 Windsor's `filters` parameter does nothing on the googleanalytics4 connector

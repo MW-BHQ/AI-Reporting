@@ -918,9 +918,25 @@ async function buildCampaign(code, from, to) {
     ga4: windsor("googleanalytics4", ga4MainFields, from, to, { accounts: [GA4_ACCOUNT] }),
     ga4Rev: windsor("googleanalytics4", ga4RevFields, from, to, { accounts: [GA4_ACCOUNT] }),
     ga4Daily: windsor("googleanalytics4", ga4DailyFields, from, to, { accounts: [GA4_ACCOUNT] }),
-    ga4Landing: windsor("googleanalytics4",
-      ga4Fields(["session_manual_campaign_name", "landing_page"], ["sessions"]),
-      from, to, { accounts: [GA4_ACCOUNT] }),
+    // Top landing pages for this campaign. Filtered SERVER-SIDE on the campaign
+    // name: Windsor ignores its `filters` parameter (§3), so the Windsor version
+    // of this pulled campaign x landing_page across all 44,463 pages of the
+    // property to display eight rows. BEGINS_WITH is case-insensitive to match
+    // the convention in §7, and the norm() guard below still narrows it.
+    ga4Landing: ga4RunReport({
+      dimensions: ["sessionManualCampaignName", GA4_LANDING_DIM],
+      metrics: ["sessions"],
+      from, to,
+      dimensionFilter: {
+        filter: {
+          fieldName: "sessionManualCampaignName",
+          stringFilter: { matchType: "BEGINS_WITH", value: code, caseSensitive: false },
+        },
+      },
+    }).catch((e) => {
+      logJson("WARNING", "campaign_landing_unavailable", { error: String(e.message || e) });
+      return null;
+    }),
     // Organic posts, matched to the campaign by the short link in their text.
     // The pull window is widened to always include the campaign's code date
     // plus 45 days: posts are returned by publish date, so a post published
@@ -1149,9 +1165,11 @@ async function buildCampaign(code, from, to) {
   if (data.ga4Landing !== null) {
     const lp = new Map();
     for (const r of data.ga4Landing) {
-      if (!norm(r.session_manual_campaign_name).startsWith(needle)) continue;
-      const page = r.landing_page;
-      if (!page) continue;
+      if (!norm(r.sessionManualCampaignName).startsWith(needle)) continue;
+      // Normalised so "/th/x?utm=1" and "/th/x" are one page, and so locale
+      // detection reads a clean path (§7).
+      const page = pagePath(r[GA4_LANDING_DIM]);
+      if (!page || page === "/") continue;
       if (!lp.has(page)) lp.set(page, { page, visits: 0, locale: localeFromPath(page) });
       lp.get(page).visits += n(r.sessions);
     }
