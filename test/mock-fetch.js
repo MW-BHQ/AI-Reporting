@@ -213,7 +213,9 @@ function ga4Report(body) {
       : d === "sessionManualSource" ? ["facebook"]
       : d === "sessionManualMedium" ? ["paid"]
       : d === "sessionManualCampaignName" ? [...campaigns, ...marker]
-      : d === "sessionDefaultChannelGroup" ? ["Organic Search", "Paid Social", ...marker]
+      // Paid Search must be present or the Google Ads impression mapping
+      // (IMPRESSION_SOURCE_BY_CHANNEL) is never exercised.
+      : d === "sessionDefaultChannelGroup" ? ["Organic Search", "Paid Social", "Paid Search", ...marker]
       : d === "itemName" ? ["Heart Screening Package", ...marker]
       : pages;
     if (!opts.length) return;

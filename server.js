@@ -875,6 +875,13 @@ const IMPRESSION_SOURCE_BY_CHANNEL = {
   "paid social": "meta",
   "organic search": "gsc",
   "organic social": "organicSocial",
+  // Google Ads search campaigns land in GA4's "Paid Search" channel group.
+  // Display and Video campaigns land in "Display" / "Paid Video", which this
+  // deliberately does NOT claim: the connector returns one total across all
+  // campaign types, so attributing it to Paid Search alone would be wrong for
+  // the others. If Display spend becomes material, split the pull by
+  // campaign type rather than widening this map.
+  "paid search": "gads",
 };
 
 /**
@@ -938,6 +945,7 @@ async function buildOverview(from, to) {
       from, to, { noBranchFilter: true }),
     ga4Month: ga4Compat(["date"], ["purchase_revenue", "ecommerce_purchases"], monthFrom, monthTo),
     meta: windsor("facebook", ["date", "account_name", "spend", "impressions", "clicks"], from, to),
+    gads: windsor("google_ads", ["date", "account_name", "spend", "impressions", "clicks"], from, to),
     gsc: gscQuery(["date"], from, to),
     gmb: windsor("google_my_business",
       ["date", "location_title", "impressions", "call_clicks", "website_clicks", "direction_requests"], from, to),
@@ -961,6 +969,7 @@ async function buildOverview(from, to) {
 
   const impressions = {
     meta: sumOrNull(data.meta, "impressions"),
+    gads: sumOrNull(data.gads, "impressions"),
     gsc: sumOrNull(data.gsc, "impressions"),
     gmb: sumOrNull(data.gmb, "impressions"),
     organicSocial: (data.fbOrganic === null && data.ttOrganic === null) ? null
@@ -1004,7 +1013,12 @@ async function buildOverview(from, to) {
     }
   }
   // Ad clicks belong to the same channels that have ad impressions.
-  const adClicksByKey = { meta: sumOrNull(data.meta, "clicks"), gsc: sumOrNull(data.gsc, "clicks"), organicSocial: null };
+  const adClicksByKey = {
+    meta: sumOrNull(data.meta, "clicks"),
+    gads: sumOrNull(data.gads, "clicks"),
+    gsc: sumOrNull(data.gsc, "clicks"),
+    organicSocial: null,
+  };
   const funnel = [...chanMap.values()].map((c) => {
     const srcKey = IMPRESSION_SOURCE_BY_CHANNEL[norm(c.channel)];
     return {
@@ -1026,11 +1040,11 @@ async function buildOverview(from, to) {
 
   const totals = {
     impressions: (() => {
-      const vals = [impressions.meta, impressions.gsc, impressions.organicSocial];
+      const vals = [impressions.meta, impressions.gads, impressions.gsc, impressions.organicSocial];
       return vals.every((v) => v === null) ? null : vals.reduce((a, v) => a + n(v), 0);
     })(),
     clicks: (() => {
-      const vals = [adClicksByKey.meta, adClicksByKey.gsc];
+      const vals = [adClicksByKey.meta, adClicksByKey.gads, adClicksByKey.gsc];
       return vals.every((v) => v === null) ? null : vals.reduce((a, v) => a + n(v), 0);
     })(),
     visits: ga4Available ? funnel.reduce((a, c) => a + c.visits, 0) : null,
@@ -1116,10 +1130,25 @@ async function buildOverview(from, to) {
   }
   const trend = [...trendMap.values()].sort((a, b) => a.d.localeCompare(b.d));
 
+  /**
+   * ALL paid media, not just Meta. A card headed "Paid media" that counted only
+   * Meta understated spend by whatever Google Ads was doing, and did it
+   * silently. Nulls are preserved: if BOTH platforms are unavailable the figure
+   * is null (renders as "—"), but one platform down must not read as zero for
+   * the other, so an available platform still contributes.
+   */
+  const bothNull = (a, b) => a === null && b === null;
+  const addNullable = (a, b) => (bothNull(a, b) ? null : n(a) + n(b));
+  const metaSpend = sumOrNull(data.meta, "spend");
+  const gadsSpend = sumOrNull(data.gads, "spend");
   const paid = {
-    spend: sumOrNull(data.meta, "spend"),
-    impressions: impressions.meta,
-    clicks: sumOrNull(data.meta, "clicks"),
+    spend: addNullable(metaSpend, gadsSpend),
+    impressions: addNullable(impressions.meta, impressions.gads),
+    clicks: addNullable(adClicksByKey.meta, adClicksByKey.gads),
+    byPlatform: {
+      meta: { spend: metaSpend, impressions: impressions.meta, clicks: adClicksByKey.meta },
+      googleAds: { spend: gadsSpend, impressions: impressions.gads, clicks: adClicksByKey.gads },
+    },
   };
   paid.cpc = paid.clicks ? paid.spend / paid.clicks : null;
 

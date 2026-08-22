@@ -646,6 +646,30 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.67.0 — Google Ads in the Overview funnel.**
+
+Overview never pulled `google_ads` at all, so **Paid Search showed visits with
+no impressions and no clicks**, and the "Paid media" card counted Meta only
+while calling itself paid media. Both fixed:
+
+- `google_ads` added to the Overview pull; `IMPRESSION_SOURCE_BY_CHANNEL` maps
+  **`paid search` → `gads`**, and impressions/clicks feed the channel row and
+  the funnel totals.
+- **Paid media now sums Meta + Google Ads**, with the split shown under the
+  spend figure. Nulls are preserved per platform: one platform unavailable must
+  not read as zero for the other, and both unavailable still renders "—".
+
+**Deliberate limitation.** The connector returns one total across all campaign
+types, so this attributes all Google Ads impressions to **Paid Search**. Display
+and Video campaigns land in GA4's "Display" and "Paid Video" channel groups and
+are NOT claimed here — if Display spend becomes material, split the pull by
+`campaign_type` rather than widening the map, or those channels will be
+credited with search impressions.
+
+The GA4 stub now emits a **Paid Search** channel group; without it the mapping
+was never exercised and the whole change would have tested green while doing
+nothing.
+
 **v3.66.0 — backlog batch: Pages daily chart, key-event types, table fixes.**
 
 - **Pages** gains a **By day** line chart (visits / engaged / key events) and a

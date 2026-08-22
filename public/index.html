@@ -1317,7 +1317,13 @@ function renderOverview() {
       <div class="grid g-4">
         <div class="stat"><div class="lab"><span class="chip" style="background:var(--amber)"></span>Ad spend</div>
           <div class="val ${isNA(d.paid&&d.paid.spend)?'na':''}">${num(d.paid&&d.paid.spend,{money:true})}</div>
-          <div class="sub">Meta Ads, all accounts</div></div>
+          <div class="sub">${(() => {
+            const b = d.paid && d.paid.byPlatform; if (!b) return 'Meta Ads + Google Ads';
+            const parts = [];
+            if (b.meta && b.meta.spend !== null) parts.push(`Meta ฿${num(Math.round(b.meta.spend))}`);
+            if (b.googleAds && b.googleAds.spend !== null) parts.push(`Google Ads ฿${num(Math.round(b.googleAds.spend))}`);
+            return parts.join(' · ') || 'no ad spend in range';
+          })()}</div></div>
         <div class="stat"><div class="lab"><span class="chip" style="background:var(--blue)"></span>Ad impressions</div>
           <div class="val ${isNA(d.paid&&d.paid.impressions)?'na':''}">${num(d.paid&&d.paid.impressions)}</div></div>
         <div class="stat"><div class="lab"><span class="chip" style="background:var(--teal)"></span>Ad clicks</div>
@@ -3964,7 +3970,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.66.0';
+const CLIENT_BUILD = '3.67.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
