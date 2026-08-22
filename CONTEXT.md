@@ -646,6 +646,33 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.65.0 — `ga4Items` fixed. GA4 is now clean.**
+
+The cause, visible within minutes of v3.64.2's logging landing:
+
+```
+GA4 Data API 400: Please remove itemViewEvents to make the request compatible.
+The request's dimensions & metrics are incompatible.
+```
+
+`itemViewEvents` is **event-scoped** and cannot be combined with `itemName` and
+item-scoped metrics. Replaced with **`itemsViewed`**, the item-scoped
+equivalent. `item_view_events` is removed from `GA4_METRIC_MAP` entirely so it
+cannot be reused by accident. The yellow degradation banner is gone and Top
+Products populates for the first time.
+
+`test/mock-fetch.js` now enforces GA4 **scope compatibility** and returns a 400
+for a known-incompatible pair, verified by reverting the metric and confirming
+the stub reproduces the failure. Third instance this session of the same
+lesson: a stub that accepts what the real API refuses certifies code that
+cannot work. The others were FULL_REGEXP semantics and filters on ungrouped
+dimensions.
+
+Top Products gained a **Views** column, `฿` moved into the header, and the card
+now states it covers **all 27 branches** — item-scoped metrics cannot take the
+landing-page filter, so it is the one number on Overview that is not
+branch-scoped, and saying so beats a silent inconsistency.
+
 **v3.64.2 — `runJobs` now LOGS job failures.**
 
 It captured the reason into `errors[k]` and showed it to nobody. The banner

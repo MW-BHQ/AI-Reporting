@@ -288,7 +288,9 @@ const GA4_METRIC_MAP = {
   transactions: "transactions",
   items_viewed: "itemsViewed",
   add_to_carts: "addToCarts",
-  item_view_events: "itemViewEvents",
+  // itemViewEvents is deliberately absent: it is EVENT-scoped and GA4 rejects
+  // it alongside itemName and item-scoped metrics with "The request's
+  // dimensions & metrics are incompatible". Use items_viewed instead.
   items_added_to_cart: "itemsAddedToCart",
   items_purchased: "itemsPurchased",
   item_revenue: "itemRevenue",
@@ -923,7 +925,7 @@ async function buildOverview(from, to) {
     // page filter — GA4 rejects the pair — so this stays group-wide and is
     // labelled as such in the UI rather than silently implying branch scope.
     ga4Items: ga4Compat(["item_name"],
-      ["item_view_events", "items_added_to_cart", "items_purchased", "item_revenue"],
+      ["items_viewed", "items_added_to_cart", "items_purchased", "item_revenue"],
       from, to, { noBranchFilter: true }),
     ga4Month: ga4Compat(["date"], ["purchase_revenue", "ecommerce_purchases"], monthFrom, monthTo),
     meta: windsor("facebook", ["date", "account_name", "spend", "impressions", "clicks"], from, to),
@@ -1069,7 +1071,7 @@ async function buildOverview(from, to) {
       if (!name || name === "(not set)") continue;
       if (!m.has(name)) m.set(name, { name, views: 0, addToCarts: 0, purchases: 0, revenue: 0 });
       const p = m.get(name);
-      p.views += n(r.item_view_events);
+      p.views += n(r.items_viewed);
       p.addToCarts += n(r.items_added_to_cart);
       p.purchases += n(r.items_purchased);
       p.revenue += n(r.item_revenue);

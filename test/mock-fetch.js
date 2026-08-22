@@ -107,9 +107,27 @@ const GA4_PAGES = [
 const GA4_EVENTS = ["appointments", "contact_us", "better_ai_start", "better_ai_result", "login"];
 const GA4_LANDING_DIM_NAME = process.env.GA4_LANDING_DIM || "landingPagePlusQueryString";
 
+/**
+ * GA4 rejects incompatible dimension/metric scope combinations with a 400.
+ * `ga4Items` asked for itemViewEvents (EVENT-scoped) alongside itemName and
+ * item-scoped metrics, and failed on every run for weeks while this stub
+ * happily returned rows. A stub that accepts what the real API refuses is the
+ * same failure as one that is more permissive about filters (see the
+ * FULL_REGEXP incident) — it certifies code that cannot work.
+ */
+const GA4_INCOMPATIBLE = [
+  { dim: "itemName", metric: "itemViewEvents",
+    msg: "Please remove itemViewEvents to make the request compatible for example. The request's dimensions & metrics are incompatible." },
+];
+
 function ga4Report(body) {
   const dims = (body.dimensions || []).map((d) => d.name);
   const mets = (body.metrics || []).map((m) => m.name);
+  for (const rule of GA4_INCOMPATIBLE) {
+    if (dims.includes(rule.dim) && mets.includes(rule.metric)) {
+      const err = new Error(rule.msg); err.ga4Status = 400; throw err;
+    }
+  }
 
   // Read the filter the server actually sent, and honour it — per field, since
   // /api/page filters on the landing page and /api/campaign on the campaign name.
@@ -254,7 +272,11 @@ global.fetch = async (url, opts = {}) => {
     if (process.env.MOCK_FAIL_GA4 === "1") return jsonRes({ error: { message: "simulated GA4 failure" } }, 500);
     let body = {};
     try { body = JSON.parse(opts.body || "{}"); } catch { /* fall through to empty */ }
-    return jsonRes(ga4Report(body));
+    try { return jsonRes(ga4Report(body)); }
+    catch (e) {
+      if (e.ga4Status === 400) return jsonRes({ error: { code: 400, message: e.message, status: "INVALID_ARGUMENT" } }, 400);
+      throw e;
+    }
   }
 
   if (u.includes("connectors.windsor.ai/google_ads")) {

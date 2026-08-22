@@ -1364,9 +1364,10 @@ function renderOverview() {
       </div>
       <div class="card">
         <h2>Top products</h2>
-        <table><thead><tr><th>Item</th><th class="num">Revenue</th></tr></thead><tbody>
-        ${(d.topProducts||[]).slice(0,8).map(p=>`<tr><td class="strong i18n">${esc(p.name)}</td><td class="num">${num(p.revenue,{money:true})}</td></tr>`).join('')||'<tr><td colspan="2" class="num">no item data</td></tr>'}
+        <table><thead><tr><th>Item</th><th class="num">Views</th><th class="num">Revenue ฿</th></tr></thead><tbody>
+        ${(d.topProducts||[]).slice(0,8).map(p=>`<tr><td class="strong i18n">${esc(p.name)}</td><td class="num">${num(p.views)}</td><td class="num">${num(Math.round(p.revenue))}</td></tr>`).join('')||'<tr><td colspan="3" class="num">no item data</td></tr>'}
         </tbody></table>
+        <div class="note">Item-scoped metrics cannot take the landing-page filter GA4 applies elsewhere, so this table covers <b>all 27 group branches</b>, not the four in the funnel above.</div>
       </div>
     </div>
   `;
@@ -3931,7 +3932,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.64.2';
+const CLIENT_BUILD = '3.65.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
