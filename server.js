@@ -4389,6 +4389,34 @@ async function buildPage(url, from, to) {
   const monthKey = (r) => ga4Date(r.date).slice(0, 7);
   const monthKeyEvents = keyIndex(data.dateK, monthKey);
 
+  /**
+   * Per-day series and per-event breakdown. Both come from reports buildPage
+   * already fetches (dateS, dateK), so this costs no extra API calls — the data
+   * was being aggregated to months and thrown away at day resolution.
+   */
+  const dayKey = (r) => ga4Date(r.date);
+  const dayKeyEvents = keyIndex(data.dateK, dayKey);
+  const days = new Map();
+  for (const r of rows(data.dateS)) {
+    const d = dayKey(r);
+    if (!d) continue;
+    const e = days.get(d) || { d, visits: 0, engagement: 0, keyEvents: 0 };
+    e.visits += n(r.sessions); e.engagement += n(r.engagedSessions);
+    days.set(d, e);
+  }
+  for (const e of days.values()) e.keyEvents = dayKeyEvents.get(e.d) || 0;
+  const daily = [...days.values()].sort((a, b) => a.d.localeCompare(b.d));
+
+  // Same shape the Overview key-events card uses, so the client renders it the
+  // same way. Restricted to this page's rows, so it sums to totals.keyEvents.
+  const pageKeyEvents = new Map();
+  for (const r of rows(data.dateK)) {
+    pageKeyEvents.set(r.eventName, (pageKeyEvents.get(r.eventName) || 0) + n(r.keyEvents));
+  }
+  const keyEventBreakdown = KEY_EVENTS
+    .map((e) => ({ id: e.name, label: e.label, value: pageKeyEvents.get(e.name) || 0 }))
+    .sort((a, b) => b.value - a.value);
+
   const months = new Map(), variants = new Map();
   for (const r of rows(data.dateS)) {
     const se = n(r.sessions), en = n(r.engagedSessions);
@@ -4450,6 +4478,8 @@ async function buildPage(url, from, to) {
     monthly: [...months.values()].map(shape).sort((a, b) => (a.month < b.month ? -1 : 1)),
     sources: sources.map(shape).sort((a, b) => b.sessions - a.sessions).slice(0, 15),
     campaigns: campaigns.map(shape).sort((a, b) => b.sessions - a.sessions).slice(0, 15),
+    daily,
+    keyEventBreakdown,
     variants: [...variants.values()].sort((a, b) => b.sessions - a.sessions).slice(0, 12),
     empty: now.sessions === 0,
   };

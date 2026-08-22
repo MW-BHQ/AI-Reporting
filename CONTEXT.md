@@ -646,6 +646,25 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.66.0 — backlog batch: Pages daily chart, key-event types, table fixes.**
+
+- **Pages** gains a **By day** line chart (visits / engaged / key events) and a
+  **Key events by type** card. Neither costs an API call: `buildPage` already
+  fetched `dateS` and `dateK` and was aggregating them to months, discarding day
+  resolution. The breakdown is restricted to the page's own rows, so it sums to
+  `totals.keyEvents`.
+- **Trend tooltips** show the weekday (`2026-07-18 · Sat`). Parsed as UTC so the
+  day cannot shift in +07.
+- **`th.num` / `td.num` gained `padding-left:14px`.** Numeric columns had zero
+  left padding, so two adjacent headers collided as "ViewsRevenue ฿" once Top
+  Products took a third column. Affected every wide table, not just that one.
+- **Meta Ads by account:** `฿` moved into the Spend header instead of repeating
+  on every row.
+
+Note for future edits: `buildGoogleAds` and `buildPage` **end with an identical
+`monthly:` line**. A first-match replace on it lands in the wrong function and
+fails as `daily is not defined`. Anchor on a neighbouring unique key.
+
 **v3.65.1 — branch regex was dropping UTM-tagged section-root landings.**
 
 GA4 landing pages have **no trailing slash** on a section root: `/th/bangkok`,

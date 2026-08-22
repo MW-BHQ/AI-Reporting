@@ -194,13 +194,16 @@
   /* ---------------- tables ---------------- */
   table{width:100%;border-collapse:collapse;font-size:12.5px;}
   th{text-align:left;color:var(--muted);font-weight:500;font-size:11.5px;letter-spacing:0;padding:0 8px 9px 0;border-bottom:1px solid var(--line);white-space:nowrap;}
-  th.num{text-align:right;padding-right:0;}
+  /* Numeric columns need separation from each other, not just from the edge.
+     With padding-left:0 two adjacent headers ran together as "ViewsRevenue"
+     whenever the first column was wide (long Thai item names). */
+  th.num{text-align:right;padding-right:0;padding-left:14px;}
   /* Long ad/campaign names truncate; the full string is on hover. */
   td.trunc{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   td.trunc:hover{cursor:pointer;}
   td{padding:9px 0;border-bottom:1px solid var(--line);color:var(--ink-2);}
   td.strong{color:var(--ink);font-weight:500;}
-  td.num{text-align:right;font-variant-numeric:tabular-nums;}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;padding-left:14px;}
   tr:last-child td{border-bottom:none;}
   tr.grp td{
     background:rgba(124,107,245,.05);color:var(--muted);
@@ -1358,8 +1361,8 @@ function renderOverview() {
     <div class="grid g-2-1 mt">
       <div class="card">
         <h2>Meta Ads by account</h2>
-        <table><thead><tr><th>Account</th><th class="num">Spend</th><th class="num">Impressions</th><th class="num">Clicks</th></tr></thead><tbody>
-        ${(d.topAccounts||[]).map(a=>`<tr><td class="strong">${esc(a.name)}</td><td class="num">${num(a.spend,{money:true})}</td><td class="num">${num(a.impressions)}</td><td class="num">${num(a.clicks)}</td></tr>`).join('')||'<tr><td colspan="4" class="num">unavailable</td></tr>'}
+        <table><thead><tr><th>Account</th><th class="num">Spend ฿</th><th class="num">Impressions</th><th class="num">Clicks</th></tr></thead><tbody>
+        ${(d.topAccounts||[]).map(a=>`<tr><td class="strong">${esc(a.name)}</td><td class="num">${num(Math.round(a.spend))}</td><td class="num">${num(a.impressions)}</td><td class="num">${num(a.clicks)}</td></tr>`).join('')||'<tr><td colspan="4" class="num">unavailable</td></tr>'}
         </tbody></table>
       </div>
       <div class="card">
@@ -2242,6 +2245,17 @@ function renderPages() {
         <span>${esc(d.monthly[0].month)}</span><span>${esc(d.monthly[d.monthly.length-1].month)}</span></div>
     </div>` : ''}
 
+    ${(d.daily||[]).length > 1 ? `<div class="grid g-2-1 mt">
+      <div class="card">
+        <div class="card-title">By day</div>
+        <div class="chart-wrap"><canvas id="pageTrend"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Key events by type</div>
+        <table><tbody>${(d.keyEventBreakdown||[]).map(k=>`<tr><td class="strong">${esc(k.label)}</td><td class="num">${num(k.value)}</td></tr>`).join('')||'<tr><td class="num">\u2014</td></tr>'}</tbody></table>
+      </div>
+    </div>` : ''}
+
     <div class="card mt">
       <div class="card-title">Where the traffic came from</div>
       <table class="roomy sortable"><thead><tr>
@@ -2287,6 +2301,15 @@ function renderPages() {
       to narrow the analysis.</div>
     </div>` : ''}`);
   wirePages();
+  // The canvas only exists once the markup above is in the DOM, and only when
+  // the range covers more than one day.
+  if ((d.daily || []).length > 1) {
+    drawChart('pageTrend', d.daily, [
+      { label:'Visits', key:'visits', color:'#4B8DF8', axis:'y' },
+      { label:'Engaged sessions', key:'engagement', color:'#9FC8C2', axis:'y' },
+      { label:'Key events', key:'keyEvents', color:'#7C6BF5', axis:'y1' },
+    ]);
+  }
 }
 
 function wirePages() {
@@ -3874,7 +3897,16 @@ function drawChart(canvasId, rows, series) {
       options: {
         responsive: true, maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { labels: { color:'#4C5878', font:{family:'Poppins',size:11}, usePointStyle:true, boxWidth:7 } } },
+        plugins: {
+          legend: { labels: { color:'#4C5878', font:{family:'Poppins',size:11}, usePointStyle:true, boxWidth:7 } },
+          tooltip: { callbacks: { title: (items) => {
+            const d = items && items[0] && items[0].label;
+            if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return d || '';
+            // Parsed as UTC so the weekday cannot shift by a day in +07.
+            const wd = new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' });
+            return `${d} \u00b7 ${wd}`;
+          } } },
+        },
         scales: {
           x: { ticks:{ color:'#A7B0C7', font:{family:'Poppins',size:10}, maxRotation:0, autoSkip:true, maxTicksLimit:8 }, grid:{ color:'rgba(90,110,160,.09)' } },
           y: { position:'left', ticks:{ color:'#A7B0C7', font:{size:10} }, grid:{ color:'rgba(90,110,160,.09)' } },
@@ -3932,7 +3964,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.65.1';
+const CLIENT_BUILD = '3.66.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
