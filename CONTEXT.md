@@ -646,6 +646,82 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.69.0 — Board Report tab: the spine.**
+
+First pass at replacing the four Looker Studio monthly exports with one tab and
+a brand selector (All / BGH / BIH / BHT / WSH). Sessions is the unit, chosen by
+MW so the whole dashboard speaks one language.
+
+**`BRANDS` is now the single brand registry.** Five systems identify a brand
+five different ways and share no key — GA4 and Search Console by landing path,
+GBP by listing title, Meta by account name, Facebook by page. Every section
+reads from `BRANDS` rather than inventing its own lookup, which is how such
+tables drift apart unnoticed.
+
+Mapping confirmed by MW 22 Aug 2026:
+
+| Brand | GA4 segment | GBP | Meta |
+|---|---|---|---|
+| BGH | `bangkok` | Bangkok Hospital + **Dental** | BGH x ADA |
+| BIH | `bangkok-bone-brain` | BIH (Brain x Bone) | BIH x ADA |
+| BHT | `bangkok-heart` | Bangkok Heart | BHT x ADA |
+| WSH | `bangkok-cancer` | Cancer Wattanosoth | **none** |
+
+**Shared assets serve all four and belong to none:** Meta `BHQ x AIQ` and
+`BHQ Inter x ADA`, the single Facebook page, and the JMS listing. They are
+reported in a separate "Group-level" block and **never added to a brand's
+totals**. The consequence is deliberate and must be stated in the deck: **brand
+figures do not sum to the group total.** `BHQ Shopee x EGG` is e-commerce only
+and excluded from this report entirely.
+
+WSH having no Meta account is correct, not a gap — its paid social runs from the
+shared group accounts.
+
+**Not reproducible from the LS deck, by decision:** YouTube (connector not
+added) and the Appointments page (sourced from a Google Sheet of appointment
+records, no connector). Both wait for MW.
+
+Brand splits will NOT match LS exactly: LS reads the four dedicated GA4
+properties, this reads the group property filtered by landing path, so a session
+landing on one brand and converting on another is credited differently. MW
+accepts and will explain.
+
+Test fixtures widened to one page per brand plus brand/shared/ecom Meta
+accounts — with only `bangkok-heart` present, three of four brands read zero and
+a broken segment filter looked identical to correct output.
+
+**Still to build:** search by language, ads, social, GBP, reviews, chat bubble.
+
+**v3.68.1 — panel renamed; the Bookings zero was a lie.**
+
+"Reach without site visits" → **"Off-site reach & action"**, since the panel now
+holds outcomes as well as reach.
+
+**`business_bookings` will always be 0 here**, and a row saying so was
+misleading. That metric counts bookings made through a **Reserve with Google**
+partner. BHQ's booking button links to the site, so Google records a *click* and
+never learns whether a booking followed. The row now renders only when the value
+is non-zero — it will appear by itself if Reserve with Google is ever adopted —
+and the note explains that booking taps arrive as `website_clicks`.
+
+**Why Facebook page reach is 23.1M against TikTok's 96.9K:** Boost Post. Every
+boosted organic post's reach lands in `page_impressions` AND in Meta Ads
+impressions. Confirmed by MW 22 Aug 2026. The note now names Boost Post rather
+than "ads", because that is the mechanism a marketer will recognise.
+
+Correcting an assumption made earlier the same day: TikTok was believed to be
+the large organic-reach contributor. Once split, it is **0.4%** of what
+Facebook page reach reports. Almost all of the old 23.2M "Organic Social" line
+was Facebook, most of it boosted.
+
+**Known inconsistency, deferred to the band layout.** The Organic Social channel
+row now shows TikTok views (96.9K) against 20.1K visits — a 21% rate that cannot
+be true. GA4's Organic Social channel group spans Facebook, TikTok, IG and LINE,
+while only TikTok reach is attributed to it. Platform reach and GA4 channel
+groups are different taxonomies and should not share a row. The fix is to stop
+attributing platform reach to channel rows entirely and show all reach in the
+off-site panel — part of the TOFU/MOFU/BOFU reshape.
+
 **v3.68.0 — off-site ACTION surfaced; Facebook page reach removed from the total.**
 
 Step one of the TOFU/MOFU/BOFU reshape: the marketing funnel does not end at the

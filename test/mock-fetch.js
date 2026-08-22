@@ -46,7 +46,7 @@ function windsorRows(connector, fields) {
     else if (name === "review_create_time") row.review_create_time = "2026-07-15T10:00:00Z";
     else if (name === "location_title") row.location_title = "Bangkok Hospital";
     else if (name === "review_star_rating") row.review_star_rating = "FIVE";
-    else if (name === "account_name") row.account_name = "BHQ Main";
+    else if (name === "account_name") row.account_name = "BGH x ADA";
     else if (name === "campaign") row.campaign = "260701-08_BHT_test_2JUL2026_31JUL2026_Traffic_THB8344";
     else if (name === "campaign_objective") row.campaign_objective = "OUTCOME_TRAFFIC";
     else if (name === "session_manual_campaign_name") row.session_manual_campaign_name = "260701-08_bht_tra";
@@ -92,6 +92,12 @@ function windsorRows(connector, fields) {
  * from a discarded one, so this one refuses to.
  */
 const GA4_PAGES = [
+  // One page per brand so the per-brand segment filter is actually exercised;
+  // with only bangkok-heart present, three of four brands read zero and a
+  // broken filter would look identical to correct output.
+  "/th/bangkok/page/a",
+  "/th/bangkok-bone-brain/page/b",
+  "/th/bangkok-cancer/page/c",
   "/th/bangkok-heart/package/x",
   "/th/bangkok-heart/package/x/details",
   "/th/bangkok-heart/package/x-other",   // sibling: BEGINS_WITH catches it, match() must not
@@ -281,6 +287,23 @@ global.fetch = async (url, opts = {}) => {
     catch (e) {
       if (e.ga4Status === 400) return jsonRes({ error: { code: 400, message: e.message, status: "INVALID_ARGUMENT" } }, 400);
       throw e;
+    }
+  }
+
+  if (u.includes("connectors.windsor.ai/facebook?") || /connectors\.windsor\.ai\/facebook[?&]/.test(u)) {
+    if (process.env.MOCK_FAIL_CONNECTOR === "facebook") return jsonRes({ error: "simulated failure" }, 500);
+    const want = (new URL(u)).searchParams.get("fields") || "";
+    if (want.includes("account_name") && !want.includes("campaign")) {
+      // Brand-owned, shared, and e-commerce-only accounts, so the registry split
+      // in buildReport is verifiable end to end.
+      const mk = (account_name, spend) => ({ date: "2026-07-15", account_name, spend,
+        impressions: spend * 10, clicks: spend / 2,
+        actions_onsite_conversion_total_messaging_connection: 5 });
+      return jsonRes({ data: [
+        mk("BGH x ADA", 100), mk("BIH x ADA", 80), mk("BHT x ADA", 60),
+        mk("BHQ x AIQ", 40), mk("BHQ Inter x ADA", 20),
+        mk("BHQ Shopee x EGG", 10),
+      ]});
     }
   }
 

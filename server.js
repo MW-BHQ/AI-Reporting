@@ -257,11 +257,14 @@ const BRANCH_SEGMENTS = (process.env.BRANCH_SEGMENTS ||
  * generate. Section roots have no trailing slash ("/th/bangkok"), so `$` is
  * needed too.
  */
-const BRANCH_REGEX = `^/([a-z]{2}/)?(${BRANCH_SEGMENTS.join("|")})([/?]|$)`;
-const branchFilter = () => ({
+const branchRegexFor = (segments) =>
+  `^/([a-z]{2}/)?(${(segments && segments.length ? segments : BRANCH_SEGMENTS).join("|")})([/?]|$)`;
+const BRANCH_REGEX = branchRegexFor(null);
+/** Pass `segments` to narrow to one brand; omit for all four. */
+const branchFilter = (segments) => ({
   filter: {
     fieldName: GA4_LANDING_DIM,
-    stringFilter: { matchType: "PARTIAL_REGEXP", value: BRANCH_REGEX, caseSensitive: false },
+    stringFilter: { matchType: "PARTIAL_REGEXP", value: branchRegexFor(segments), caseSensitive: false },
   },
 });
 
@@ -272,9 +275,9 @@ const branchFilter = () => ({
  * filter is wrong and the dashboard is dark. Reports then cover all 27 branches,
  * which is wrong but visible, rather than zero, which looks like an outage.
  */
-function withBranch(dimensionFilter) {
+function withBranch(dimensionFilter, segments) {
   if (BRANCH_FILTER_OFF) return dimensionFilter;
-  const b = branchFilter();
+  const b = branchFilter(segments);
   if (!dimensionFilter) return b;
   return { andGroup: { expressions: [b, dimensionFilter] } };
 }
@@ -319,7 +322,8 @@ async function ga4Compat(windsorDims, windsorMetrics, from, to, opts = {}) {
   });
   const rows = await ga4RunReport({
     dimensions: dims, metrics: mets, from, to,
-    dimensionFilter: opts.noBranchFilter ? opts.dimensionFilter : withBranch(opts.dimensionFilter),
+    dimensionFilter: opts.noBranchFilter ? opts.dimensionFilter
+      : withBranch(opts.dimensionFilter, opts.segments),
   });
   // Translate back to the Windsor names the consumers expect.
   return rows.map((r) => {
@@ -521,8 +525,62 @@ function topicFor(code, topics) {
  * If the service is ever set to allow-unauthenticated, this becomes spoofable —
  * DEPLOY.md says so.
  */
+/**
+ * THE BRAND REGISTRY \u2014 the single place that knows what "BGH" means.
+ *
+ * Five systems identify a brand five different ways and share no key: GA4 and
+ * Search Console by landing path, GBP by listing title, Meta by ad account
+ * name, Facebook by page. Each section inventing its own lookup is how they
+ * drift apart without anyone noticing, so they all read from here.
+ *
+ * `shared` assets serve all four brands and belong to none. They are reported
+ * in their own block and NEVER added to a brand's totals \u2014 otherwise the four
+ * brand views sum to more than the group total. Consequence to keep in mind:
+ * brand views deliberately do not sum to All.
+ *
+ * Mapping confirmed by MW 22 Aug 2026.
+ */
+const BRANDS = [
+  { key: "BGH", label: "Bangkok Hospital",        segment: "bangkok",
+    gbp: ["Bangkok Hospital", "Dental Center | Bangkok Hospital"], meta: ["BGH x ADA"] },
+  { key: "BIH", label: "Bangkok International",   segment: "bangkok-bone-brain",
+    gbp: ["Bangkok International Hospital (Brain x Bone)"], meta: ["BIH x ADA"] },
+  { key: "BHT", label: "Bangkok Heart",           segment: "bangkok-heart",
+    gbp: ["Bangkok Heart Hospital"], meta: ["BHT x ADA"] },
+  // WSH has no dedicated Meta ad account; its paid social sits in the shared
+  // group accounts, so an empty list here is correct, not an oversight.
+  { key: "WSH", label: "Bangkok Cancer",          segment: "bangkok-cancer",
+    gbp: ["Bangkok Cancer Hospital Wattanosoth"], meta: [] },
+];
+const BRAND_KEYS = BRANDS.map((b) => b.key);
+
+/** Serve all four; reported separately, never folded into a brand. */
+const SHARED_ASSETS = {
+  meta: ["BHQ x AIQ", "BHQ Inter x ADA"],
+  gbp: ["Japanese Medical Services (JMS) \u30d0\u30f3\u30b3\u30af\u75c5\u9662\u65e5\u672c\u4eba\u5c02\u9580\u30af\u30ea\u30cb\u30c3\u30af"],
+  facebookPage: true,   // one page for all four
+};
+/** E-commerce only \u2014 excluded from the general report entirely. */
+const ECOM_ONLY_META = ["BHQ Shopee x EGG"];
+
+const brandBySegment = (seg) => BRANDS.find((b) => b.segment === seg) || null;
+const brandForMetaAccount = (name) => {
+  const n = norm(name);
+  if (ECOM_ONLY_META.some((a) => norm(a) === n)) return "ECOM";
+  if (SHARED_ASSETS.meta.some((a) => norm(a) === n)) return "SHARED";
+  const b = BRANDS.find((x) => x.meta.some((a) => norm(a) === n));
+  return b ? b.key : null;
+};
+const brandForGbpListing = (title) => {
+  const t = norm(title);
+  if (SHARED_ASSETS.gbp.some((g) => norm(g) === t)) return "SHARED";
+  const b = BRANDS.find((x) => x.gbp.some((g) => norm(g) === t));
+  return b ? b.key : null;
+};
+
 const TABS = [
   { id: "overview",  label: "Overview" },
+  { id: "report",    label: "Board Report" },
   { id: "campaigns", label: "Campaigns" },
   { id: "pages",     label: "Pages" },
   { id: "gbp",       label: "Google Profile" },
@@ -813,7 +871,7 @@ function ga4JoinKey(windsorDims, row, fromGa4) {
  * zeros and is logged, because a missing key-event count must not take down a
  * whole tab.
  */
-async function ga4KeyEvents(windsorDims, from, to) {
+async function ga4KeyEvents(windsorDims, from, to, segments) {
   const empty = { total: 0, byKey: new Map(), byName: new Map(), byKeyEvent: new Map(), rows: [], failed: false };
   for (const d of windsorDims) {
     if (!GA4_DIM_MAP[d]) throw new Error(`ga4KeyEvents: no Data API mapping for dimension "${d}"`);
@@ -827,7 +885,7 @@ async function ga4KeyEvents(windsorDims, from, to) {
       // four branches and key events cover all 27 — every rate on the dashboard
       // silently inflates, and the merge hides it because unmatched keys are
       // never looked up.
-      dimensionFilter: withBranch({ filter: { fieldName: "eventName", inListFilter: { values: KEY_EVENT_NAMES } } }),
+      dimensionFilter: withBranch({ filter: { fieldName: "eventName", inListFilter: { values: KEY_EVENT_NAMES } } }, segments),
     });
     const out = { total: 0, byKey: new Map(), byName: new Map(), byKeyEvent: new Map(), rows: [], failed: false };
     for (const r of raw) {
@@ -1065,7 +1123,9 @@ async function buildOverview(from, to) {
   const reachOnly = [
     { channel: "Google Business Profile", impressions: impressions.gmb, note: "profile views" },
     { channel: "Facebook page", impressions: impressions.fbPage,
-      note: "page reach — includes ads, so not added to the funnel total" },
+      // Boost Post is the mechanism: a boosted organic post's reach lands here
+      // AND in Meta Ads impressions, so this cannot join the funnel total.
+      note: "page reach — includes Boost Post, so not added to the funnel total" },
     { channel: "TikTok", impressions: impressions.tiktok, note: "video views — counted in the funnel as Organic Social" },
     // LINE is listed only while the connector is on. Showing a permanent
     // "unavailable" row trains people to ignore the panel.
@@ -1234,6 +1294,83 @@ async function buildOverview(from, to) {
     syncedAt: new Date().toISOString(),
   };
 }
+
+/**
+ * The board report: the four brands side by side, replacing four separate
+ * Looker Studio exports with one view and a brand selector.
+ *
+ * Sessions, not users — chosen by MW so the whole dashboard speaks one unit.
+ * Shared assets are returned in their own block and are NOT inside any brand,
+ * so the four brands deliberately do not sum to the group figure.
+ */
+async function buildReport(from, to) {
+  const perBrand = {};
+  for (const b of BRANDS) perBrand[b.key] = { key: b.key, label: b.label, segment: b.segment };
+
+  // One filtered pair of reports per brand: each is small, and bucketing a
+  // single wide landing-page pull in JS would drag tens of thousands of rows.
+  const jobs = {};
+  for (const b of BRANDS) {
+    jobs[`s_${b.key}`] = ga4Compat(["session_default_channel_group"], ["sessions", "engaged_sessions"],
+      from, to, { segments: [b.segment] });
+    jobs[`k_${b.key}`] = ga4KeyEvents(["session_default_channel_group"], from, to, [b.segment]);
+  }
+  jobs.meta = windsor("facebook", ["account_name", "spend", "impressions", "clicks"], from, to);
+  const { data } = await runJobs(jobs);
+
+  for (const b of BRANDS) {
+    const rows = data[`s_${b.key}`] || [];
+    const ke = data[`k_${b.key}`] || { total: 0, byName: new Map(), rows: [] };
+    const chan = rows.map((r) => ({
+      channel: r.session_default_channel_group || "(unassigned)",
+      sessions: n(r.sessions), engaged: n(r.engaged_sessions),
+    })).sort((x, y) => y.sessions - x.sessions);
+    perBrand[b.key].sessions = chan.reduce((a, c) => a + c.sessions, 0);
+    perBrand[b.key].engaged = chan.reduce((a, c) => a + c.engaged, 0);
+    perBrand[b.key].channels = chan.slice(0, 6);
+    perBrand[b.key].keyEvents = ke.total;
+    perBrand[b.key].keyEventBreakdown = KEY_EVENTS
+      .map((e) => ({ id: e.name, label: e.label, value: ke.byName.get(e.name) || 0 }))
+      .filter((e) => e.value > 0).sort((a, c) => c.value - a.value);
+    perBrand[b.key].unavailable = data[`s_${b.key}`] === null;
+  }
+
+  // Meta split three ways: brand-owned, shared across all four, e-commerce only.
+  const metaByBrand = {}, metaShared = { spend: 0, impressions: 0, clicks: 0, accounts: [] };
+  for (const r of (data.meta || [])) {
+    const owner = brandForMetaAccount(r.account_name);
+    if (!owner || owner === "ECOM") continue;      // ECOM excluded from this report
+    const bucket = owner === "SHARED" ? metaShared
+      : (metaByBrand[owner] = metaByBrand[owner] || { spend: 0, impressions: 0, clicks: 0, accounts: [] });
+    bucket.spend += n(r.spend); bucket.impressions += n(r.impressions); bucket.clicks += n(r.clicks);
+    if (!bucket.accounts.includes(r.account_name)) bucket.accounts.push(r.account_name);
+  }
+  for (const b of BRANDS) perBrand[b.key].meta = metaByBrand[b.key] || null;
+
+  return {
+    range: { from, to },
+    brands: BRAND_KEYS.map((k) => perBrand[k]),
+    shared: {
+      meta: metaShared.accounts.length ? metaShared : null,
+      note: "Serves all four brands, so it is reported here and not added to any single brand. "
+          + "Brand figures therefore do not sum to the group total.",
+    },
+    unit: "sessions",
+  };
+}
+
+app.get("/api/report", requireTab("report"), async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  if (!WINDSOR_API_KEY) return res.status(500).json({ error: "Server missing WINDSOR_API_KEY" });
+  try {
+    const out = await withCache(`report:${from}:${to}`, req.query.refresh === "1", () => buildReport(from, to));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "report_failed", { error: String(err.message || err) });
+    res.status(500).json({ error: err.message || "Report failed" });
+  }
+});
 
 app.get("/api/overview", requireTab("overview"), async (req, res) => {
   const { from, to } = req.query;

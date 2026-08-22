@@ -532,6 +532,10 @@
       </div>
 
       <div class="nav-sep"></div>
+      <div class="nav-item" data-view="report">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+        Board Report
+      </div>
       <div class="nav-item" data-view="gbp">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l2.6 5.6 6 .8-4.4 4.2 1.1 6-5.3-3-5.3 3 1.1-6L3.4 9.4l6-.8z"/></svg>
         Google Profile
@@ -895,6 +899,7 @@ const NO_DATE_VIEWS = new Set(['benchmark', 'users']);
 const TITLES = {
   overview: ['Overview', 'Impressions → Visits → Key Events across all channels'],
   campaigns: ['Campaigns', 'Enter a utm_campaign code to see its funnel and every variant'],
+  report: ['Board Report', 'The four hospitals side by side \u2014 one view instead of four exports'],
   topics: ['Topic Explorer', 'Multilingual search demand across 10 site languages'],
   users: ['Users', 'Who can see which tab'],
   audit: ['Tagging audit', 'How much traffic and spend the campaign view cannot attribute'],
@@ -1119,11 +1124,24 @@ async function loadTopic(topic) {
   return S.topic;
 }
 
+async function loadReport(refresh = false) {
+  const key = `${$('from').value}|${$('to').value}`;
+  if (!refresh && S.reportKey === key && S.report) return S.report;
+  setStatus('busy', 'pulling the four hospitals\u2026');
+  const url = `/api/report?from=${$('from').value}&to=${$('to').value}${refresh ? '&refresh=1' : ''}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,200)}`);
+  S.report = await res.json(); S.reportKey = key;
+  setStatus('ok', S.report.cached ? `cached ${S.report.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.report;
+}
+
 $('loadBtn').addEventListener('click', async () => {
   const btn = $('loadBtn');
   btn.disabled = true; btn.classList.add('loading'); $('loadLabel').textContent = 'Loading…';
   try {
     if (S.view === 'overview') { await loadOverview(true); }
+    else if (S.view === 'report') { S.reportError = null; await loadReport(true); }
     else if (S.view === 'campaigns') {
       S.campaignList = null; S.campaignListKey = null;
       if (S.campaignCode) await loadCampaign(S.campaignCode, true);
@@ -1206,9 +1224,57 @@ function render() {
   else if (S.view === 'ecommonthly') renderEcomMonthly();
   else if (S.view === 'ecomroas') renderEcomRoas();
   else if (S.view === 'gads') renderGads();
+  else if (S.view === 'report') renderReport();
   else if (S.view === 'pages') renderPages();
   else if (S.view === 'users') renderUsers();
   else renderTopics();
+}
+
+// ============================================================ BOARD REPORT
+function renderReport() {
+  const d = S.report;
+  if (!d) { loadReport().then(render).catch(e => { $('viewRoot').innerHTML = errorState(e.message); }); 
+            $('viewRoot').innerHTML = '<div class="card"><div class="state"><div class="big">Loading\u2026</div></div></div>'; return; }
+  const sel = S.reportBrand || 'ALL';
+  const shown = sel === 'ALL' ? d.brands : d.brands.filter(b => b.key === sel);
+
+  const chip = (k, lab) => `<button class="btn ${sel===k?'btn-primary':'btn-ghost'}" data-brand="${k}">${esc(lab)}</button>`;
+  const card = (b) => `
+    <div class="card">
+      <div class="card-title">${esc(b.label)}</div>
+      ${b.unavailable ? '<div class="note">unavailable this run</div>' : `
+      <div class="grid g-3" style="margin-bottom:10px">
+        <div class="stat"><div class="lab">Sessions</div><div class="val">${num(b.sessions)}</div></div>
+        <div class="stat"><div class="lab">Engaged</div><div class="val">${num(b.engaged)}</div>
+          <div class="sub2">${b.sessions?((b.engaged/b.sessions)*100).toFixed(1):'0'}% of sessions</div></div>
+        <div class="stat"><div class="lab">Key events</div><div class="val">${num(b.keyEvents)}</div></div>
+      </div>
+      <table><thead><tr><th>Channel</th><th class="num">Sessions</th><th class="num">Engaged</th></tr></thead><tbody>
+      ${(b.channels||[]).map(c=>`<tr><td class="strong">${esc(c.channel)}</td><td class="num">${num(c.sessions)}</td><td class="num">${num(c.engaged)}</td></tr>`).join('')}
+      </tbody></table>
+      ${(b.keyEventBreakdown||[]).length ? `<table style="margin-top:8px"><tbody>
+        ${b.keyEventBreakdown.map(k=>`<tr><td class="strong">${esc(k.label)}</td><td class="num">${num(k.value)}</td></tr>`).join('')}
+      </tbody></table>` : ''}
+      ${b.meta ? `<div class="note">Meta: ฿${num(Math.round(b.meta.spend))} \u00b7 ${num(b.meta.impressions)} impressions \u00b7 ${num(b.meta.clicks)} clicks <span style="color:var(--faint)">(${b.meta.accounts.map(esc).join(', ')})</span></div>`
+        : '<div class="note">No dedicated Meta ad account \u2014 paid social runs from the shared group accounts below.</div>'}
+      `}
+    </div>`;
+
+  $('viewRoot').innerHTML = `
+    <div class="search" style="gap:6px">${['ALL',...d.brands.map(b=>b.key)].map(k=>chip(k, k==='ALL'?'All four':k)).join('')}</div>
+    <div class="grid ${shown.length>1?'g-2':''} mt">${shown.map(card).join('')}</div>
+    ${d.shared && d.shared.meta ? `<div class="card mt">
+      <div class="card-title">Group-level \u2014 shared across all four</div>
+      <div class="grid g-3">
+        <div class="stat"><div class="lab">Spend</div><div class="val">฿${num(Math.round(d.shared.meta.spend))}</div></div>
+        <div class="stat"><div class="lab">Impressions</div><div class="val">${num(d.shared.meta.impressions)}</div></div>
+        <div class="stat"><div class="lab">Clicks</div><div class="val">${num(d.shared.meta.clicks)}</div></div>
+      </div>
+      <div class="note">${esc(d.shared.meta.accounts.join(', '))}. ${esc(d.shared.note)}</div>
+    </div>` : ''}`;
+
+  document.querySelectorAll('[data-brand]').forEach(el =>
+    el.addEventListener('click', () => { S.reportBrand = el.dataset.brand; render(); }));
 }
 
 // ============================================================ OVERVIEW
@@ -1302,7 +1368,7 @@ function renderOverview() {
         </tbody></table>
       </div>
       <div class="card">
-        <h2>Reach without site visits</h2>
+        <h2>Off-site reach &amp; action</h2>
         <table><tbody>
         ${(d.reachOnly||[]).map(r=>`<tr><td class="strong">${esc(r.channel)}<div style="font-size:10.5px;color:var(--faint)">${esc(r.note)}${r.sub?' · '+esc(r.sub):''}</div></td>
           <td class="num" style="font-size:15px;font-weight:600;color:${isNA(r.impressions)?'var(--faint)':'var(--ink)'}">${num(r.impressions)}</td></tr>`).join('')}
@@ -1315,12 +1381,12 @@ function renderOverview() {
             <table><tbody>
               ${row('Calls from profile', o.gbpCalls)}
               ${row('Direction requests', o.gbpDirections)}
-              ${row('Bookings from profile', o.gbpBookings)}
+              ${o.gbpBookings ? row('Bookings from profile', o.gbpBookings, 'via Reserve with Google') : ''}
               ${row('New Meta conversations', o.metaMessages, 'ad-attributed only')}
             </tbody></table>
           </div>`;
         })()}
-        <div class="note">These platforms drive awareness and offline action (calls, directions, bookings) GA4 can't attribute as sessions, so they sit outside the funnel. The actions above are outcomes, not reach — a call from Maps is worth at least a form fill. Meta conversations count <b>ad-attributed</b> messages only: organic Messenger and Instagram DMs have no metric on any connected source, so real message volume is higher.${(d.reachOnly||[]).some(r=>r.channel==='LINE')?' LINE counts <b>messages sent</b>, which exceeds follower count because each follower receives several messages in a period &mdash; it is not unique people reached.':''}</div>
+        <div class="note">These platforms drive awareness and offline action GA4 can't attribute as sessions, so they sit outside the funnel. The actions are outcomes, not reach — a call from Maps is worth at least a form fill. Two limits worth knowing: Meta conversations count <b>ad-attributed</b> messages only, since organic Messenger and Instagram DMs have no metric on any connected source; and booking-button taps arrive as <b>website clicks</b>, because Google records a booking only when it is made through a Reserve with Google partner — it never learns what happens after someone reaches your site.${(d.reachOnly||[]).some(r=>r.channel==='LINE')?' LINE counts <b>messages sent</b>, which exceeds follower count because each follower receives several messages in a period &mdash; it is not unique people reached.':''}</div>
       </div>
     </div>
 
@@ -3983,7 +4049,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.68.0';
+const CLIENT_BUILD = '3.69.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
