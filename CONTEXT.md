@@ -646,6 +646,24 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.64.1 — GA4 cleanup after the migration.**
+
+`ga4Fields()` became dead code once every GA4 pull moved to the Data API — and
+with it, its 10-metric guard. **The guard protected nothing.** It now lives in
+`ga4RunReport()`, the single choke point all GA4 traffic passes through, and
+also checks the 9-dimension cap. The Data API has the same limits Windsor did,
+so the protection is still needed; it was just attached to the wrong thing.
+
+Confirmed clean in this pass: no `windsor("googleanalytics4")` call remains
+(one comment reference only), all scoped calls go through `withBranch()`, and
+`/api/page` plus `ga4Items` are the only deliberate exemptions.
+
+Still open: **`ga4Items` fails on every run** and is the recurring yellow banner
+plus the empty Top Products card. It failed under Windsor too, so it predates
+the migration. Item-scoped metrics cannot take the session-scoped landing-page
+filter, so it is exempt from branch scoping and will be group-wide if it ever
+returns — the card needs a label saying so.
+
 **v3.64.0 — Search Console moved to its own API and branch-filtered.**
 
 After v3.63.0 the funnel compared unlike things: Impressions 109.7M and clicks

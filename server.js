@@ -144,7 +144,23 @@ async function ga4Token() {
  * limit is explicit and a truncated response is reported rather than silently
  * short. With a landing-page filter applied this should never come close.
  */
+const GA4_METRIC_LIMIT = 10;
+const GA4_DIMENSION_LIMIT = 9;
+
 async function ga4RunReport({ dimensions, metrics, from, to, dimensionFilter, limit = 100000 }) {
+  /**
+   * The Data API caps a request at 10 metrics and 9 dimensions, exactly as
+   * Windsor did. This guard used to live in ga4Fields(), which every Windsor
+   * GA4 pull was built through; once those pulls moved here ga4Fields became
+   * dead code and the guard protected nothing. Failing loudly at build time
+   * beats an opaque HTTP 400.
+   */
+  if (metrics.length > GA4_METRIC_LIMIT) {
+    throw new Error(`GA4 request asks for ${metrics.length} metrics; the API allows ${GA4_METRIC_LIMIT}. Split it, or fetch as rows (see KEY_EVENTS).`);
+  }
+  if (dimensions.length > GA4_DIMENSION_LIMIT) {
+    throw new Error(`GA4 request asks for ${dimensions.length} dimensions; the API allows ${GA4_DIMENSION_LIMIT}.`);
+  }
   const token = await ga4Token();
   const body = {
     dateRanges: [{ startDate: from, endDate: to }],
@@ -257,7 +273,7 @@ function withBranch(dimensionFilter) {
 /**
  * Windsor field names in, Windsor-shaped rows out — but the data comes from the
  * GA4 Data API, branch-filtered. A drop-in replacement for the
- * `windsor("googleanalytics4", ga4Fields(dims, metrics), ...)` calls, so the
+ * `windsor("googleanalytics4", ...)` calls, so the
  * dozens of consumers that read `r.sessions` or `r.session_manual_campaign_name`
  * did not all have to be rewritten.
  *
@@ -830,13 +846,6 @@ const keyEventBreakdownFrom = (ke, keep) => {
  * miss: build every GA4 field list through it and an over-limit request fails
  * loudly here at build time instead of as an opaque HTTP 400 from Windsor.
  */
-const GA4_METRIC_LIMIT = 10;
-function ga4Fields(dimensions, metrics) {
-  if (metrics.length > GA4_METRIC_LIMIT) {
-    throw new Error(`GA4 request would ask for ${metrics.length} metrics; the API allows ${GA4_METRIC_LIMIT}. Split it into two calls.`);
-  }
-  return [...dimensions, ...metrics];
-}
 
 // Which platform's impressions belong to which GA4 channel group. Units differ
 // across platforms; the UI states this rather than implying one true total.
