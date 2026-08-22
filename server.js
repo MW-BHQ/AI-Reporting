@@ -722,7 +722,18 @@ async function runJobs(jobs) {
   settled.forEach((s, i) => {
     const k = names[i];
     if (s.status === "fulfilled") data[k] = s.value;
-    else { data[k] = null; errors[k] = String((s.reason && s.reason.message) || s.reason); }
+    else {
+      data[k] = null;
+      errors[k] = String((s.reason && s.reason.message) || s.reason);
+      /**
+       * LOG IT. The reason used to be captured here and shown to nobody: the
+       * banner names the failed job ("Unavailable this run: ga4Items") but not
+       * why, and nothing reached Cloud Logging. A source could fail on every
+       * run for weeks with the cause never recorded anywhere — which is exactly
+       * what happened to ga4Items.
+       */
+      logJson("WARNING", "job_failed", { job: k, error: errors[k].slice(0, 500) });
+    }
   });
   return { data, errors };
 }

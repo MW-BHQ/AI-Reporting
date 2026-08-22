@@ -646,6 +646,28 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.64.2 — `runJobs` now LOGS job failures.**
+
+It captured the reason into `errors[k]` and showed it to nobody. The banner
+names the failed job — "Unavailable this run: ga4Items" — but not why, and
+nothing reached Cloud Logging, so a source could fail on every run for weeks
+with the cause recorded nowhere. That is why `ga4Items` was undiagnosable:
+searching the logs for it returned empty, which looked like "no error" and was
+actually "no logging".
+
+Every failure now writes `job_failed` with the job name and the first 500
+characters of the reason:
+
+```
+gcloud logging read 'resource.type=cloud_run_revision AND
+  resource.labels.service_name=ai-reporting-git AND
+  jsonPayload.message="job_failed"' --limit 20 --freshness=1h \
+  --format='value(jsonPayload.job, jsonPayload.error)'
+```
+
+A degradation path that hides the cause is only half a degradation path — it
+keeps the dashboard up and makes the bug permanent.
+
 **v3.64.1 — GA4 cleanup after the migration.**
 
 `ga4Fields()` became dead code once every GA4 pull moved to the Data API — and
