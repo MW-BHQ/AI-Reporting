@@ -874,7 +874,10 @@ const keyEventBreakdownFrom = (ke, keep) => {
 const IMPRESSION_SOURCE_BY_CHANNEL = {
   "paid social": "meta",
   "organic search": "gsc",
-  "organic social": "organicSocial",
+  // TikTok views only. Facebook page reach is NOT here: it includes ads by
+  // Meta's definition, so putting it in a column that sums into the headline
+  // double-counts every paid impression. It is reported in the reach panel.
+  "organic social": "tiktok",
   // Google Ads search campaigns land in GA4's "Paid Search" channel group.
   // Display and Video campaigns land in "Display" / "Paid Video", which this
   // deliberately does NOT claim: the connector returns one total across all
@@ -944,11 +947,17 @@ async function buildOverview(from, to) {
       ["items_viewed", "items_added_to_cart", "items_purchased", "item_revenue"],
       from, to, { noBranchFilter: true }),
     ga4Month: ga4Compat(["date"], ["purchase_revenue", "ecommerce_purchases"], monthFrom, monthTo),
-    meta: windsor("facebook", ["date", "account_name", "spend", "impressions", "clicks"], from, to),
+    meta: windsor("facebook", ["date", "account_name", "spend", "impressions", "clicks",
+      // Ad-ATTRIBUTED conversations only. There is no organic Messenger or IG
+      // DM metric on any connector Windsor offers (facebook_messenger does not
+      // exist; facebook_organic has no messaging fields), so this undercounts
+      // real message volume and the UI must say so rather than imply totality.
+      "actions_onsite_conversion_total_messaging_connection"], from, to),
     gads: windsor("google_ads", ["date", "account_name", "spend", "impressions", "clicks"], from, to),
     gsc: gscQuery(["date"], from, to),
     gmb: windsor("google_my_business",
-      ["date", "location_title", "impressions", "call_clicks", "website_clicks", "direction_requests"], from, to),
+      ["date", "location_title", "impressions", "call_clicks", "website_clicks", "direction_requests",
+        "business_bookings"], from, to),
     fbOrganic: windsor("facebook_organic", ["date", "page_impressions", "post_engagements"], from, to),
     ttOrganic: windsor("tiktok_organic", ["date", "video_views", "likes", "comments", "shares"], from, to),
     line: lineWindsor(["date", "message__broadcast", "message__targeting", "message__api_broadcast",
@@ -972,8 +981,24 @@ async function buildOverview(from, to) {
     gads: sumOrNull(data.gads, "impressions"),
     gsc: sumOrNull(data.gsc, "impressions"),
     gmb: sumOrNull(data.gmb, "impressions"),
-    organicSocial: (data.fbOrganic === null && data.ttOrganic === null) ? null
-      : n(sumOrNull(data.fbOrganic, "page_impressions")) + n(sumOrNull(data.ttOrganic, "video_views")),
+    /**
+     * SPLIT, and fbPage deliberately EXCLUDED from the impressions total.
+     *
+     * Meta defines page_impressions as "any content from your Page or about
+     * your Page... this includes posts, stories, ADS". So it contains the Meta
+     * Ads impressions already counted in `meta`, and summing both
+     * double-counted every paid impression. It is now reported on its own as
+     * "Facebook page reach (includes ads)" rather than folded into a headline
+     * that cannot be defended.
+     *
+     * TikTok is separate because a video view is not an impression — autoplay
+     * counts. Merging the two produced a 23.2M "impressions" line against 20.1K
+     * visits, a rate an order of magnitude below every other channel, which
+     * read as a failing channel rather than a different unit.
+     */
+    fbPage: sumOrNull(data.fbOrganic, "page_impressions"),
+    tiktok: sumOrNull(data.ttOrganic, "video_views"),
+
     /**
      * LINE reach. The connector's message-EVENT metrics (message_delivered,
      * message_unique_impression, message_unique_click) return 0 for every date:
@@ -1017,7 +1042,7 @@ async function buildOverview(from, to) {
     meta: sumOrNull(data.meta, "clicks"),
     gads: sumOrNull(data.gads, "clicks"),
     gsc: sumOrNull(data.gsc, "clicks"),
-    organicSocial: null,
+    tiktok: null,   // TikTok reports no click-out metric at all.
   };
   const funnel = [...chanMap.values()].map((c) => {
     const srcKey = IMPRESSION_SOURCE_BY_CHANNEL[norm(c.channel)];
@@ -1030,17 +1055,45 @@ async function buildOverview(from, to) {
   }).sort((a, b) => b.visits - a.visits);
 
   // Platform reach with no GA4 channel equivalent.
+  /**
+   * Off-site reach and off-site ACTION. These never become a GA4 session, so
+   * they sit outside the funnel — but a call or a booking from Maps is a better
+   * outcome than a form fill, not a lesser one, so the actions are surfaced
+   * rather than discarded as they were until v3.68.
+   */
+  const gmbAction = (f) => sumOrNull(data.gmb, f);
   const reachOnly = [
     { channel: "Google Business Profile", impressions: impressions.gmb, note: "profile views" },
+    { channel: "Facebook page", impressions: impressions.fbPage,
+      note: "page reach — includes ads, so not added to the funnel total" },
+    { channel: "TikTok", impressions: impressions.tiktok, note: "video views — counted in the funnel as Organic Social" },
     // LINE is listed only while the connector is on. Showing a permanent
     // "unavailable" row trains people to ignore the panel.
     ...(LINE_ENABLED ? [{ channel: "LINE", impressions: impressions.line, note: lineBasis,
       sub: lineFollowers ? `${lineFollowers.toLocaleString()} followers${lineReachable ? ` · ${lineReachable.toLocaleString()} targetable` : ""}` : null }] : []),
   ];
 
+  /**
+   * BOFU actions that never touch the website. Bookings are the strongest of
+   * these for a hospital and only exist because the booking button is live on
+   * the profile. Meta messaging is ad-attributed ONLY — organic Messenger and
+   * IG DMs have no metric on any available connector, so this is a floor.
+   */
+  const offsiteActions = {
+    gbpCalls: gmbAction("call_clicks"),
+    gbpDirections: gmbAction("direction_requests"),
+    gbpBookings: gmbAction("business_bookings"),
+    gbpWebsiteClicks: gmbAction("website_clicks"),
+    metaMessages: sumOrNull(data.meta, "actions_onsite_conversion_total_messaging_connection"),
+  };
+  offsiteActions.total = ["gbpCalls", "gbpDirections", "gbpBookings", "metaMessages"]
+    .every((k) => offsiteActions[k] === null) ? null
+    : ["gbpCalls", "gbpDirections", "gbpBookings", "metaMessages"]
+      .reduce((a, k) => a + n(offsiteActions[k]), 0);
+
   const totals = {
     impressions: (() => {
-      const vals = [impressions.meta, impressions.gads, impressions.gsc, impressions.organicSocial];
+      const vals = [impressions.meta, impressions.gads, impressions.gsc, impressions.tiktok];
       return vals.every((v) => v === null) ? null : vals.reduce((a, v) => a + n(v), 0);
     })(),
     clicks: (() => {
@@ -1172,7 +1225,7 @@ async function buildOverview(from, to) {
 
   return {
     range: { from, to },
-    totals, funnel, reachOnly, keyEventBreakdown,
+    totals, funnel, reachOnly, keyEventBreakdown, offsiteActions,
     ecommerce, forecast, topProducts,
     paid, topAccounts, search, trend,
     unavailable: Object.keys(errors),

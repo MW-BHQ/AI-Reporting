@@ -646,6 +646,46 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.68.0 — off-site ACTION surfaced; Facebook page reach removed from the total.**
+
+Step one of the TOFU/MOFU/BOFU reshape: the marketing funnel does not end at the
+website. Three things landed.
+
+**1. A real double-count is gone.** Meta defines `page_impressions` as "any
+content from your Page or about your Page... this includes posts, stories,
+**ADS**". It was being added to Meta Ads impressions, so every paid impression
+was counted twice in the Impressions headline. Facebook page reach now sits in
+the reach panel labelled "includes ads" and is **excluded from the total**.
+Expect Impressions to drop.
+
+**2. TikTok split out.** A video view is not an impression — autoplay counts.
+Merged with Facebook it produced a 23.2M "impressions" line against 20.1K
+visits, which read as a failing channel rather than a different unit. The
+Organic Social channel row now carries TikTok views only.
+
+**3. Off-site actions, previously pulled and discarded:** GBP `call_clicks`,
+`direction_requests` and the newly added **`business_bookings`** (the booking
+button is live on the profile), plus Meta
+`actions_onsite_conversion_total_messaging_connection`.
+
+**Connector facts established 22 Aug 2026 by querying Windsor directly:**
+- **GBP `conversations` is DEPRECATED** — Google shut down Business Profile
+  chat. There are no GBP messages to count, ever.
+- **`facebook_messenger` connector does not exist** ("We don't have this
+  connector yet!"). `facebook_organic` has no messaging fields either. So
+  message volume is **ad-attributed only** and is a floor, not a total. The UI
+  says so.
+- **YouTube IS available** in Windsor, unconnected. Prefer it to the GCP route:
+  the YouTube Analytics API needs OAuth as channel owner, which a service
+  account cannot do without domain-wide delegation.
+- Windsor **GA4 and Search Console are now unused** by this service — both moved
+  to Google's APIs. Safe to disconnect. **Google Ads is NOT** — it is live in the
+  funnel since v3.67.0.
+
+**Backlog (after the Looker Studio changeover):** disconnect Windsor GA4 +
+Search Console; connect YouTube and re-enable LINE; then the TOFU/MOFU/BOFU band
+layout with the web funnel nested intact.
+
 **v3.67.0 — Google Ads in the Overview funnel.**
 
 Overview never pulled `google_ads` at all, so **Paid Search showed visits with

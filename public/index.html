@@ -1256,7 +1256,7 @@ function renderOverview() {
         <div class="stage-head"><span class="stage-name">Impressions</span>
           <span class="stage-val ${isNA(d.totals.impressions)?'na':''}">${num(d.totals.impressions)}</span></div>
         <div class="bar">${seg(impChannels, totalImp, 'impressions')}</div>
-        <div class="stage-note">Meta Ads + Search Console + organic social. Units differ per platform, so read this as scale rather than one audited total. GMB reach is listed separately below.</div>
+        <div class="stage-note">Meta Ads + Google Ads + Search Console + TikTok views. Units differ per platform, so read this as scale rather than one audited total. Facebook page reach is <b>excluded</b> — Meta counts ads inside it, so adding it would double-count paid. It and GMB reach are listed separately below.</div>
       </div>
       <div class="stage minor">
         <div class="stage-head"><span class="stage-name">Ad &amp; search clicks</span>
@@ -1307,7 +1307,20 @@ function renderOverview() {
         ${(d.reachOnly||[]).map(r=>`<tr><td class="strong">${esc(r.channel)}<div style="font-size:10.5px;color:var(--faint)">${esc(r.note)}${r.sub?' · '+esc(r.sub):''}</div></td>
           <td class="num" style="font-size:15px;font-weight:600;color:${isNA(r.impressions)?'var(--faint)':'var(--ink)'}">${num(r.impressions)}</td></tr>`).join('')}
         </tbody></table>
-        <div class="note">These platforms drive awareness and offline action (calls, directions) GA4 can't attribute as sessions, so they sit outside the funnel.${(d.reachOnly||[]).some(r=>r.channel==='LINE')?' LINE counts <b>messages sent</b>, which exceeds follower count because each follower receives several messages in a period &mdash; it is not unique people reached.':''}</div>
+        ${(() => {
+          const o = d.offsiteActions; if (!o || o.total === null) return '';
+          const row = (lab, v, sub) => v === null ? '' : `<tr><td class="strong">${lab}${sub?`<div style="font-size:10.5px;color:var(--faint)">${sub}</div>`:''}</td><td class="num" style="font-size:15px;font-weight:600">${num(v)}</td></tr>`;
+          return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+            <div class="card-title" style="margin-bottom:6px">Action without site visits</div>
+            <table><tbody>
+              ${row('Calls from profile', o.gbpCalls)}
+              ${row('Direction requests', o.gbpDirections)}
+              ${row('Bookings from profile', o.gbpBookings)}
+              ${row('New Meta conversations', o.metaMessages, 'ad-attributed only')}
+            </tbody></table>
+          </div>`;
+        })()}
+        <div class="note">These platforms drive awareness and offline action (calls, directions, bookings) GA4 can't attribute as sessions, so they sit outside the funnel. The actions above are outcomes, not reach — a call from Maps is worth at least a form fill. Meta conversations count <b>ad-attributed</b> messages only: organic Messenger and Instagram DMs have no metric on any connected source, so real message volume is higher.${(d.reachOnly||[]).some(r=>r.channel==='LINE')?' LINE counts <b>messages sent</b>, which exceeds follower count because each follower receives several messages in a period &mdash; it is not unique people reached.':''}</div>
       </div>
     </div>
 
@@ -3970,7 +3983,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.67.0';
+const CLIENT_BUILD = '3.68.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
