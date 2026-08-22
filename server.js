@@ -219,18 +219,36 @@ const GA4_DIM_MAP = {
  * The locale segment is optional in the pattern because not every URL carries
  * one; see §7 for the ten locales.
  */
+const BRANCH_FILTER_OFF = String(process.env.BRANCH_SEGMENTS || "").toLowerCase() === "off";
 const BRANCH_SEGMENTS = (process.env.BRANCH_SEGMENTS ||
   "bangkok,bangkok-bone-brain,bangkok-heart,bangkok-cancer").split(",").map((s) => s.trim()).filter(Boolean);
-const BRANCH_REGEX = `^/([a-z]{2}/)?(${BRANCH_SEGMENTS.join("|")})/`;
+
+/**
+ * PARTIAL_REGEXP, not FULL_REGEXP.
+ *
+ * GA4's FULL_REGEXP requires the pattern to match the ENTIRE dimension value,
+ * so this prefix pattern matched nothing and v3.63.0 returned zero rows for
+ * every GA4 report — a dead dashboard rather than a visible error. PARTIAL_REGEXP
+ * matches anywhere in the value, and the leading ^ still anchors it to the start
+ * of the path. Do not "tidy" this back to FULL_REGEXP.
+ */
+const BRANCH_REGEX = `^/([a-z]{2}/)?(${BRANCH_SEGMENTS.join("|")})(/|$)`;
 const branchFilter = () => ({
   filter: {
     fieldName: GA4_LANDING_DIM,
-    stringFilter: { matchType: "FULL_REGEXP", value: BRANCH_REGEX, caseSensitive: false },
+    stringFilter: { matchType: "PARTIAL_REGEXP", value: BRANCH_REGEX, caseSensitive: false },
   },
 });
 
-/** AND the branch filter onto a caller's own filter, if any. */
+/**
+ * AND the branch filter onto a caller's own filter, if any.
+ *
+ * Set BRANCH_SEGMENTS=off to disable group-wide — the escape hatch for when the
+ * filter is wrong and the dashboard is dark. Reports then cover all 27 branches,
+ * which is wrong but visible, rather than zero, which looks like an outage.
+ */
 function withBranch(dimensionFilter) {
+  if (BRANCH_FILTER_OFF) return dimensionFilter;
   const b = branchFilter();
   if (!dimensionFilter) return b;
   return { andGroup: { expressions: [b, dimensionFilter] } };
@@ -805,8 +823,12 @@ async function buildOverview(from, to) {
     ga4: ga4Compat(GA4_FUNNEL_DIMS, ["sessions", "engaged_sessions"], from, to),
     keyEvents: ga4KeyEvents(GA4_FUNNEL_DIMS, from, to),
     ga4Ecom: ga4Compat(GA4_FUNNEL_DIMS, GA4_ECOM_METRICS, from, to),
+    // Item-scoped metrics cannot be combined with the session-scoped landing
+    // page filter — GA4 rejects the pair — so this stays group-wide and is
+    // labelled as such in the UI rather than silently implying branch scope.
     ga4Items: ga4Compat(["item_name"],
-      ["item_view_events", "items_added_to_cart", "items_purchased", "item_revenue"], from, to),
+      ["item_view_events", "items_added_to_cart", "items_purchased", "item_revenue"],
+      from, to, { noBranchFilter: true }),
     ga4Month: ga4Compat(["date"], ["purchase_revenue", "ecommerce_purchases"], monthFrom, monthTo),
     meta: windsor("facebook", ["date", "account_name", "spend", "impressions", "clicks"], from, to),
     gsc: windsor("searchconsole", ["date", "clicks", "impressions", "position"], from, to),

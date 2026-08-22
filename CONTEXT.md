@@ -646,6 +646,38 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.63.1 — HOTFIX. v3.63.0 took every GA4 figure to zero in production.**
+
+`FULL_REGEXP` in GA4 requires the pattern to match the **entire** dimension
+value. The branch filter is a prefix pattern, so it matched nothing and every
+GA4 report came back empty — Visits 0, Key Events 0, "no data". Not an error,
+just silence, which is why the degradation banner said nothing. Now
+**`PARTIAL_REGEXP`**, still anchored with `^`. Do not "tidy" it back.
+
+**`BRANCH_SEGMENTS=off`** now disables the filter service-wide. Reports revert
+to all 27 branches — wrong but visible, which beats zero that looks like an
+outage. Use it if the filter is ever wrong again.
+
+`ga4Items` is exempt: item-scoped metrics cannot be combined with a
+session-scoped landing-page filter, so that one report stays group-wide.
+
+**Two mock failures let this reach production, both now fixed:**
+
+1. The stub matched `FULL_REGEXP` with a bare `RegExp.test()`, which is a
+   PARTIAL match — **more permissive than the real API**, so it certified code
+   that could not work. It now anchors `^(?:...)$` for FULL_REGEXP and treats
+   PARTIAL_REGEXP separately.
+2. More important: the stub only applied a filter to dimensions the report
+   GROUPS BY. The branch filter targets the landing page while the funnel groups
+   by date × channel, so it was never evaluated at all. Real GA4 applies it to
+   the underlying sessions — no matching landing page means an empty report. The
+   stub now emulates that, and **reproduces the outage**: reverting to
+   FULL_REGEXP gives visits 0 in tests, the fix gives 400.
+
+The rule from §10 class 4, restated harder: a stub must not only be able to
+fail, it must fail **the same way the real service does**. Being more lenient is
+worse than being absent.
+
 **v3.63.0 — THE BRANCH FILTER. Read this before trusting any historical figure.**
 
 GA4 property **484633959 is the BDMS *group* property: 27 branches.** The War

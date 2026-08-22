@@ -127,8 +127,20 @@ function ga4Report(body) {
     if (f.stringFilter && f.stringFilter.matchType === "BEGINS_WITH") {
       beginsWith[f.fieldName] = f.stringFilter.value;
     }
+    /**
+     * GA4 semantics, exactly: FULL_REGEXP must match the WHOLE value,
+     * PARTIAL_REGEXP matches anywhere. v3.63.0 shipped a prefix pattern as
+     * FULL_REGEXP and every GA4 report returned zero rows in production, while
+     * this mock passed — because a bare RegExp.test() is a partial match. A
+     * stub that is more permissive than the real API certifies broken code.
+     */
     if (f.stringFilter && f.stringFilter.matchType === "FULL_REGEXP") {
-      (regexes[f.fieldName] = regexes[f.fieldName] || []).push(new RegExp(f.stringFilter.value, "i"));
+      (regexes[f.fieldName] = regexes[f.fieldName] || [])
+        .push(new RegExp(`^(?:${f.stringFilter.value})$`, f.stringFilter.caseSensitive ? "" : "i"));
+    }
+    if (f.stringFilter && f.stringFilter.matchType === "PARTIAL_REGEXP") {
+      (regexes[f.fieldName] = regexes[f.fieldName] || [])
+        .push(new RegExp(f.stringFilter.value, f.stringFilter.caseSensitive ? "" : "i"));
     }
     if (f.inListFilter) allowedEvents = f.inListFilter.values;
   }
@@ -149,6 +161,21 @@ function ga4Report(body) {
    */
   const branchFiltered = (regexes[GA4_LANDING_DIM_NAME] || []).length > 0;
   const marker = branchFiltered ? [] : ["OutOfScope"];
+
+  /**
+   * A filter may target a dimension the report does not GROUP by — the branch
+   * filter is on the landing page, but the funnel groups by date x channel.
+   * Real GA4 still applies it, to the underlying sessions: if no session's
+   * landing page matches, the report is empty.
+   *
+   * Emulating that is what catches a filter that matches nothing. Without it
+   * this stub happily returned full rows for the v3.63.0 FULL_REGEXP bug while
+   * production went dark.
+   */
+  const landingIsGrouped = dims.includes(GA4_LANDING_DIM_NAME);
+  if (branchFiltered && !landingIsGrouped && pages.length === 0) {
+    return { dimensionHeaders: dims.map((name) => ({ name })), metricHeaders: mets.map((name) => ({ name })), rows: [], rowCount: 0 };
+  }
   const campaigns = ["260701-08_bht_tra", "(not set)"]
     .filter((c) => keep("sessionManualCampaignName", c));
   const dates = ["20260714", "20260715"];
