@@ -463,6 +463,18 @@
   .acct-tab.active small{color:var(--violet);opacity:.75;}
 
   .print-head{display:none;}
+  /* A topic heading that names each printed slide. On screen it reads as a
+     quiet section label; in print it becomes the slide title, so the deck
+     tells a story by topic rather than being one long scroll. */
+  .slide-title{
+    font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--violet);margin:22px 0 8px;
+  }
+  .slide-title:first-child{margin-top:0;}
+  @media print{
+    .slide-title{font-size:13px;color:#1B2340;margin:0 0 10px;
+      border-bottom:2px solid #1B2340;padding-bottom:6px;}
+  }
   @media print{
     /* 13.333in x 7.5in is the standard 16:9 slide canvas. */
     @page{size:13.333in 7.5in;margin:0.45in;}
@@ -1262,11 +1274,17 @@ function renderReport() {
       `}
     </div>`;
 
-  $('viewRoot').innerHTML = `
-    <div class="search" style="gap:6px">${['BHQ',...d.brands.map(b=>b.key)].map(k=>chip(k,k)).join('')}</div>
-    <div class="mt">${shown.map(card).join('')}</div>
-    ${sel === 'BHQ' ? `<div class="card mt">
-      <div class="card-title">By hospital</div>
+  /**
+   * Laid out as TOPIC SLIDES, not one scroll. Each `.slide-title` names a topic
+   * and every topic after the first carries `.slide-break`, so printing gives
+   * one 16:9 slide per topic in the order a board reads them: who came, which
+   * hospital, how they arrived, what they did, what we paid.
+   */
+  const slide = (title, body, first) => body
+    ? `<div class="${first ? '' : 'slide-break'}"><div class="slide-title">${esc(title)}</div>${body}</div>`
+    : '';
+
+  const byHospital = sel !== 'BHQ' ? '' : `<div class="card">
       <table class="roomy sortable"><thead><tr><th>Hospital</th><th class="num">Sessions</th>
         <th class="num">Share</th><th class="num">Engaged</th><th class="num">Key events</th><th class="num">KE / session</th></tr></thead><tbody>
       ${d.brands.map(b=>`<tr><td class="strong">${esc(b.label)}</td>
@@ -1275,19 +1293,9 @@ function renderReport() {
         <td class="num">${num(b.engaged)}</td>
         <td class="num">${num(b.keyEvents)}</td>
         <td class="num">${b.sessions?((b.keyEvents/b.sessions)*100).toFixed(1):'0'}%</td></tr>`).join('')}
-      </tbody></table>
-    </div>` : ''}
-    ${d.shared && d.shared.meta ? `<div class="card mt">
-      <div class="card-title">BHQ shared — runs for all four hospitals</div>
-      <div class="grid g-3">
-        <div class="stat"><div class="lab">Spend</div><div class="val">฿${num(Math.round(d.shared.meta.spend))}</div></div>
-        <div class="stat"><div class="lab">Impressions</div><div class="val">${num(d.shared.meta.impressions)}</div></div>
-        <div class="stat"><div class="lab">Clicks</div><div class="val">${num(d.shared.meta.clicks)}</div></div>
-      </div>
-      <div class="note">${esc(d.shared.meta.accounts.join(', '))}. ${esc(d.shared.note)}</div>
-    </div>` : ''}
-    ${sel === 'BHQ' && (d.languages||[]).length ? `<div class="card mt">
-      <div class="card-title">Search by language \u2014 impressions to actions</div>
+      </tbody></table></div>`;
+
+  const langBody = (sel === 'BHQ' && (d.languages||[]).length) ? `<div class="card">
       <table class="roomy sortable"><thead><tr>
         <th>Language</th><th class="num">Impressions</th><th class="num">Clicks</th><th class="num">CTR</th>
         <th class="num">Visits</th><th class="num">Key events</th><th class="num">KE / visit</th></tr></thead><tbody>
@@ -1301,8 +1309,18 @@ function renderReport() {
       </tbody></table>
       <div class="note">Language is read from the URL locale segment, never guessed from the script \u2014
       English, German, Vietnamese and Indonesian share Latin characters and cannot be separated otherwise.
-      Impressions and clicks are Search Console; visits and key events are GA4. Unlike the cross-platform
-      bands on Overview, each stage here IS a subset of the one above, so these rates are meaningful.</div>
+      Impressions and clicks are Search Console; visits and key events are GA4. Each stage here IS a subset
+      of the one above, so unlike the Overview bands these rates are meaningful.</div>
+    </div>` : '';
+
+  const paidBody = `${d.shared && d.shared.meta ? `<div class="card">
+      <div class="card-title">BHQ shared \u2014 runs for all four hospitals</div>
+      <div class="grid g-3">
+        <div class="stat"><div class="lab">Spend</div><div class="val">฿${num(Math.round(d.shared.meta.spend))}</div></div>
+        <div class="stat"><div class="lab">Impressions</div><div class="val">${num(d.shared.meta.impressions)}</div></div>
+        <div class="stat"><div class="lab">Clicks</div><div class="val">${num(d.shared.meta.clicks)}</div></div>
+      </div>
+      <div class="note">${esc(d.shared.meta.accounts.join(', '))}. ${esc(d.shared.note)}</div>
     </div>` : ''}
     ${d.unmapped ? `<div class="card mt" style="border-color:#E4B84B">
       <div class="card-title">Unmapped ad accounts \u2014 not counted anywhere</div>
@@ -1311,6 +1329,14 @@ function renderReport() {
       <b>${esc(d.unmapped.accounts.join(', '))}</b> \u2014 ฿${num(Math.round(d.unmapped.spend))} spend,
       ${num(d.unmapped.impressions)} impressions.</div>
     </div>` : ''}`;
+
+  $('viewRoot').innerHTML = `
+    <div class="search no-print" style="gap:6px">${['BHQ',...d.brands.map(b=>b.key)].map(k=>chip(k,k)).join('')}</div>
+    ${slide(sel === 'BHQ' ? 'Performance \u00b7 all four hospitals' : `Performance \u00b7 ${sel}`,
+            shown.map(card).join(''), true)}
+    ${slide('By hospital', byHospital)}
+    ${slide('Search by language', langBody)}
+    ${slide('Paid media', paidBody.trim())}`;
 
   document.querySelectorAll('[data-brand]').forEach(el =>
     el.addEventListener('click', () => { S.reportBrand = el.dataset.brand; render(); }));
@@ -4088,7 +4114,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.71.0';
+const CLIENT_BUILD = '3.72.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

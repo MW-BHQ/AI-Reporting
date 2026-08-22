@@ -646,6 +646,27 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.72.0 — Monthly Reports laid out as topic slides for print.**
+
+The tab is now structured as **topic slides**, not one scroll. Each topic gets a
+`.slide-title` and every topic after the first carries `.slide-break`, so
+printing produces one **16:9** slide per topic — the `@page{size:13.333in 7.5in}`
+rule already existed, what was missing was the sectioning.
+
+Order follows how a board reads it, mirroring the LS deck without copying it:
+
+1. **Performance** — BHQ or the selected hospital
+2. **By hospital** — share of sessions, engaged, key events (BHQ view only)
+3. **Search by language** — impressions → clicks → visits → key events
+4. **Paid media** — BHQ shared accounts, and any unmapped ones
+
+The brand selector is `no-print`, so a printed deck shows the chosen scope
+without the chrome. Sections render only when they have content, so a
+single-hospital print does not emit empty slides.
+
+Build sections into this structure as they are added — retrofitting slide
+breaks after the fact is what makes a print stylesheet unmanageable.
+
 **v3.71.0 — Monthly Reports: search by language.**
 
 Renames: **Board Report → Monthly Reports**; **E-commerce · Monthly report →
