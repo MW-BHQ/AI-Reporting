@@ -216,6 +216,10 @@ const GA4_DIM_MAP = {
   session_manual_campaign_name: "sessionManualCampaignName",
   session_manual_source: "sessionManualSource",
   session_manual_medium: "sessionManualMedium",
+  // Needed by the per-language split, which buckets key events by the locale
+  // segment of the landing page. Absent, ga4KeyEvents throws, runJobs turns it
+  // into null, and every language reads zero key events with no error shown.
+  landing_page: GA4_LANDING_DIM,
 };
 
 
@@ -307,7 +311,7 @@ const GA4_METRIC_MAP = {
   items_purchased: "itemsPurchased",
   item_revenue: "itemRevenue",
 };
-const GA4_DIM_MAP_FULL = { ...GA4_DIM_MAP, landing_page: GA4_LANDING_DIM, item_name: "itemName" };
+const GA4_DIM_MAP_FULL = { ...GA4_DIM_MAP, item_name: "itemName" };
 
 async function ga4Compat(windsorDims, windsorMetrics, from, to, opts = {}) {
   const dims = windsorDims.map((d) => {
@@ -548,18 +552,18 @@ function topicFor(code, topics) {
  * quietly any more.
  */
 const BRANDS = [
-  { key: "BGH", label: "Bangkok Hospital",        segment: "bangkok",
+  { key: "BGH", label: "BGH",   segment: "bangkok",
     gbp: ["Bangkok Hospital", "Dental Center | Bangkok Hospital"],
     meta: ["BGH x ADA", "BGH x EGG"] },
-  { key: "BIH", label: "Bangkok International",   segment: "bangkok-bone-brain",
+  { key: "BIH", label: "BIH",   segment: "bangkok-bone-brain",
     gbp: ["Bangkok International Hospital (Brain x Bone)"],
     meta: ["BIH x ADA", "BIH x EGG"] },
-  { key: "BHT", label: "Bangkok Heart",           segment: "bangkok-heart",
+  { key: "BHT", label: "BHT",   segment: "bangkok-heart",
     gbp: ["Bangkok Heart Hospital"],
     meta: ["BHT x ADA", "BHT x EGG"] },
   // WSH DOES have its own accounts (WSH x ADA id 327561266199410, WSH x EGG).
   // Recent months show no spend, which is a spend gap, not an account gap.
-  { key: "WSH", label: "Bangkok Cancer",          segment: "bangkok-cancer",
+  { key: "WSH", label: "WSH",   segment: "bangkok-cancer",
     gbp: ["Bangkok Cancer Hospital Wattanosoth"],
     meta: ["WSH x ADA", "WSH x EGG"] },
 ];
@@ -593,7 +597,7 @@ const brandForGbpListing = (title) => {
 
 const TABS = [
   { id: "overview",  label: "Overview" },
-  { id: "report",    label: "Board Report" },
+  { id: "report",    label: "Monthly Reports" },
   { id: "campaigns", label: "Campaigns" },
   { id: "pages",     label: "Pages" },
   { id: "gbp",       label: "Google Profile" },
@@ -607,7 +611,7 @@ const TABS = [
   { id: "ecomchannels", label: "E-commerce · Channels" },
   { id: "ecommigration", label: "E-commerce · Migration" },
   { id: "ecomchurn",  label: "E-commerce · Churn" },
-  { id: "ecommonthly", label: "E-commerce · Monthly report" },
+  { id: "ecommonthly", label: "E-commerce · Report" },
   { id: "ecomroas",   label: "E-commerce · Ad Performance" },
   { id: "users",     label: "Users", adminOnly: true },
 ];
@@ -1329,6 +1333,17 @@ async function buildReport(from, to) {
     jobs[`k_${b.key}`] = ga4KeyEvents(["session_default_channel_group"], from, to, [b.segment]);
   }
   jobs.meta = windsor("facebook", ["account_name", "spend", "impressions", "clicks"], from, to);
+  /**
+   * Search by language: the TOFU/MOFU/BOFU strip repeated ten times in the LS
+   * deck. Impressions and clicks come from Search Console keyed on `page`;
+   * sessions and key events from GA4 keyed on landing page. Both are bucketed
+   * by the SAME locale segment via localeFromPath(), which is the only reliable
+   * split — EN/DE/VN/ID share Latin script and cannot be told apart by
+   * characters (§7).
+   */
+  jobs.gscLang = gscQuery(["page"], from, to);
+  jobs.langSessions = ga4Compat(["landing_page"], ["sessions"], from, to);
+  jobs.langKeyEvents = ga4KeyEvents(["landing_page"], from, to);
   const { data } = await runJobs(jobs);
 
   for (const b of BRANDS) {
@@ -1413,9 +1428,38 @@ async function buildReport(from, to) {
     unavailable: live.length === 0,
   };
 
+  /**
+   * Per language: impressions -> visits -> actions. This IS a genuine funnel —
+   * each stage is a subset of the one above for the same set of pages — unlike
+   * the cross-platform bands, so rates between the stages are meaningful.
+   */
+  const langBlank = () => ({ impressions: 0, clicks: 0, sessions: 0, keyEvents: 0 });
+  const byLang = {};
+  for (const k of Object.keys(LOCALES)) byLang[k] = { code: k, label: LOCALES[k], ...langBlank() };
+  for (const r of (data.gscLang || [])) {
+    const l = localeFromPath(r.page); if (!l || !byLang[l]) continue;
+    byLang[l].impressions += n(r.impressions); byLang[l].clicks += n(r.clicks);
+  }
+  for (const r of (data.langSessions || [])) {
+    const l = localeFromPath(r.landing_page); if (!l || !byLang[l]) continue;
+    byLang[l].sessions += n(r.sessions);
+  }
+  const keLang = data.langKeyEvents;
+  if (keLang && keLang.rows) {
+    for (const r of keLang.rows) {
+      const l = localeFromPath(r.key); if (!l || !byLang[l]) continue;
+      byLang[l].keyEvents += r.value;
+    }
+  }
+  const languages = Object.values(byLang)
+    .filter((x) => x.impressions || x.sessions || x.keyEvents)
+    .sort((a, b) => b.sessions - a.sessions);
+
   return {
     range: { from, to },
     bhq,
+    languages,
+    languagesAvailable: data.gscLang !== null || data.langSessions !== null,
     brands: BRAND_KEYS.map((k) => perBrand[k]),
     unmapped: metaUnmapped.accounts.length ? metaUnmapped : null,
     shared: {

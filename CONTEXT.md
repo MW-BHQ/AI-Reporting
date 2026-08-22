@@ -646,6 +646,30 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.71.0 — Monthly Reports: search by language.**
+
+Renames: **Board Report → Monthly Reports**; **E-commerce · Monthly report →
+E-commerce · Report**; brand labels are now the short codes MW uses (BGH, BIH,
+BHT, WSH) rather than full hospital names.
+
+Added the per-language strip the LS deck repeats ten times: **impressions →
+clicks → visits → key events** per locale, with CTR and KE/visit. Search Console
+supplies impressions and clicks keyed on `page`; GA4 supplies sessions and key
+events keyed on landing page; both bucket through the same `localeFromPath()`,
+which reads the URL locale segment and never guesses from script (§7 — EN, DE,
+VN and ID share Latin characters).
+
+Unlike the cross-platform bands on Overview, this **is** a real funnel: each
+stage is a subset of the one above for the same pages, so the rates mean
+something.
+
+**Trap hit while building:** `ga4KeyEvents` validates dimensions against
+`GA4_DIM_MAP`, which lacked `landing_page`. It threw, `runJobs` turned the
+rejection into null, and every language would have shown **zero key events with
+no error visible**. `landing_page` is now in `GA4_DIM_MAP`; `GA4_DIM_MAP_FULL`
+no longer duplicates it. Any new dimension used by a key-event pull must be
+added there or it fails this way — silently.
+
 **v3.70.0 — BHQ is a real total, and the naming is fixed.**
 
 **Vocabulary, which matters more than it sounds:**
