@@ -1235,8 +1235,10 @@ function renderReport() {
   const d = S.report;
   if (!d) { loadReport().then(render).catch(e => { $('viewRoot').innerHTML = errorState(e.message); }); 
             $('viewRoot').innerHTML = '<div class="card"><div class="state"><div class="big">Loading\u2026</div></div></div>'; return; }
-  const sel = S.reportBrand || 'ALL';
-  const shown = sel === 'ALL' ? d.brands : d.brands.filter(b => b.key === sel);
+  // BHQ = the four hospitals summed. Distinct from "group"/B+, which means the
+  // 27-branch property — using one word for both is how a deck overstates.
+  const sel = S.reportBrand || 'BHQ';
+  const shown = sel === 'BHQ' ? [d.bhq] : d.brands.filter(b => b.key === sel);
 
   const chip = (k, lab) => `<button class="btn ${sel===k?'btn-primary':'btn-ghost'}" data-brand="${k}">${esc(lab)}</button>`;
   const card = (b) => `
@@ -1261,16 +1263,35 @@ function renderReport() {
     </div>`;
 
   $('viewRoot').innerHTML = `
-    <div class="search" style="gap:6px">${['ALL',...d.brands.map(b=>b.key)].map(k=>chip(k, k==='ALL'?'All four':k)).join('')}</div>
-    <div class="grid ${shown.length>1?'g-2':''} mt">${shown.map(card).join('')}</div>
+    <div class="search" style="gap:6px">${['BHQ',...d.brands.map(b=>b.key)].map(k=>chip(k,k)).join('')}</div>
+    <div class="mt">${shown.map(card).join('')}</div>
+    ${sel === 'BHQ' ? `<div class="card mt">
+      <div class="card-title">By hospital</div>
+      <table class="roomy sortable"><thead><tr><th>Hospital</th><th class="num">Sessions</th>
+        <th class="num">Share</th><th class="num">Engaged</th><th class="num">Key events</th><th class="num">KE / session</th></tr></thead><tbody>
+      ${d.brands.map(b=>`<tr><td class="strong">${esc(b.label)}</td>
+        <td class="num">${num(b.sessions)}</td>
+        <td class="num">${d.bhq.sessions?((b.sessions/d.bhq.sessions)*100).toFixed(1):'0'}%</td>
+        <td class="num">${num(b.engaged)}</td>
+        <td class="num">${num(b.keyEvents)}</td>
+        <td class="num">${b.sessions?((b.keyEvents/b.sessions)*100).toFixed(1):'0'}%</td></tr>`).join('')}
+      </tbody></table>
+    </div>` : ''}
     ${d.shared && d.shared.meta ? `<div class="card mt">
-      <div class="card-title">Group-level \u2014 shared across all four</div>
+      <div class="card-title">BHQ shared — runs for all four hospitals</div>
       <div class="grid g-3">
         <div class="stat"><div class="lab">Spend</div><div class="val">฿${num(Math.round(d.shared.meta.spend))}</div></div>
         <div class="stat"><div class="lab">Impressions</div><div class="val">${num(d.shared.meta.impressions)}</div></div>
         <div class="stat"><div class="lab">Clicks</div><div class="val">${num(d.shared.meta.clicks)}</div></div>
       </div>
       <div class="note">${esc(d.shared.meta.accounts.join(', '))}. ${esc(d.shared.note)}</div>
+    </div>` : ''}
+    ${d.unmapped ? `<div class="card mt" style="border-color:#E4B84B">
+      <div class="card-title">Unmapped ad accounts \u2014 not counted anywhere</div>
+      <div class="note">These accounts have spend but are not in the brand registry, so they are
+      excluded from every figure above. Tell Claude which brand each belongs to.<br>
+      <b>${esc(d.unmapped.accounts.join(', '))}</b> \u2014 ฿${num(Math.round(d.unmapped.spend))} spend,
+      ${num(d.unmapped.impressions)} impressions.</div>
     </div>` : ''}`;
 
   document.querySelectorAll('[data-brand]').forEach(el =>
@@ -4049,7 +4070,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.69.0';
+const CLIENT_BUILD = '3.70.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

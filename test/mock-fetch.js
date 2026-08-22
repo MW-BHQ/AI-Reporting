@@ -301,8 +301,11 @@ global.fetch = async (url, opts = {}) => {
         actions_onsite_conversion_total_messaging_connection: 5 });
       return jsonRes({ data: [
         mk("BGH x ADA", 100), mk("BIH x ADA", 80), mk("BHT x ADA", 60),
+        mk("BGH x EGG", 50), mk("WSH x ADA", 30),
         mk("BHQ x AIQ", 40), mk("BHQ Inter x ADA", 20),
         mk("BHQ Shopee x EGG", 10),
+        mk("Some New Account", 7),   // must land in UNMAPPED, never vanish
+
       ]});
     }
   }

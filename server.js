@@ -540,22 +540,35 @@ function topicFor(code, topics) {
  *
  * Mapping confirmed by MW 22 Aug 2026.
  */
+/**
+ * Two agencies run Meta for BHQ — **ADA** and **EGG** — so most brands have two
+ * ad accounts. Listing only the ADA ones (as v3.69.0 did) silently dropped
+ * every EGG account's spend, because an unmapped account fell through
+ * `continue` and vanished. See UNMAPPED handling below: nothing is dropped
+ * quietly any more.
+ */
 const BRANDS = [
   { key: "BGH", label: "Bangkok Hospital",        segment: "bangkok",
-    gbp: ["Bangkok Hospital", "Dental Center | Bangkok Hospital"], meta: ["BGH x ADA"] },
+    gbp: ["Bangkok Hospital", "Dental Center | Bangkok Hospital"],
+    meta: ["BGH x ADA", "BGH x EGG"] },
   { key: "BIH", label: "Bangkok International",   segment: "bangkok-bone-brain",
-    gbp: ["Bangkok International Hospital (Brain x Bone)"], meta: ["BIH x ADA"] },
+    gbp: ["Bangkok International Hospital (Brain x Bone)"],
+    meta: ["BIH x ADA", "BIH x EGG"] },
   { key: "BHT", label: "Bangkok Heart",           segment: "bangkok-heart",
-    gbp: ["Bangkok Heart Hospital"], meta: ["BHT x ADA"] },
-  // WSH has no dedicated Meta ad account; its paid social sits in the shared
-  // group accounts, so an empty list here is correct, not an oversight.
+    gbp: ["Bangkok Heart Hospital"],
+    meta: ["BHT x ADA", "BHT x EGG"] },
+  // WSH DOES have its own accounts (WSH x ADA id 327561266199410, WSH x EGG).
+  // Recent months show no spend, which is a spend gap, not an account gap.
   { key: "WSH", label: "Bangkok Cancer",          segment: "bangkok-cancer",
-    gbp: ["Bangkok Cancer Hospital Wattanosoth"], meta: [] },
+    gbp: ["Bangkok Cancer Hospital Wattanosoth"],
+    meta: ["WSH x ADA", "WSH x EGG"] },
 ];
 const BRAND_KEYS = BRANDS.map((b) => b.key);
 
 /** Serve all four; reported separately, never folded into a brand. */
 const SHARED_ASSETS = {
+  // "BHQ Inter x EGG" is INFERRED from the ADA equivalent and needs confirming;
+  // until then it lands in the unmapped bucket, which is visible in the UI.
   meta: ["BHQ x AIQ", "BHQ Inter x ADA"],
   gbp: ["Japanese Medical Services (JMS) \u30d0\u30f3\u30b3\u30af\u75c5\u9662\u65e5\u672c\u4eba\u5c02\u9580\u30af\u30ea\u30cb\u30c3\u30af"],
   facebookPage: true,   // one page for all four
@@ -1336,24 +1349,79 @@ async function buildReport(from, to) {
   }
 
   // Meta split three ways: brand-owned, shared across all four, e-commerce only.
-  const metaByBrand = {}, metaShared = { spend: 0, impressions: 0, clicks: 0, accounts: [] };
+  const blank = () => ({ spend: 0, impressions: 0, clicks: 0, accounts: [] });
+  const metaByBrand = {}, metaShared = blank(), metaUnmapped = blank();
   for (const r of (data.meta || [])) {
     const owner = brandForMetaAccount(r.account_name);
-    if (!owner || owner === "ECOM") continue;      // ECOM excluded from this report
+    if (owner === "ECOM") continue;              // e-commerce only, out of scope here
+    /**
+     * An account nobody claims goes to UNMAPPED and is shown in the UI, never
+     * dropped. v3.69.0 listed only the ADA agency's accounts, so every EGG
+     * account fell through a `continue` and its spend disappeared with no
+     * error and no visible gap. A registry that silently ignores what it does
+     * not recognise is worse than no registry — it looks authoritative.
+     */
     const bucket = owner === "SHARED" ? metaShared
-      : (metaByBrand[owner] = metaByBrand[owner] || { spend: 0, impressions: 0, clicks: 0, accounts: [] });
+      : owner === null ? metaUnmapped
+      : (metaByBrand[owner] = metaByBrand[owner] || blank());
     bucket.spend += n(r.spend); bucket.impressions += n(r.impressions); bucket.clicks += n(r.clicks);
     if (!bucket.accounts.includes(r.account_name)) bucket.accounts.push(r.account_name);
   }
+  if (metaUnmapped.accounts.length) {
+    logJson("WARNING", "meta_accounts_unmapped",
+      { accounts: metaUnmapped.accounts, spend: Math.round(metaUnmapped.spend) });
+  }
   for (const b of BRANDS) perBrand[b.key].meta = metaByBrand[b.key] || null;
+
+  /**
+   * BHQ = the four hospitals combined. NOT the same as "group" / B+, which in
+   * BHQ's vocabulary means the 27-branch GA4 property. Naming these the same
+   * thing is how a board deck ends up claiming 27 branches' numbers are four.
+   *
+   * Summing the four brands cannot double-count: a session has exactly one
+   * landing page and therefore exactly one brand. This total should match the
+   * Overview funnel's Visits figure, which filters all four segments at once —
+   * a useful cross-check if the two ever diverge.
+   */
+  const live = BRANDS.map((b) => perBrand[b.key]).filter((b) => !b.unavailable);
+  const chanMerged = new Map();
+  const keMerged = new Map();
+  for (const b of live) {
+    for (const c of (b.channels || [])) {
+      const e = chanMerged.get(c.channel) || { channel: c.channel, sessions: 0, engaged: 0 };
+      e.sessions += c.sessions; e.engaged += c.engaged;
+      chanMerged.set(c.channel, e);
+    }
+    for (const k of (b.keyEventBreakdown || [])) keMerged.set(k.id, (keMerged.get(k.id) || 0) + k.value);
+  }
+  const bhq = {
+    key: "BHQ", label: "BHQ · all four hospitals",
+    sessions: live.reduce((a, b) => a + b.sessions, 0),
+    engaged: live.reduce((a, b) => a + b.engaged, 0),
+    keyEvents: live.reduce((a, b) => a + b.keyEvents, 0),
+    channels: [...chanMerged.values()].sort((a, b) => b.sessions - a.sessions).slice(0, 8),
+    keyEventBreakdown: KEY_EVENTS.map((e) => ({ id: e.name, label: e.label, value: keMerged.get(e.name) || 0 }))
+      .filter((e) => e.value > 0).sort((a, b) => b.value - a.value),
+    meta: (() => {
+      const acc = { spend: 0, impressions: 0, clicks: 0, accounts: [] };
+      for (const b of live) if (b.meta) {
+        acc.spend += b.meta.spend; acc.impressions += b.meta.impressions; acc.clicks += b.meta.clicks;
+        acc.accounts.push(...b.meta.accounts);
+      }
+      return acc.accounts.length ? acc : null;
+    })(),
+    unavailable: live.length === 0,
+  };
 
   return {
     range: { from, to },
+    bhq,
     brands: BRAND_KEYS.map((k) => perBrand[k]),
+    unmapped: metaUnmapped.accounts.length ? metaUnmapped : null,
     shared: {
       meta: metaShared.accounts.length ? metaShared : null,
-      note: "Serves all four brands, so it is reported here and not added to any single brand. "
-          + "Brand figures therefore do not sum to the group total.",
+      note: "Serves all four hospitals, so it is reported here and not added to any single brand. "
+          + "The four brand figures therefore do not sum to the BHQ total.",
     },
     unit: "sessions",
   };

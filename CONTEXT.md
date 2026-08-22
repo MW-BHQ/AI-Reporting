@@ -646,6 +646,55 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.70.0 — BHQ is a real total, and the naming is fixed.**
+
+**Vocabulary, which matters more than it sounds:**
+- **B+ / "group"** = the 27-branch GA4 property `484633959`
+- **BHQ** = the four hospitals combined — what this dashboard reports
+- **BGH / BIH / BHT / WSH** = individual hospitals
+
+v3.69.0 used "group-level" for the shared-asset block, which in BHQ's own
+vocabulary means 27 branches. Renamed to **"BHQ shared — runs for all four
+hospitals"**. Using one word for both is how a board deck ends up presenting
+27 branches' numbers as four.
+
+"All four" showed four separate cards; it is now **BHQ**, a genuine sum with a
+**By hospital** table underneath giving each hospital's share of sessions,
+engaged, key events and KE/session. Summing cannot double-count: a session has
+one landing page and therefore one brand.
+
+**Cross-check worth running on live data:** BHQ sessions should equal the
+Overview funnel's Visits, since both count sessions landing on the same four
+segments. They differ in the mock only because the stub generates rows from the
+dimensions requested rather than from traffic, and Overview groups by
+date × channel while the report groups by channel alone. If they diverge in
+production, one of the two filters is wrong.
+
+**v3.69.1 — the brand registry had a hole; unmapped accounts now surface.**
+
+**Two agencies run Meta for BHQ: ADA and EGG.** Most brands have one account
+with each. v3.69.0 listed only the ADA accounts, so every EGG account's spend
+was **silently dropped** — an unmapped account hit `continue` and vanished with
+no error and no visible gap. A registry that quietly ignores what it does not
+recognise is worse than no registry, because it looks authoritative.
+
+Fixed two ways:
+1. EGG accounts added for all four brands.
+2. **An `UNMAPPED` bucket.** Any account nobody claims is collected, shown in
+   the UI in a bordered card headed "not counted anywhere", and logged as
+   `meta_accounts_unmapped`. A new ad account can never disappear silently
+   again — it will appear and ask to be classified.
+
+Also corrected: v3.69.0 asserted in a comment that **WSH has no Meta account**.
+It does — `WSH x ADA` (id 327561266199410) and `WSH x EGG`. Recent months simply
+show no spend. A confidently wrong comment is worse than no comment.
+
+`BHQ Inter x EGG` is **inferred** shared from its ADA equivalent and is NOT in
+the registry; it will appear in the unmapped card until MW confirms.
+
+Fixture now includes an EGG account, a WSH account, and a deliberately unknown
+one, so the unmapped path is proven rather than assumed.
+
 **v3.69.0 — Board Report tab: the spine.**
 
 First pass at replacing the four Looker Studio monthly exports with one tab and
