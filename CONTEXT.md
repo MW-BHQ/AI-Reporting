@@ -646,6 +646,55 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.63.0 — THE BRANCH FILTER. Read this before trusting any historical figure.**
+
+GA4 property **484633959 is the BDMS *group* property: 27 branches.** The War
+Room watches four — BGH `/bangkok/`, BIH `/bangkok-bone-brain/`,
+BHT `/bangkok-heart/`, WSH `/bangkok-cancer/`. Windsor cannot filter (§3), so
+**every GA4 number this dashboard produced before v3.63.0 was the 27-branch
+group total**, not the four hospitals it claimed to report. Expect every figure
+to drop sharply. That is the fix working, not a regression.
+
+All GA4 now goes through the **Data API**; the Windsor `googleanalytics4`
+connector is unused. A shim, `ga4Compat(windsorDims, windsorMetrics, from, to)`,
+takes Windsor field names and returns Windsor-shaped rows, so the dozens of
+consumers reading `r.sessions` did not have to change. Ten pulls migrated.
+
+Attribution is by **landing page**: a session is credited to the branch it
+arrived on, matching the Pages tab. A visit landing on `/bangkok/` that later
+reads a heart article counts as BGH. The regex is
+`^/([a-z]{2}/)?(seg|seg|...)/` — locale optional — overridable via
+`BRANCH_SEGMENTS`.
+
+**Two traps found while building this, both of which produce silent wrong
+numbers rather than errors:**
+
+1. `ga4KeyEvents` called `ga4RunReport` directly and bypassed the filter, so
+   session metrics covered 4 branches and key events covered 27. The merge
+   *hides* this — unmatched keys are never looked up, so nothing errors and
+   every rate inflates. **Any new `ga4RunReport` call must go through
+   `withBranch()`** unless it is `/api/page`, which is deliberately unfiltered
+   because the user pastes arbitrary URLs.
+2. Declaration order. `GA4_LANDING_DIM`, `ga4Date` and `GA4_DIM_MAP` were
+   defined near `buildPage` but are now consumed at module top level by
+   `GA4_DIM_MAP_FULL`. A `const` spread evaluates immediately, so this throws
+   on boot in the temporal dead zone — and `node -c` does **not** catch it.
+   `test/boot.js` does.
+
+Also fixed: the funnel double-counted key events (2.0M against a true 410K)
+because it added `ke.byKey` once per Windsor row and Windsor could return
+several rows per `(date, channel)`. Data API rows are unique per combination,
+so the bug is gone by construction. Verified against GA4 directly — view_item
+187,506, contact_us 131,758, find_doctors 55,467, appointments 32,911, exact.
+
+The key-events caption under the funnel is now generated from `KEY_EVENTS`; it
+was a hardcoded list of seven and had already gone stale at nine.
+
+`test/mock-fetch.js` honours `FULL_REGEXP` and carries two out-of-scope branch
+pages plus an **`OutOfScope` marker** emitted whenever a report arrives without
+a branch filter. Grep any endpoint's output for it: a hit means that endpoint is
+querying all 27 branches.
+
 **v3.62.0** — key events moved off Windsor's flattened columns onto the GA4
 Data API, and **`better_ai_start`** + **`better_ai_result`** added.
 

@@ -181,6 +181,113 @@ async function ga4RunReport({ dimensions, metrics, from, to, dimensionFilter, li
   return rows;
 }
 
+const GA4_LANDING_DIM = process.env.GA4_LANDING_DIM || "landingPagePlusQueryString";
+
+/** GA4 reports dates as YYYYMMDD; the rest of this service speaks YYYY-MM-DD. */
+const ga4Date = (v) => {
+  const s = String(v || "");
+  return /^\d{8}$/.test(s) ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}` : s;
+};
+
+/**
+ * Windsor dimension name -> GA4 Data API dimension name, for the dimensions a
+ * key-event pull is ever grouped by. Anything absent here is a programming
+ * error rather than a missing feature, so it throws loudly.
+ */
+const GA4_DIM_MAP = {
+  date: "date",
+  session_default_channel_group: "sessionDefaultChannelGroup",
+  session_manual_campaign_name: "sessionManualCampaignName",
+  session_manual_source: "sessionManualSource",
+  session_manual_medium: "sessionManualMedium",
+};
+
+
+/**
+ * THE BRANCH FILTER.
+ *
+ * Property 484633959 is the BDMS group property: 27 branches. The War Room
+ * watches four. Windsor could not filter (§3), so every GA4 figure this
+ * dashboard has ever shown silently included all 27 — the group total, not the
+ * four hospitals it claims to report on.
+ *
+ * Landing page is the attribution rule: a session is credited to the branch it
+ * ARRIVED on, which matches how the Pages tab already works and how campaigns
+ * are judged. A session landing on /bangkok/ that later reads a heart article
+ * counts as BGH, not BHT.
+ *
+ * The locale segment is optional in the pattern because not every URL carries
+ * one; see §7 for the ten locales.
+ */
+const BRANCH_SEGMENTS = (process.env.BRANCH_SEGMENTS ||
+  "bangkok,bangkok-bone-brain,bangkok-heart,bangkok-cancer").split(",").map((s) => s.trim()).filter(Boolean);
+const BRANCH_REGEX = `^/([a-z]{2}/)?(${BRANCH_SEGMENTS.join("|")})/`;
+const branchFilter = () => ({
+  filter: {
+    fieldName: GA4_LANDING_DIM,
+    stringFilter: { matchType: "FULL_REGEXP", value: BRANCH_REGEX, caseSensitive: false },
+  },
+});
+
+/** AND the branch filter onto a caller's own filter, if any. */
+function withBranch(dimensionFilter) {
+  const b = branchFilter();
+  if (!dimensionFilter) return b;
+  return { andGroup: { expressions: [b, dimensionFilter] } };
+}
+
+/**
+ * Windsor field names in, Windsor-shaped rows out — but the data comes from the
+ * GA4 Data API, branch-filtered. A drop-in replacement for the
+ * `windsor("googleanalytics4", ga4Fields(dims, metrics), ...)` calls, so the
+ * dozens of consumers that read `r.sessions` or `r.session_manual_campaign_name`
+ * did not all have to be rewritten.
+ *
+ * Rows are unique per dimension combination, unlike Windsor, which could return
+ * several rows for the same key and made a naive per-row merge double-count.
+ */
+const GA4_METRIC_MAP = {
+  sessions: "sessions",
+  engaged_sessions: "engagedSessions",
+  purchase_revenue: "purchaseRevenue",
+  ecommerce_purchases: "ecommercePurchases",
+  transactions: "transactions",
+  items_viewed: "itemsViewed",
+  add_to_carts: "addToCarts",
+  item_view_events: "itemViewEvents",
+  items_added_to_cart: "itemsAddedToCart",
+  items_purchased: "itemsPurchased",
+  item_revenue: "itemRevenue",
+};
+const GA4_DIM_MAP_FULL = { ...GA4_DIM_MAP, landing_page: GA4_LANDING_DIM, item_name: "itemName" };
+
+async function ga4Compat(windsorDims, windsorMetrics, from, to, opts = {}) {
+  const dims = windsorDims.map((d) => {
+    const g = GA4_DIM_MAP_FULL[d];
+    if (!g) throw new Error(`ga4Compat: no Data API mapping for dimension "${d}"`);
+    return g;
+  });
+  const mets = windsorMetrics.map((m) => {
+    const g = GA4_METRIC_MAP[m];
+    if (!g) throw new Error(`ga4Compat: no Data API mapping for metric "${m}"`);
+    return g;
+  });
+  const rows = await ga4RunReport({
+    dimensions: dims, metrics: mets, from, to,
+    dimensionFilter: opts.noBranchFilter ? opts.dimensionFilter : withBranch(opts.dimensionFilter),
+  });
+  // Translate back to the Windsor names the consumers expect.
+  return rows.map((r) => {
+    const o = {};
+    windsorDims.forEach((d, i) => {
+      const v = r[dims[i]];
+      o[d] = d === "date" ? ga4Date(v) : ((v === "(not set)" || v === "(none)") ? "" : v);
+    });
+    windsorMetrics.forEach((m, i) => { o[m] = r[mets[i]]; });
+    return o;
+  });
+}
+
 const CODE_RE = /^\d{6}-\d{1,3}/;   // 260605-01...
 const looksLikeCode = (v) => CODE_RE.test(String(v || "").trim());
 
@@ -545,18 +652,6 @@ const KEY_EVENTS = [
 const KEY_EVENT_NAMES = KEY_EVENTS.map((e) => e.name);
 const KEY_EVENT_LABELS = Object.fromEntries(KEY_EVENTS.map((e) => [e.name, e.label]));
 
-/**
- * Windsor dimension name -> GA4 Data API dimension name, for the dimensions a
- * key-event pull is ever grouped by. Anything absent here is a programming
- * error rather than a missing feature, so it throws loudly.
- */
-const GA4_DIM_MAP = {
-  date: "date",
-  session_default_channel_group: "sessionDefaultChannelGroup",
-  session_manual_campaign_name: "sessionManualCampaignName",
-  session_manual_source: "sessionManualSource",
-  session_manual_medium: "sessionManualMedium",
-};
 
 /**
  * The join key between a Windsor row and a Data API row.
@@ -596,7 +691,11 @@ async function ga4KeyEvents(windsorDims, from, to) {
       dimensions: [...windsorDims.map((d) => GA4_DIM_MAP[d]), "eventName"],
       metrics: ["keyEvents"],
       from, to,
-      dimensionFilter: { filter: { fieldName: "eventName", inListFilter: { values: KEY_EVENT_NAMES } } },
+      // MUST be branch-filtered too. Without this, session metrics cover the
+      // four branches and key events cover all 27 — every rate on the dashboard
+      // silently inflates, and the merge hides it because unmatched keys are
+      // never looked up.
+      dimensionFilter: withBranch({ filter: { fieldName: "eventName", inListFilter: { values: KEY_EVENT_NAMES } } }),
     });
     const out = { total: 0, byKey: new Map(), byName: new Map(), byKeyEvent: new Map(), rows: [], failed: false };
     for (const r of raw) {
@@ -691,12 +790,8 @@ async function buildOverview(from, to) {
   // Session metrics only: 2. Key events come from the Data API as rows, so this
   // no longer sits at the 10-metric ceiling (see KEY_EVENTS).
   const GA4_FUNNEL_DIMS = ["date", "session_default_channel_group"];
-  const ga4FunnelFields = ga4Fields(GA4_FUNNEL_DIMS, ["sessions", "engaged_sessions"]);
   // Commerce call: 5 metrics.
-  const ga4EcomFields = ga4Fields(
-    ["date", "session_default_channel_group"],
-    ["items_viewed", "add_to_carts", "ecommerce_purchases", "purchase_revenue", "transactions"]
-  );
+  const GA4_ECOM_METRICS = ["items_viewed", "add_to_carts", "ecommerce_purchases", "purchase_revenue", "transactions"];
 
   // Month-to-date pulled separately so the forecast is stable no matter which
   // range is being viewed.
@@ -707,15 +802,12 @@ async function buildOverview(from, to) {
   const daysElapsed = today.getDate();
 
   const { data, errors } = await runJobs({
-    ga4: windsor("googleanalytics4", ga4FunnelFields, from, to, { accounts: [GA4_ACCOUNT] }),
+    ga4: ga4Compat(GA4_FUNNEL_DIMS, ["sessions", "engaged_sessions"], from, to),
     keyEvents: ga4KeyEvents(GA4_FUNNEL_DIMS, from, to),
-    ga4Ecom: windsor("googleanalytics4", ga4EcomFields, from, to, { accounts: [GA4_ACCOUNT] }),
-    ga4Items: windsor("googleanalytics4",
-      ga4Fields(["item_name"], ["item_view_events", "items_added_to_cart", "items_purchased", "item_revenue"]),
-      from, to, { accounts: [GA4_ACCOUNT] }),
-    ga4Month: windsor("googleanalytics4",
-      ga4Fields(["date"], ["purchase_revenue", "ecommerce_purchases"]),
-      monthFrom, monthTo, { accounts: [GA4_ACCOUNT] }),
+    ga4Ecom: ga4Compat(GA4_FUNNEL_DIMS, GA4_ECOM_METRICS, from, to),
+    ga4Items: ga4Compat(["item_name"],
+      ["item_view_events", "items_added_to_cart", "items_purchased", "item_revenue"], from, to),
+    ga4Month: ga4Compat(["date"], ["purchase_revenue", "ecommerce_purchases"], monthFrom, monthTo),
     meta: windsor("facebook", ["date", "account_name", "spend", "impressions", "clicks"], from, to),
     gsc: windsor("searchconsole", ["date", "clicks", "impressions", "position"], from, to),
     gmb: windsor("google_my_business",
@@ -967,7 +1059,7 @@ const isPlatformId = (s) => /^\d{6,}$/.test(String(s || "").trim());
 
 async function buildCampaignList(from, to) {
   const [rows, sheets] = await Promise.all([
-    windsor("googleanalytics4", ["session_manual_campaign_name", "sessions"], from, to, { accounts: [GA4_ACCOUNT] }),
+    ga4Compat(["session_manual_campaign_name"], ["sessions"], from, to),
     loadSheetContext().catch(() => ({ topics: new Map(), errors: [] })),
   ]);
   const list = rows
@@ -1005,18 +1097,12 @@ async function buildCampaign(code, from, to) {
   // 9 metrics: sessions, page views, 7 key events. Revenue moves to a second
   // call because 11 metrics in one request is rejected by GA4.
   const GA4_MAIN_DIMS = ["session_manual_campaign_name", "session_manual_source", "session_manual_medium"];
-  const ga4MainFields = ga4Fields(
-    GA4_MAIN_DIMS,
-    ["sessions", "engaged_sessions"]
-  );
-  const ga4RevFields = ga4Fields(GA4_MAIN_DIMS, ["purchase_revenue", "ecommerce_purchases"]);
   const GA4_DAILY_DIMS = ["date", "session_manual_campaign_name"];
-  const ga4DailyFields = ga4Fields(GA4_DAILY_DIMS, ["sessions"]);
 
   const jobs = {
-    ga4: windsor("googleanalytics4", ga4MainFields, from, to, { accounts: [GA4_ACCOUNT] }),
-    ga4Rev: windsor("googleanalytics4", ga4RevFields, from, to, { accounts: [GA4_ACCOUNT] }),
-    ga4Daily: windsor("googleanalytics4", ga4DailyFields, from, to, { accounts: [GA4_ACCOUNT] }),
+    ga4: ga4Compat(GA4_MAIN_DIMS, ["sessions", "engaged_sessions"], from, to),
+    ga4Rev: ga4Compat(GA4_MAIN_DIMS, ["purchase_revenue", "ecommerce_purchases"], from, to),
+    ga4Daily: ga4Compat(GA4_DAILY_DIMS, ["sessions"], from, to),
     keyEvents: ga4KeyEvents(GA4_MAIN_DIMS, from, to),
     keyEventsDaily: ga4KeyEvents(GA4_DAILY_DIMS, from, to),
     // Top landing pages for this campaign. Filtered SERVER-SIDE on the campaign
@@ -1028,12 +1114,12 @@ async function buildCampaign(code, from, to) {
       dimensions: ["sessionManualCampaignName", GA4_LANDING_DIM],
       metrics: ["sessions"],
       from, to,
-      dimensionFilter: {
+      dimensionFilter: withBranch({
         filter: {
           fieldName: "sessionManualCampaignName",
           stringFilter: { matchType: "BEGINS_WITH", value: code, caseSensitive: false },
         },
-      },
+      }),
     }).catch((e) => {
       logJson("WARNING", "campaign_landing_unavailable", { error: String(e.message || e) });
       return null;
@@ -1960,18 +2046,10 @@ async function buildBenchmark(anchorISO) {
   const { data, errors } = await runJobs({
     metaMonthly: windsor("facebook", META_MONTHLY_FIELDS, from, to),
     metaCampaigns: windsor("facebook", META_CAMPAIGN_FIELDS, from, to),
-    ga4m3: windsor("googleanalytics4",
-      ga4Fields(["session_manual_campaign_name"], ["sessions", "purchase_revenue"]),
-      W.m3.from, W.m3.to, { accounts: [GA4_ACCOUNT] }),
-    ga4m6: windsor("googleanalytics4",
-      ga4Fields(["session_manual_campaign_name"], ["sessions", "purchase_revenue"]),
-      W.m6.from, W.m6.to, { accounts: [GA4_ACCOUNT] }),
-    ga4m12: windsor("googleanalytics4",
-      ga4Fields(["session_manual_campaign_name"], ["sessions", "purchase_revenue"]),
-      W.m12.from, W.m12.to, { accounts: [GA4_ACCOUNT] }),
-    ga4Monthly: windsor("googleanalytics4",
-      ga4Fields(["date"], ["sessions", "purchase_revenue"]),
-      from, to, { accounts: [GA4_ACCOUNT] }),
+    ga4m3: ga4Compat(["session_manual_campaign_name"], ["sessions", "purchase_revenue"], W.m3.from, W.m3.to),
+    ga4m6: ga4Compat(["session_manual_campaign_name"], ["sessions", "purchase_revenue"], W.m6.from, W.m6.to),
+    ga4m12: ga4Compat(["session_manual_campaign_name"], ["sessions", "purchase_revenue"], W.m12.from, W.m12.to),
+    ga4Monthly: ga4Compat(["date"], ["sessions", "purchase_revenue"], from, to),
     keM3: ga4KeyEvents(["session_manual_campaign_name"], W.m3.from, W.m3.to),
     keM6: ga4KeyEvents(["session_manual_campaign_name"], W.m6.from, W.m6.to),
     keM12: ga4KeyEvents(["session_manual_campaign_name"], W.m12.from, W.m12.to),
@@ -2214,10 +2292,8 @@ const AUDIT_LABELS = {
 
 async function buildUntagged(from, to) {
   const { data, errors } = await runJobs({
-    ga4: windsor("googleanalytics4",
-      ga4Fields(["session_manual_campaign_name", "session_manual_source", "session_manual_medium"],
-        ["sessions"]),
-      from, to, { accounts: [GA4_ACCOUNT] }),
+    ga4: ga4Compat(["session_manual_campaign_name", "session_manual_source", "session_manual_medium"],
+      ["sessions"], from, to),
     keyEvents: ga4KeyEvents(["session_manual_campaign_name", "session_manual_source", "session_manual_medium"], from, to),
     meta: windsor("facebook", ["campaign", "account_name", "campaign_objective", "impressions", "clicks", "spend",
       "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d"], from, to),
@@ -2732,9 +2808,7 @@ async function buildAudiences(from, to) {
    */
   let ga4ByCode = null;
   try {
-    const ga4 = await windsor("googleanalytics4",
-      ga4Fields(["session_manual_campaign_name"], ["sessions", "engaged_sessions"]),
-      from, to, { accounts: [GA4_ACCOUNT] });
+    const ga4 = await ga4Compat(["session_manual_campaign_name"], ["sessions", "engaged_sessions"], from, to);
     const keCode = await ga4KeyEvents(["session_manual_campaign_name"], from, to);
     if (ga4) {
       ga4ByCode = new Map();
@@ -4080,13 +4154,6 @@ function pagePath(input) {
   return p.replace(/\/+$/, "") || "/";
 }
 
-const GA4_LANDING_DIM = process.env.GA4_LANDING_DIM || "landingPagePlusQueryString";
-
-/** GA4 reports dates as YYYYMMDD; the rest of this service speaks YYYY-MM-DD. */
-const ga4Date = (v) => {
-  const s = String(v || "");
-  return /^\d{8}$/.test(s) ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}` : s;
-};
 
 /**
  * GA4 writes "(not set)" where Windsor wrote an empty string. Left as-is it

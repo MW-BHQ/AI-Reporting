@@ -96,6 +96,11 @@ const GA4_PAGES = [
   "/th/bangkok-heart/package/x/details",
   "/th/bangkok-heart/package/x-other",   // sibling: BEGINS_WITH catches it, match() must not
   "/th/somewhere-else/page",
+  // Out-of-scope branches. The War Room watches 4 of the group property's 27,
+  // so these must be excluded by the FULL_REGEXP branch filter. If the filter
+  // is dropped they reappear and every total silently inflates.
+  "/th/samitivej-srinakarin/package/y",
+  "/en/phyathai-2/package/z",
 ];
 // Includes login (must be filtered out by the server's inListFilter) and the
 // two Better AI events, so a merge that silently returns zero is detectable.
@@ -116,20 +121,34 @@ function ga4Report(body) {
   };
   walk(body.dimensionFilter);
   const beginsWith = {};       // fieldName -> required prefix
+  const regexes = {};          // fieldName -> [RegExp] (the branch filter)
   let allowedEvents = null;
   for (const f of flat) {
     if (f.stringFilter && f.stringFilter.matchType === "BEGINS_WITH") {
       beginsWith[f.fieldName] = f.stringFilter.value;
     }
+    if (f.stringFilter && f.stringFilter.matchType === "FULL_REGEXP") {
+      (regexes[f.fieldName] = regexes[f.fieldName] || []).push(new RegExp(f.stringFilter.value, "i"));
+    }
     if (f.inListFilter) allowedEvents = f.inListFilter.values;
   }
   const keep = (field, value) => {
     const p = beginsWith[field];
-    if (!p) return true;
-    return String(value).toLowerCase().startsWith(String(p).toLowerCase());
+    if (p && !String(value).toLowerCase().startsWith(String(p).toLowerCase())) return false;
+    for (const re of (regexes[field] || [])) if (!re.test(String(value))) return false;
+    return true;
   };
 
   const pages = GA4_PAGES.filter((p) => keep(GA4_LANDING_DIM_NAME, p));
+  /**
+   * The branch filter targets the landing-page dimension, which most reports do
+   * not GROUP by — so filtering it has no visible effect on those rows here.
+   * To keep its absence detectable, an out-of-scope marker value is emitted
+   * whenever no branch regex was sent. Any endpoint whose output contains
+   * "OutOfScope" is querying all 27 branches.
+   */
+  const branchFiltered = (regexes[GA4_LANDING_DIM_NAME] || []).length > 0;
+  const marker = branchFiltered ? [] : ["OutOfScope"];
   const campaigns = ["260701-08_bht_tra", "(not set)"]
     .filter((c) => keep("sessionManualCampaignName", c));
   const dates = ["20260714", "20260715"];
@@ -145,8 +164,9 @@ function ga4Report(body) {
       : d === "eventName" ? (allowedEvents || GA4_EVENTS)
       : d === "sessionManualSource" ? ["facebook"]
       : d === "sessionManualMedium" ? ["paid"]
-      : d === "sessionManualCampaignName" ? campaigns
-      : d === "sessionDefaultChannelGroup" ? ["Organic Search", "Paid Social"]
+      : d === "sessionManualCampaignName" ? [...campaigns, ...marker]
+      : d === "sessionDefaultChannelGroup" ? ["Organic Search", "Paid Social", ...marker]
+      : d === "itemName" ? ["Heart Screening Package", ...marker]
       : pages;
     if (!opts.length) return;
     for (const v of opts) expand(i + 1, [...acc, v]);
