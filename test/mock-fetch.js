@@ -96,6 +96,9 @@ const GA4_PAGES = [
   "/th/bangkok-heart/package/x/details",
   "/th/bangkok-heart/package/x-other",   // sibling: BEGINS_WITH catches it, match() must not
   "/th/somewhere-else/page",
+  // Section root with a UTM: the segment ends with "?" not "/". An earlier
+  // pattern dropped these, excluding every campaign landing on a section root.
+  "/th/bangkok-heart?utm_source=facebook",
   // Out-of-scope branches. The War Room watches 4 of the group property's 27,
   // so these must be excluded by the FULL_REGEXP branch filter. If the filter
   // is dropped they reappear and every total silently inflates.

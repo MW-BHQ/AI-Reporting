@@ -646,6 +646,31 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.65.1 — branch regex was dropping UTM-tagged section-root landings.**
+
+GA4 landing pages have **no trailing slash** on a section root: `/th/bangkok`,
+not `/th/bangkok/`. The pattern ended `(/|$)`, so a campaign landing on
+`/th/bangkok-heart?utm_source=facebook` hit `?`, matched neither branch, and was
+excluded — **exactly the traffic campaigns generate.** Deeper pages were fine
+(`/th/bangkok-heart/package/x?utm=1` has the `/`), so this only bit section
+roots, which is why the totals looked plausible. Now `([/?]|$)`, in both the
+GA4 and Search Console patterns. Mock fixture covers the case.
+
+**Verifying the filter in the GA4 UI — the semantics differ from the API.**
+Explore's "matches regex" is a **FULL** match; the Data API uses
+`PARTIAL_REGEXP`. The server pattern pasted into Explore returns only section
+roots (2,967 sessions) and looks broken when it is not. For a UI check, use the
+full-match form:
+
+```
+^/([a-z]{2}/)?(bangkok|bangkok-bone-brain|bangkok-heart|bangkok-cancer)([/?].*)?$
+```
+
+Third appearance of FULL vs PARTIAL regex semantics in one session: the
+v3.63.0 outage, the mock that matched too leniently, and this verification
+procedure. Whenever a regex crosses a boundary here, state which semantics
+apply.
+
 **v3.65.0 — `ga4Items` fixed. GA4 is now clean.**
 
 The cause, visible within minutes of v3.64.2's logging landing:

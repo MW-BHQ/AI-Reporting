@@ -248,7 +248,16 @@ const BRANCH_SEGMENTS = (process.env.BRANCH_SEGMENTS ||
  * matches anywhere in the value, and the leading ^ still anchors it to the start
  * of the path. Do not "tidy" this back to FULL_REGEXP.
  */
-const BRANCH_REGEX = `^/([a-z]{2}/)?(${BRANCH_SEGMENTS.join("|")})(/|$)`;
+/**
+ * The segment may be followed by `/`, `?`, or end-of-string. The `?` case is
+ * NOT optional: GA4's landingPagePlusQueryString keeps the query string, so a
+ * campaign landing on "/th/bangkok-heart?utm_source=facebook" ends the segment
+ * with "?" — under the earlier `(/|$)` pattern every UTM-tagged landing on a
+ * section root was silently dropped, which is precisely the traffic campaigns
+ * generate. Section roots have no trailing slash ("/th/bangkok"), so `$` is
+ * needed too.
+ */
+const BRANCH_REGEX = `^/([a-z]{2}/)?(${BRANCH_SEGMENTS.join("|")})([/?]|$)`;
 const branchFilter = () => ({
   filter: {
     fieldName: GA4_LANDING_DIM,
@@ -348,7 +357,7 @@ const GSC_SITE = process.env.GSC_SITE || "sc-domain:bangkokhospital.com";
  * and every page on the domain passes — the filter would look applied and do
  * nothing, which is the failure mode this whole exercise keeps producing.
  */
-const GSC_BRANCH_REGEX = `^https?://[^/]+/([a-z]{2}/)?(${BRANCH_SEGMENTS.join("|")})(/|$)`;
+const GSC_BRANCH_REGEX = `^https?://[^/]+/([a-z]{2}/)?(${BRANCH_SEGMENTS.join("|")})([/?]|$)`;
 
 let _gscAuth = null;
 async function gscToken() {
