@@ -646,6 +646,37 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.64.0 — Search Console moved to its own API and branch-filtered.**
+
+After v3.63.0 the funnel compared unlike things: Impressions 109.7M and clicks
+1.4M covering all 27 branches, against Visits 1.0M covering four. Windsor cannot
+filter (§3), so all three GSC pulls moved to
+`searchconsole.googleapis.com/webmasters/v3`, filtered with `includingRegex` on
+`page`.
+
+| Item | Value |
+|---|---|
+| Scope | `https://www.googleapis.com/auth/webmasters.readonly` |
+| Site | `GSC_SITE`, default `sc-domain:bangkokhospital.com` |
+| Override | `GSC_API_BASE`, and `BRANCH_SEGMENTS=off` disables filtering |
+| Requires | Search Console API enabled + service account added as a user on the property |
+
+This also relieves the volume problem: the unfiltered `query x page` pull was
+44.8 MB in 260 s against a 300 s Cloud Run timeout. Filtered to four branches it
+is a fraction of that, so Topic Explorer should be well clear of the ceiling.
+
+GSC returns `page` as a **full URL**, so the pattern is anchored past the host:
+`^https?://[^/]+/([a-z]{2}/)?(seg|...)(/|$)`. Note the hostname trap that was
+predicted here does NOT actually bite — "bangkok" in "bangkokhospital.com" is
+not followed by a slash, so even an unanchored pattern rejects it. The anchor is
+kept because it is more precise, not because it fixes a live bug.
+
+**Deliberately NOT scoped, both confirmed correct by MW 22 Aug 2026:**
+- **Meta / TikTok / Facebook organic / Google Ads** — every ad account already
+  belongs to BHQ, so there is nothing to filter.
+- **GBP** — all six listings in `GBP_LISTINGS` are in scope, including Dental
+  and JMS. The panel deliberately shows more than the four hospital branches.
+
 **v3.63.1 — HOTFIX. v3.63.0 took every GA4 figure to zero in production.**
 
 `FULL_REGEXP` in GA4 requires the pattern to match the **entire** dimension

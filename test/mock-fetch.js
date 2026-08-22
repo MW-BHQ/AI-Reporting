@@ -210,6 +210,46 @@ function ga4Report(body) {
 global.fetch = async (url, opts = {}) => {
   const u = String(url);
 
+  if (u.includes("searchconsole.googleapis.com")) {
+    if (process.env.MOCK_FAIL_GSC === "1") return jsonRes({ error: { message: "simulated GSC failure" } }, 500);
+    let body = {};
+    try { body = JSON.parse(opts.body || "{}"); } catch { /* empty */ }
+    const dims = body.dimensions || [];
+    /**
+     * GSC returns `page` as a FULL URL. The branch regex must be anchored past
+     * the host, because the domain itself contains "bangkok" — an unanchored
+     * pattern matches every page and the filter silently does nothing. These
+     * fixtures include an out-of-scope branch so that mistake shows up.
+     */
+    const PAGES = [
+      "https://www.bangkokhospital.com/th/bangkok-heart/package/x",
+      "https://www.bangkokhospital.com/en/bangkok-cancer/article/y",
+      "https://www.bangkokhospital.com/th/samitivej-srinakarin/package/z",
+      "https://www.bangkokhospital.com/th/other-branch/page",
+    ];
+    const groups = body.dimensionFilterGroups || [];
+    const pageRes = [];
+    for (const g of groups) for (const f of (g.filters || [])) {
+      if (f.dimension === "page" && f.operator === "includingRegex") pageRes.push(new RegExp(f.expression));
+    }
+    const pages = PAGES.filter((p) => pageRes.every((re) => re.test(p)));
+    // A page filter with no surviving page means no data, even when the report
+    // does not group by page (real GSC filters the underlying rows).
+    if (pageRes.length && !pages.length) return jsonRes({ rows: [] });
+    const vals = (d) => d === "date" ? ["2026-07-15"]
+      : d === "page" ? pages
+      : d === "query" ? ["heart checkup", "\u0e42\u0e23\u0e04\u0e2b\u0e31\u0e27\u0e43\u0e08"]
+      : d === "country" ? ["tha"] : ["x"];
+    const rows = [];
+    const walk = (i, keys) => {
+      if (i === dims.length) { rows.push({ keys, clicks: 10, impressions: 100, ctr: 0.1, position: 4.2 }); return; }
+      for (const v of vals(dims[i])) walk(i + 1, [...keys, v]);
+    };
+    if (!dims.length) rows.push({ keys: [], clicks: 10, impressions: 100, ctr: 0.1, position: 4.2 });
+    else walk(0, []);
+    return jsonRes({ rows });
+  }
+
   if (u.includes("analyticsdata.googleapis.com")) {
     if (process.env.MOCK_FAIL_GA4 === "1") return jsonRes({ error: { message: "simulated GA4 failure" } }, 500);
     let body = {};

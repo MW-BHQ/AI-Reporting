@@ -306,6 +306,82 @@ async function ga4Compat(windsorDims, windsorMetrics, from, to, opts = {}) {
   });
 }
 
+// --------------------------------------------------- Search Console API
+
+/**
+ * Search Console, direct, so it can be filtered to the four branches.
+ *
+ * Windsor cannot filter (§3), so the GSC figures covered the whole domain —
+ * all 27 branches — while GA4 covered four. That mismatch was created by
+ * v3.63.0 and made the funnel compare unlike things: 70.3M impressions and
+ * 1.2M clicks against 806.4K visits, the first two group-wide.
+ *
+ * It also cuts the volume problem. The unfiltered `query x page` pull was
+ * 44.8 MB and 260 s against a 300 s Cloud Run timeout; filtered to four
+ * branches it is a fraction of that.
+ */
+const GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
+const GSC_API_BASE = process.env.GSC_API_BASE || "https://searchconsole.googleapis.com/webmasters/v3";
+const GSC_SITE = process.env.GSC_SITE || "sc-domain:bangkokhospital.com";
+
+/**
+ * GSC returns `page` as a FULL URL, so the branch pattern must be anchored past
+ * the host. Without that anchor "bangkok" matches "bangkokhospital.com" itself
+ * and every page on the domain passes — the filter would look applied and do
+ * nothing, which is the failure mode this whole exercise keeps producing.
+ */
+const GSC_BRANCH_REGEX = `^https?://[^/]+/([a-z]{2}/)?(${BRANCH_SEGMENTS.join("|")})(/|$)`;
+
+let _gscAuth = null;
+async function gscToken() {
+  if (!_gscAuth) _gscAuth = new GoogleAuth({ scopes: [GSC_SCOPE] });
+  const client = await _gscAuth.getClient();
+  const t = await client.getAccessToken();
+  const token = typeof t === "string" ? t : t && t.token;
+  if (!token) throw new Error("Could not obtain an access token for the Search Console API");
+  return token;
+}
+
+/**
+ * Rows come back keyed by the dimension names asked for plus clicks,
+ * impressions, ctr and position, matching the Windsor shape so consumers that
+ * read `r.clicks` or `r.page` did not change.
+ */
+async function gscQuery(dimensions, from, to, { rowLimit = 25000, noBranchFilter = false } = {}) {
+  const token = await gscToken();
+  const body = {
+    startDate: from, endDate: to,
+    dimensions,
+    rowLimit,
+    dataState: "final",
+  };
+  if (!noBranchFilter && !BRANCH_FILTER_OFF) {
+    body.dimensionFilterGroups = [{
+      groupType: "and",
+      filters: [{ dimension: "page", operator: "includingRegex", expression: GSC_BRANCH_REGEX }],
+    }];
+  }
+  const res = await fetch(`${GSC_API_BASE}/sites/${encodeURIComponent(GSC_SITE)}/searchAnalytics/query`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Search Console API ${res.status}: ${text.slice(0, 300)}`);
+  }
+  const json = await res.json();
+  const rows = (json.rows || []).map((r) => {
+    const o = { clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position };
+    dimensions.forEach((d, i) => { o[d] = (r.keys || [])[i]; });
+    return o;
+  });
+  if (rows.length >= rowLimit) {
+    logJson("WARNING", "gsc_rows_truncated", { rowLimit, dimensions, from, to });
+  }
+  return rows;
+}
+
 const CODE_RE = /^\d{6}-\d{1,3}/;   // 260605-01...
 const looksLikeCode = (v) => CODE_RE.test(String(v || "").trim());
 
@@ -831,7 +907,7 @@ async function buildOverview(from, to) {
       from, to, { noBranchFilter: true }),
     ga4Month: ga4Compat(["date"], ["purchase_revenue", "ecommerce_purchases"], monthFrom, monthTo),
     meta: windsor("facebook", ["date", "account_name", "spend", "impressions", "clicks"], from, to),
-    gsc: windsor("searchconsole", ["date", "clicks", "impressions", "position"], from, to),
+    gsc: gscQuery(["date"], from, to),
     gmb: windsor("google_my_business",
       ["date", "location_title", "impressions", "call_clicks", "website_clicks", "direction_requests"], from, to),
     fbOrganic: windsor("facebook_organic", ["date", "page_impressions", "post_engagements"], from, to),
@@ -2578,8 +2654,8 @@ async function buildTopic(topic, from, to) {
   // enormously on a site this size and was large enough to OOM the container
   // (surfacing as a Cloud Run 503). Each call below is one dimension narrower.
   const { data: scData, errors: scErrors } = await runJobs({
-    byPage: windsor("searchconsole", ["query", "page", "clicks", "impressions", "position"], from, to),
-    byCountry: windsor("searchconsole", ["query", "country", "clicks", "impressions"], from, to),
+    byPage: gscQuery(["query", "page"], from, to),
+    byCountry: gscQuery(["query", "country"], from, to),
   });
   if (scData.byPage === null) {
     throw new Error(`Search Console unavailable: ${scErrors.byPage}`);
