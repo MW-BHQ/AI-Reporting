@@ -646,6 +646,22 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.82.0 — countries slide; print fills the page; BHQ logo corrected.**
+
+**New slide: "Who reaches us from outside Thailand"** — four hospitals, top five
+countries each, sessions and MoM. Kept as small ranked tables rather than
+charts: five rows with a delta read faster than four bar charts, and the country
+names are the point. Thailand is filtered at render, not in the query, so the
+payload keeps the domestic row and the share maths stays honest if that ever
+changes. `country` added to `GA4_DIM_MAP`.
+
+**Print was shrinking to fit instead of filling.** v3.81.0 capped chart wrappers
+at 190px, which left a 16:9 slide half empty. Now 300px, with `.slide` given a
+6.3in minimum and slightly larger stat and table type, so a slide occupies the
+page it is given.
+
+**BHQ logo** corrected to `BGHlogo.svg` per MW.
+
 **v3.81.0 — stage bars add up; print layout and logo fixed.**
 
 **Stages 1 and 2 are now SOURCE-based, not channel-based.** They are platform

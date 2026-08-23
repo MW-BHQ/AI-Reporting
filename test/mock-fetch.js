@@ -221,6 +221,8 @@ function ga4Report(body) {
       : d === "eventName" ? (allowedEvents || GA4_EVENTS)
       : d === "sessionManualSource" ? ["facebook"]
       : d === "sessionManualMedium" ? ["paid"]
+      // Thailand must be present so the render-time exclusion is exercised.
+      : d === "country" ? ["Thailand", "Japan", "United States", "Germany", "Singapore", "Cambodia"]
       : d === "sessionManualCampaignName" ? [...campaigns, ...marker]
       // Paid Search must be present or the Google Ads impression mapping
       // (IMPRESSION_SOURCE_BY_CHANNEL) is never exercised.

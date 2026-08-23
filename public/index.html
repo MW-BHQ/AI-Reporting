@@ -519,8 +519,13 @@
     .g-2-1{grid-template-columns:1.6fr 1fr!important;}
     .g-2{grid-template-columns:repeat(2,1fr)!important;}
     .g-3{grid-template-columns:repeat(3,1fr)!important;}
-    /* Inline heights on chart wrappers would otherwise survive into print. */
-    .chart-wrap[style]{height:190px!important;}
+    /* Inline heights would otherwise survive into print. Sized to FILL the
+       16:9 slide rather than shrink to fit \u2014 at 190px a slide was half empty. */
+    .chart-wrap[style]{height:300px!important;}
+    .chart-wrap{height:300px;}
+    .slide{min-height:6.3in;}
+    .stat .val{font-size:20px;}
+    table{font-size:11px;}
     .mt{margin-top:10px;}
     .stat .val{font-size:17px;}
     .chart-wrap{height:150px;}
@@ -1283,7 +1288,7 @@ function renderReport() {
    * request fails the img is hidden rather than leaving a broken icon.
    */
   const LOGOS = {
-    BHQ: 'https://static.bangkokhospital.com/uploads/2025/05/BHQ-Logo.svg',
+    BHQ: 'https://static.bangkokhospital.com/uploads/2024/04/BGHlogo.svg',
     BGH: 'https://static.bangkokhospital.com/uploads/2025/05/BHQ-Logo.svg',
     BIH: 'https://static.bangkokhospital.com/uploads/2024/03/bih-1.svg',
     BHT: 'https://static.bangkokhospital.com/uploads/2024/04/BHTlogo.svg',
@@ -1342,6 +1347,27 @@ function renderReport() {
         <div class="note">MoM compares the ${U.windows && U.windows.prev ? 'same length of window one month back' : 'previous window'};
         YoY the same window last year.</div>
       </div>
+    </div>` : '';
+
+  /**
+   * Four hospitals, top five countries each, Thailand excluded \u2014 the LS
+   * "Who get into our sites (Outside Thailand)" page. Kept as small tables
+   * rather than charts: five ranked rows with a delta read faster than four
+   * bar charts, and the country names are the point.
+   */
+  const CO = d.countries || [];
+  const countryBody = CO.some(c => c.rows.length) ? `
+    <div class="grid g-2">
+      ${CO.map(c => `<div class="card">
+        <div class="card-title">${esc(c.label)}</div>
+        <table><thead><tr><th>Country</th><th class="num">Sessions</th><th class="num">MoM</th></tr></thead><tbody>
+        ${c.rows.length ? c.rows.map((r,i)=>`<tr>
+          <td class="strong">${i+1}. ${esc(r.country)}</td>
+          <td class="num" style="font-weight:600">${num(r.sessions)}</td>
+          <td class="num">${dlt(r.mom)}</td></tr>`).join('')
+          : '<tr><td colspan="3" class="num">no data</td></tr>'}
+        </tbody></table>
+      </div>`).join('')}
     </div>` : '';
 
   const head = shown[0] || {};
@@ -1451,6 +1477,7 @@ function renderReport() {
   $('viewRoot').innerHTML = `
     <div class="search no-print" style="gap:6px">${['BHQ',...d.brands.map(b=>b.key)].map(k=>chip(k,k)).join('')}</div>
     ${slide('Sessions overview', usersBody, true, true)}
+    ${slide('Who reaches us from outside Thailand', countryBody, false, true)}
     ${slide(sel === 'BHQ' ? 'Performance \u00b7 all four hospitals' : `Performance \u00b7 ${sel}`, perfBody)}
     ${slide('By hospital', byHospital, false, true)}
     ${slide('Search by language', langBody, false, true)}
@@ -4407,7 +4434,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.81.0';
+const CLIENT_BUILD = '3.82.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

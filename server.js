@@ -220,6 +220,7 @@ const GA4_DIM_MAP = {
   // segment of the landing page. Absent, ga4KeyEvents throws, runJobs turns it
   // into null, and every language reads zero key events with no error shown.
   landing_page: GA4_LANDING_DIM,
+  country: "country",
 };
 
 
@@ -1461,6 +1462,16 @@ async function buildReport(from, to) {
    * bid on. `search_term` is the query; `keyword_text` is our bid term. The LS
    * deck shows the former, which is the more useful of the two.
    */
+  /**
+   * Countries per hospital, current window and one window back for MoM.
+   * Thailand is excluded at render time, not here — the LS page is "who gets
+   * into our sites from OUTSIDE Thailand", and keeping the domestic row in the
+   * payload means the share maths stays honest if that ever changes.
+   */
+  for (const b of BRANDS) {
+    jobs[`c_${b.key}`] = ga4Compat(["country"], ["sessions"], from, to, { segments: [b.segment] });
+    jobs[`cp_${b.key}`] = ga4Compat(["country"], ["sessions"], cwr.prev.from, cwr.prev.to, { segments: [b.segment] });
+  }
   jobs.gadsTerms = windsor("google_ads", ["search_term", "impressions", "clicks", "spend"], from, to);
   jobs.fbOrganic = windsor("facebook_organic", ["date", "page_impressions", "post_engagements"], from, to);
   jobs.ttOrganic = windsor("tiktok_organic", ["date", "video_views", "likes", "comments", "shares"], from, to);
@@ -1694,10 +1705,27 @@ async function buildReport(from, to) {
     windows: cwr,
   };
 
+  /** Top countries outside Thailand, per hospital, with MoM. */
+  const THAI = new Set(["thailand", "th"]);
+  const countries = BRANDS.map((b) => {
+    const cur = new Map(), prev = new Map();
+    for (const r of (data[`c_${b.key}`] || [])) cur.set(String(r.country || ""), n(r.sessions));
+    for (const r of (data[`cp_${b.key}`] || [])) prev.set(String(r.country || ""), n(r.sessions));
+    const rows = [...cur.entries()]
+      .filter(([c]) => c && !THAI.has(norm(c)) && norm(c) !== "(not set)")
+      .map(([country, sessions]) => {
+        const was = prev.get(country);
+        return { country, sessions, mom: (was && was > 0) ? (sessions - was) / was : null };
+      })
+      .sort((x, y) => y.sessions - x.sessions).slice(0, 5);
+    return { key: b.key, label: b.label, rows };
+  });
+
   return {
     range: { from, to },
     bhq,
     usersOverview,
+    countries,
     gbp,
     searchTerms,
     social,
