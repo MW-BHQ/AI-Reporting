@@ -646,6 +646,33 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.75.0 — Search Ads terms, organic social, nav order.**
+
+**Monthly Reports moved above the separator**, directly under Overview.
+
+**Search Ads · what people typed** — top terms by clicks plus CTR, from
+`search_term` (the query someone actually entered) rather than `keyword_text`
+(the term we bid on). The two diverge, and the query is the one that says what
+patients are looking for. Long Thai queries are truncated at 34 characters or
+the axis swallows the chart.
+
+**Organic social** — Facebook reach and post engagements, TikTok views and an
+engagement mix chart. Reported side by side and **never summed**: page reach
+includes Boost Post and therefore overlaps Meta Ads, and a TikTok view counts
+autoplay (§v3.68.0).
+
+**Chat Bubble is NOT built.** `click_chat_bubble` appears in the LS deck but is
+tracked nowhere in this codebase, and there is no per-channel parameter to split
+Telegram / LINE / WhatsApp / Messenger. It needs GTM work before it can be
+reported.
+
+The `change:capped` audit rule was firing on `x.ctr` — a **rate**, not a change.
+Rates legitimately render as raw percentages and must not be capped at ">10x".
+Exemption widened to `.ctr` / `.rate` / `.share`, and the negative control
+re-run to confirm the rule still catches genuine violations.
+
+Monthly Reports now stands at **8 slides, 14 charts, 0 tables**.
+
 **v3.74.0 — Monthly Reports: Google Business Profile and Reviews.**
 
 Two new slides, four charts, no tables.

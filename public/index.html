@@ -549,12 +549,12 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>
         Overview
       </div>
-
-      <div class="nav-sep"></div>
       <div class="nav-item" data-view="report">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
         Monthly Reports
       </div>
+
+      <div class="nav-sep"></div>
       <div class="nav-item" data-view="gbp">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l2.6 5.6 6 .8-4.4 4.2 1.1 6-5.3-3-5.3 3 1.1-6L3.4 9.4l6-.8z"/></svg>
         Google Profile
@@ -1264,6 +1264,8 @@ function renderReport() {
     ? `<div class="slide ${first ? '' : 'slide-break'}"><div class="slide-title">${esc(title)}</div>${body}</div>`
     : '';
   const C = { a:'#6C5CE7', b:'#4B8DF8', c:'#2E9E6F', d:'#F2A93B', e:'#E8607A' };
+  // Local numeric coercion: nulls must contribute 0 to a sum, not NaN.
+  const n0 = (v) => (v === null || v === undefined || isNaN(Number(v))) ? 0 : Number(v);
   const kpi = (lab, val, sub) => `<div class="stat"><div class="lab">${lab}</div>
     <div class="val">${val}</div>${sub?`<div class="sub2">${sub}</div>`:''}</div>`;
 
@@ -1330,6 +1332,30 @@ function renderReport() {
         <div class="chart-wrap" style="height:210px"><canvas id="repRvBrand"></canvas></div></div>
     </div>` : '';
 
+  const T = d.searchTerms || [];
+  const termsBody = (sel === 'BHQ' && T.length) ? `
+    <div class="grid g-2">
+      <div class="card"><div class="card-title">Top search terms by clicks</div>
+        <div class="chart-wrap" style="height:300px"><canvas id="repTerms"></canvas></div></div>
+      <div class="card"><div class="card-title">Click-through by term</div>
+        <div class="chart-wrap" style="height:300px"><canvas id="repTermsCtr"></canvas></div></div>
+    </div>
+    <div class="note">These are the queries people actually typed, not the keywords we bid on \u2014 the two
+    diverge, and the query is what tells you what patients are looking for.</div>` : '';
+
+  const SO = d.social || {};
+  const socialBody = (sel === 'BHQ' && (SO.facebook || SO.tiktok)) ? `
+    <div class="grid g-4" style="margin-bottom:10px">
+      ${SO.facebook ? kpi('Facebook reach', num(SO.facebook.reach), 'includes Boost Post') : ''}
+      ${SO.facebook ? kpi('Post engagements', num(SO.facebook.engagements)) : ''}
+      ${SO.tiktok ? kpi('TikTok views', num(SO.tiktok.views)) : ''}
+      ${SO.tiktok ? kpi('TikTok engagements', num(n0(SO.tiktok.likes)+n0(SO.tiktok.comments)+n0(SO.tiktok.shares))) : ''}
+    </div>
+    ${SO.tiktok ? `<div class="card"><div class="card-title">TikTok engagement mix</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="repTt"></canvas></div></div>` : ''}
+    <div class="note">Facebook page reach and TikTok views are <b>different units</b> and are never summed:
+    page reach counts boosted posts, so it overlaps Meta Ads, and a TikTok view counts autoplay.</div>` : '';
+
   const paidBody = `${d.shared && d.shared.meta ? `
     <div class="grid g-3" style="margin-bottom:10px">
       ${kpi('Shared spend', '฿'+num(Math.round(d.shared.meta.spend)))}
@@ -1354,7 +1380,9 @@ function renderReport() {
     ${slide('Search by language', langBody)}
     ${slide('Google Business Profile', gbpBody)}
     ${slide('Google reviews', reviewBody)}
-    ${slide('Paid media', paidBody.trim())}`;
+    ${slide('Paid media', paidBody.trim())}
+    ${slide('Search Ads \u00b7 what people typed', termsBody)}
+    ${slide('Organic social', socialBody)}`;
 
   // Charts must be drawn after the markup is in the DOM.
   const ch = (head.channels || []).slice(0, 8);
@@ -1403,6 +1431,15 @@ function renderReport() {
           [{ label:'Average rating', data: gb.map(b=>b.reviews.avg||0), color:C.c }]);
       }
     }
+    if (T.length) {
+      const tt = T.slice(0, 12);
+      // Long Thai queries need truncating or the axis eats the chart.
+      const lbl = tt.map(x => x.term.length > 34 ? x.term.slice(0, 33) + '\u2026' : x.term);
+      drawBars('repTerms', lbl, [{ label:'Clicks', data: tt.map(x=>x.clicks), color:C.b }]);
+      drawBars('repTermsCtr', lbl, [{ label:'CTR %', data: tt.map(x=>x.ctr?+(x.ctr*100).toFixed(2):0), color:C.d }]);
+    }
+    if (SO.tiktok) drawBars('repTt', ['Likes','Shares','Comments'],
+      [{ label:'TikTok', data:[n0(SO.tiktok.likes),n0(SO.tiktok.shares),n0(SO.tiktok.comments)], color:C.e }]);
     const withMeta = d.brands.filter(b=>b.meta);
     if (withMeta.length) drawBars('repMeta', withMeta.map(b=>b.label), [
       { label:'Spend ฿', data: withMeta.map(b=>Math.round(b.meta.spend)), color:C.e },
@@ -4221,7 +4258,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.74.0';
+const CLIENT_BUILD = '3.75.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

@@ -1343,6 +1343,14 @@ async function buildReport(from, to) {
    */
   // GBP per listing, mapped to brands through the registry. Dental rolls into
   // BGH and JMS is shared, so the listing count (6) is not the brand count (4).
+  /**
+   * Search Ads by search term — what people actually typed, not the keyword we
+   * bid on. `search_term` is the query; `keyword_text` is our bid term. The LS
+   * deck shows the former, which is the more useful of the two.
+   */
+  jobs.gadsTerms = windsor("google_ads", ["search_term", "impressions", "clicks", "spend"], from, to);
+  jobs.fbOrganic = windsor("facebook_organic", ["date", "page_impressions", "post_engagements"], from, to);
+  jobs.ttOrganic = windsor("tiktok_organic", ["date", "video_views", "likes", "comments", "shares"], from, to);
   jobs.gbp = windsor("google_my_business",
     ["location_title", "impressions", "call_clicks", "website_clicks", "direction_requests"], from, to);
   jobs.gbpReviews = windsor("google_my_business",
@@ -1509,10 +1517,42 @@ async function buildReport(from, to) {
     available: data.gbp !== null,
   };
 
+  // Top search terms, by clicks. One row per term after merging dates.
+  const termMap = new Map();
+  for (const r of (data.gadsTerms || [])) {
+    const t = String(r.search_term || "").trim(); if (!t) continue;
+    const e = termMap.get(t) || { term: t, impressions: 0, clicks: 0, spend: 0 };
+    e.impressions += n(r.impressions); e.clicks += n(r.clicks); e.spend += n(r.spend);
+    termMap.set(t, e);
+  }
+  const searchTerms = [...termMap.values()]
+    .map((t) => ({ ...t, ctr: t.impressions ? t.clicks / t.impressions : null }))
+    .sort((a, b) => b.clicks - a.clicks).slice(0, 15);
+
+  /**
+   * Organic social. Facebook page reach INCLUDES Boost Post, and a TikTok view
+   * is not an impression, so the two are reported side by side and never summed
+   * — same reasoning as the Overview funnel (§v3.68.0).
+   */
+  const social = {
+    facebook: data.fbOrganic === null ? null : {
+      reach: sumOrNull(data.fbOrganic, "page_impressions"),
+      engagements: sumOrNull(data.fbOrganic, "post_engagements"),
+    },
+    tiktok: data.ttOrganic === null ? null : {
+      views: sumOrNull(data.ttOrganic, "video_views"),
+      likes: sumOrNull(data.ttOrganic, "likes"),
+      comments: sumOrNull(data.ttOrganic, "comments"),
+      shares: sumOrNull(data.ttOrganic, "shares"),
+    },
+  };
+
   return {
     range: { from, to },
     bhq,
     gbp,
+    searchTerms,
+    social,
     languages,
     languagesAvailable: data.gscLang !== null || data.langSessions !== null,
     brands: BRAND_KEYS.map((k) => perBrand[k]),

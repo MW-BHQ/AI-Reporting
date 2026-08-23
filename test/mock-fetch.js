@@ -341,6 +341,16 @@ global.fetch = async (url, opts = {}) => {
   }
 
   if (u.includes("connectors.windsor.ai/google_ads")) {
+    // Search-term rows are a different shape from campaign rows; without this
+    // branch the report's term table silently renders empty.
+    if (((new URL(u)).searchParams.get("fields") || "").includes("search_term")) {
+      return jsonRes({ data: [
+        { search_term: "เอ็น หัว เข่า พลิก", impressions: 37745, clicks: 646, spend: 4200 },
+        { search_term: "เอ็น หัว เข่า ขาด อาการ", impressions: 15695, clicks: 348, spend: 2100 },
+        { search_term: "ผ่าตัดถุงน้ำดี", impressions: 2750, clicks: 152, spend: 900 },
+        { search_term: "bmi calculator", impressions: 56800, clicks: 4336, spend: 5100 },
+      ]});
+    }
     return jsonRes({ data: [
       { date:"2026-07-05", account_name:"BGH x ADA", campaign:"260701-08_BGH_Search", adgroup:"Brand", campaign_type:"SEARCH", conversions:4, spend:1200, impressions:5000, clicks:300 },
       { date:"2026-07-05", account_name:"BGH x ADA", campaign:"260701-08_BGH_Search", adgroup:"Generic", campaign_type:"SEARCH", conversions:1, spend:400, impressions:2000, clicks:90 },

@@ -189,7 +189,9 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
   for (const re of exempt) scan = scan.replace(re, "");
   const raw = [...scan.matchAll(/\(\s*(?:Math\.abs\()?\s*([A-Za-z_$][\w.$]*)\s*\*\s*100\s*\)?\s*\)\.toFixed\(/g)]
     .map((m) => m[1])
-    .filter((v) => !/^(frac|share)$/.test(v));
+    // Rates, not changes: a CTR or a share legitimately renders as a raw
+    // percentage and must not be capped at ">10x".
+    .filter((v) => !/^(frac|share)$/.test(v) && !/\.(ctr|rate|share)$/.test(v));
   raw.length
     ? fail("change:capped", `percentage change rendered outside changeText(): ${raw.join(", ")}`)
     : ok("change:capped", "all change renderers routed through changeText()");
