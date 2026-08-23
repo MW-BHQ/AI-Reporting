@@ -1397,6 +1397,55 @@ function renderReport() {
     <div class="note">CR is the action divided by that hospital's own sessions, so the four hospitals are
     comparable despite very different traffic. "Packages viewed" is the <b>view_item</b> key event.</div>` : '';
 
+  /**
+   * Actions by language for the SELECTED hospital \u2014 the only slide on this tab
+   * that is genuinely per-brand rather than a comparison, which is why it is
+   * not badged "all four".
+   */
+  const AL = (d.actionsByLanguage || {})[sel] || [];
+  const alv = (row, ev) => (row.events && row.events[ev]) || 0;
+  const actionsLangBody = AL.length ? `
+    <div class="card">
+      <table class="roomy sortable"><thead><tr>
+        <th>Language</th><th class="num">Views</th><th class="num">Sessions</th>
+        <th class="num">Find doctors</th><th class="num">Appointments</th><th class="num">Contact us</th>
+        <th class="num">View items</th><th class="num">Add to cart</th><th class="num">Revenue \u0e3f</th>
+      </tr></thead><tbody>
+      ${AL.map(r=>`<tr>
+        <td class="strong">${esc(r.label)}</td>
+        <td class="num">${num(r.views)}</td>
+        <td class="num">${num(r.sessions)}</td>
+        <td class="num">${num(alv(r,'find_doctors'))}</td>
+        <td class="num">${num(alv(r,'appointments'))}</td>
+        <td class="num">${num(alv(r,'contact_us'))}</td>
+        <td class="num">${num(alv(r,'view_item'))}</td>
+        <td class="num">${num(alv(r,'add_to_cart'))}</td>
+        <td class="num">${num(Math.round(r.revenue))}</td>
+      </tr>`).join('')}
+      </tbody></table>
+      <div class="note">Views are page views; sessions are visits. Revenue is GA4 web only and reads 0 while
+      orders are not reaching GA4 (\u00a711). Language comes from the URL locale segment.</div>
+    </div>` : '';
+
+  /**
+   * Channels per hospital. Same 2x2 card grid as the countries slide, so the
+   * two comparison pages read identically \u2014 five ranked rows, sessions, MoM.
+   */
+  const CH = d.channelsByBrand || [];
+  const channelsBody = CH.some(c => c.rows.length) ? `
+    <div class="grid g-2">
+      ${CH.map(c => `<div class="card">
+        <div class="card-title">${esc(c.label)}</div>
+        <table><thead><tr><th>Channel</th><th class="num">Sessions</th><th class="num">MoM</th></tr></thead><tbody>
+        ${c.rows.length ? c.rows.map((r,i)=>`<tr>
+          <td class="strong">${i+1}. ${esc(r.channel)}</td>
+          <td class="num" style="font-weight:600">${num(r.sessions)}</td>
+          <td class="num">${dlt(r.mom)}</td></tr>`).join('')
+          : '<tr><td colspan="3" class="num">no data</td></tr>'}
+        </tbody></table>
+      </div>`).join('')}
+    </div>` : '';
+
   const CO = d.countries || [];
   const countryBody = CO.some(c => c.rows.length) ? `
     <div class="grid g-2">
@@ -1542,6 +1591,8 @@ function renderReport() {
     <div class="search no-print" style="gap:6px">${['BHQ',...d.brands.map(b=>b.key)].map(k=>chip(k,k)).join('')}</div>
     ${slide('Sessions overview', usersBody, true, true)}
     ${slide('Actions \u00b7 what we want them to do', actionsBody, false, true)}
+    ${slide(`Actions by language \u00b7 ${sel}`, actionsLangBody)}
+    ${slide('Channels \u00b7 where do they find us', channelsBody, false, true)}
     ${slide('Who reaches us from outside Thailand', countryBody, false, true)}
     ${slide(sel === 'BHQ' ? 'Performance \u00b7 all four hospitals' : `Performance \u00b7 ${sel}`, perfBody)}
     ${slide('By hospital', byHospital, false, true)}
@@ -4500,7 +4551,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.84.0';
+const CLIENT_BUILD = '3.86.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

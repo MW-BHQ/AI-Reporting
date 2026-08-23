@@ -646,6 +646,37 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.86.0 — Channels slide.**
+
+"Where do they find us" — four hospitals in the same 2×2 card grid as the
+countries slide, top five channels each with sessions and MoM. The two
+comparison pages now read identically, which is the point of a grid.
+
+**No new query.** The previous-window pull `p_${brand}` was fetching a bare
+session total for the usersOverview MoM; it now groups by
+`session_default_channel_group`, and the same rows serve both — summed for the
+headline MoM, per-channel for this slide. Verified both still compute.
+
+**v3.85.0 — Actions by language.**
+
+Per-locale rows: views, sessions, find doctors, appointments, contact us, view
+items, add to cart, revenue — the LS "Actions by languages" page. Computed for
+**every hospital and for BHQ combined**, and rendered for whichever tab is
+selected. This is the only slide on the tab that is genuinely per-brand rather
+than a comparison, so it is deliberately NOT badged "all four".
+
+Costs no new query. A landing page carries the hospital, the locale and the page
+metrics; `ga4KeyEvents(["landing_page"])` was already returning key events keyed
+by the same landing page. Two metrics were added to the existing pull —
+`screen_page_views` (new to `GA4_METRIC_MAP`) and `purchase_revenue` — and the
+whole grid falls out of it.
+
+BHQ accumulates every in-scope page as a real sum, verified: Thai 700 = BGH 100
++ BIH 100 + BHT 400 + WSH 100.
+
+Revenue will read 0 while orders do not reach GA4 (§11); the note says so rather
+than leaving a bare zero.
+
 **v3.84.0 — Actions slide.**
 
 The LS "Actions | What we want them to do" page: one row per hospital, sessions

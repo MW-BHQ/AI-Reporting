@@ -300,6 +300,7 @@ function withBranch(dimensionFilter, segments) {
 const GA4_METRIC_MAP = {
   sessions: "sessions",
   engaged_sessions: "engagedSessions",
+  screen_page_views: "screenPageViews",
   purchase_revenue: "purchaseRevenue",
   ecommerce_purchases: "ecommercePurchases",
   transactions: "transactions",
@@ -1443,7 +1444,11 @@ async function buildReport(from, to) {
   jobs.prevAll = ga4Compat([], ["sessions"], cwr.prev.from, cwr.prev.to);
   jobs.yoyAll = ga4Compat([], ["sessions"], cwr.yoy.from, cwr.yoy.to);
   for (const b of BRANDS) {
-    jobs[`p_${b.key}`] = ga4Compat([], ["sessions"], cwr.prev.from, cwr.prev.to, { segments: [b.segment] });
+    // Grouped by channel rather than a bare total: the same rows serve the
+    // usersOverview MoM (summed) and the per-channel MoM, so the Channels slide
+    // costs nothing extra.
+    jobs[`p_${b.key}`] = ga4Compat(["session_default_channel_group"], ["sessions"],
+      cwr.prev.from, cwr.prev.to, { segments: [b.segment] });
     jobs[`y_${b.key}`] = ga4Compat([], ["sessions"], cwr.yoy.from, cwr.yoy.to, { segments: [b.segment] });
   }
   jobs.meta = windsor("facebook", ["account_name", "spend", "impressions", "clicks"], from, to);
@@ -1480,7 +1485,8 @@ async function buildReport(from, to) {
   jobs.gbpReviews = windsor("google_my_business",
     ["review_create_time", "location_title", "review_star_rating"], from, to);
   jobs.gscLang = gscQuery(["page"], from, to);
-  jobs.langSessions = ga4Compat(["landing_page"], ["sessions"], from, to);
+  jobs.langSessions = ga4Compat(["landing_page"],
+    ["sessions", "screen_page_views", "purchase_revenue"], from, to);
   // Previous window, for the MoM on the language matrix. One extra report
   // rather than eight: the landing page carries BOTH the brand segment and the
   // locale, so a single pull buckets into all 40 cells.
@@ -1763,12 +1769,67 @@ async function buildReport(from, to) {
     available: data.langSessions !== null,
   };
 
+  /**
+   * Actions by language, per hospital AND for BHQ combined.
+   *
+   * A landing page carries the hospital, the locale and the page metrics, and
+   * ga4KeyEvents already returns key events keyed by landing page — so the whole
+   * grid comes out of pulls that were already being made. `__BHQ` accumulates
+   * every in-scope page so the combined view is a real sum, not an average.
+   */
+  const ALB = {};
+  const albBlank = () => ({ views: 0, sessions: 0, revenue: 0, events: {} });
+  for (const k of [...BRAND_KEYS, "BHQ"]) {
+    ALB[k] = {}; for (const l of Object.keys(LOCALES)) ALB[k][l] = albBlank();
+  }
+  for (const r of (data.langSessions || [])) {
+    const bk = brandForPath(r.landing_page); if (!bk) continue;
+    const lc = localeFromPath(r.landing_page); if (!lc || !ALB[bk][lc]) continue;
+    for (const target of [ALB[bk][lc], ALB.BHQ[lc]]) {
+      target.views += n(r.screen_page_views);
+      target.sessions += n(r.sessions);
+      target.revenue += n(r.purchase_revenue);
+    }
+  }
+  if (data.langKeyEvents && data.langKeyEvents.rows) {
+    for (const r of data.langKeyEvents.rows) {
+      const bk = brandForPath(r.key); if (!bk) continue;
+      const lc = localeFromPath(r.key); if (!lc || !ALB[bk][lc]) continue;
+      for (const target of [ALB[bk][lc], ALB.BHQ[lc]]) {
+        target.events[r.eventName] = (target.events[r.eventName] || 0) + r.value;
+      }
+    }
+  }
+  /**
+   * Channels per hospital with MoM — the LS "Where do they find us" page.
+   * Top five by sessions, matching the deck.
+   */
+  const channelsByBrand = BRANDS.map((b) => {
+    const prev = new Map();
+    for (const r of (data[`p_${b.key}`] || [])) {
+      prev.set(norm(r.session_default_channel_group || ""), n(r.sessions));
+    }
+    const rows = (perBrand[b.key].channels || []).map((c) => {
+      const was = prev.get(norm(c.channel));
+      return { channel: c.channel, sessions: c.sessions,
+        mom: (was && was > 0) ? (c.sessions - was) / was : null };
+    }).sort((x, y) => y.sessions - x.sessions).slice(0, 5);
+    return { key: b.key, label: b.label, rows };
+  });
+
+  const actionsByLanguage = Object.fromEntries([...BRAND_KEYS, "BHQ"].map((k) => [k,
+    LANG_ORDER.map((l) => ({ key: l, label: LOCALES[l], ...ALB[k][l] }))
+      .filter((x) => x.views || x.sessions)
+      .sort((a, b) => b.views - a.views)]));
+
   return {
     range: { from, to },
     bhq,
     usersOverview,
     countries,
     languageMatrix,
+    actionsByLanguage,
+    channelsByBrand,
     gbp,
     searchTerms,
     social,
