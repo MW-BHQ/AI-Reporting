@@ -198,5 +198,20 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
 }
 
 
+/**
+ * A drawChart/drawBars call whose canvas no longer exists is silent at runtime:
+ * the helper returns early, no error, no chart, nobody notices. It has happened
+ * three times while removing superseded blocks, so it is a check rather than a
+ * habit. Template-literal ids are skipped — those are generated per row.
+ */
+{
+  const canvases = new Set([...html.matchAll(/<canvas id="([A-Za-z0-9_-]+)"/g)].map((m) => m[1]));
+  const targets = [...html.matchAll(/draw(?:Chart|Bars)\(\s*['"]([A-Za-z0-9_-]+)['"]/g)].map((m) => m[1]);
+  const orphans = [...new Set(targets.filter((t) => !canvases.has(t)))];
+  orphans.length
+    ? fail("charts:wired", `draw call with no canvas: ${orphans.join(", ")}`)
+    : ok("charts:wired", `${targets.length} draw calls all have canvases`);
+}
+
 console.log(failures ? `\n${failures} audit check(s) failed` : "\nstatic audit clean");
 process.exit(failures ? 1 : 0);

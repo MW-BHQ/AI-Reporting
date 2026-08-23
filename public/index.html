@@ -383,8 +383,11 @@
   .ra-kpis{display:flex;flex-wrap:wrap;gap:26px;margin:14px 0 16px;}
   .ra-kpis .lab{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);}
   .ra-kpis .v{font-size:17px;font-weight:600;color:var(--ink);margin-top:2px;font-variant-numeric:tabular-nums;}
+  /* Default cursor: a chip with no data-tip does nothing, and a hand promises
+     an interaction that never happens. Only tipped chips get the hand. */
   .dlt{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 5px;border-radius:5px;
-    margin-left:5px;cursor:pointer;white-space:nowrap;}
+    margin-left:5px;white-space:nowrap;}
+  .dlt[data-tip]{cursor:pointer;}
   .dlt.up{background:rgba(74,190,140,.14);color:#2E9E6F;}
   .dlt.down{background:#FFEDE7;color:#D9534F;}
   .dlt.flat{background:rgba(140,155,190,.14);color:var(--muted);}
@@ -1369,9 +1372,14 @@ function renderReport() {
    * Sessions rather than users \u2014 one unit across the whole dashboard.
    */
   const U = d.usersOverview;
-  const dlt = (v) => v === null || v === undefined
-    ? '<span class="dlt none">\u2014</span>'
-    : `<span class="dlt ${v>0.005?'up':(v<-0.005?'down':'flat')}">${changeText(v, Math.abs(v)>=1?0:1)}</span>`;
+  /**
+   * Every delta chip on this tab is MoM against the same length of window one
+   * month back. The tooltip says so, because a bare coloured percentage does
+   * not tell you what it is comparing against.
+   */
+  const dlt = (v, tip) => v === null || v === undefined
+    ? `<span class="dlt none" data-tip="${esc(tip || 'No earlier window to compare against')}">\u2014</span>`
+    : `<span class="dlt ${v>0.005?'up':(v<-0.005?'down':'flat')}" data-tip="${esc(tip || 'MoM \u2014 same length of window, one month back')}">${changeText(v, Math.abs(v)>=1?0:1)}</span>`;
   const usersBody = (U && U.months.length) ? `
     <div class="grid g-2-1">
       <div class="card">
@@ -1408,6 +1416,15 @@ function renderReport() {
    * hospital, four actions across. Built entirely from keyEventBreakdown, so it
    * costs no extra query.
    */
+  // Icons mirror the reference deck: magnifier, calendar, phone, ticket.
+  const ICON = {
+    find_doctors: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
+    appointments: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/>',
+    contact_us:   '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2 4.2 2 2 0 0 1 4 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.4 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c.9.4 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/>',
+    view_item:    '<path d="M3 8h18v8H3z"/><path d="M7 8v8M17 8v8"/>',
+  };
+  const actIcon = (id) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+      style="width:17px;height:17px;vertical-align:-3px;margin-right:5px;opacity:.75">${ICON[id]||''}</svg>`;
   const ACTIONS = [
     { id:'find_doctors', label:'Find doctors' },
     { id:'appointments', label:'Appointments' },
@@ -1428,7 +1445,7 @@ function renderReport() {
             const v = byId[a.id]||0;
             const cr = b.sessions ? (v/b.sessions)*100 : null;
             return `<div>
-              <div class="lab">${esc(a.label)}</div>
+              <div class="lab">${actIcon(a.id)}${esc(a.label)}</div>
               <div style="font-size:19px;font-weight:600">${num(v)}</div>
               <div style="font-size:11px;font-weight:600;color:var(--violet)">CR ${cr===null?'\u2014':cr.toFixed(1)+'%'}</div>
             </div>`;
@@ -1450,8 +1467,11 @@ function renderReport() {
     <div class="card">
       <table class="roomy sortable"><thead><tr>
         <th>Language</th><th class="num">Views</th><th class="num">Sessions</th>
-        <th class="num">Find doctors</th><th class="num">Appointments</th><th class="num">Contact us</th>
-        <th class="num">View items</th><th class="num">Add to cart</th><th class="num">Revenue \u0e3f</th>
+        <th class="num">${actIcon('find_doctors')}Find doctors</th>
+        <th class="num">${actIcon('appointments')}Appointments</th>
+        <th class="num">${actIcon('contact_us')}Contact us</th>
+        <th class="num">${actIcon('view_item')}View items</th>
+        <th class="num">Add to cart</th><th class="num">Revenue \u0e3f</th>
       </tr></thead><tbody>
       ${AL.map(r=>`<tr>
         <td class="strong">${esc(r.label)}</td>
@@ -1517,8 +1537,9 @@ function renderReport() {
           <div style="font-size:9.5px">${c.sessions?dlt(c.mom):''}</div></td>`).join('')}
       </tr>`).join('')}
       </tbody></table>
-      <div class="note">Sessions by the locale segment of the landing page, per hospital. A page carries both
-      facts \u2014 which hospital and which language \u2014 so this is one query, not forty.</div>
+      <div class="note">Sessions by the locale segment of the landing page, per hospital, with
+      <b>MoM</b> beneath each figure \u2014 the same length of window one month back. A page carries both
+      facts, which hospital and which language, so this is one query, not forty.</div>
     </div>` : '';
 
   /**
@@ -1530,7 +1551,6 @@ function renderReport() {
   const SB = (d.searchByLanguage || {})[sel] || [];
   const activeLang = S.reportLang && SB.some(x => x.key === S.reportLang) ? S.reportLang : (SB[0] || {}).key;
   const searchPagesBody = SB.length ? `
-    <div class="slide-title"><span>Search by language \u00b7 ${esc(sel)}</span>${logoImg}</div>
     <div class="lang-tabs no-print">
       ${SB.map(x=>`<button class="lang-tab ${x.key===activeLang?'active':''}" data-lang="${esc(x.key)}">${esc(x.label)}</button>`).join('')}
     </div>
@@ -1542,21 +1562,17 @@ function renderReport() {
         <div class="slide-title" style="margin-top:0"><span>Search \u00b7 ${esc(x.label)} \u00b7 ${esc(sel)}</span>${logoImg}</div>
         <div class="grid g-2">
           <div class="card">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-              <div style="width:52px;font-size:10px;font-weight:700;color:var(--faint)">TOFU</div>
-              <div style="flex:1;background:#4B8DF8;color:#fff;border-radius:20px;padding:9px 16px;display:flex;justify-content:space-between">
-                <span style="font-size:11.5px;opacity:.9">Impressions</span><b style="font-size:17px">${num(x.impressions)}</b></div>
-            </div>
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-              <div style="width:52px;font-size:10px;font-weight:700;color:var(--faint)">MOFU</div>
-              <div style="flex:1;max-width:${pv}%;background:#7FB0F5;color:#fff;border-radius:20px;padding:9px 16px;display:flex;justify-content:space-between">
-                <span style="font-size:11.5px;opacity:.9">Visits</span><b style="font-size:17px">${num(x.visits)}</b></div>
-            </div>
-            <div style="display:flex;align-items:center;gap:10px">
-              <div style="width:52px;font-size:10px;font-weight:700;color:var(--faint)">BOFU</div>
-              <div style="flex:1;max-width:${pa}%;background:#BFD8FA;color:#1B2340;border-radius:20px;padding:9px 16px;display:flex;justify-content:space-between">
-                <span style="font-size:11.5px">Actions</span><b style="font-size:17px">${num(x.actionsTotal)}</b></div>
-            </div>
+            ${[['TOFU','Impressions',x.impressions,100,'#4B8DF8','#fff'],
+                ['MOFU','Visits',x.visits,pv,'#7FB0F5','#fff'],
+                ['BOFU','Actions',x.actionsTotal,pa,'#BFD8FA','#1B2340']].map(([stage,lab,val,w,bg,fg])=>`
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                <div style="width:46px;font-size:10px;font-weight:700;color:var(--faint)">${stage}</div>
+                <div style="width:92px;font-size:11.5px;color:var(--ink-2)">${lab}</div>
+                <div style="flex:1;min-width:0">
+                  <div style="width:${w}%;min-width:64px;background:${bg};color:${fg};border-radius:20px;
+                              padding:9px 14px;text-align:right;font-weight:700;font-size:16px">${num(val)}</div>
+                </div>
+              </div>`).join('')}
             <table style="margin-top:12px"><tbody>
               ${x.actions.map(a=>`<tr><td class="strong">${esc(a.label)}</td><td class="num">${num(a.value)}</td></tr>`).join('')
                 || '<tr><td class="num">no actions</td></tr>'}
@@ -1580,18 +1596,39 @@ function renderReport() {
     }).join('')}` : '';
 
   const G = d.gbp;
-  const reviewBody = (G && G.reviewsAll && G.reviewsAll.count) ? `
-    <div class="grid g-3" style="margin-bottom:10px">
-      ${kpi('Reviews this period', num(G.reviewsAll.count))}
-      ${kpi('Average rating', G.reviewsAll.avg ?? '\u2014')}
-      ${kpi('5-star share', G.reviewsAll.count?((G.reviewsAll.stars['5']/G.reviewsAll.count)*100).toFixed(1)+'%':'\u2014')}
-    </div>
+  /**
+   * Reviews per hospital, one card each, rather than a single group figure.
+   * The group average hid that one listing can carry the rating while another
+   * quietly slides.
+   */
+  const RV = (G && G.byBrand) ? G.byBrand.filter(b => b.reviews && b.reviews.count) : [];
+  const reviewBody = RV.length ? `
     <div class="grid g-2">
-      <div class="card"><div class="card-title">Rating mix</div>
-        <div class="chart-wrap" style="height:210px"><canvas id="repRvStars"></canvas></div></div>
-      <div class="card"><div class="card-title">Average rating by hospital</div>
-        <div class="chart-wrap" style="height:210px"><canvas id="repRvBrand"></canvas></div></div>
-    </div>` : '';
+      ${RV.map(b => {
+        const r = b.reviews, five = r.count ? (r.stars['5']/r.count)*100 : 0;
+        return `<div class="card">
+          <div class="card-title">${esc(b.label)}</div>
+          <div class="grid g-3" style="margin-bottom:8px">
+            <div><div class="lab">Reviews</div><div style="font-size:19px;font-weight:700">${num(r.count)}</div></div>
+            <div><div class="lab">Average</div><div style="font-size:19px;font-weight:700;color:var(--violet)">${r.avg ?? '\u2014'}</div></div>
+            <div><div class="lab">5-star</div><div style="font-size:19px;font-weight:700">${five.toFixed(1)}%</div></div>
+          </div>
+          <table><tbody>
+          ${[5,4,3,2,1].map(st=>{
+            const v = r.stars[String(st)] || 0;
+            const pct = r.count ? (v/r.count)*100 : 0;
+            return `<tr><td class="strong" style="width:44px">${st}\u2605</td>
+              <td><div style="background:var(--line);border-radius:6px;height:9px">
+                <div style="width:${pct}%;background:${st>=4?'#2E9E6F':(st===3?'#F2A93B':'#D9534F')};height:9px;border-radius:6px"></div>
+              </div></td>
+              <td class="num" style="width:56px">${num(v)}</td></tr>`;
+          }).join('')}
+          </tbody></table>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="note">Reviews landing in this window, per hospital listing. Dental and JMS are counted in the
+    group totals elsewhere but are not shown here.</div>` : '';
 
   const T = d.searchTerms || [];
   const termsBody = T.length ? `
@@ -1623,15 +1660,21 @@ function renderReport() {
    * (MW). Each is its own `.slide`, so print gives one page per hospital
    * regardless of which tab is selected on screen.
    */
-  const GD = (d.gbpDetail || []).filter(x => x.totals && x.totals.impressions);
+  // Only the hospital whose tab is open \u2014 the other three have their own tabs.
+  const GD = (d.gbpDetail || []).filter(x => x.key === sel && x.totals && x.totals.impressions);
   const gbpDetailBody = GD.map((g, gi) => `
     <div class="slide slide-break">
       <div class="slide-title"><span>Google Business Profile \u00b7 ${esc(g.label)}</span>${logoImg}</div>
       <div class="grid g-4" style="margin-bottom:10px">
-        ${kpi('Impressions', num(g.totals.impressions), dlt(g.mom.impressions))}
-        ${kpi('Call clicks', num(g.totals.calls), dlt(g.mom.calls))}
-        ${kpi('Website clicks', num(g.totals.website), dlt(g.mom.website))}
-        ${kpi('Direction requests', num(g.totals.directions), dlt(g.mom.directions))}
+        ${[['Impressions', g.totals.impressions, g.mom.impressions],
+           ['Call clicks', g.totals.calls, g.mom.calls],
+           ['Website clicks', g.totals.website, g.mom.website],
+           ['Direction requests', g.totals.directions, g.mom.directions]]
+          .map(([lab, val, mom]) => `<div class="stat card">
+            <div class="lab">${lab}</div>
+            <div class="val">${num(val)}</div>
+            <div class="sub2">${dlt(mom)}</div>
+          </div>`).join('')}
       </div>
       <div class="grid g-2-1">
         <div class="card">
@@ -1642,13 +1685,14 @@ function renderReport() {
         </div>
         <div class="card">
           <div class="card-title">Search keywords</div>
-          <table><thead><tr><th>#</th><th>Keyword</th><th class="num">Impressions</th></tr></thead><tbody>
-          ${g.keywords.length ? g.keywords.map((k,i)=>`<tr><td>${i+1}</td>
-            <td class="strong i18n">${esc(k.keyword)}</td>
-            <td class="num">${num(k.impressions)}</td></tr>`).join('')
-            : '<tr><td colspan="3" class="num">no keyword data</td></tr>'}
+          <table><thead><tr><th>#</th><th>Keyword</th></tr></thead><tbody>
+          ${g.keywords.length ? g.keywords.map((k,i)=>`<tr><td style="width:28px">${i+1}</td>
+            <td class="strong i18n">${esc(k.keyword)}</td></tr>`).join('')
+            : '<tr><td colspan="2" class="num">no keyword data</td></tr>'}
           </tbody></table>
-          <div class="note">The phrases people actually typed to find this listing, by impressions.</div>
+          <div class="note">The phrases people typed to find this listing, in the order Google returns them.
+          <b>No volume is shown because none is available</b> \u2014 the connector exposes the keyword but not its
+          impression count, so a figure here would have been a column of zeros.</div>
         </div>
       </div>
     </div>`).join('');
@@ -1722,16 +1766,6 @@ function renderReport() {
         { label:'Direction clicks', key:'directions', color:'#E8607A', axis:'y' },
       ]);
     });
-    if (G && G.available) {
-      const gb = G.byBrand;
-      const rv = G.reviewsAll;
-      if (rv && rv.count) {
-        drawBars('repRvStars', ['5\u2605','4\u2605','3\u2605','2\u2605','1\u2605'],
-          [{ label:'Reviews', data:[rv.stars['5'],rv.stars['4'],rv.stars['3'],rv.stars['2'],rv.stars['1']], color:C.d }]);
-        drawBars('repRvBrand', gb.map(b=>b.label),
-          [{ label:'Average rating', data: gb.map(b=>b.reviews.avg||0), color:C.c }]);
-      }
-    }
     if (T.length) {
       const tt = T.slice(0, 12);
       // Long Thai queries need truncating or the axis eats the chart.
@@ -4619,7 +4653,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.90.1';
+const CLIENT_BUILD = '3.91.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

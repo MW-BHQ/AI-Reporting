@@ -646,6 +646,32 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.91.0 — five fixes from MW's review, plus a new audit rule.**
+
+1. **Delta chips say what they compare.** Every chip on this tab is MoM against
+   the same length of window one month back; the tooltip now says so. `.dlt`
+   had inherited `cursor:pointer` from the v3.61.2 cursor swap, so untipped
+   chips looked clickable and did nothing — the hand is now `.dlt[data-tip]`
+   only.
+2. **Icons** on Actions and Actions-by-language, matching the reference.
+3. **Search by language:** the outer heading duplicated the per-page one, logo
+   and all — removed. Stage labels moved OUTSIDE the bars: the pills are
+   width-limited by ratio, so at small ratios white label text spilled past the
+   coloured bar onto white background.
+4. **GBP** shows only the hospital whose tab is open; the four metrics are
+   framed scorecards. **The keyword Impressions column is gone** — Windsor's GBP
+   connector exposes the keyword phrase but no count (checked
+   `search_keyword_impressions`, `keyword_search_volume`, `value`, `threshold`
+   and others; none exist), so the column was zeros. Rank and search volume as
+   the LS deck shows them must come from an SEO tool, not this connector.
+5. **Google reviews split per hospital**, with a star-distribution bar each. The
+   group average concealed one listing carrying the rating while another slid.
+
+**New audit rule `charts:wired`.** A `drawChart`/`drawBars` call whose canvas no
+longer exists returns early — no error, no chart, nobody notices. That has now
+happened three times while removing superseded blocks, so it is a check rather
+than a habit. Verified against a planted violation.
+
 **v3.90.1 — HOTFIX "chip is not defined", and boot now renders the report.**
 
 v3.90.0 removed the in-page brand selector but left the row that called it, so
