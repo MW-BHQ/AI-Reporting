@@ -178,7 +178,7 @@ function ga4Report(body) {
     return true;
   };
 
-  const pages = GA4_PAGES.filter((p) => keep(GA4_LANDING_DIM_NAME, p));
+  const pages = GA4_PAGES.filter((p) => keep(GA4_LANDING_DIM_NAME, p) && keep("pagePath", p));
   /**
    * The branch filter targets the landing-page dimension, which most reports do
    * not GROUP by — so filtering it has no visible effect on those rows here.
@@ -186,7 +186,10 @@ function ga4Report(body) {
    * whenever no branch regex was sent. Any endpoint whose output contains
    * "OutOfScope" is querying all 27 branches.
    */
-  const branchFiltered = (regexes[GA4_LANDING_DIM_NAME] || []).length > 0;
+  // A report may be branch-scoped via the landing dimension OR via pagePath
+  // (page-scoped reports cannot use the session-scoped landing filter).
+  const branchFiltered = (regexes[GA4_LANDING_DIM_NAME] || []).length > 0
+    || (regexes.pagePath || []).length > 0;
   const marker = branchFiltered ? [] : ["OutOfScope"];
 
   /**
@@ -223,6 +226,8 @@ function ga4Report(body) {
       // (IMPRESSION_SOURCE_BY_CHANNEL) is never exercised.
       : d === "sessionDefaultChannelGroup" ? ["Organic Search", "Paid Social", "Paid Search", ...marker]
       : d === "itemName" ? ["Heart Screening Package", ...marker]
+      : d === "pageTitle" ? ["Heart Screening Package", "Annual Check-up", ...marker]
+      : d === "pagePath" ? pages
       : pages;
     if (!opts.length) return;
     for (const v of opts) expand(i + 1, [...acc, v]);

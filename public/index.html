@@ -1516,7 +1516,7 @@ function renderOverview() {
       <h2>Website funnel &middot; stacked by channel</h2>`;
     })()}
       <div class="stage">
-        <div class="stage-head"><span class="stage-name">Visits</span>
+        <div class="stage-head"><span class="stage-name">Web visits</span>
           <span class="stage-val ${isNA(d.totals.visits)?'na':''}">${num(d.totals.visits)}</span></div>
         <div class="bar">${seg(f, totalVisits, 'visits')}</div>
         <div class="stage-note">GA4 sessions by default channel group &mdash; one consistent source, so channel comparison here is exact.</div>
@@ -1634,11 +1634,13 @@ function renderOverview() {
         </tbody></table>
       </div>
       <div class="card">
-        <h2>Top products</h2>
-        <table><thead><tr><th>Item</th><th class="num">Views</th><th class="num">Revenue ฿</th></tr></thead><tbody>
-        ${(d.topProducts||[]).slice(0,8).map(p=>`<tr><td class="strong i18n">${esc(p.name)}</td><td class="num">${num(p.views)}</td><td class="num">${num(Math.round(p.revenue))}</td></tr>`).join('')||'<tr><td colspan="3" class="num">no item data</td></tr>'}
+        <h2>Top packages viewed</h2>
+        <table><thead><tr><th>Page</th><th class="num">Views</th></tr></thead><tbody>
+        ${(d.topProducts||[]).slice(0,8).map(p=>`<tr><td class="strong i18n">${esc(p.name)}</td><td class="num">${num(p.views)}</td></tr>`).join('')||'<tr><td colspan="2" class="num">no data</td></tr>'}
         </tbody></table>
-        <div class="note">Item-scoped metrics cannot take the landing-page filter GA4 applies elsewhere, so this table covers <b>all 27 group branches</b>, not the four in the funnel above.</div>
+        <div class="note"><b>view_item</b> events by page, scoped to the four hospitals like everything else.
+        Counted page-side rather than item-side: GA4's item metrics cannot be combined with any page or
+        session dimension, so an item-name table can never be branch-filtered and covered all 27 branches.</div>
       </div>
     </div>
   `;
@@ -4268,7 +4270,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.76.0';
+const CLIENT_BUILD = '3.77.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

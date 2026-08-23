@@ -646,6 +646,36 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.77.0 — the website is IN the funnel; Top Products is branch-scoped at last.**
+
+**Engage band gained Website visits and Engaged sessions.** The band listed ad
+clicks, post engagements and profile clicks but omitted the largest response
+channel of all, because the website sat only in the detail below. "Visits" in
+that lower funnel is renamed **Web visits** so the two are not confused.
+
+**Top Products → Top packages viewed, now filtered to the four hospitals.**
+
+This was the last figure on Overview still covering all 27 branches. GA4's
+item-scoped metrics (`itemsViewed`, `itemRevenue`) **cannot be combined with any
+page or session dimension**, so an item-name table can never be branch-filtered
+— no amount of filter work fixes it. Solved by changing the *measure* rather
+than the filter: count **`view_item` events against `pageTitle`**, which is
+event- and page-scoped and therefore filterable on `pagePath`.
+
+Trades accepted: page titles instead of item names, and revenue dropped — item
+revenue has no page-scoped equivalent, and GA4 web purchases are 0 anyway
+because orders never reach GA4 (§11).
+
+**Every number on Overview is now four-branch scoped.** No exceptions remain.
+
+Two mock gaps closed: the `OutOfScope` marker only watched the landing
+dimension, so a report scoped via `pagePath` looked unfiltered; and `pages` was
+filtered on the landing dimension alone. Both now consider `pagePath`.
+
+`test/boot.js` caught a backtick inside a template literal (`view_item` in a
+note) that broke the whole client parse — fourth time that layer has paid for
+itself.
+
 **v3.76.0 — Overview is a MARKETING funnel now, not a web funnel.**
 
 Off-site reach and action are folded in. The page leads with three bands:

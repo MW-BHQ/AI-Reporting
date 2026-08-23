@@ -1018,9 +1018,29 @@ async function buildOverview(from, to) {
     // Item-scoped metrics cannot be combined with the session-scoped landing
     // page filter — GA4 rejects the pair — so this stays group-wide and is
     // labelled as such in the UI rather than silently implying branch scope.
-    ga4Items: ga4Compat(["item_name"],
-      ["items_viewed", "items_added_to_cart", "items_purchased", "item_revenue"],
-      from, to, { noBranchFilter: true }),
+    /**
+     * Top packages, measured PAGE-side rather than item-side.
+     *
+     * Item-scoped metrics (itemsViewed, itemRevenue) cannot be combined with any
+     * page or session dimension, so an item report can never be branch-filtered
+     * and this table covered all 27 branches. Counting `view_item` against
+     * pageTitle is event- and page-scoped, which IS filterable, so it now
+     * respects the four-branch scope like everything else. The trade is item
+     * names for page titles, and revenue is dropped — item revenue has no
+     * page-scoped equivalent and web purchases are 0 regardless (§11).
+     */
+    ga4Items: ga4RunReport({
+      dimensions: ["pageTitle", "pagePath"],
+      metrics: ["eventCount"],
+      from, to,
+      dimensionFilter: {
+        andGroup: { expressions: [
+          { filter: { fieldName: "eventName", stringFilter: { matchType: "EXACT", value: "view_item" } } },
+          { filter: { fieldName: "pagePath",
+            stringFilter: { matchType: "PARTIAL_REGEXP", value: BRANCH_REGEX, caseSensitive: false } } },
+        ] },
+      },
+    }),
     ga4Month: ga4Compat(["date"], ["purchase_revenue", "ecommerce_purchases"], monthFrom, monthTo),
     meta: windsor("facebook", ["date", "account_name", "spend", "impressions", "clicks",
       // Ad-ATTRIBUTED conversations only. There is no organic Messenger or IG
@@ -1186,6 +1206,9 @@ async function buildOverview(from, to) {
   const bothNull = (a, b) => a === null && b === null;
   const addNullable = (a, b) => (bothNull(a, b) ? null : n(a) + n(b));
 
+  const totalsVisits = funnel.reduce((a, c) => a + n(c.visits), 0) || null;
+  const totalsEngaged = funnel.reduce((a, c) => a + n(c.engagement), 0) || null;
+
   const bandRow = (label, value, unit, note) => (value === null || value === undefined)
     ? null : { label, value, unit, note: note || null };
   const reach = [
@@ -1205,6 +1228,10 @@ async function buildOverview(from, to) {
       : n(sumOrNull(data.ttOrganic, "likes")) + n(sumOrNull(data.ttOrganic, "comments"))
         + n(sumOrNull(data.ttOrganic, "shares")), "likes, comments, shares"),
     bandRow("Profile website clicks", offsiteActions.gbpWebsiteClicks, "clicks"),
+    // The website belongs IN the funnel, not only in the detail below it —
+    // otherwise the Engage band silently omits the largest response channel.
+    bandRow("Website visits", totalsVisits, "sessions"),
+    bandRow("Engaged sessions", totalsEngaged, "sessions", "10s+, 2+ screens, or a key event"),
   ].filter(Boolean).sort((a, b) => b.value - a.value);
 
   const act = [
@@ -1268,16 +1295,12 @@ async function buildOverview(from, to) {
   const topProducts = data.ga4Items === null ? null : (() => {
     const m = new Map();
     for (const r of data.ga4Items) {
-      const name = r.item_name;
+      const name = String(r.pageTitle || "").trim();
       if (!name || name === "(not set)") continue;
-      if (!m.has(name)) m.set(name, { name, views: 0, addToCarts: 0, purchases: 0, revenue: 0 });
-      const p = m.get(name);
-      p.views += n(r.items_viewed);
-      p.addToCarts += n(r.items_added_to_cart);
-      p.purchases += n(r.items_purchased);
-      p.revenue += n(r.item_revenue);
+      if (!m.has(name)) m.set(name, { name, views: 0 });
+      m.get(name).views += n(r.eventCount);
     }
-    return [...m.values()].sort((a, b) => b.revenue - a.revenue || b.views - a.views).slice(0, 10);
+    return [...m.values()].sort((a, b) => b.views - a.views).slice(0, 10);
   })();
 
   // ---- trend ----
