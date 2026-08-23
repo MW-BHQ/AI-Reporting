@@ -646,6 +646,34 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.87.1 — request budget for Monthly Reports.**
+
+Current cost of `/api/report`: **40 jobs — 31 GA4 reports, 1 Search Console,
+8 Windsor.** Removed the two group-wide `prevAll` / `yoyAll` pulls: the
+per-brand prev/yoy pulls already cover the same four segments, so the group
+total is their sum (`sumBrandWindow`).
+
+**Scaling rule for the remaining LS pages.** A per-brand section costs **4
+requests per window** — a section with current + previous costs 8. The endpoint
+is fine at 31 GA4 reports behind a 6-slot gate (roughly 5–6 waves, so on the
+order of 10–30s cold, well inside the 300s Cloud Run timeout, and cached for
+600s afterwards). It will NOT stay fine if every new page adds 8.
+
+**Prefer, in this order:**
+1. **Derive from an existing pull.** A landing page encodes both the brand and
+   the locale, which is how the language matrix and actions-by-language cost
+   nothing extra. Always check whether a pull already in flight carries the
+   dimension.
+2. **One group-wide pull bucketed in JS**, rather than four filtered ones.
+3. **Only then** add per-brand requests.
+
+**Splitting the endpoint does not reduce GA4 load** — the gate is module-global
+and the quota is per property, so total wall time is unchanged. Split for
+failure isolation and progressive rendering, not for speed.
+
+Note the gate is shared across ALL requests and endpoints: two people loading
+the report at once queue behind the same 6 slots.
+
 **v3.87.0 — GA4 CONCURRENCY GATE. This was causing random "no data".**
 
 `buildReport` fans out roughly **thirty GA4 reports at once** — four brands

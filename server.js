@@ -1476,8 +1476,8 @@ async function buildReport(from, to) {
   }
   // Same length of window, one month back and one year back, for MoM and YoY.
   const cwr = comparisonWindows(from, to);
-  jobs.prevAll = ga4Compat([], ["sessions"], cwr.prev.from, cwr.prev.to);
-  jobs.yoyAll = ga4Compat([], ["sessions"], cwr.yoy.from, cwr.yoy.to);
+  // No group-wide prev/yoy pulls: the per-brand ones below already cover the
+  // same four segments, so the totals are their sum. Two fewer round trips.
   for (const b of BRANDS) {
     // Grouped by channel rather than a bare total: the same rows serve the
     // usersOverview MoM (summed) and the per-channel MoM, so the Channels slide
@@ -1730,6 +1730,11 @@ async function buildReport(from, to) {
   }
   const months = [...monthsSet].sort();
   const sumSessions = (rows) => rows === null ? null : rows.reduce((a, r) => a + n(r.sessions), 0);
+  /** Group total for a comparison window, summed from the per-brand pulls. */
+  const sumBrandWindow = (prefix) => {
+    const parts = BRANDS.map((b) => sumSessions(data[`${prefix}${b.key}`]));
+    return parts.every((v) => v === null) ? null : parts.reduce((a, v) => a + n(v), 0);
+  };
   const chg = (now, before) => (before && before > 0) ? (now - before) / before : null;
 
   const usersOverview = {
@@ -1739,8 +1744,8 @@ async function buildReport(from, to) {
       data: months.map((m) => seriesByBrand[b.key].get(m) || 0),
     })),
     total: bhq.sessions,
-    mom: chg(bhq.sessions, sumSessions(data.prevAll)),
-    yoy: chg(bhq.sessions, sumSessions(data.yoyAll)),
+    mom: chg(bhq.sessions, sumBrandWindow("p_")),
+    yoy: chg(bhq.sessions, sumBrandWindow("y_")),
     byBrand: BRANDS.map((b) => {
       const cur = perBrand[b.key].sessions;
       return { key: b.key, label: b.label, sessions: cur,
