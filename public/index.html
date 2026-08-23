@@ -1388,7 +1388,7 @@ function renderReport() {
             return `<div>
               <div class="lab">${esc(a.label)}</div>
               <div style="font-size:19px;font-weight:600">${num(v)}</div>
-              <div style="font-size:10.5px;color:var(--faint)">CR ${cr===null?'\u2014':cr.toFixed(1)+'%'}</div>
+              <div style="font-size:11px;font-weight:600;color:var(--violet)">CR ${cr===null?'\u2014':cr.toFixed(1)+'%'}</div>
             </div>`;
           }).join('')}
         </div>
@@ -4551,7 +4551,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.86.0';
+const CLIENT_BUILD = '3.87.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

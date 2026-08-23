@@ -646,6 +646,28 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.87.0 — GA4 CONCURRENCY GATE. This was causing random "no data".**
+
+`buildReport` fans out roughly **thirty GA4 reports at once** — four brands
+× several windows, plus the language and country pulls. The Data API caps
+concurrent requests per property, so the surplus were rejected; `runJobs` turned
+each rejection into null, and the failures surfaced as **"no data" on whichever
+slides lost the race**. Different brands went blank on different runs, which is
+exactly why it read as a per-brand bug — BGH and BHT empty on the countries
+slide while BIH and WSH were fine.
+
+`ga4RunReport` now queues behind **6 slots** (`GA4_MAX_CONCURRENT`). Verified
+with 40 simulated tasks: all complete, peak concurrency 6, no deadlock — the
+release hands its slot straight to the next waiter rather than decrementing,
+which is the bug most such gates ship with.
+
+Slower by a few seconds, deterministic instead of arbitrary. **If a slide shows
+"no data" now, it is genuinely missing data, not a lost race** — which finally
+makes those cases worth investigating.
+
+Also: the CR line on the Actions slide was 10.5px in `--faint` and effectively
+unreadable; now 11px semibold in the accent colour.
+
 **v3.86.0 — Channels slide.**
 
 "Where do they find us" — four hospitals in the same 2×2 card grid as the

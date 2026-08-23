@@ -147,6 +147,32 @@ async function ga4Token() {
 const GA4_METRIC_LIMIT = 10;
 const GA4_DIMENSION_LIMIT = 9;
 
+/**
+ * CONCURRENCY GATE.
+ *
+ * The GA4 Data API caps concurrent requests per property. buildReport fans out
+ * roughly thirty reports at once (four brands x several windows, plus the
+ * language and country pulls), so the excess were being rejected — and because
+ * runJobs turns a rejection into null, the failures surfaced as "no data" on
+ * whichever slides happened to lose the race. Different brands went blank on
+ * different runs, which is what made it look like a per-brand bug.
+ *
+ * Requests now queue behind a fixed number of slots. Slower by a little,
+ * deterministic instead of arbitrary.
+ */
+const GA4_MAX_CONCURRENT = Number(process.env.GA4_MAX_CONCURRENT || 6);
+let _ga4Active = 0;
+const _ga4Queue = [];
+function ga4Slot() {
+  if (_ga4Active < GA4_MAX_CONCURRENT) { _ga4Active++; return Promise.resolve(); }
+  return new Promise((resolve) => _ga4Queue.push(resolve));
+}
+function ga4Release() {
+  const next = _ga4Queue.shift();
+  if (next) next();          // hand the slot straight on
+  else _ga4Active--;
+}
+
 async function ga4RunReport({ dimensions, metrics, from, to, dimensionFilter, limit = 100000 }) {
   /**
    * The Data API caps a request at 10 metrics and 9 dimensions, exactly as
@@ -161,6 +187,15 @@ async function ga4RunReport({ dimensions, metrics, from, to, dimensionFilter, li
   if (dimensions.length > GA4_DIMENSION_LIMIT) {
     throw new Error(`GA4 request asks for ${dimensions.length} dimensions; the API allows ${GA4_DIMENSION_LIMIT}.`);
   }
+  await ga4Slot();
+  try {
+    return await ga4RunReportInner({ dimensions, metrics, from, to, dimensionFilter, limit });
+  } finally {
+    ga4Release();
+  }
+}
+
+async function ga4RunReportInner({ dimensions, metrics, from, to, dimensionFilter, limit }) {
   const token = await ga4Token();
   const body = {
     dateRanges: [{ startDate: from, endDate: to }],
