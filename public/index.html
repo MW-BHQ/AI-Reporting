@@ -1300,6 +1300,36 @@ function renderReport() {
     German, Vietnamese and Indonesian share Latin characters. Impressions and clicks are Search Console;
     visits and key events are GA4. Each stage is a subset of the one above, so these rates hold.</div>` : '';
 
+  const G = d.gbp;
+  const gbpBody = (sel === 'BHQ' && G && G.available) ? `
+    <div class="grid g-3" style="margin-bottom:10px">
+      ${kpi('Profile views', num(G.byBrand.reduce((a,b)=>a+b.impressions,0) + (G.shared?G.shared.impressions:0)))}
+      ${kpi('Calls', num(G.byBrand.reduce((a,b)=>a+b.calls,0) + (G.shared?G.shared.calls:0)))}
+      ${kpi('Directions', num(G.byBrand.reduce((a,b)=>a+b.directions,0) + (G.shared?G.shared.directions:0)))}
+    </div>
+    <div class="grid g-2">
+      <div class="card"><div class="card-title">Profile views by hospital</div>
+        <div class="chart-wrap" style="height:210px"><canvas id="repGbpImp"></canvas></div></div>
+      <div class="card"><div class="card-title">Actions taken \u2014 no website visit needed</div>
+        <div class="chart-wrap" style="height:210px"><canvas id="repGbpAct"></canvas></div></div>
+    </div>
+    <div class="note">Calls and direction requests never become a website session, so they sit outside the
+    funnel \u2014 for a hospital they are often the better outcome.${G.shared?` JMS serves all four and is not
+    added to any single hospital.`:''}${G.unlisted?` <b>Unmapped listings:</b> ${esc(G.unlisted.listings.join(', '))}.`:''}</div>` : '';
+
+  const reviewBody = (sel === 'BHQ' && G && G.reviewsAll && G.reviewsAll.count) ? `
+    <div class="grid g-3" style="margin-bottom:10px">
+      ${kpi('Reviews this period', num(G.reviewsAll.count))}
+      ${kpi('Average rating', G.reviewsAll.avg ?? '\u2014')}
+      ${kpi('5-star share', G.reviewsAll.count?((G.reviewsAll.stars['5']/G.reviewsAll.count)*100).toFixed(1)+'%':'\u2014')}
+    </div>
+    <div class="grid g-2">
+      <div class="card"><div class="card-title">Rating mix</div>
+        <div class="chart-wrap" style="height:210px"><canvas id="repRvStars"></canvas></div></div>
+      <div class="card"><div class="card-title">Average rating by hospital</div>
+        <div class="chart-wrap" style="height:210px"><canvas id="repRvBrand"></canvas></div></div>
+    </div>` : '';
+
   const paidBody = `${d.shared && d.shared.meta ? `
     <div class="grid g-3" style="margin-bottom:10px">
       ${kpi('Shared spend', '฿'+num(Math.round(d.shared.meta.spend)))}
@@ -1322,6 +1352,8 @@ function renderReport() {
     ${slide(sel === 'BHQ' ? 'Performance \u00b7 all four hospitals' : `Performance \u00b7 ${sel}`, perfBody, true)}
     ${slide('By hospital', byHospital)}
     ${slide('Search by language', langBody)}
+    ${slide('Google Business Profile', gbpBody)}
+    ${slide('Google reviews', reviewBody)}
     ${slide('Paid media', paidBody.trim())}`;
 
   // Charts must be drawn after the markup is in the DOM.
@@ -1353,6 +1385,23 @@ function renderReport() {
       drawBars('repLangI', L.map(l=>l.label), [
         { label:'Impressions', data: L.map(l=>l.impressions), color:C.b },
       ]);
+    }
+    if (G && G.available) {
+      const gb = G.byBrand;
+      drawBars('repGbpImp', gb.map(b=>b.label), [
+        { label:'Profile views', data: gb.map(b=>b.impressions), color:C.a }]);
+      drawBars('repGbpAct', gb.map(b=>b.label), [
+        { label:'Calls',      data: gb.map(b=>b.calls),      color:C.c },
+        { label:'Directions', data: gb.map(b=>b.directions), color:C.d },
+        { label:'Website',    data: gb.map(b=>b.website),    color:C.b },
+      ]);
+      const rv = G.reviewsAll;
+      if (rv && rv.count) {
+        drawBars('repRvStars', ['5\u2605','4\u2605','3\u2605','2\u2605','1\u2605'],
+          [{ label:'Reviews', data:[rv.stars['5'],rv.stars['4'],rv.stars['3'],rv.stars['2'],rv.stars['1']], color:C.d }]);
+        drawBars('repRvBrand', gb.map(b=>b.label),
+          [{ label:'Average rating', data: gb.map(b=>b.reviews.avg||0), color:C.c }]);
+      }
     }
     const withMeta = d.brands.filter(b=>b.meta);
     if (withMeta.length) drawBars('repMeta', withMeta.map(b=>b.label), [
@@ -4172,7 +4221,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.73.0';
+const CLIENT_BUILD = '3.74.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

@@ -1341,6 +1341,12 @@ async function buildReport(from, to) {
    * split — EN/DE/VN/ID share Latin script and cannot be told apart by
    * characters (§7).
    */
+  // GBP per listing, mapped to brands through the registry. Dental rolls into
+  // BGH and JMS is shared, so the listing count (6) is not the brand count (4).
+  jobs.gbp = windsor("google_my_business",
+    ["location_title", "impressions", "call_clicks", "website_clicks", "direction_requests"], from, to);
+  jobs.gbpReviews = windsor("google_my_business",
+    ["review_create_time", "location_title", "review_star_rating"], from, to);
   jobs.gscLang = gscQuery(["page"], from, to);
   jobs.langSessions = ga4Compat(["landing_page"], ["sessions"], from, to);
   jobs.langKeyEvents = ga4KeyEvents(["landing_page"], from, to);
@@ -1455,9 +1461,58 @@ async function buildReport(from, to) {
     .filter((x) => x.impressions || x.sessions || x.keyEvents)
     .sort((a, b) => b.sessions - a.sessions);
 
+  /**
+   * GBP by brand. Listings do not map one-to-one to hospitals: Dental belongs
+   * to BGH, JMS serves all four and is reported as shared, exactly like the
+   * Meta group accounts. Anything unrecognised goes to `unlisted` and is shown,
+   * never dropped \u2014 the same rule as unmapped ad accounts.
+   */
+  const gBlank = () => ({ impressions: 0, calls: 0, website: 0, directions: 0, listings: [] });
+  const gbpByBrand = {}, gbpShared = gBlank(), gbpUnlisted = gBlank();
+  for (const b of BRANDS) gbpByBrand[b.key] = gBlank();
+  for (const r of (data.gbp || [])) {
+    const owner = brandForGbpListing(r.location_title);
+    const bucket = owner === "SHARED" ? gbpShared : owner ? gbpByBrand[owner] : gbpUnlisted;
+    bucket.impressions += n(r.impressions);
+    bucket.calls += n(r.call_clicks);
+    bucket.website += n(r.website_clicks);
+    bucket.directions += n(r.direction_requests);
+    if (r.location_title && !bucket.listings.includes(r.location_title)) bucket.listings.push(r.location_title);
+  }
+  if (gbpUnlisted.listings.length) {
+    logJson("WARNING", "gbp_listings_unmapped", { listings: gbpUnlisted.listings });
+  }
+
+  // Reviews by star, per brand, plus the month's average.
+  const rvBlank = () => ({ count: 0, stars: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, avg: null });
+  const rvByBrand = {}; for (const b of BRANDS) rvByBrand[b.key] = rvBlank();
+  const rvAll = rvBlank();
+  for (const r of (data.gbpReviews || [])) {
+    const st = starOf(r.review_star_rating); if (!st) continue;
+    const owner = brandForGbpListing(r.location_title);
+    const targets = [rvAll];
+    if (owner && owner !== "SHARED") targets.push(rvByBrand[owner]);
+    for (const t of targets) { t.count += 1; t.stars[st] += 1; }
+  }
+  const finishRv = (t) => {
+    const tot = Object.entries(t.stars).reduce((a, [k, v]) => a + Number(k) * v, 0);
+    t.avg = t.count ? +(tot / t.count).toFixed(2) : null;
+    return t;
+  };
+  finishRv(rvAll); for (const b of BRANDS) finishRv(rvByBrand[b.key]);
+
+  const gbp = {
+    byBrand: BRANDS.map((b) => ({ key: b.key, label: b.label, ...gbpByBrand[b.key], reviews: rvByBrand[b.key] })),
+    shared: gbpShared.listings.length ? gbpShared : null,
+    unlisted: gbpUnlisted.listings.length ? gbpUnlisted : null,
+    reviewsAll: rvAll,
+    available: data.gbp !== null,
+  };
+
   return {
     range: { from, to },
     bhq,
+    gbp,
     languages,
     languagesAvailable: data.gscLang !== null || data.langSessions !== null,
     brands: BRAND_KEYS.map((k) => perBrand[k]),

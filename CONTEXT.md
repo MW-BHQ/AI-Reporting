@@ -646,6 +646,27 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.74.0 — Monthly Reports: Google Business Profile and Reviews.**
+
+Two new slides, four charts, no tables.
+
+**GBP by hospital** — profile views, plus calls / directions / website clicks as
+a grouped bar. Listings do **not** map one-to-one to hospitals: Dental rolls
+into BGH (so BGH shows 2 listings), JMS serves all four and is reported as
+shared exactly like the Meta group accounts, and anything unrecognised lands in
+an **unlisted** bucket that is shown in the note and logged as
+`gbp_listings_unmapped` — same rule as unmapped ad accounts, nothing is dropped
+quietly.
+
+**Google reviews** — count, average and 5-star share, with rating mix and
+average-by-hospital charts. Shared listings count toward the group average but
+not toward any hospital's.
+
+Fixture widened from a single "Bangkok Hospital" row to **all six real listings
+plus one unknown**. With one row, the Dental roll-up, the JMS shared path and
+the unlisted bucket were all unexercised — three mappings that would have
+tested green while doing nothing.
+
 **v3.73.0 — Monthly Reports is chart-first, and the print break is fixed.**
 
 **The break bug:** a `.slide-title` printed alone at the foot of a slide with its

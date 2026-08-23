@@ -239,6 +239,36 @@ function ga4Report(body) {
 global.fetch = async (url, opts = {}) => {
   const u = String(url);
 
+  if (u.includes("connectors.windsor.ai/google_my_business")) {
+    if (process.env.MOCK_FAIL_CONNECTOR === "google_my_business") return jsonRes({ error: "simulated failure" }, 500);
+    const want = (new URL(u)).searchParams.get("fields") || "";
+    /**
+     * All six real listings plus one unknown. Dental must roll into BGH, JMS
+     * must land in SHARED, and the unknown must reach the unlisted bucket \u2014
+     * with a single "Bangkok Hospital" row none of that mapping was exercised.
+     */
+    const LOCS = [
+      "Bangkok Hospital",
+      "Dental Center | Bangkok Hospital",
+      "Bangkok International Hospital (Brain x Bone)",
+      "Bangkok Heart Hospital",
+      "Bangkok Cancer Hospital Wattanosoth",
+      "Japanese Medical Services (JMS) \u30d0\u30f3\u30b3\u30af\u75c5\u9662\u65e5\u672c\u4eba\u5c02\u9580\u30af\u30ea\u30cb\u30c3\u30af",
+      "Some Other Clinic",
+    ];
+    if (want.includes("review_star_rating") && !want.includes("review_comment")) {
+      return jsonRes({ data: LOCS.map((location_title, i) => ({
+        review_create_time: "2026-07-15", location_title, review_star_rating: i % 5 === 0 ? "FOUR" : "FIVE" })) });
+    }
+    if (want.includes("call_clicks")) {
+      return jsonRes({ data: LOCS.map((location_title, i) => ({
+        date: "2026-07-15", location_title,
+        impressions: 1000 * (i + 1), call_clicks: 10 * (i + 1),
+        website_clicks: 5 * (i + 1), direction_requests: 20 * (i + 1),
+        business_bookings: 0 })) });
+    }
+  }
+
   if (u.includes("searchconsole.googleapis.com")) {
     if (process.env.MOCK_FAIL_GSC === "1") return jsonRes({ error: { message: "simulated GSC failure" } }, 500);
     let body = {};
