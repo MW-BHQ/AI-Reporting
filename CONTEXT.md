@@ -646,6 +646,21 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.84.0 — Actions slide.**
+
+The LS "Actions | What we want them to do" page: one row per hospital, sessions
+plus four actions with a conversion rate against **that hospital's own
+sessions**, so BGH at 781K and WSH at 35K stay comparable. Costs no extra query
+— built from the `keyEventBreakdown` each brand already carries.
+
+**Mapping note.** LS shows ค้นหาแพทย์ / นัดหมายแพทย์ / ติดต่อเรา / แพ็กเกจ. The first
+three map cleanly to `find_doctors`, `appointments`, `contact_us`. The fourth is
+rendered here as **`view_item`** — but GA4 also has a separate **`packages`**
+event (36,452 group-wide in July) which is what LS may actually be counting, and
+`packages` is NOT in `KEY_EVENTS`. **Awaiting MW.** If it is the right one, add
+it to `KEY_EVENTS` and swap the mapping; the numbers will not match the LS deck
+until that is settled.
+
 **v3.83.0 — Foreign language versions matrix.**
 
 Hospital × locale, sessions and MoM in every cell — the LS "Foreign Language

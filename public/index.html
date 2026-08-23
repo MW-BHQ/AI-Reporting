@@ -1360,6 +1360,43 @@ function renderReport() {
    * rather than charts: five ranked rows with a delta read faster than four
    * bar charts, and the country names are the point.
    */
+  /**
+   * Actions per hospital, with a conversion rate against that hospital's own
+   * sessions \u2014 the LS "Actions | What we want them to do" page. One row per
+   * hospital, four actions across. Built entirely from keyEventBreakdown, so it
+   * costs no extra query.
+   */
+  const ACTIONS = [
+    { id:'find_doctors', label:'Find doctors' },
+    { id:'appointments', label:'Appointments' },
+    { id:'contact_us',   label:'Contact us' },
+    { id:'view_item',    label:'Packages viewed' },
+  ];
+  const actionsBody = d.brands.some(b=>b.sessions) ? `
+    ${d.brands.map(b=>{
+      const byId = Object.fromEntries((b.keyEventBreakdown||[]).map(k=>[k.id,k.value]));
+      return `<div class="card" style="margin-bottom:10px">
+        <div class="grid g-5" style="align-items:center">
+          <div>
+            <div class="strong" style="font-size:14px">${esc(b.label)}</div>
+            <div style="font-size:22px;font-weight:700;color:var(--violet)">${num(b.sessions)}</div>
+            <div class="lab">sessions</div>
+          </div>
+          ${ACTIONS.map(a=>{
+            const v = byId[a.id]||0;
+            const cr = b.sessions ? (v/b.sessions)*100 : null;
+            return `<div>
+              <div class="lab">${esc(a.label)}</div>
+              <div style="font-size:19px;font-weight:600">${num(v)}</div>
+              <div style="font-size:10.5px;color:var(--faint)">CR ${cr===null?'\u2014':cr.toFixed(1)+'%'}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }).join('')}
+    <div class="note">CR is the action divided by that hospital's own sessions, so the four hospitals are
+    comparable despite very different traffic. "Packages viewed" is the <b>view_item</b> key event.</div>` : '';
+
   const CO = d.countries || [];
   const countryBody = CO.some(c => c.rows.length) ? `
     <div class="grid g-2">
@@ -1504,6 +1541,7 @@ function renderReport() {
   $('viewRoot').innerHTML = `
     <div class="search no-print" style="gap:6px">${['BHQ',...d.brands.map(b=>b.key)].map(k=>chip(k,k)).join('')}</div>
     ${slide('Sessions overview', usersBody, true, true)}
+    ${slide('Actions \u00b7 what we want them to do', actionsBody, false, true)}
     ${slide('Who reaches us from outside Thailand', countryBody, false, true)}
     ${slide(sel === 'BHQ' ? 'Performance \u00b7 all four hospitals' : `Performance \u00b7 ${sel}`, perfBody)}
     ${slide('By hospital', byHospital, false, true)}
@@ -4462,7 +4500,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.83.0';
+const CLIENT_BUILD = '3.84.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
