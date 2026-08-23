@@ -646,6 +646,32 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.81.0 — stage bars add up; print layout and logo fixed.**
+
+**Stages 1 and 2 are now SOURCE-based, not channel-based.** They are platform
+stages, and mapping a platform onto a GA4 channel row only works while that
+channel exists in the data. When it does not — TikTok with no Organic Social row
+— the source counted toward the headline but appeared in no segment, and the bar
+silently failed to add up (41,270 headline against 41,170 of segments). Stage 1
+now segments by Meta / Google Ads / Search / TikTok / Facebook organic / GBP;
+stage 2 by ad clicks / search clicks / post engagements / TikTok engagements /
+profile clicks. Stages 3–5 stay channel-based, where the channel IS the unit.
+**All three bars verified to sum exactly to their headlines.**
+
+Stage 5's off-site actions render as muted grey segments rather than being
+absent from the bar.
+
+Post engagements stay in stage 2 per MW: "at least they are slightly moving
+toward us than they did nothing."
+
+**Print fixes:**
+- **BHQ had no logo entry**, so the most-used export showed none. Added.
+- Two-up grids collapsed to one column in print, which is what split Sessions
+  overview across pages 2 and 3. `g-2-1`, `g-2` and `g-3` are now forced in
+  print, and inline chart heights are overridden to 190px so a chart and its
+  companion card fit one slide.
+- MoM and YoY were stacked badges in a single cell; they are now **two columns**.
+
 **v3.80.0 — the five stages now mean what MW says they mean.**
 
 Stage definitions, set by MW 23 Aug 2026:

@@ -1388,6 +1388,17 @@ async function buildOverview(from, to) {
   return {
     range: { from, to },
     totals, funnel, reachOnly, keyEventBreakdown, offsiteActions,
+    // Per-source figures for the non-GA4 segments of the stage bars.
+    impressionsBySource: {
+      meta: impressions.meta, gads: impressions.gads, gsc: impressions.gsc,
+      fbPage: impressions.fbPage, gmb: impressions.gmb, tiktok: impressions.tiktok,
+      adClicks: addNullable(adClicksByKey.meta, adClicksByKey.gads),
+      searchClicks: adClicksByKey.gsc,
+      fbEngagements: sumOrNull(data.fbOrganic, "post_engagements"),
+      ttEngagements: data.ttOrganic === null ? null
+        : n(sumOrNull(data.ttOrganic, "likes")) + n(sumOrNull(data.ttOrganic, "comments"))
+          + n(sumOrNull(data.ttOrganic, "shares")),
+    },
     ecommerce, forecast, topProducts,
     paid, topAccounts, search, trend,
     unavailable: Object.keys(errors),
