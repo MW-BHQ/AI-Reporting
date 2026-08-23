@@ -825,7 +825,9 @@ async function runJobs(jobs) {
 }
 
 function sumOrNull(rows, field) {
-  if (rows === null) return null;
+  // undefined as well as null: a mistyped job key used to throw
+  // "Cannot read properties of undefined" and 500 the whole endpoint.
+  if (rows === null || rows === undefined) return null;
   return rows.reduce((a, r) => a + n(r[field]), 0);
 }
 
@@ -1048,12 +1050,26 @@ async function buildOverview(from, to) {
       // exist; facebook_organic has no messaging fields), so this undercounts
       // real message volume and the UI must say so rather than imply totality.
       "actions_onsite_conversion_total_messaging_connection"], from, to),
-    gads: windsor("google_ads", ["date", "account_name", "spend", "impressions", "clicks"], from, to),
+    gads: windsor("google_ads",
+      // phone_calls: calls placed straight from the ad, a stage-5 outcome that
+      // never becomes a session.
+      ["date", "account_name", "spend", "impressions", "clicks", "phone_calls"], from, to),
     gsc: gscQuery(["date"], from, to),
     gmb: windsor("google_my_business",
       ["date", "location_title", "impressions", "call_clicks", "website_clicks", "direction_requests",
         "business_bookings"], from, to),
-    fbOrganic: windsor("facebook_organic", ["date", "page_impressions", "post_engagements"], from, to),
+    /**
+     * page_impressions_organic, NOT page_impressions.
+     *
+     * The plain field counts organic + boosted + dark, so adding it to Meta Ads
+     * double-counted every paid impression and the field had to be excluded
+     * from the funnel entirely. The organic-only variant has no overlap, so
+     * Facebook can finally sit IN the Impressions stage: Meta Ads keeps all
+     * paid distribution (boosted and dark alike) and this adds only what
+     * reached people organically. No estimate, no subtraction.
+     */
+    fbOrganic: windsor("facebook_organic",
+      ["date", "page_impressions", "page_impressions_organic", "post_engagements"], from, to),
     ttOrganic: windsor("tiktok_organic", ["date", "video_views", "likes", "comments", "shares"], from, to),
     line: lineWindsor(["date", "message__broadcast", "message__targeting", "message__api_broadcast",
       "message__api_narrowcast", "message__api_multicast", "message__api_push",
@@ -1091,7 +1107,8 @@ async function buildOverview(from, to) {
      * visits, a rate an order of magnitude below every other channel, which
      * read as a failing channel rather than a different unit.
      */
-    fbPage: sumOrNull(data.fbOrganic, "page_impressions"),
+    fbPage: sumOrNull(data.fbOrganic, "page_impressions_organic"),
+    fbPageAll: sumOrNull(data.fbOrganic, "page_impressions"),   // organic + boosted + dark, reference only
     tiktok: sumOrNull(data.ttOrganic, "video_views"),
 
     /**
@@ -1185,82 +1202,75 @@ async function buildOverview(from, to) {
    * the profile. Meta messaging is ad-attributed ONLY — organic Messenger and
    * IG DMs have no metric on any available connector, so this is a floor.
    */
+
+  // Nulls must stay null when BOTH sides are missing, but one side being
+  // unavailable must not read as zero for the other.
+  const bothNull = (a, b) => a === null && b === null;
+  const addNullable = (a, b) => (bothNull(a, b) ? null : n(a) + n(b));
+
   const offsiteActions = {
     gbpCalls: gmbAction("call_clicks"),
     gbpDirections: gmbAction("direction_requests"),
     gbpBookings: gmbAction("business_bookings"),
     gbpWebsiteClicks: gmbAction("website_clicks"),
     metaMessages: sumOrNull(data.meta, "actions_onsite_conversion_total_messaging_connection"),
+    gadsCalls: sumOrNull(data.gads, "phone_calls"),
   };
   offsiteActions.total = ["gbpCalls", "gbpDirections", "gbpBookings", "metaMessages"]
     .every((k) => offsiteActions[k] === null) ? null
     : ["gbpCalls", "gbpDirections", "gbpBookings", "metaMessages"]
       .reduce((a, k) => a + n(offsiteActions[k]), 0);
 
-  /**
-   * TOFU / MOFU / BOFU as BANDS, not a narrowing funnel.
-   *
-   * These stages are NOT subsets of one another across platforms — a patient
-   * who calls from Maps was never a visit — so there is deliberately no
-   * conversion rate between bands. Each row carries its own unit because they
-   * genuinely differ, and summing across them would be meaningless. Rates
-   * appear only inside GA4 (visits -> engaged -> key events), where the
-   * progression is real.
-   */
-  // Declared here because the bands below use it; a const used before its
-  // declaration throws in the temporal dead zone, which node -c will not catch.
-  const bothNull = (a, b) => a === null && b === null;
-  const addNullable = (a, b) => (bothNull(a, b) ? null : n(a) + n(b));
-
-  const totalsVisits = funnel.reduce((a, c) => a + n(c.visits), 0) || null;
-  const totalsEngaged = funnel.reduce((a, c) => a + n(c.engagement), 0) || null;
-
-  const bandRow = (label, value, unit, note) => (value === null || value === undefined)
-    ? null : { label, value, unit, note: note || null };
-  const reach = [
-    bandRow("Meta Ads", impressions.meta, "impressions"),
-    bandRow("Google Ads", impressions.gads, "impressions"),
-    bandRow("Google Search", impressions.gsc, "impressions"),
-    bandRow("Facebook page", impressions.fbPage, "reach", "includes Boost Post, so it overlaps Meta Ads"),
-    bandRow("TikTok", impressions.tiktok, "views", "autoplay counts"),
-    bandRow("Google Business Profile", impressions.gmb, "profile views"),
-  ].filter(Boolean).sort((a, b) => b.value - a.value);
-
-  const engage = [
-    bandRow("Ad clicks", addNullable(adClicksByKey.meta, adClicksByKey.gads), "clicks"),
-    bandRow("Search clicks", adClicksByKey.gsc, "clicks"),
-    bandRow("Facebook post engagements", sumOrNull(data.fbOrganic, "post_engagements"), "engagements"),
-    bandRow("TikTok engagements", data.ttOrganic === null ? null
-      : n(sumOrNull(data.ttOrganic, "likes")) + n(sumOrNull(data.ttOrganic, "comments"))
-        + n(sumOrNull(data.ttOrganic, "shares")), "likes, comments, shares"),
-    bandRow("Profile website clicks", offsiteActions.gbpWebsiteClicks, "clicks"),
-    // The website belongs IN the funnel, not only in the detail below it —
-    // otherwise the Engage band silently omits the largest response channel.
-    bandRow("Website visits", totalsVisits, "sessions"),
-    bandRow("Engaged sessions", totalsEngaged, "sessions", "10s+, 2+ screens, or a key event"),
-  ].filter(Boolean).sort((a, b) => b.value - a.value);
-
-  const act = [
-    bandRow("Website key events", ke.total || null, "events", "appointments, contact, find doctors and the rest"),
-    bandRow("Calls from profile", offsiteActions.gbpCalls, "calls", "never becomes a session"),
-    bandRow("Direction requests", offsiteActions.gbpDirections, "requests", "never becomes a session"),
-    bandRow("New Meta conversations", offsiteActions.metaMessages, "conversations", "ad-attributed only"),
-  ].filter(Boolean).sort((a, b) => b.value - a.value);
-
-  const bands = { reach, engage, act };
-
   const totals = {
     impressions: (() => {
-      const vals = [impressions.meta, impressions.gads, impressions.gsc, impressions.tiktok];
+      /**
+       * TOFU. Everything that put us in front of someone: paid impressions,
+       * organic search impressions, organic social reach, and GBP profile
+       * views. fbPage is the ORGANIC-only figure, so Meta Ads can keep its
+       * boosted and dark distribution without either being counted twice.
+       * Email sends and LINE broadcasts belong here too but have no connector.
+       */
+      const vals = [impressions.meta, impressions.gads, impressions.gsc,
+                    impressions.tiktok, impressions.fbPage, impressions.gmb];
       return vals.every((v) => v === null) ? null : vals.reduce((a, v) => a + n(v), 0);
     })(),
     clicks: (() => {
-      const vals = [adClicksByKey.meta, adClicksByKey.gads, adClicksByKey.gsc];
+      /**
+       * Stage 2 is INTERACTION with what they saw, not only clicks: post
+       * engagements and TikTok engagements are the same intent as a click and
+       * belong here (MW 23 Aug 2026). Still an interim stage — narrower than
+       * reach, wider than a visit.
+       */
+      const vals = [adClicksByKey.meta, adClicksByKey.gads, adClicksByKey.gsc,
+                    sumOrNull(data.fbOrganic, "post_engagements"),
+                    data.ttOrganic === null ? null
+                      : n(sumOrNull(data.ttOrganic, "likes")) + n(sumOrNull(data.ttOrganic, "comments"))
+                        + n(sumOrNull(data.ttOrganic, "shares")),
+                    offsiteActions.gbpWebsiteClicks];
       return vals.every((v) => v === null) ? null : vals.reduce((a, v) => a + n(v), 0);
     })(),
     visits: ga4Available ? funnel.reduce((a, c) => a + c.visits, 0) : null,
     engagement: ga4Available ? funnel.reduce((a, c) => a + c.engagement, 0) : null,
-    keyEvents: ga4Available ? funnel.reduce((a, c) => a + c.keyEvents, 0) : null,
+    /**
+     * BOFU — VALUE ACTIONS, not just website key events (MW 23 Aug 2026).
+     * A call from Maps, a direction request, a message from a Meta ad and a
+     * call placed straight from a Google ad are all outcomes of equal worth
+     * that never become a session, so they belong in this stage rather than
+     * beside the funnel.
+     */
+    keyEvents: (() => {
+      const web = ga4Available ? funnel.reduce((a, c) => a + c.keyEvents, 0) : null;
+      const off = [offsiteActions.gbpCalls, offsiteActions.gbpDirections,
+                   offsiteActions.metaMessages, sumOrNull(data.gads, "phone_calls")];
+      if (web === null && off.every((v) => v === null)) return null;
+      return n(web) + off.reduce((a, v) => a + n(v), 0);
+    })(),
+    keyEventsWeb: ga4Available ? funnel.reduce((a, c) => a + c.keyEvents, 0) : null,
+    keyEventsOffsite: (() => {
+      const off = [offsiteActions.gbpCalls, offsiteActions.gbpDirections,
+                   offsiteActions.metaMessages, sumOrNull(data.gads, "phone_calls")];
+      return off.every((v) => v === null) ? null : off.reduce((a, v) => a + n(v), 0);
+    })(),
   };
 
   /**
@@ -1377,7 +1387,7 @@ async function buildOverview(from, to) {
 
   return {
     range: { from, to },
-    totals, funnel, reachOnly, keyEventBreakdown, offsiteActions, bands,
+    totals, funnel, reachOnly, keyEventBreakdown, offsiteActions,
     ecommerce, forecast, topProducts,
     paid, topAccounts, search, trend,
     unavailable: Object.keys(errors),

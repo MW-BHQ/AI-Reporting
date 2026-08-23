@@ -646,6 +646,37 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.80.0 — the five stages now mean what MW says they mean.**
+
+Stage definitions, set by MW 23 Aug 2026:
+
+| # | Stage | Contains |
+|---|---|---|
+| 1 | **TOFU · Impressions** | paid + organic impressions, social reach, TikTok views, GBP profile views, (email sends, LINE broadcasts — no connector) |
+| 2 | **Interactions** | interaction with what was seen: ad + search clicks, post engagements, TikTok engagements, GBP website clicks. Interim, hence the narrow bar |
+| 3 | **MOFU · Visits** | web visits, where consideration happens |
+| 4 | **Engagement** | on-site engagement, interim before acting |
+| 5 | **BOFU · Value actions** | web key events + GBP calls + GBP directions + Meta ad messages + Google Ads phone calls |
+
+**The Facebook double-count is solved properly.** `page_impressions` counts
+organic + boosted + dark, which is why it had to be excluded. Windsor exposes
+**`page_impressions_organic`** — organic distribution only. Facebook now sits IN
+stage 1 with its organic reach while Meta Ads keeps all paid distribution
+including dark posts. No subtraction, no estimate, no overlap. (`page_impressions`
+is still pulled as `impressions.fbPageAll` for reference.)
+
+`google_ads.phone_calls` — "number of offline phone calls" — supplies the
+call-from-Google-Ads outcome in stage 5.
+
+`totals.keyEvents` is now web + off-site; `keyEventsWeb` and `keyEventsOffsite`
+are exposed separately because **the stacked bar splits by GA4 channel and
+off-site actions have no channel**, so they are in the total but not in the
+segments. The stage note says so.
+
+Removed the dead v3.76 bands block from `server.js`, which also took
+`addNullable` with it — restored. `sumOrNull` now tolerates `undefined` as well
+as null: a mistyped job key used to 500 the whole endpoint rather than degrade.
+
 **v3.79.0 — Overview funnel rolled back; Monthly Reports opens with Sessions overview.**
 
 **ROLLED BACK: the three-band marketing funnel on Overview.** MW: the five-stage

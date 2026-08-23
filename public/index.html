@@ -1580,19 +1580,19 @@ function renderOverview() {
         <div class="stage-head"><span class="stage-name">Impressions</span>
           <span class="stage-val ${isNA(d.totals.impressions)?'na':''}">${num(d.totals.impressions)}</span></div>
         <div class="bar">${seg(impChannels, totalImp, 'impressions')}</div>
-        <div class="stage-note">Meta Ads + Google Ads + Search Console + TikTok views. Units differ per platform, so read this as scale rather than one audited total. Facebook page reach is <b>excluded</b> &mdash; Meta counts Boost Post inside it, so adding it would double-count paid. It and GMB reach are listed separately below.</div>
+        <div class="stage-note"><b>TOFU.</b> Everything that put us in front of someone: Meta Ads, Google Ads, Search Console, TikTok views, Facebook <b>organic</b> reach and Google Business Profile views. Facebook contributes organic distribution only, so Meta Ads keeps its boosted and dark posts without either being counted twice. Units differ per platform, so read this as scale rather than one audited total. Email sends and LINE broadcasts belong here too but have no connector yet.</div>
       </div>
       <div class="stage minor">
-        <div class="stage-head"><span class="stage-name">Ad &amp; search clicks</span>
+        <div class="stage-head"><span class="stage-name">Interactions</span>
           <span class="stage-val ${isNA(d.totals.clicks)?'na':''}">${num(d.totals.clicks)}</span></div>
         <div class="bar">${seg(clickChannels, totalClicks, 'clicks')}</div>
-        <div class="stage-note">Clicks reported by the ad platforms and Search Console. Always higher than visits &mdash; a click that bounces before the tag fires never becomes a session.</div>
+        <div class="stage-note">The interim step between seeing and visiting: ad and search clicks, plus post engagements, TikTok engagements and profile website clicks. Someone acting on what they saw, without necessarily arriving on the site. Always higher than visits &mdash; a click that bounces before the tag fires never becomes a session.</div>
       </div>
       <div class="stage">
         <div class="stage-head"><span class="stage-name">Visits</span>
           <span class="stage-val ${isNA(d.totals.visits)?'na':''}">${num(d.totals.visits)}</span></div>
         <div class="bar">${seg(f, totalVisits, 'visits')}</div>
-        <div class="stage-note">GA4 sessions by default channel group &mdash; one consistent source, so channel comparison here is exact.</div>
+        <div class="stage-note"><b>MOFU.</b> Consideration, and mostly where it happens. GA4 sessions by default channel group &mdash; one consistent source, so channel comparison here is exact.</div>
       </div>
       <div class="stage minor">
         <div class="stage-head"><span class="stage-name">Engagement</span>
@@ -1601,10 +1601,10 @@ function renderOverview() {
         <div class="stage-note">GA4 engaged sessions: over 10 seconds, or 2+ screen views, or containing a key event. A subset of visits, so the funnel narrows properly. Not a key event itself &mdash; a quality signal between arriving and acting.</div>
       </div>
       <div class="stage">
-        <div class="stage-head"><span class="stage-name">Key Events</span>
+        <div class="stage-head"><span class="stage-name">Value actions</span>
           <span class="stage-val ${isNA(d.totals.keyEvents)?'na':''}">${num(d.totals.keyEvents)}</span></div>
         <div class="bar">${seg(f, totalKE, 'keyEvents')}</div>
-        <div class="stage-note">${(d.keyEventBreakdown||[]).map(k=>esc(k.label)).join(', ')||'—'}.</div>
+        <div class="stage-note"><b>BOFU.</b> ${(d.keyEventBreakdown||[]).map(k=>esc(k.label)).join(', ')||'—'}${d.totals.keyEventsOffsite?`, plus <b>${num(d.totals.keyEventsOffsite)}</b> off-site actions worth the same: calls and direction requests from Google Business Profile, messages from Meta ads and calls placed straight from Google ads. The bar splits by GA4 channel, so off-site actions are in the total but not in the segments.`:''}.</div>
       </div>
       <div class="legend">${f.map((c,i)=>`<div><span class="chip" style="background:${colorFor(i)}"></span>${esc(c.channel)}</div>`).join('')}</div>
     </div>
@@ -4347,7 +4347,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.79.0';
+const CLIENT_BUILD = '3.80.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
