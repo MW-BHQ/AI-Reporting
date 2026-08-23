@@ -646,6 +646,27 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.90.1 — HOTFIX "chip is not defined", and boot now renders the report.**
+
+v3.90.0 removed the in-page brand selector but left the row that called it, so
+Monthly Reports showed **"Something went wrong — chip is not defined"**. Parses
+fine, boots fine, throws the moment data arrives.
+
+**Why nothing caught it, and what now does.** `test/boot.js` rendered only the
+EMPTY Overview — it never executed a template against data, so any dead
+identifier inside a renderer was invisible. Boot now serves a **full report
+payload** (every key the renderer reads, one row deep), clicks the BGH nav item,
+and asserts three things: no thrown error, **no "Something went wrong" state**,
+and at least 8 sections rendered. Verified by reintroducing the bug — both new
+checks fail on it and pass once fixed.
+
+Chart.js is a CDN script JSDOM does not load; the app degrades cleanly, so that
+expected console noise is muted in boot rather than left to bury a real error.
+
+This is the fifth client-render break this session. The lesson generalises:
+**parsing a template is not executing it.** Any renderer worth shipping is worth
+running against data in the suite.
+
 **v3.90.0 — Monthly Reports restructured: a nav SECTION with one tab per hospital.**
 
 "Monthly Reports" is now a nav section like META ADS or GOOGLE ADS, with four

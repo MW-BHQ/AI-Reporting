@@ -1671,7 +1671,6 @@ function renderReport() {
     </div>` : ''}`;
 
   $('viewRoot').innerHTML = `
-    <div class="search no-print" style="gap:6px">${['BHQ',...d.brands.map(b=>b.key)].map(k=>chip(k,k)).join('')}</div>
     <!-- ================= MW's sequence ================= -->
     ${slide('Sessions overview \u00b7 BHQ', usersBody, true, true)}
     ${slide('Who reaches us from outside Thailand', countryBody, false, true)}
@@ -4620,7 +4619,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.90.0';
+const CLIENT_BUILD = '3.90.1';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
