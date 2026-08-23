@@ -271,12 +271,22 @@ global.fetch = async (url, opts = {}) => {
       return jsonRes({ data: LOCS.map((location_title, i) => ({
         review_create_time: "2026-07-15", location_title, review_star_rating: i % 5 === 0 ? "FOUR" : "FIVE" })) });
     }
+    if (want.includes("search_keyword")) {
+      return jsonRes({ data: LOCS.flatMap((location_title, i) =>
+        ["\u0e42\u0e23\u0e07\u0e1e\u0e22\u0e32\u0e1a\u0e32\u0e25", "hospital near me", "heart hospital"].map((search_keyword, j) => ({
+          location_title, search_keyword, impressions: 500 - j * 100 + i }))) });
+    }
     if (want.includes("call_clicks")) {
-      return jsonRes({ data: LOCS.map((location_title, i) => ({
-        date: "2026-07-15", location_title,
-        impressions: 1000 * (i + 1), call_clicks: 10 * (i + 1),
-        website_clicks: 5 * (i + 1), direction_requests: 20 * (i + 1),
-        business_bookings: 0 })) });
+      // Two days, so the daily charts have a line rather than a point, and the
+      // four surface metrics so the surface split is actually exercised.
+      return jsonRes({ data: LOCS.flatMap((location_title, i) =>
+        ["2026-07-14", "2026-07-15"].map((date) => ({
+          date, location_title,
+          impressions: 1000 * (i + 1), call_clicks: 10 * (i + 1),
+          website_clicks: 5 * (i + 1), direction_requests: 20 * (i + 1),
+          impressions_mobile_search: 500 * (i + 1), impressions_mobile_maps: 300 * (i + 1),
+          impressions_desktop_search: 150 * (i + 1), impressions_desktop_maps: 50 * (i + 1),
+          business_bookings: 0 }))) });
     }
   }
 

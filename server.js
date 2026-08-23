@@ -419,12 +419,29 @@ async function gscToken() {
  * impressions, ctr and position, matching the Windsor shape so consumers that
  * read `r.clicks` or `r.page` did not change.
  */
-async function gscQuery(dimensions, from, to, { rowLimit = 25000, noBranchFilter = false } = {}) {
+/**
+ * `maxPages` walks Search Console's 25,000-row ceiling with startRow. The
+ * query x page pull that feeds the per-language search pages exceeds one page
+ * comfortably; rows come back sorted by clicks, so a truncated tail costs the
+ * long tail rather than the headline, but paging keeps the buckets honest.
+ */
+async function gscQuery(dimensions, from, to, { rowLimit = 25000, noBranchFilter = false, maxPages = 1 } = {}) {
+  const out = [];
+  for (let page = 0; page < maxPages; page++) {
+    const batch = await gscQueryPage(dimensions, from, to, { rowLimit, noBranchFilter, startRow: page * rowLimit });
+    out.push(...batch);
+    if (batch.length < rowLimit) break;      // last page
+  }
+  return out;
+}
+
+async function gscQueryPage(dimensions, from, to, { rowLimit, noBranchFilter, startRow }) {
   const token = await gscToken();
   const body = {
     startDate: from, endDate: to,
     dimensions,
     rowLimit,
+    startRow,
     dataState: "final",
   };
   if (!noBranchFilter && !BRANCH_FILTER_OFF) {
@@ -448,9 +465,6 @@ async function gscQuery(dimensions, from, to, { rowLimit = 25000, noBranchFilter
     dimensions.forEach((d, i) => { o[d] = (r.keys || [])[i]; });
     return o;
   });
-  if (rows.length >= rowLimit) {
-    logJson("WARNING", "gsc_rows_truncated", { rowLimit, dimensions, from, to });
-  }
   return rows;
 }
 
@@ -1517,9 +1531,28 @@ async function buildReport(from, to) {
   jobs.ttOrganic = windsor("tiktok_organic", ["date", "video_views", "likes", "comments", "shares"], from, to);
   jobs.gbp = windsor("google_my_business",
     ["location_title", "impressions", "call_clicks", "website_clicks", "direction_requests"], from, to);
+  /**
+   * GBP detail per hospital: daily series split by surface, plus the same
+   * window a month back for MoM. Two pulls grouped by location and date, then
+   * bucketed in JS — not eight per-hospital pulls.
+   */
+  const GBP_DAILY_FIELDS = ["date", "location_title", "impressions",
+    "impressions_mobile_search", "impressions_mobile_maps",
+    "impressions_desktop_search", "impressions_desktop_maps",
+    "call_clicks", "website_clicks", "direction_requests"];
+  jobs.gbpDaily = windsor("google_my_business", GBP_DAILY_FIELDS, from, to);
+  jobs.gbpDailyPrev = windsor("google_my_business", GBP_DAILY_FIELDS, cwr.prev.from, cwr.prev.to);
+  jobs.gbpKeywords = windsor("google_my_business", ["location_title", "search_keyword", "impressions"], from, to);
   jobs.gbpReviews = windsor("google_my_business",
     ["review_create_time", "location_title", "review_star_rating"], from, to);
   jobs.gscLang = gscQuery(["page"], from, to);
+  /**
+   * ONE request covering all 40 hospital x language search pages. The page URL
+   * carries both the branch segment and the locale, so query x page buckets
+   * into every combination at once — the alternative was 40 filtered pulls.
+   * Three pages of 25,000 rows; sorted by clicks, so any tail lost is the tail.
+   */
+  jobs.gscQueries = gscQuery(["query", "page"], from, to, { maxPages: 3 });
   jobs.langSessions = ga4Compat(["landing_page"],
     ["sessions", "screen_page_views", "purchase_revenue"], from, to);
   // Previous window, for the MoM on the language matrix. One extra report
@@ -1862,9 +1895,116 @@ async function buildReport(from, to) {
       .filter((x) => x.views || x.sessions)
       .sort((a, b) => b.views - a.views)]));
 
+  /**
+   * Search by hospital x language: TOFU impressions, MOFU visits, BOFU actions
+   * and the top keywords behind them. Visits and actions come free from ALB
+   * (already built for actions-by-language); only the GSC side is new.
+   */
+  const brandFromUrl = (u) => brandForPath(String(u || "").replace(/^https?:\/\/[^/]+/, ""));
+  const localeFromUrl = (u) => localeFromPath(String(u || "").replace(/^https?:\/\/[^/]+/, ""));
+  const SL = {};
+  for (const k of [...BRAND_KEYS, "BHQ"]) {
+    SL[k] = {};
+    for (const l of Object.keys(LOCALES)) SL[k][l] = { impressions: 0, clicks: 0, terms: new Map() };
+  }
+  for (const r of (data.gscQueries || [])) {
+    const bk = brandFromUrl(r.page); if (!bk) continue;
+    const lc = localeFromUrl(r.page); if (!lc || !SL[bk][lc]) continue;
+    for (const t of [SL[bk][lc], SL.BHQ[lc]]) {
+      t.impressions += n(r.impressions);
+      t.clicks += n(r.clicks);
+      const q = String(r.query || "");
+      const e = t.terms.get(q) || { query: q, impressions: 0, clicks: 0, posSum: 0, posN: 0 };
+      e.impressions += n(r.impressions); e.clicks += n(r.clicks);
+      if (r.position) { e.posSum += n(r.position) * n(r.impressions); e.posN += n(r.impressions); }
+      t.terms.set(q, e);
+    }
+  }
+  const searchByLanguage = Object.fromEntries([...BRAND_KEYS, "BHQ"].map((k) => [k,
+    LANG_ORDER.map((l) => {
+      const t = SL[k][l];
+      const cell = (ALB[k] && ALB[k][l]) || { sessions: 0, events: {} };
+      const actions = KEY_EVENTS
+        .map((e) => ({ id: e.name, label: e.label, value: (cell.events || {})[e.name] || 0 }))
+        .filter((e) => e.value > 0).sort((a, b) => b.value - a.value);
+      return {
+        key: l, label: LOCALES[l],
+        impressions: t.impressions, clicks: t.clicks,
+        visits: cell.sessions,
+        actionsTotal: actions.reduce((a, e) => a + e.value, 0),
+        actions,
+        terms: [...t.terms.values()]
+          .map((e) => ({ query: e.query, impressions: e.impressions, clicks: e.clicks,
+            ctr: e.impressions ? e.clicks / e.impressions : null,
+            position: e.posN ? +(e.posSum / e.posN).toFixed(2) : null }))
+          .sort((a, b) => b.clicks - a.clicks).slice(0, 20),
+      };
+    }).filter((x) => x.impressions || x.visits)]));
+
+  /**
+   * GBP detail, the four hospital listings only — Dental and JMS are excluded
+   * here by MW: they roll into the group totals elsewhere but are not hospitals
+   * and do not get their own page.
+   */
+  const gbpDetail = (() => {
+    const blank = () => ({ impressions: 0, mobileSearch: 0, mobileMaps: 0, desktopSearch: 0, desktopMaps: 0,
+      calls: 0, website: 0, directions: 0 });
+    const perBrandDaily = {}, perBrandTot = {}, perBrandPrev = {};
+    for (const b of BRANDS) { perBrandDaily[b.key] = new Map(); perBrandTot[b.key] = blank(); perBrandPrev[b.key] = blank(); }
+    // Only the listing that IS the hospital: b.gbp[0]. Dental sits at gbp[1].
+    const listingOwner = (title) => {
+      const t = norm(title);
+      const b = BRANDS.find((x) => norm(x.gbp[0]) === t);
+      return b ? b.key : null;
+    };
+    const add = (target, r) => {
+      target.impressions += n(r.impressions);
+      target.mobileSearch += n(r.impressions_mobile_search);
+      target.mobileMaps += n(r.impressions_mobile_maps);
+      target.desktopSearch += n(r.impressions_desktop_search);
+      target.desktopMaps += n(r.impressions_desktop_maps);
+      target.calls += n(r.call_clicks);
+      target.website += n(r.website_clicks);
+      target.directions += n(r.direction_requests);
+    };
+    for (const r of (data.gbpDaily || [])) {
+      const k = listingOwner(r.location_title); if (!k) continue;
+      add(perBrandTot[k], r);
+      const day = String(r.date || "").slice(0, 10); if (!day) continue;
+      if (!perBrandDaily[k].has(day)) perBrandDaily[k].set(day, { d: day, ...blank() });
+      add(perBrandDaily[k].get(day), r);
+    }
+    for (const r of (data.gbpDailyPrev || [])) {
+      const k = listingOwner(r.location_title); if (!k) continue;
+      add(perBrandPrev[k], r);
+    }
+    const kw = {};
+    for (const b of BRANDS) kw[b.key] = new Map();
+    for (const r of (data.gbpKeywords || [])) {
+      const k = listingOwner(r.location_title); if (!k) continue;
+      const q = String(r.search_keyword || "").trim(); if (!q) continue;
+      kw[k].set(q, (kw[k].get(q) || 0) + n(r.impressions));
+    }
+    const chg2 = (a, b2) => (b2 && b2 > 0) ? (a - b2) / b2 : null;
+    return BRANDS.map((b) => {
+      const t = perBrandTot[b.key], pv = perBrandPrev[b.key];
+      return {
+        key: b.key, label: b.label, listing: b.gbp[0],
+        totals: t,
+        mom: { impressions: chg2(t.impressions, pv.impressions), calls: chg2(t.calls, pv.calls),
+          website: chg2(t.website, pv.website), directions: chg2(t.directions, pv.directions) },
+        daily: [...perBrandDaily[b.key].values()].sort((x, y) => x.d.localeCompare(y.d)),
+        keywords: [...kw[b.key].entries()].map(([keyword, impressions]) => ({ keyword, impressions }))
+          .sort((x, y) => y.impressions - x.impressions).slice(0, 10),
+      };
+    });
+  })();
+
   return {
     range: { from, to },
     bhq,
+    gbpDetail,
+    searchByLanguage,
     usersOverview,
     countries,
     languageMatrix,

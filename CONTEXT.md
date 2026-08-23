@@ -646,6 +646,51 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.89.0 — Google Business Profile page per hospital.**
+
+One slide each for BGH / BIH / BHT / WSH: impressions, call clicks, website
+clicks and direction requests with MoM; daily **impressions split by surface**
+(Mobile Search, Mobile Maps, Desktop Search, Desktop Maps); daily clicks; and
+the top search keywords for that listing.
+
+**Dental and JMS are excluded from these pages** (MW). They still feed the group
+GBP totals, but they are not hospitals and get no page. `listingOwner()` matches
+`b.gbp[0]` only — the hospital's own listing — so Dental at `b.gbp[1]` is
+deliberately skipped here while continuing to roll into BGH elsewhere.
+
+**Three pulls, not eight.** Grouped by `location_title` × `date` and bucketed in
+JS: current window, previous window for MoM, and keywords. Rule 2 from the
+budget.
+
+Field names confirmed against Windsor rather than guessed — the surface split is
+`impressions_mobile_search` / `impressions_mobile_maps` /
+`impressions_desktop_search` / `impressions_desktop_maps`. An earlier guess of
+`business_impressions_*` does not exist.
+
+**Post clicks** (in the LS page) has no field on this connector and is omitted.
+
+**v3.88.0 — Search pages: 10 languages × 4 hospitals, for ONE extra request.**
+
+The LS Search page — TOFU impressions → MOFU visits → BOFU actions, with the
+keywords behind them — now exists for every language and every hospital.
+
+**Forty pages, one new query.** Visits and actions were already computed in
+`ALB` for actions-by-language. Only the Search Console side was missing, and a
+page URL carries both the branch segment and the locale, so a single
+`query × page` pull buckets into all forty cells. The alternative was 40
+filtered pulls. This is rule 1 from the request budget in §v3.87.1 working as
+intended — check what is already in flight before adding requests.
+
+`gscQuery` gained **paging** (`maxPages`), since `query × page` exceeds Search
+Console's 25,000-row ceiling. Three pages; rows arrive sorted by clicks, so any
+tail lost is the tail rather than the headline.
+
+**Tabs on screen, one slide per language in print.** Each language renders as
+its own `.lang-page`; screen CSS hides all but the active one, print forces them
+all visible with a page break before each. A deck needs forty pages, a browser
+does not want forty stacked sections — same markup serves both, so there is no
+separate export path to keep in sync.
+
 **v3.87.1 — request budget for Monthly Reports.**
 
 Current cost of `/api/report`: **40 jobs — 31 GA4 reports, 1 Search Console,
