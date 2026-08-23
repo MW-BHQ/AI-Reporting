@@ -646,6 +646,42 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.90.0 — Monthly Reports restructured: a nav SECTION with one tab per hospital.**
+
+"Monthly Reports" is now a nav section like META ADS or GOOGLE ADS, with four
+items: **BGH / BIH / BHT / WSH**. The in-page brand selector is gone; the
+hospital comes from the nav, and each report carries that hospital's logo on
+every slide. There is no BHQ tab — the comparison blocks render inside every
+hospital's report, badged "all four hospitals".
+
+**All four nav items share `data-view="report"`** so Monthly Reports stays a
+single permission tab; `data-brand` distinguishes them, and the active-state
+check compares both. Adding four tab ids would have fragmented per-user
+permissions for no benefit.
+
+**Slide order is now MW's sequence:**
+1. Sessions overview · BHQ
+2. Who reaches us from outside Thailand
+3. Actions · what we want them to do · BHQ
+4. Sessions by language · BHQ *(was "Foreign language versions")*
+5. Actions by language · <hospital>
+6. Channels · where do they find us
+7. Search by language · <hospital> — ten pages
+8. Google Business Profile · <hospital>
+
+Anything MW has not yet reviewed sits **below** that sequence: Google reviews,
+Search Ads, Paid media, Organic social. Keep that split — it marks what is
+agreed against what is provisional.
+
+**Removed as redundant** (my inventions, superseded by MW's layout):
+`perfBody` (KPIs + channel/key-event charts — now covered by Sessions overview,
+Channels and Actions), `byHospital` (duplicated the table inside Sessions
+overview), `langBody` (superseded by the Sessions-by-language matrix and the
+per-language Search pages), and the group `gbpBody` (superseded by per-hospital
+GBP pages). Their orphaned `drawBars` calls went with them — checked by
+diffing canvas ids against draw targets, which found six dead calls the eye
+would have missed.
+
 **v3.89.0 — Google Business Profile page per hospital.**
 
 One slide each for BGH / BIH / BHT / WSH: impressions, call clicks, website

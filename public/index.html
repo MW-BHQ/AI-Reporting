@@ -589,9 +589,24 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>
         Overview
       </div>
-      <div class="nav-item" data-view="report">
+
+      <div class="nav-sep"></div>
+      <div class="nav-label">Monthly Reports</div>
+      <div class="nav-item sub" data-view="report" data-brand="BGH">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
-        Monthly Reports
+        BGH
+      </div>
+      <div class="nav-item sub" data-view="report" data-brand="BIH">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+        BIH
+      </div>
+      <div class="nav-item sub" data-view="report" data-brand="BHT">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+        BHT
+      </div>
+      <div class="nav-item sub" data-view="report" data-brand="WSH">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+        WSH
       </div>
 
       <div class="nav-sep"></div>
@@ -901,7 +916,10 @@ setLastMonth();
 function goTo(view, { push = true } = {}) {
   if (!S.me || !S.me.tabs.includes(view)) return;
   S.view = view;
-  document.querySelectorAll('.nav-item').forEach(i => i.classList.toggle('active', i.dataset.view === view));
+  // Four nav items share data-view="report" so they stay one permission tab;
+  // the brand attribute is what distinguishes them.
+  document.querySelectorAll('.nav-item').forEach(i => i.classList.toggle('active',
+    i.dataset.view === view && (!i.dataset.brand || i.dataset.brand === (S.reportBrand || 'BGH'))));
   // Tabs are addressable, so a view can be bookmarked or sent to a colleague.
   if (push && location.hash.slice(1) !== view) location.hash = view;
 }
@@ -914,6 +932,13 @@ window.addEventListener('hashchange', () => {
 document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => {
     if (!S.me || !S.me.tabs.includes(item.dataset.view)) return;
+    // The four Monthly Reports items share one view; the brand selects which
+    // hospital the report renders for, and changing it must drop the cached
+    // render so the new hospital's slides are built.
+    if (item.dataset.brand && item.dataset.brand !== S.reportBrand) {
+      S.reportBrand = item.dataset.brand;
+      S.reportLang = null;
+    }
     goTo(item.dataset.view);
     if (S.view === 'gbp' && !S.gbpInit) {
       // Reviews accumulate slowly, so a year is the useful default window.
@@ -1296,10 +1321,14 @@ function renderReport() {
             $('viewRoot').innerHTML = '<div class="card"><div class="state"><div class="big">Loading\u2026</div></div></div>'; return; }
   // BHQ = the four hospitals summed. Distinct from "group"/B+, which means the
   // 27-branch property — using one word for both is how a deck overstates.
-  const sel = S.reportBrand || 'BHQ';
-  const shown = sel === 'BHQ' ? [d.bhq] : d.brands.filter(b => b.key === sel);
+  /**
+   * The hospital now comes from the nav, not an in-page selector — Monthly
+   * Reports is a section with one tab per hospital. BHQ is no longer a tab:
+   * the comparison blocks render inside every hospital's report, badged.
+   */
+  const sel = S.reportBrand || 'BGH';
 
-  const chip = (k, lab) => `<button class="btn ${sel===k?'btn-primary':'btn-ghost'}" data-brand="${k}">${esc(lab)}</button>`;
+
   /**
    * Hospital logos, shown on every printed slide so a page pulled out of the
    * deck still says which brand it describes. Hosted on the public CDN; if a
@@ -1474,44 +1503,7 @@ function renderReport() {
       </div>`).join('')}
     </div>` : '';
 
-  const head = shown[0] || {};
-  const perfBody = `
-    <div class="grid g-3" style="margin-bottom:10px">
-      ${kpi('Sessions', num(head.sessions))}
-      ${kpi('Engaged', num(head.engaged), head.sessions?((head.engaged/head.sessions)*100).toFixed(1)+'% of sessions':'')}
-      ${kpi('Key events', num(head.keyEvents), head.sessions?((head.keyEvents/head.sessions)*100).toFixed(1)+'% per session':'')}
-    </div>
-    <div class="grid g-2">
-      <div class="card"><div class="card-title">Where they came from</div>
-        <div class="chart-wrap" style="height:230px"><canvas id="repChan"></canvas></div></div>
-      <div class="card"><div class="card-title">What they did</div>
-        <div class="chart-wrap" style="height:230px"><canvas id="repKe"></canvas></div></div>
-    </div>`;
-
-  const byHospital = `
-    <div class="grid g-2">
-      <div class="card"><div class="card-title">Sessions and engagement</div>
-        <div class="chart-wrap" style="height:230px"><canvas id="repBrandSess"></canvas></div></div>
-      <div class="card"><div class="card-title">Key events per session</div>
-        <div class="chart-wrap" style="height:230px"><canvas id="repBrandKe"></canvas></div></div>
-    </div>`;
-
-  const langBody = (d.languages||[]).length ? `
-    <div class="grid g-2">
-      <div class="card"><div class="card-title">Visits and key events</div>
-        <div class="chart-wrap" style="height:250px"><canvas id="repLangV"></canvas></div></div>
-      <div class="card"><div class="card-title">Search impressions and click-through</div>
-        <div class="chart-wrap" style="height:250px"><canvas id="repLangI"></canvas></div></div>
-    </div>
-    <div class="note">Language comes from the URL locale segment, never guessed from script \u2014 English,
-    German, Vietnamese and Indonesian share Latin characters. Impressions and clicks are Search Console;
-    visits and key events are GA4. Each stage is a subset of the one above, so these rates hold.</div>` : '';
-
-  /**
-   * Hospital x locale. A matrix is the right shape here \u2014 forty numbers whose
-   * meaning comes from their position in the grid, which no chart carries
-   * better. Columns are ordered as the LS deck has them.
-   */
+  const head = d.brands.find(b => b.key === sel) || {};
   const LM = d.languageMatrix;
   const langMatrixBody = (LM && LM.available && LM.rows.some(r => r.cells.some(c => c.sessions))) ? `
     <div class="card">
@@ -1588,22 +1580,6 @@ function renderReport() {
     }).join('')}` : '';
 
   const G = d.gbp;
-  const gbpBody = (G && G.available) ? `
-    <div class="grid g-3" style="margin-bottom:10px">
-      ${kpi('Profile views', num(G.byBrand.reduce((a,b)=>a+b.impressions,0) + (G.shared?G.shared.impressions:0)))}
-      ${kpi('Calls', num(G.byBrand.reduce((a,b)=>a+b.calls,0) + (G.shared?G.shared.calls:0)))}
-      ${kpi('Directions', num(G.byBrand.reduce((a,b)=>a+b.directions,0) + (G.shared?G.shared.directions:0)))}
-    </div>
-    <div class="grid g-2">
-      <div class="card"><div class="card-title">Profile views by hospital</div>
-        <div class="chart-wrap" style="height:210px"><canvas id="repGbpImp"></canvas></div></div>
-      <div class="card"><div class="card-title">Actions taken \u2014 no website visit needed</div>
-        <div class="chart-wrap" style="height:210px"><canvas id="repGbpAct"></canvas></div></div>
-    </div>
-    <div class="note">Calls and direction requests never become a website session, so they sit outside the
-    funnel \u2014 for a hospital they are often the better outcome.${G.shared?` JMS serves all four and is not
-    added to any single hospital.`:''}${G.unlisted?` <b>Unmapped listings:</b> ${esc(G.unlisted.listings.join(', '))}.`:''}</div>` : '';
-
   const reviewBody = (G && G.reviewsAll && G.reviewsAll.count) ? `
     <div class="grid g-3" style="margin-bottom:10px">
       ${kpi('Reviews this period', num(G.reviewsAll.count))}
@@ -1696,21 +1672,20 @@ function renderReport() {
 
   $('viewRoot').innerHTML = `
     <div class="search no-print" style="gap:6px">${['BHQ',...d.brands.map(b=>b.key)].map(k=>chip(k,k)).join('')}</div>
-    ${slide('Sessions overview', usersBody, true, true)}
-    ${slide('Actions \u00b7 what we want them to do', actionsBody, false, true)}
+    <!-- ================= MW's sequence ================= -->
+    ${slide('Sessions overview \u00b7 BHQ', usersBody, true, true)}
+    ${slide('Who reaches us from outside Thailand', countryBody, false, true)}
+    ${slide('Actions \u00b7 what we want them to do \u00b7 BHQ', actionsBody, false, true)}
+    ${slide('Sessions by language \u00b7 BHQ', langMatrixBody, false, true)}
     ${slide(`Actions by language \u00b7 ${sel}`, actionsLangBody)}
     ${slide('Channels \u00b7 where do they find us', channelsBody, false, true)}
-    ${slide('Who reaches us from outside Thailand', countryBody, false, true)}
-    ${slide(sel === 'BHQ' ? 'Performance \u00b7 all four hospitals' : `Performance \u00b7 ${sel}`, perfBody)}
-    ${slide('By hospital', byHospital, false, true)}
-    ${slide('Foreign language versions', langMatrixBody, false, true)}
     ${searchPagesBody}
-    ${slide('Search by language', langBody, false, true)}
-    ${slide('Google Business Profile', gbpBody, false, true)}
     ${gbpDetailBody}
+
+    <!-- ===== not yet reviewed by MW: below the agreed sequence ===== -->
     ${slide('Google reviews', reviewBody, false, true)}
-    ${slide('Paid media', paidBody.trim(), false, true)}
     ${slide('Search Ads \u00b7 what people typed', termsBody, false, true)}
+    ${slide('Paid media', paidBody.trim(), false, true)}
     ${slide('Organic social', socialBody, false, true)}`;
 
   // Charts must be drawn after the markup is in the DOM.
@@ -1734,35 +1709,7 @@ function renderReport() {
       });
     }
   }
-  const ch = (head.channels || []).slice(0, 8);
-  drawBars('repChan', ch.map(c => c.channel), [
-    { label:'Sessions', data: ch.map(c=>c.sessions), color:C.a },
-    { label:'Engaged',  data: ch.map(c=>c.engaged),  color:C.b },
-  ]);
-  const ke = (head.keyEventBreakdown || []).slice(0, 9);
-  drawBars('repKe', ke.map(k=>k.label), [{ label:'Key events', data: ke.map(k=>k.value), color:C.c }]);
-
   {
-    const bs = d.brands;
-    drawBars('repBrandSess', bs.map(b=>b.label), [
-      { label:'Sessions', data: bs.map(b=>b.sessions), color:C.a },
-      { label:'Engaged',  data: bs.map(b=>b.engaged),  color:C.b },
-    ]);
-    drawBars('repBrandKe', bs.map(b=>b.label), [
-      { label:'KE per session %', data: bs.map(b=>b.sessions?+((b.keyEvents/b.sessions)*100).toFixed(1):0), color:C.d },
-    ]);
-    const L = d.languages || [];
-    if (L.length) {
-      drawBars('repLangV', L.map(l=>l.label), [
-        { label:'Visits',     data: L.map(l=>l.sessions),  color:C.a },
-        { label:'Key events', data: L.map(l=>l.keyEvents), color:C.c },
-      ]);
-      // Impressions run millions against a CTR of a few percent, so CTR gets
-      // its own chart rather than being flattened to nothing beside them.
-      drawBars('repLangI', L.map(l=>l.label), [
-        { label:'Impressions', data: L.map(l=>l.impressions), color:C.b },
-      ]);
-    }
     GD.forEach((g, gi) => {
       drawChart(`gbpImp${gi}`, g.daily, [
         { label:'Mobile Search',  key:'mobileSearch',  color:'#4B8DF8', axis:'y' },
@@ -1778,13 +1725,6 @@ function renderReport() {
     });
     if (G && G.available) {
       const gb = G.byBrand;
-      drawBars('repGbpImp', gb.map(b=>b.label), [
-        { label:'Profile views', data: gb.map(b=>b.impressions), color:C.a }]);
-      drawBars('repGbpAct', gb.map(b=>b.label), [
-        { label:'Calls',      data: gb.map(b=>b.calls),      color:C.c },
-        { label:'Directions', data: gb.map(b=>b.directions), color:C.d },
-        { label:'Website',    data: gb.map(b=>b.website),    color:C.b },
-      ]);
       const rv = G.reviewsAll;
       if (rv && rv.count) {
         drawBars('repRvStars', ['5\u2605','4\u2605','3\u2605','2\u2605','1\u2605'],
@@ -4680,7 +4620,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.89.0';
+const CLIENT_BUILD = '3.90.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
