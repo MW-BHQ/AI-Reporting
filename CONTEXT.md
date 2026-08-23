@@ -646,6 +646,33 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.76.0 — Overview is a MARKETING funnel now, not a web funnel.**
+
+Off-site reach and action are folded in. The page leads with three bands:
+
+- **Reach** — Meta Ads, Google Ads, Search, Facebook page, TikTok, GBP profile views
+- **Engage** — ad clicks, search clicks, FB post engagements, TikTok engagements, GBP website clicks
+- **Act** — website key events, calls from profile, direction requests, Meta conversations
+
+**The bands are deliberately NOT a narrowing funnel.** Someone who calls from
+Maps was never a visit, and the same person can appear in several channels with
+no way to dedupe, so there is **no conversion rate between bands** and no total
+across them. Every row states its own unit, because a TikTok view, a boosted
+Facebook reach and a search impression are genuinely different things. The
+website funnel keeps its rates and sits below, where each stage really is a
+subset of the one above.
+
+**Channel detail is now purely GA4** — the Impr and Clicks columns are gone.
+Attributing TikTok views to the "Organic Social" channel group produced 96.9K
+impressions against 20.1K visits in a row that also contains Facebook, Instagram
+and LINE traffic: two taxonomies in one row, and a ratio that reads as a
+conversion rate while being nothing of the sort. Platform reach belongs in the
+Reach band; GA4 channel groups belong in the channel table; they should never
+share a row again.
+
+Trap: `addNullable` was declared below its first use by the bands — a `const` in
+the temporal dead zone, which `node -c` does not catch and `test/boot.js` does.
+
 **v3.75.0 — Search Ads terms, organic social, nav order.**
 
 **Monthly Reports moved above the separator**, directly under Overview.

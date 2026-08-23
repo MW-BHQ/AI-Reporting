@@ -1119,15 +1119,18 @@ async function buildOverview(from, to) {
     gsc: sumOrNull(data.gsc, "clicks"),
     tiktok: null,   // TikTok reports no click-out metric at all.
   };
-  const funnel = [...chanMap.values()].map((c) => {
-    const srcKey = IMPRESSION_SOURCE_BY_CHANNEL[norm(c.channel)];
-    return {
-      ...c,
-      impressions: srcKey ? impressions[srcKey] : null,
-      clicks: srcKey ? (adClicksByKey[srcKey] ?? null) : null,
-      impressionSource: srcKey || null,
-    };
-  }).sort((a, b) => b.visits - a.visits);
+  /**
+   * Channel detail is now PURELY GA4 — no platform impressions or clicks.
+   *
+   * Platform reach and GA4 channel groups are different taxonomies. Attributing
+   * TikTok views to "Organic Social" produced 96.9K impressions against 20.1K
+   * visits, in a row that also contains Facebook, Instagram and LINE traffic:
+   * a ratio that looks like a conversion rate and is not one. Platform reach
+   * now lives entirely in the Reach band, where the units can be stated.
+   */
+  const funnel = [...chanMap.values()]
+    .map((c) => ({ ...c }))
+    .sort((a, b) => b.visits - a.visits);
 
   // Platform reach with no GA4 channel equivalent.
   /**
@@ -1167,6 +1170,51 @@ async function buildOverview(from, to) {
     .every((k) => offsiteActions[k] === null) ? null
     : ["gbpCalls", "gbpDirections", "gbpBookings", "metaMessages"]
       .reduce((a, k) => a + n(offsiteActions[k]), 0);
+
+  /**
+   * TOFU / MOFU / BOFU as BANDS, not a narrowing funnel.
+   *
+   * These stages are NOT subsets of one another across platforms — a patient
+   * who calls from Maps was never a visit — so there is deliberately no
+   * conversion rate between bands. Each row carries its own unit because they
+   * genuinely differ, and summing across them would be meaningless. Rates
+   * appear only inside GA4 (visits -> engaged -> key events), where the
+   * progression is real.
+   */
+  // Declared here because the bands below use it; a const used before its
+  // declaration throws in the temporal dead zone, which node -c will not catch.
+  const bothNull = (a, b) => a === null && b === null;
+  const addNullable = (a, b) => (bothNull(a, b) ? null : n(a) + n(b));
+
+  const bandRow = (label, value, unit, note) => (value === null || value === undefined)
+    ? null : { label, value, unit, note: note || null };
+  const reach = [
+    bandRow("Meta Ads", impressions.meta, "impressions"),
+    bandRow("Google Ads", impressions.gads, "impressions"),
+    bandRow("Google Search", impressions.gsc, "impressions"),
+    bandRow("Facebook page", impressions.fbPage, "reach", "includes Boost Post, so it overlaps Meta Ads"),
+    bandRow("TikTok", impressions.tiktok, "views", "autoplay counts"),
+    bandRow("Google Business Profile", impressions.gmb, "profile views"),
+  ].filter(Boolean).sort((a, b) => b.value - a.value);
+
+  const engage = [
+    bandRow("Ad clicks", addNullable(adClicksByKey.meta, adClicksByKey.gads), "clicks"),
+    bandRow("Search clicks", adClicksByKey.gsc, "clicks"),
+    bandRow("Facebook post engagements", sumOrNull(data.fbOrganic, "post_engagements"), "engagements"),
+    bandRow("TikTok engagements", data.ttOrganic === null ? null
+      : n(sumOrNull(data.ttOrganic, "likes")) + n(sumOrNull(data.ttOrganic, "comments"))
+        + n(sumOrNull(data.ttOrganic, "shares")), "likes, comments, shares"),
+    bandRow("Profile website clicks", offsiteActions.gbpWebsiteClicks, "clicks"),
+  ].filter(Boolean).sort((a, b) => b.value - a.value);
+
+  const act = [
+    bandRow("Website key events", ke.total || null, "events", "appointments, contact, find doctors and the rest"),
+    bandRow("Calls from profile", offsiteActions.gbpCalls, "calls", "never becomes a session"),
+    bandRow("Direction requests", offsiteActions.gbpDirections, "requests", "never becomes a session"),
+    bandRow("New Meta conversations", offsiteActions.metaMessages, "conversations", "ad-attributed only"),
+  ].filter(Boolean).sort((a, b) => b.value - a.value);
+
+  const bands = { reach, engage, act };
 
   const totals = {
     impressions: (() => {
@@ -1267,8 +1315,6 @@ async function buildOverview(from, to) {
    * is null (renders as "—"), but one platform down must not read as zero for
    * the other, so an available platform still contributes.
    */
-  const bothNull = (a, b) => a === null && b === null;
-  const addNullable = (a, b) => (bothNull(a, b) ? null : n(a) + n(b));
   const metaSpend = sumOrNull(data.meta, "spend");
   const gadsSpend = sumOrNull(data.gads, "spend");
   const paid = {
@@ -1302,7 +1348,7 @@ async function buildOverview(from, to) {
 
   return {
     range: { from, to },
-    totals, funnel, reachOnly, keyEventBreakdown, offsiteActions,
+    totals, funnel, reachOnly, keyEventBreakdown, offsiteActions, bands,
     ecommerce, forecast, topProducts,
     paid, topAccounts, search, trend,
     unavailable: Object.keys(errors),

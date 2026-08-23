@@ -1463,12 +1463,10 @@ function renderOverview() {
 
   const f = d.funnel || [];
   const totalVisits = f.reduce((a,c)=>a+c.visits,0) || 1;
-  const impChannels = f.filter(c => !isNA(c.impressions));
-  const totalImp = impChannels.reduce((a,c)=>a+c.impressions,0) || 1;
+  // Channel rows are GA4-only since v3.76: platform impressions and clicks moved
+  // to the Reach and Engage bands, where their differing units can be stated.
   const totalKE = f.reduce((a,c)=>a+c.keyEvents,0) || 1;
   const totalEng = f.reduce((a,c)=>a+c.engagement,0) || 1;
-  const clickChannels = f.filter(c => !isNA(c.clicks));
-  const totalClicks = clickChannels.reduce((a,c)=>a+c.clicks,0) || 1;
 
   const seg = (chans, total, key) => chans.map((c,i) => {
     const v = c[key];
@@ -1488,21 +1486,35 @@ function renderOverview() {
   $('viewRoot').innerHTML = `
     ${unavail}
 
-    <!-- funnel -->
-    <div class="card">
-      <h2>Funnel &middot; stacked by channel</h2>
-      <div class="stage">
-        <div class="stage-head"><span class="stage-name">Impressions</span>
-          <span class="stage-val ${isNA(d.totals.impressions)?'na':''}">${num(d.totals.impressions)}</span></div>
-        <div class="bar">${seg(impChannels, totalImp, 'impressions')}</div>
-        <div class="stage-note">Meta Ads + Google Ads + Search Console + TikTok views. Units differ per platform, so read this as scale rather than one audited total. Facebook page reach is <b>excluded</b> — Meta counts ads inside it, so adding it would double-count paid. It and GMB reach are listed separately below.</div>
+    <!-- marketing funnel: three bands, all channels, on-site and off -->
+    ${(() => {
+      const B = d.bands; if (!B) return '';
+      const band = (title, rows, note) => !rows || !rows.length ? '' : `
+        <div class="stage">
+          <div class="stage-head"><span class="stage-name">${title}</span>
+            <span class="stage-val" style="font-weight:400;font-size:12px;color:var(--faint)">${rows.length} sources</span></div>
+          <table><tbody>${rows.map(r=>`<tr>
+            <td class="strong">${esc(r.label)}${r.note?`<div style="font-size:10.5px;color:var(--faint)">${esc(r.note)}</div>`:''}</td>
+            <td class="num" style="font-size:15px;font-weight:600">${num(r.value)}</td>
+            <td style="width:110px;font-size:10.5px;color:var(--faint);padding-left:10px">${esc(r.unit)}</td>
+          </tr>`).join('')}</tbody></table>
+          <div class="stage-note">${note}</div>
+        </div>`;
+      return `<div class="card">
+        <h2>Marketing funnel &middot; every channel, on-site and off</h2>
+        ${band('Reach', B.reach, 'Who saw us. Units differ by platform and are stated per row, so these are not summed \u2014 a TikTok view, a Facebook boosted reach and a search impression are not the same thing.')}
+        ${band('Engage', B.engage, 'Who responded. Includes engagement that never reaches the website at all.')}
+        ${band('Act', B.act, 'What they did. A call or a direction request from Maps never becomes a session \u2014 for a hospital it is often the better outcome, so it belongs here rather than outside the funnel.')}
+        <div class="stage-note" style="border-top:1px solid var(--line);padding-top:10px;margin-top:4px;">
+          <b>These bands are not a narrowing funnel.</b> Someone who calls from Maps was never a visit, and
+          the same person can appear in several channels with no way to dedupe, so there is deliberately no
+          conversion rate between bands. Rates are shown only inside GA4 below, where each stage really is a
+          subset of the one above.</div>
       </div>
-      <div class="stage minor">
-        <div class="stage-head"><span class="stage-name">Ad &amp; search clicks</span>
-          <span class="stage-val ${isNA(d.totals.clicks)?'na':''}">${num(d.totals.clicks)}</span></div>
-        <div class="bar">${seg(clickChannels, totalClicks, 'clicks')}</div>
-        <div class="stage-note">Clicks reported by the ad platforms and Search Console. Always higher than visits &mdash; a click that bounces before the tag fires never becomes a session.</div>
-      </div>
+
+    <div class="card mt">
+      <h2>Website funnel &middot; stacked by channel</h2>`;
+    })()}
       <div class="stage">
         <div class="stage-head"><span class="stage-name">Visits</span>
           <span class="stage-val ${isNA(d.totals.visits)?'na':''}">${num(d.totals.visits)}</span></div>
@@ -1528,16 +1540,14 @@ function renderOverview() {
     <div class="grid g-2-1 mt">
       <div class="card">
         <h2>Channel detail</h2>
-        <table><thead><tr><th>Channel</th><th class="num">Impr</th><th class="num">Clicks</th><th class="num">Visits</th><th class="num">Engaged</th><th class="num">Key events</th><th class="num">KE / visit</th></tr></thead><tbody>
+        <table><thead><tr><th>Channel</th><th class="num">Visits</th><th class="num">Engaged</th><th class="num">Key events</th><th class="num">KE / visit</th></tr></thead><tbody>
         ${f.map((c,i)=>`<tr>
           <td class="strong"><span class="chip" style="background:${colorFor(i)};margin-right:7px;"></span>${esc(c.channel)}</td>
-          <td class="num">${num(c.impressions)}</td>
-          <td class="num">${num(c.clicks)}</td>
           <td class="num">${num(c.visits)}</td>
           <td class="num">${num(c.engagement)}</td>
           <td class="num">${num(c.keyEvents)}</td>
           <td class="num">${c.visits?num((c.keyEvents/c.visits)*100,{pct:true}):'—'}</td>
-        </tr>`).join('')||'<tr><td colspan="7" class="num">no data</td></tr>'}
+        </tr>`).join('')||'<tr><td colspan="5" class="num">no data</td></tr>'}
         </tbody></table>
       </div>
       <div class="card">
@@ -4258,7 +4268,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.75.0';
+const CLIENT_BUILD = '3.76.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
