@@ -1148,9 +1148,15 @@ async function buildOverview(from, to) {
    * a ratio that looks like a conversion rate and is not one. Platform reach
    * now lives entirely in the Reach band, where the units can be stated.
    */
-  const funnel = [...chanMap.values()]
-    .map((c) => ({ ...c }))
-    .sort((a, b) => b.visits - a.visits);
+  const funnel = [...chanMap.values()].map((c) => {
+    const srcKey = IMPRESSION_SOURCE_BY_CHANNEL[norm(c.channel)];
+    return {
+      ...c,
+      impressions: srcKey ? impressions[srcKey] : null,
+      clicks: srcKey ? (adClicksByKey[srcKey] ?? null) : null,
+      impressionSource: srcKey || null,
+    };
+  }).sort((a, b) => b.visits - a.visits);
 
   // Platform reach with no GA4 channel equivalent.
   /**
@@ -1401,6 +1407,23 @@ async function buildReport(from, to) {
       from, to, { segments: [b.segment] });
     jobs[`k_${b.key}`] = ga4KeyEvents(["session_default_channel_group"], from, to, [b.segment]);
   }
+  /**
+   * Year-to-date monthly series per hospital, for the opening slide. The LS
+   * deck shows January onward regardless of the selected range, so the trend is
+   * always readable; only the headline follows the picker.
+   */
+  const ytdFrom = `${String(to).slice(0, 4)}-01-01`;
+  for (const b of BRANDS) {
+    jobs[`m_${b.key}`] = ga4Compat(["date"], ["sessions"], ytdFrom, to, { segments: [b.segment] });
+  }
+  // Same length of window, one month back and one year back, for MoM and YoY.
+  const cwr = comparisonWindows(from, to);
+  jobs.prevAll = ga4Compat([], ["sessions"], cwr.prev.from, cwr.prev.to);
+  jobs.yoyAll = ga4Compat([], ["sessions"], cwr.yoy.from, cwr.yoy.to);
+  for (const b of BRANDS) {
+    jobs[`p_${b.key}`] = ga4Compat([], ["sessions"], cwr.prev.from, cwr.prev.to, { segments: [b.segment] });
+    jobs[`y_${b.key}`] = ga4Compat([], ["sessions"], cwr.yoy.from, cwr.yoy.to, { segments: [b.segment] });
+  }
   jobs.meta = windsor("facebook", ["account_name", "spend", "impressions", "clicks"], from, to);
   /**
    * Search by language: the TOFU/MOFU/BOFU strip repeated ten times in the LS
@@ -1616,9 +1639,44 @@ async function buildReport(from, to) {
     },
   };
 
+  /** Month-by-month sessions per hospital, plus MoM / YoY on the headline. */
+  const monthsSet = new Set();
+  const seriesByBrand = {};
+  for (const b of BRANDS) {
+    const m = new Map();
+    for (const r of (data[`m_${b.key}`] || [])) {
+      const key = String(r.date || "").slice(0, 7); if (!key) continue;
+      monthsSet.add(key);
+      m.set(key, (m.get(key) || 0) + n(r.sessions));
+    }
+    seriesByBrand[b.key] = m;
+  }
+  const months = [...monthsSet].sort();
+  const sumSessions = (rows) => rows === null ? null : rows.reduce((a, r) => a + n(r.sessions), 0);
+  const chg = (now, before) => (before && before > 0) ? (now - before) / before : null;
+
+  const usersOverview = {
+    months,
+    series: BRANDS.map((b) => ({
+      key: b.key, label: b.label,
+      data: months.map((m) => seriesByBrand[b.key].get(m) || 0),
+    })),
+    total: bhq.sessions,
+    mom: chg(bhq.sessions, sumSessions(data.prevAll)),
+    yoy: chg(bhq.sessions, sumSessions(data.yoyAll)),
+    byBrand: BRANDS.map((b) => {
+      const cur = perBrand[b.key].sessions;
+      return { key: b.key, label: b.label, sessions: cur,
+        mom: chg(cur, sumSessions(data[`p_${b.key}`])),
+        yoy: chg(cur, sumSessions(data[`y_${b.key}`])) };
+    }),
+    windows: cwr,
+  };
+
   return {
     range: { from, to },
     bhq,
+    usersOverview,
     gbp,
     searchTerms,
     social,

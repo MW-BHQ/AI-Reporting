@@ -646,6 +646,55 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.79.0 — Overview funnel rolled back; Monthly Reports opens with Sessions overview.**
+
+**ROLLED BACK: the three-band marketing funnel on Overview.** MW: the five-stage
+funnel was already correct. Restored Impressions → Ad & search clicks → Visits →
+Engagement → Key Events, with Impr and Clicks back in the channel table.
+
+The intent behind the bands still stands — off-site action belongs **inside**
+these five stages, not in a parallel structure. **Awaiting MW on which stage
+each off-site action belongs to** before folding them in. Do not re-invent the
+bands.
+
+**New opening slide: Sessions overview**, mirroring the LS "Users Overview" —
+stacked months by hospital on the left, headline with MoM / YoY and a
+per-hospital breakdown on the right. Sessions, not users, so the dashboard keeps
+one unit.
+
+The monthly series runs **year-to-date regardless of the selected range**, as the
+LS deck does, so the trend is always readable; only the headline and the
+comparisons follow the picker. MoM and YoY use `comparisonWindows()`, so both
+compare equal-length windows rather than calendar months.
+
+**v3.78.0 — Monthly Reports exports per hospital, with the hospital's logo.**
+
+**PDF follows the selected tab.** The Performance slide shows the chosen
+hospital; every other slide keeps rendering because those blocks are
+**comparisons or group-level assets with no per-brand split** — by hospital,
+search by language, GBP, reviews, paid media, search terms, social. Each is
+badged **"all four hospitals"** so nobody in a BHT export mistakes them for
+BHT's own numbers.
+
+Screen and print now show the same thing, per MW — no separate export path to
+keep in sync.
+
+**Hospital logo on every printed slide.** `print-head` renders once at the top
+of the document, so a logo there does not appear on pages 2–8. The logo now sits
+in each `.slide-title`, which guarantees one per printed page — a page pulled
+out of the deck still says which brand it belongs to. Served from the public
+CDN, with `onerror` hiding the img rather than leaving a broken icon:
+
+| | |
+|---|---|
+| BGH | `static.bangkokhospital.com/uploads/2025/05/BHQ-Logo.svg` |
+| BIH | `.../2024/03/bih-1.svg` |
+| BHT | `.../2024/04/BHTlogo.svg` |
+| WSH | `.../2024/04/WSHlogo.svg` |
+
+The print masthead now names the hospital too, so an exported file is
+self-identifying.
+
 **v3.77.0 — the website is IN the funnel; Top Products is branch-scoped at last.**
 
 **Engage band gained Website visits and Engaged sessions.** The band listed ad

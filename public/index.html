@@ -467,8 +467,17 @@
      quiet section label; in print it becomes the slide title, so the deck
      tells a story by topic rather than being one long scroll. */
   .slide-title{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
     font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
     color:var(--violet);margin:22px 0 8px;
+  }
+  /* One logo per slide, so every printed page says which hospital it belongs
+     to. print-head only renders once, at the top of the document. */
+  .slide-logo{height:26px;width:auto;flex:none;opacity:.9;}
+  @media print{ .slide-logo{height:30px;opacity:1;} }
+  .all-four{
+    font-size:9.5px;font-weight:600;letter-spacing:.04em;text-transform:none;
+    background:var(--violet-soft);color:var(--violet);padding:2px 8px;border-radius:20px;
   }
   .slide-title:first-child{margin-top:0;}
   @media print{
@@ -1260,14 +1269,69 @@ function renderReport() {
   const shown = sel === 'BHQ' ? [d.bhq] : d.brands.filter(b => b.key === sel);
 
   const chip = (k, lab) => `<button class="btn ${sel===k?'btn-primary':'btn-ghost'}" data-brand="${k}">${esc(lab)}</button>`;
-  const slide = (title, body, first) => body
-    ? `<div class="slide ${first ? '' : 'slide-break'}"><div class="slide-title">${esc(title)}</div>${body}</div>`
+  /**
+   * Hospital logos, shown on every printed slide so a page pulled out of the
+   * deck still says which brand it describes. Hosted on the public CDN; if a
+   * request fails the img is hidden rather than leaving a broken icon.
+   */
+  const LOGOS = {
+    BGH: 'https://static.bangkokhospital.com/uploads/2025/05/BHQ-Logo.svg',
+    BIH: 'https://static.bangkokhospital.com/uploads/2024/03/bih-1.svg',
+    BHT: 'https://static.bangkokhospital.com/uploads/2024/04/BHTlogo.svg',
+    WSH: 'https://static.bangkokhospital.com/uploads/2024/04/WSHlogo.svg',
+  };
+  const logoImg = LOGOS[sel]
+    ? `<img class="slide-logo" src="${LOGOS[sel]}" alt="${esc(sel)}" onerror="this.style.display='none'">`
+    : '';
+
+  /**
+   * `allFour` marks a block that deliberately shows every hospital — a
+   * comparison, or a group-level asset with no per-brand split. Those still
+   * belong in a single-hospital export, badged so nobody mistakes them for that
+   * hospital's own numbers.
+   */
+  const slide = (title, body, first, allFour) => body
+    ? `<div class="slide ${first ? '' : 'slide-break'}"><div class="slide-title">
+         <span>${esc(title)}${allFour ? ' <span class="all-four">all four hospitals</span>' : ''}</span>
+         ${logoImg}
+       </div>${body}</div>`
     : '';
   const C = { a:'#6C5CE7', b:'#4B8DF8', c:'#2E9E6F', d:'#F2A93B', e:'#E8607A' };
   // Local numeric coercion: nulls must contribute 0 to a sum, not NaN.
   const n0 = (v) => (v === null || v === undefined || isNaN(Number(v))) ? 0 : Number(v);
   const kpi = (lab, val, sub) => `<div class="stat"><div class="lab">${lab}</div>
     <div class="val">${val}</div>${sub?`<div class="sub2">${sub}</div>`:''}</div>`;
+
+  /**
+   * Opening slide, mirroring the LS "Users Overview": stacked months on the
+   * left, headline with MoM/YoY and a per-hospital breakdown on the right.
+   * Sessions rather than users \u2014 one unit across the whole dashboard.
+   */
+  const U = d.usersOverview;
+  const dlt = (v) => v === null || v === undefined
+    ? '<span class="dlt none">\u2014</span>'
+    : `<span class="dlt ${v>0.005?'up':(v<-0.005?'down':'flat')}">${changeText(v, Math.abs(v)>=1?0:1)}</span>`;
+  const usersBody = (U && U.months.length) ? `
+    <div class="grid g-2-1">
+      <div class="card">
+        <div class="card-title">Sessions by month</div>
+        <div class="chart-wrap" style="height:270px"><canvas id="repUsers"></canvas></div>
+      </div>
+      <div class="card">
+        <div style="font-size:30px;font-weight:700;color:var(--violet);line-height:1.1">${num(U.total)}</div>
+        <div class="lab" style="margin-bottom:8px">sessions this period</div>
+        <div style="font-size:12px;margin-bottom:12px">MoM ${dlt(U.mom)} &nbsp; YoY ${dlt(U.yoy)}</div>
+        <table><tbody>
+        ${U.byBrand.map(b=>`<tr>
+          <td class="strong">${esc(b.label)}</td>
+          <td class="num" style="font-size:15px;font-weight:600">${num(b.sessions)}</td>
+          <td class="num" style="font-size:10.5px;padding-left:10px">${dlt(b.mom)}<br>${dlt(b.yoy)}</td>
+        </tr>`).join('')}
+        </tbody></table>
+        <div class="note">MoM compares the ${U.windows && U.windows.prev ? 'same length of window one month back' : 'previous window'};
+        YoY the same window last year.</div>
+      </div>
+    </div>` : '';
 
   const head = shown[0] || {};
   const perfBody = `
@@ -1283,7 +1347,7 @@ function renderReport() {
         <div class="chart-wrap" style="height:230px"><canvas id="repKe"></canvas></div></div>
     </div>`;
 
-  const byHospital = sel !== 'BHQ' ? '' : `
+  const byHospital = `
     <div class="grid g-2">
       <div class="card"><div class="card-title">Sessions and engagement</div>
         <div class="chart-wrap" style="height:230px"><canvas id="repBrandSess"></canvas></div></div>
@@ -1291,7 +1355,7 @@ function renderReport() {
         <div class="chart-wrap" style="height:230px"><canvas id="repBrandKe"></canvas></div></div>
     </div>`;
 
-  const langBody = (sel === 'BHQ' && (d.languages||[]).length) ? `
+  const langBody = (d.languages||[]).length ? `
     <div class="grid g-2">
       <div class="card"><div class="card-title">Visits and key events</div>
         <div class="chart-wrap" style="height:250px"><canvas id="repLangV"></canvas></div></div>
@@ -1303,7 +1367,7 @@ function renderReport() {
     visits and key events are GA4. Each stage is a subset of the one above, so these rates hold.</div>` : '';
 
   const G = d.gbp;
-  const gbpBody = (sel === 'BHQ' && G && G.available) ? `
+  const gbpBody = (G && G.available) ? `
     <div class="grid g-3" style="margin-bottom:10px">
       ${kpi('Profile views', num(G.byBrand.reduce((a,b)=>a+b.impressions,0) + (G.shared?G.shared.impressions:0)))}
       ${kpi('Calls', num(G.byBrand.reduce((a,b)=>a+b.calls,0) + (G.shared?G.shared.calls:0)))}
@@ -1319,7 +1383,7 @@ function renderReport() {
     funnel \u2014 for a hospital they are often the better outcome.${G.shared?` JMS serves all four and is not
     added to any single hospital.`:''}${G.unlisted?` <b>Unmapped listings:</b> ${esc(G.unlisted.listings.join(', '))}.`:''}</div>` : '';
 
-  const reviewBody = (sel === 'BHQ' && G && G.reviewsAll && G.reviewsAll.count) ? `
+  const reviewBody = (G && G.reviewsAll && G.reviewsAll.count) ? `
     <div class="grid g-3" style="margin-bottom:10px">
       ${kpi('Reviews this period', num(G.reviewsAll.count))}
       ${kpi('Average rating', G.reviewsAll.avg ?? '\u2014')}
@@ -1333,7 +1397,7 @@ function renderReport() {
     </div>` : '';
 
   const T = d.searchTerms || [];
-  const termsBody = (sel === 'BHQ' && T.length) ? `
+  const termsBody = T.length ? `
     <div class="grid g-2">
       <div class="card"><div class="card-title">Top search terms by clicks</div>
         <div class="chart-wrap" style="height:300px"><canvas id="repTerms"></canvas></div></div>
@@ -1344,7 +1408,7 @@ function renderReport() {
     diverge, and the query is what tells you what patients are looking for.</div>` : '';
 
   const SO = d.social || {};
-  const socialBody = (sel === 'BHQ' && (SO.facebook || SO.tiktok)) ? `
+  const socialBody = (SO.facebook || SO.tiktok) ? `
     <div class="grid g-4" style="margin-bottom:10px">
       ${SO.facebook ? kpi('Facebook reach', num(SO.facebook.reach), 'includes Boost Post') : ''}
       ${SO.facebook ? kpi('Post engagements', num(SO.facebook.engagements)) : ''}
@@ -1375,16 +1439,37 @@ function renderReport() {
 
   $('viewRoot').innerHTML = `
     <div class="search no-print" style="gap:6px">${['BHQ',...d.brands.map(b=>b.key)].map(k=>chip(k,k)).join('')}</div>
-    ${slide(sel === 'BHQ' ? 'Performance \u00b7 all four hospitals' : `Performance \u00b7 ${sel}`, perfBody, true)}
-    ${slide('By hospital', byHospital)}
-    ${slide('Search by language', langBody)}
-    ${slide('Google Business Profile', gbpBody)}
-    ${slide('Google reviews', reviewBody)}
-    ${slide('Paid media', paidBody.trim())}
-    ${slide('Search Ads \u00b7 what people typed', termsBody)}
-    ${slide('Organic social', socialBody)}`;
+    ${slide('Sessions overview', usersBody, true, true)}
+    ${slide(sel === 'BHQ' ? 'Performance \u00b7 all four hospitals' : `Performance \u00b7 ${sel}`, perfBody)}
+    ${slide('By hospital', byHospital, false, true)}
+    ${slide('Search by language', langBody, false, true)}
+    ${slide('Google Business Profile', gbpBody, false, true)}
+    ${slide('Google reviews', reviewBody, false, true)}
+    ${slide('Paid media', paidBody.trim(), false, true)}
+    ${slide('Search Ads \u00b7 what people typed', termsBody, false, true)}
+    ${slide('Organic social', socialBody, false, true)}`;
 
   // Charts must be drawn after the markup is in the DOM.
+  if (U && U.months.length && window.Chart) {
+    const el = document.getElementById('repUsers');
+    if (el) {
+      if (el._chart) el._chart.destroy();
+      const cols = { BGH:'#1B3A7A', BIH:'#9AA3B2', BHT:'#C2185B', WSH:'#F2882B' };
+      el._chart = new Chart(el.getContext('2d'), {
+        type:'bar',
+        data:{ labels:U.months, datasets:U.series.map(sx=>({
+          label:sx.label, data:sx.data, backgroundColor:cols[sx.key]||C.a, borderRadius:2 })) },
+        options:{ responsive:true, maintainAspectRatio:false, animation:false,
+          // Stacked: the months chart is about the group total AND its mix.
+          scales:{ x:{ stacked:true, grid:{display:false},
+                       ticks:{color:'#8A94AD',font:{family:'Poppins',size:9}} },
+                   y:{ stacked:true, beginAtZero:true, grid:{color:'#EEF1F8'},
+                       ticks:{color:'#8A94AD',font:{family:'Poppins',size:9},
+                              callback:(v)=> v>=1e6?(v/1e6)+'M' : v>=1e3?(v/1e3)+'K' : v} } },
+          plugins:{ legend:{ labels:{color:'#4C5878',font:{family:'Poppins',size:10},usePointStyle:true,boxWidth:7} } } },
+      });
+    }
+  }
   const ch = (head.channels || []).slice(0, 8);
   drawBars('repChan', ch.map(c => c.channel), [
     { label:'Sessions', data: ch.map(c=>c.sessions), color:C.a },
@@ -1393,7 +1478,7 @@ function renderReport() {
   const ke = (head.keyEventBreakdown || []).slice(0, 9);
   drawBars('repKe', ke.map(k=>k.label), [{ label:'Key events', data: ke.map(k=>k.value), color:C.c }]);
 
-  if (sel === 'BHQ') {
+  {
     const bs = d.brands;
     drawBars('repBrandSess', bs.map(b=>b.label), [
       { label:'Sessions', data: bs.map(b=>b.sessions), color:C.a },
@@ -1463,8 +1548,10 @@ function renderOverview() {
 
   const f = d.funnel || [];
   const totalVisits = f.reduce((a,c)=>a+c.visits,0) || 1;
-  // Channel rows are GA4-only since v3.76: platform impressions and clicks moved
-  // to the Reach and Engage bands, where their differing units can be stated.
+  const impChannels = f.filter(c => !isNA(c.impressions));
+  const totalImp = impChannels.reduce((a,c)=>a+c.impressions,0) || 1;
+  const clickChannels = f.filter(c => !isNA(c.clicks));
+  const totalClicks = clickChannels.reduce((a,c)=>a+c.clicks,0) || 1;
   const totalKE = f.reduce((a,c)=>a+c.keyEvents,0) || 1;
   const totalEng = f.reduce((a,c)=>a+c.engagement,0) || 1;
 
@@ -1486,37 +1573,23 @@ function renderOverview() {
   $('viewRoot').innerHTML = `
     ${unavail}
 
-    <!-- marketing funnel: three bands, all channels, on-site and off -->
-    ${(() => {
-      const B = d.bands; if (!B) return '';
-      const band = (title, rows, note) => !rows || !rows.length ? '' : `
-        <div class="stage">
-          <div class="stage-head"><span class="stage-name">${title}</span>
-            <span class="stage-val" style="font-weight:400;font-size:12px;color:var(--faint)">${rows.length} sources</span></div>
-          <table><tbody>${rows.map(r=>`<tr>
-            <td class="strong">${esc(r.label)}${r.note?`<div style="font-size:10.5px;color:var(--faint)">${esc(r.note)}</div>`:''}</td>
-            <td class="num" style="font-size:15px;font-weight:600">${num(r.value)}</td>
-            <td style="width:110px;font-size:10.5px;color:var(--faint);padding-left:10px">${esc(r.unit)}</td>
-          </tr>`).join('')}</tbody></table>
-          <div class="stage-note">${note}</div>
-        </div>`;
-      return `<div class="card">
-        <h2>Marketing funnel &middot; every channel, on-site and off</h2>
-        ${band('Reach', B.reach, 'Who saw us. Units differ by platform and are stated per row, so these are not summed \u2014 a TikTok view, a Facebook boosted reach and a search impression are not the same thing.')}
-        ${band('Engage', B.engage, 'Who responded. Includes engagement that never reaches the website at all.')}
-        ${band('Act', B.act, 'What they did. A call or a direction request from Maps never becomes a session \u2014 for a hospital it is often the better outcome, so it belongs here rather than outside the funnel.')}
-        <div class="stage-note" style="border-top:1px solid var(--line);padding-top:10px;margin-top:4px;">
-          <b>These bands are not a narrowing funnel.</b> Someone who calls from Maps was never a visit, and
-          the same person can appear in several channels with no way to dedupe, so there is deliberately no
-          conversion rate between bands. Rates are shown only inside GA4 below, where each stage really is a
-          subset of the one above.</div>
-      </div>
-
-    <div class="card mt">
-      <h2>Website funnel &middot; stacked by channel</h2>`;
-    })()}
+    <!-- funnel -->
+    <div class="card">
+      <h2>Funnel &middot; stacked by channel</h2>
       <div class="stage">
-        <div class="stage-head"><span class="stage-name">Web visits</span>
+        <div class="stage-head"><span class="stage-name">Impressions</span>
+          <span class="stage-val ${isNA(d.totals.impressions)?'na':''}">${num(d.totals.impressions)}</span></div>
+        <div class="bar">${seg(impChannels, totalImp, 'impressions')}</div>
+        <div class="stage-note">Meta Ads + Google Ads + Search Console + TikTok views. Units differ per platform, so read this as scale rather than one audited total. Facebook page reach is <b>excluded</b> &mdash; Meta counts Boost Post inside it, so adding it would double-count paid. It and GMB reach are listed separately below.</div>
+      </div>
+      <div class="stage minor">
+        <div class="stage-head"><span class="stage-name">Ad &amp; search clicks</span>
+          <span class="stage-val ${isNA(d.totals.clicks)?'na':''}">${num(d.totals.clicks)}</span></div>
+        <div class="bar">${seg(clickChannels, totalClicks, 'clicks')}</div>
+        <div class="stage-note">Clicks reported by the ad platforms and Search Console. Always higher than visits &mdash; a click that bounces before the tag fires never becomes a session.</div>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-name">Visits</span>
           <span class="stage-val ${isNA(d.totals.visits)?'na':''}">${num(d.totals.visits)}</span></div>
         <div class="bar">${seg(f, totalVisits, 'visits')}</div>
         <div class="stage-note">GA4 sessions by default channel group &mdash; one consistent source, so channel comparison here is exact.</div>
@@ -1540,14 +1613,16 @@ function renderOverview() {
     <div class="grid g-2-1 mt">
       <div class="card">
         <h2>Channel detail</h2>
-        <table><thead><tr><th>Channel</th><th class="num">Visits</th><th class="num">Engaged</th><th class="num">Key events</th><th class="num">KE / visit</th></tr></thead><tbody>
+        <table><thead><tr><th>Channel</th><th class="num">Impr</th><th class="num">Clicks</th><th class="num">Visits</th><th class="num">Engaged</th><th class="num">Key events</th><th class="num">KE / visit</th></tr></thead><tbody>
         ${f.map((c,i)=>`<tr>
           <td class="strong"><span class="chip" style="background:${colorFor(i)};margin-right:7px;"></span>${esc(c.channel)}</td>
+          <td class="num">${num(c.impressions)}</td>
+          <td class="num">${num(c.clicks)}</td>
           <td class="num">${num(c.visits)}</td>
           <td class="num">${num(c.engagement)}</td>
           <td class="num">${num(c.keyEvents)}</td>
           <td class="num">${c.visits?num((c.keyEvents/c.visits)*100,{pct:true}):'—'}</td>
-        </tr>`).join('')||'<tr><td colspan="5" class="num">no data</td></tr>'}
+        </tr>`).join('')||'<tr><td colspan="7" class="num">no data</td></tr>'}
         </tbody></table>
       </div>
       <div class="card">
@@ -4236,7 +4311,9 @@ $('printBtn').addEventListener('click', () => {
   const isMonthly = S.view === 'ecommonthly';
   const ph = document.querySelector('.print-head');
   if (ph) ph.style.display = isMonthly ? 'none' : '';
-  $('printTitle').textContent = isMonthly ? '' : t + extra;
+  // Name the hospital in the masthead so an exported deck is self-identifying.
+  const brandTag = S.view === 'report' ? ` \u2014 ${S.reportBrand || 'BHQ'}` : '';
+  $('printTitle').textContent = isMonthly ? '' : t + extra + brandTag;
   $('printRange').textContent = `${$('from').value} to ${$('to').value} · generated ${new Date().toLocaleString()}`;
   window.print();
 });
@@ -4270,7 +4347,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.77.0';
+const CLIENT_BUILD = '3.79.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
