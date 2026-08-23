@@ -161,6 +161,10 @@
   .g-4{grid-template-columns:repeat(4,1fr);}
   .g-5{grid-template-columns:repeat(5,1fr);}
   .g-3{grid-template-columns:repeat(3,1fr);}
+  /* .g-2 existed only inside the print block, so on screen every two-up grid
+     silently collapsed to a single column — the countries cards stacked full
+     width instead of sitting 2x2. */
+  .g-2{grid-template-columns:repeat(2,1fr);}
   .g-2-1{grid-template-columns:1.6fr 1fr;}
   .mt{margin-top:14px;}
 
@@ -469,8 +473,9 @@
   .slide-title{
     display:flex;align-items:center;justify-content:space-between;gap:12px;
     font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
-    color:var(--violet);margin:22px 0 8px;
+    color:var(--violet);margin:34px 0 10px;
   }
+  .slide + .slide{margin-top:6px;}
   /* One logo per slide, so every printed page says which hospital it belongs
      to. print-head only renders once, at the top of the document. */
   .slide-logo{height:26px;width:auto;flex:none;opacity:.9;}
@@ -542,7 +547,7 @@
     a{color:#1B2340!important;text-decoration:none!important;}
   }
 
-  @media(max-width:1080px){.g-5,.g-4{grid-template-columns:repeat(2,1fr);}.g-2-1,.g-3{grid-template-columns:1fr;}}
+  @media(max-width:1080px){.g-5,.g-4{grid-template-columns:repeat(2,1fr);}.g-2-1,.g-3,.g-2{grid-template-columns:1fr;}}
   @media(max-width:760px){
     .shell{flex-direction:column;}
     .rail{width:auto;height:auto;position:static;flex-direction:row;align-items:center;gap:14px;overflow-x:auto;}
@@ -1403,6 +1408,28 @@ function renderReport() {
     German, Vietnamese and Indonesian share Latin characters. Impressions and clicks are Search Console;
     visits and key events are GA4. Each stage is a subset of the one above, so these rates hold.</div>` : '';
 
+  /**
+   * Hospital x locale. A matrix is the right shape here \u2014 forty numbers whose
+   * meaning comes from their position in the grid, which no chart carries
+   * better. Columns are ordered as the LS deck has them.
+   */
+  const LM = d.languageMatrix;
+  const langMatrixBody = (LM && LM.available && LM.rows.some(r => r.cells.some(c => c.sessions))) ? `
+    <div class="card">
+      <table class="roomy"><thead><tr><th></th>
+        ${LM.locales.map(l=>`<th class="num"><div style="font-size:13px;font-weight:700;color:var(--ink)">${esc(l.code)}</div>
+          <div style="font-size:9.5px;font-weight:400;color:var(--faint)">${esc(l.label)}</div></th>`).join('')}
+      </tr></thead><tbody>
+      ${LM.rows.map(r=>`<tr><td class="strong">${esc(r.label)}</td>
+        ${r.cells.map(c=>`<td class="num">
+          <div style="font-size:14px;font-weight:600">${c.sessions?num(c.sessions):'\u2014'}</div>
+          <div style="font-size:9.5px">${c.sessions?dlt(c.mom):''}</div></td>`).join('')}
+      </tr>`).join('')}
+      </tbody></table>
+      <div class="note">Sessions by the locale segment of the landing page, per hospital. A page carries both
+      facts \u2014 which hospital and which language \u2014 so this is one query, not forty.</div>
+    </div>` : '';
+
   const G = d.gbp;
   const gbpBody = (G && G.available) ? `
     <div class="grid g-3" style="margin-bottom:10px">
@@ -1480,6 +1507,7 @@ function renderReport() {
     ${slide('Who reaches us from outside Thailand', countryBody, false, true)}
     ${slide(sel === 'BHQ' ? 'Performance \u00b7 all four hospitals' : `Performance \u00b7 ${sel}`, perfBody)}
     ${slide('By hospital', byHospital, false, true)}
+    ${slide('Foreign language versions', langMatrixBody, false, true)}
     ${slide('Search by language', langBody, false, true)}
     ${slide('Google Business Profile', gbpBody, false, true)}
     ${slide('Google reviews', reviewBody, false, true)}
@@ -4434,7 +4462,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.82.0';
+const CLIENT_BUILD = '3.83.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

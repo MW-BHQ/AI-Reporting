@@ -646,6 +646,47 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.83.0 — Foreign language versions matrix.**
+
+Hospital × locale, sessions and MoM in every cell — the LS "Foreign Language
+Versions" page. Forty numbers whose meaning comes from their position in the
+grid, so this stays a matrix rather than becoming charts.
+
+**Built from one extra query, not eight.** A landing page carries both facts —
+which hospital (the branch segment) and which language (the locale segment) —
+so the existing `langSessions` pull fills all forty cells; only a
+previous-window copy had to be added for MoM. `brandForPath()` reads the segment
+straight out of the path via `brandBySegment()`, so it stays tied to the BRANDS
+registry rather than duplicating the mapping.
+
+Column order is taken from the LS deck (TH EN JA ZH MY KM AR VN DE ID) rather
+than the `LOCALES` declaration order, so the two can be read side by side during
+the changeover.
+
+Fixtures gained `/en/` and `/ja/` in-scope pages: with only `/th/` present the
+matrix filled a single column and a broken locale split would have looked
+identical to a correct one.
+
+**v3.82.1 — `.g-2` never existed on screen.**
+
+It was defined **only inside the `@media print` block**, so every two-up grid
+built with `grid g-2` collapsed to a single column in the browser — the
+countries cards stacked full width instead of sitting 2×2, and the same applied
+to the GBP, reviews, search-terms and language slides. Now defined in the base
+stylesheet, and added to the 1080px breakpoint so it collapses like its
+siblings.
+
+Section spacing increased (`.slide-title` margin 22px → 34px) so topics read as
+separate blocks rather than one scroll.
+
+**Logo mapping, confirmed by MW — counter-intuitive on purpose:**
+| Tab | File | Which mark |
+|---|---|---|
+| **BHQ** | `2024/04/BGHlogo.svg` | plain, no sub-text |
+| **BGH** | `2025/05/BHQ-Logo.svg` | the one carrying HEADQUARTERS |
+
+The filenames are the reverse of the tabs they serve. Do not "fix" this.
+
 **v3.82.0 — countries slide; print fills the page; BHQ logo corrected.**
 
 **New slide: "Who reaches us from outside Thailand"** — four hospitals, top five

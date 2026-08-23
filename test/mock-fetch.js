@@ -96,6 +96,10 @@ const GA4_PAGES = [
   // with only bangkok-heart present, three of four brands read zero and a
   // broken filter would look identical to correct output.
   "/th/bangkok/page/a",
+  // A second locale in scope, so the language matrix is exercised across
+  // columns rather than only ever filling the Thai one.
+  "/en/bangkok/page/a-en",
+  "/ja/bangkok-heart/page/a-ja",
   "/th/bangkok-bone-brain/page/b",
   "/th/bangkok-cancer/page/c",
   "/th/bangkok-heart/package/x",

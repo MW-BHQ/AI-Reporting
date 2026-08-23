@@ -1481,6 +1481,10 @@ async function buildReport(from, to) {
     ["review_create_time", "location_title", "review_star_rating"], from, to);
   jobs.gscLang = gscQuery(["page"], from, to);
   jobs.langSessions = ga4Compat(["landing_page"], ["sessions"], from, to);
+  // Previous window, for the MoM on the language matrix. One extra report
+  // rather than eight: the landing page carries BOTH the brand segment and the
+  // locale, so a single pull buckets into all 40 cells.
+  jobs.langSessionsPrev = ga4Compat(["landing_page"], ["sessions"], cwr.prev.from, cwr.prev.to);
   jobs.langKeyEvents = ga4KeyEvents(["landing_page"], from, to);
   const { data } = await runJobs(jobs);
 
@@ -1721,11 +1725,50 @@ async function buildReport(from, to) {
     return { key: b.key, label: b.label, rows };
   });
 
+  /**
+   * Foreign Language Versions: hospital x locale, sessions and MoM.
+   * A landing page carries both facts — the branch segment and the locale — so
+   * one pull fills all forty cells.
+   */
+  const brandForPath = (path) => {
+    const m = String(path || "").match(/^\/(?:[a-z]{2}\/)?([a-z-]+)(?:[/?]|$)/i);
+    if (!m) return null;
+    const b = brandBySegment(norm(m[1]));
+    return b ? b.key : null;
+  };
+  const langCell = {};
+  for (const b of BRANDS) { langCell[b.key] = {}; for (const l of Object.keys(LOCALES)) langCell[b.key][l] = { sessions: 0, prev: 0 }; }
+  const fillLang = (rows, field) => {
+    for (const r of (rows || [])) {
+      const bk = brandForPath(r.landing_page); if (!bk) continue;
+      const lc = localeFromPath(r.landing_page); if (!lc || !langCell[bk][lc]) continue;
+      langCell[bk][lc][field] += n(r.sessions);
+    }
+  };
+  fillLang(data.langSessions, "sessions");
+  fillLang(data.langSessionsPrev, "prev");
+
+  // Column order taken from the LS deck rather than the LOCALES declaration,
+  // so the two can be read side by side during the changeover.
+  const LANG_ORDER = ["th", "en", "ja", "zh", "my", "km", "ar", "vn", "de", "id"];
+  const languageMatrix = {
+    locales: LANG_ORDER.map((k) => ({ code: k.toUpperCase(), label: LOCALES[k], key: k })),
+    rows: BRANDS.map((b) => ({
+      key: b.key, label: b.label,
+      cells: LANG_ORDER.map((l) => {
+        const c = langCell[b.key][l];
+        return { key: l, sessions: c.sessions, mom: c.prev > 0 ? (c.sessions - c.prev) / c.prev : null };
+      }),
+    })),
+    available: data.langSessions !== null,
+  };
+
   return {
     range: { from, to },
     bhq,
     usersOverview,
     countries,
+    languageMatrix,
     gbp,
     searchTerms,
     social,
