@@ -646,6 +646,30 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.73.0 — Monthly Reports is chart-first, and the print break is fixed.**
+
+**The break bug:** a `.slide-title` printed alone at the foot of a slide with its
+content on the next page. Cards carry `break-inside:avoid`, so a card that could
+not fit the remaining height moved on and abandoned its heading. Fixed with
+`break-after:avoid` on `.slide-title`, plus `.slide{break-inside:auto}` so the
+slide is the unit that flows while its cards stay whole.
+
+**Charts replace tables.** The tab now renders **7 charts and 0 tables** — a
+20–30 page deck is skimmed, not read, so a number that needs a row scan is a
+number nobody sees. New `drawBars()` helper covers the categorical comparisons a
+board deck is mostly made of; `drawChart()` remains for time series. Horizontal
+by default, because category labels here are long and multilingual and rotated
+labels are unreadable at slide size.
+
+Per slide: **Performance** — 3 KPIs, channels, key events. **By hospital** —
+sessions/engaged, and KE-per-session as a rate. **Search by language** — visits
+with key events, and impressions separately, because impressions run to millions
+against a CTR of a few percent and flatten to nothing if plotted together.
+**Paid media** — shared KPIs and spend by hospital.
+
+Animation is disabled on these charts: print captures the canvas as it stands,
+and a mid-animation canvas prints half-drawn.
+
 **v3.72.0 — Monthly Reports laid out as topic slides for print.**
 
 The tab is now structured as **topic slides**, not one scroll. Each topic gets a

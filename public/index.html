@@ -473,7 +473,14 @@
   .slide-title:first-child{margin-top:0;}
   @media print{
     .slide-title{font-size:13px;color:#1B2340;margin:0 0 10px;
-      border-bottom:2px solid #1B2340;padding-bottom:6px;}
+      border-bottom:2px solid #1B2340;padding-bottom:6px;
+      /* Without this the heading prints alone at the foot of a slide: the card
+         below carries break-inside:avoid, so if it cannot fit the remaining
+         height it moves on and abandons its title. */
+      break-after:avoid;page-break-after:avoid;}
+    /* The slide is the unit that breaks, not the cards inside it. */
+    .slide{break-inside:auto;}
+    .slide > .card{break-inside:avoid;}
   }
   @media print{
     /* 13.333in x 7.5in is the standard 16:9 slide canvas. */
@@ -1253,90 +1260,105 @@ function renderReport() {
   const shown = sel === 'BHQ' ? [d.bhq] : d.brands.filter(b => b.key === sel);
 
   const chip = (k, lab) => `<button class="btn ${sel===k?'btn-primary':'btn-ghost'}" data-brand="${k}">${esc(lab)}</button>`;
-  const card = (b) => `
-    <div class="card">
-      <div class="card-title">${esc(b.label)}</div>
-      ${b.unavailable ? '<div class="note">unavailable this run</div>' : `
-      <div class="grid g-3" style="margin-bottom:10px">
-        <div class="stat"><div class="lab">Sessions</div><div class="val">${num(b.sessions)}</div></div>
-        <div class="stat"><div class="lab">Engaged</div><div class="val">${num(b.engaged)}</div>
-          <div class="sub2">${b.sessions?((b.engaged/b.sessions)*100).toFixed(1):'0'}% of sessions</div></div>
-        <div class="stat"><div class="lab">Key events</div><div class="val">${num(b.keyEvents)}</div></div>
-      </div>
-      <table><thead><tr><th>Channel</th><th class="num">Sessions</th><th class="num">Engaged</th></tr></thead><tbody>
-      ${(b.channels||[]).map(c=>`<tr><td class="strong">${esc(c.channel)}</td><td class="num">${num(c.sessions)}</td><td class="num">${num(c.engaged)}</td></tr>`).join('')}
-      </tbody></table>
-      ${(b.keyEventBreakdown||[]).length ? `<table style="margin-top:8px"><tbody>
-        ${b.keyEventBreakdown.map(k=>`<tr><td class="strong">${esc(k.label)}</td><td class="num">${num(k.value)}</td></tr>`).join('')}
-      </tbody></table>` : ''}
-      ${b.meta ? `<div class="note">Meta: ฿${num(Math.round(b.meta.spend))} \u00b7 ${num(b.meta.impressions)} impressions \u00b7 ${num(b.meta.clicks)} clicks <span style="color:var(--faint)">(${b.meta.accounts.map(esc).join(', ')})</span></div>`
-        : '<div class="note">No dedicated Meta ad account \u2014 paid social runs from the shared group accounts below.</div>'}
-      `}
+  const slide = (title, body, first) => body
+    ? `<div class="slide ${first ? '' : 'slide-break'}"><div class="slide-title">${esc(title)}</div>${body}</div>`
+    : '';
+  const C = { a:'#6C5CE7', b:'#4B8DF8', c:'#2E9E6F', d:'#F2A93B', e:'#E8607A' };
+  const kpi = (lab, val, sub) => `<div class="stat"><div class="lab">${lab}</div>
+    <div class="val">${val}</div>${sub?`<div class="sub2">${sub}</div>`:''}</div>`;
+
+  const head = shown[0] || {};
+  const perfBody = `
+    <div class="grid g-3" style="margin-bottom:10px">
+      ${kpi('Sessions', num(head.sessions))}
+      ${kpi('Engaged', num(head.engaged), head.sessions?((head.engaged/head.sessions)*100).toFixed(1)+'% of sessions':'')}
+      ${kpi('Key events', num(head.keyEvents), head.sessions?((head.keyEvents/head.sessions)*100).toFixed(1)+'% per session':'')}
+    </div>
+    <div class="grid g-2">
+      <div class="card"><div class="card-title">Where they came from</div>
+        <div class="chart-wrap" style="height:230px"><canvas id="repChan"></canvas></div></div>
+      <div class="card"><div class="card-title">What they did</div>
+        <div class="chart-wrap" style="height:230px"><canvas id="repKe"></canvas></div></div>
     </div>`;
 
-  /**
-   * Laid out as TOPIC SLIDES, not one scroll. Each `.slide-title` names a topic
-   * and every topic after the first carries `.slide-break`, so printing gives
-   * one 16:9 slide per topic in the order a board reads them: who came, which
-   * hospital, how they arrived, what they did, what we paid.
-   */
-  const slide = (title, body, first) => body
-    ? `<div class="${first ? '' : 'slide-break'}"><div class="slide-title">${esc(title)}</div>${body}</div>`
-    : '';
+  const byHospital = sel !== 'BHQ' ? '' : `
+    <div class="grid g-2">
+      <div class="card"><div class="card-title">Sessions and engagement</div>
+        <div class="chart-wrap" style="height:230px"><canvas id="repBrandSess"></canvas></div></div>
+      <div class="card"><div class="card-title">Key events per session</div>
+        <div class="chart-wrap" style="height:230px"><canvas id="repBrandKe"></canvas></div></div>
+    </div>`;
 
-  const byHospital = sel !== 'BHQ' ? '' : `<div class="card">
-      <table class="roomy sortable"><thead><tr><th>Hospital</th><th class="num">Sessions</th>
-        <th class="num">Share</th><th class="num">Engaged</th><th class="num">Key events</th><th class="num">KE / session</th></tr></thead><tbody>
-      ${d.brands.map(b=>`<tr><td class="strong">${esc(b.label)}</td>
-        <td class="num">${num(b.sessions)}</td>
-        <td class="num">${d.bhq.sessions?((b.sessions/d.bhq.sessions)*100).toFixed(1):'0'}%</td>
-        <td class="num">${num(b.engaged)}</td>
-        <td class="num">${num(b.keyEvents)}</td>
-        <td class="num">${b.sessions?((b.keyEvents/b.sessions)*100).toFixed(1):'0'}%</td></tr>`).join('')}
-      </tbody></table></div>`;
+  const langBody = (sel === 'BHQ' && (d.languages||[]).length) ? `
+    <div class="grid g-2">
+      <div class="card"><div class="card-title">Visits and key events</div>
+        <div class="chart-wrap" style="height:250px"><canvas id="repLangV"></canvas></div></div>
+      <div class="card"><div class="card-title">Search impressions and click-through</div>
+        <div class="chart-wrap" style="height:250px"><canvas id="repLangI"></canvas></div></div>
+    </div>
+    <div class="note">Language comes from the URL locale segment, never guessed from script \u2014 English,
+    German, Vietnamese and Indonesian share Latin characters. Impressions and clicks are Search Console;
+    visits and key events are GA4. Each stage is a subset of the one above, so these rates hold.</div>` : '';
 
-  const langBody = (sel === 'BHQ' && (d.languages||[]).length) ? `<div class="card">
-      <table class="roomy sortable"><thead><tr>
-        <th>Language</th><th class="num">Impressions</th><th class="num">Clicks</th><th class="num">CTR</th>
-        <th class="num">Visits</th><th class="num">Key events</th><th class="num">KE / visit</th></tr></thead><tbody>
-      ${d.languages.map(l=>`<tr><td class="strong">${esc(l.label)}</td>
-        <td class="num">${num(l.impressions)}</td>
-        <td class="num">${num(l.clicks)}</td>
-        <td class="num">${l.impressions?((l.clicks/l.impressions)*100).toFixed(2)+'%':'\u2014'}</td>
-        <td class="num">${num(l.sessions)}</td>
-        <td class="num">${num(l.keyEvents)}</td>
-        <td class="num">${l.sessions?((l.keyEvents/l.sessions)*100).toFixed(1)+'%':'\u2014'}</td></tr>`).join('')}
-      </tbody></table>
-      <div class="note">Language is read from the URL locale segment, never guessed from the script \u2014
-      English, German, Vietnamese and Indonesian share Latin characters and cannot be separated otherwise.
-      Impressions and clicks are Search Console; visits and key events are GA4. Each stage here IS a subset
-      of the one above, so unlike the Overview bands these rates are meaningful.</div>
-    </div>` : '';
-
-  const paidBody = `${d.shared && d.shared.meta ? `<div class="card">
-      <div class="card-title">BHQ shared \u2014 runs for all four hospitals</div>
-      <div class="grid g-3">
-        <div class="stat"><div class="lab">Spend</div><div class="val">฿${num(Math.round(d.shared.meta.spend))}</div></div>
-        <div class="stat"><div class="lab">Impressions</div><div class="val">${num(d.shared.meta.impressions)}</div></div>
-        <div class="stat"><div class="lab">Clicks</div><div class="val">${num(d.shared.meta.clicks)}</div></div>
-      </div>
-      <div class="note">${esc(d.shared.meta.accounts.join(', '))}. ${esc(d.shared.note)}</div>
+  const paidBody = `${d.shared && d.shared.meta ? `
+    <div class="grid g-3" style="margin-bottom:10px">
+      ${kpi('Shared spend', '฿'+num(Math.round(d.shared.meta.spend)))}
+      ${kpi('Impressions', num(d.shared.meta.impressions))}
+      ${kpi('Clicks', num(d.shared.meta.clicks))}
+    </div>
+    <div class="card"><div class="card-title">Meta spend by hospital</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="repMeta"></canvas></div>
+      <div class="note">${esc(d.shared.meta.accounts.join(', '))} \u2014 ${esc(d.shared.note)}</div>
     </div>` : ''}
     ${d.unmapped ? `<div class="card mt" style="border-color:#E4B84B">
       <div class="card-title">Unmapped ad accounts \u2014 not counted anywhere</div>
-      <div class="note">These accounts have spend but are not in the brand registry, so they are
-      excluded from every figure above. Tell Claude which brand each belongs to.<br>
-      <b>${esc(d.unmapped.accounts.join(', '))}</b> \u2014 ฿${num(Math.round(d.unmapped.spend))} spend,
-      ${num(d.unmapped.impressions)} impressions.</div>
+      <div class="note"><b>${esc(d.unmapped.accounts.join(', '))}</b> \u2014 ฿${num(Math.round(d.unmapped.spend))} spend,
+      ${num(d.unmapped.impressions)} impressions. Not in the brand registry, so excluded from every figure
+      above. Tell Claude which brand each belongs to.</div>
     </div>` : ''}`;
 
   $('viewRoot').innerHTML = `
     <div class="search no-print" style="gap:6px">${['BHQ',...d.brands.map(b=>b.key)].map(k=>chip(k,k)).join('')}</div>
-    ${slide(sel === 'BHQ' ? 'Performance \u00b7 all four hospitals' : `Performance \u00b7 ${sel}`,
-            shown.map(card).join(''), true)}
+    ${slide(sel === 'BHQ' ? 'Performance \u00b7 all four hospitals' : `Performance \u00b7 ${sel}`, perfBody, true)}
     ${slide('By hospital', byHospital)}
     ${slide('Search by language', langBody)}
     ${slide('Paid media', paidBody.trim())}`;
+
+  // Charts must be drawn after the markup is in the DOM.
+  const ch = (head.channels || []).slice(0, 8);
+  drawBars('repChan', ch.map(c => c.channel), [
+    { label:'Sessions', data: ch.map(c=>c.sessions), color:C.a },
+    { label:'Engaged',  data: ch.map(c=>c.engaged),  color:C.b },
+  ]);
+  const ke = (head.keyEventBreakdown || []).slice(0, 9);
+  drawBars('repKe', ke.map(k=>k.label), [{ label:'Key events', data: ke.map(k=>k.value), color:C.c }]);
+
+  if (sel === 'BHQ') {
+    const bs = d.brands;
+    drawBars('repBrandSess', bs.map(b=>b.label), [
+      { label:'Sessions', data: bs.map(b=>b.sessions), color:C.a },
+      { label:'Engaged',  data: bs.map(b=>b.engaged),  color:C.b },
+    ]);
+    drawBars('repBrandKe', bs.map(b=>b.label), [
+      { label:'KE per session %', data: bs.map(b=>b.sessions?+((b.keyEvents/b.sessions)*100).toFixed(1):0), color:C.d },
+    ]);
+    const L = d.languages || [];
+    if (L.length) {
+      drawBars('repLangV', L.map(l=>l.label), [
+        { label:'Visits',     data: L.map(l=>l.sessions),  color:C.a },
+        { label:'Key events', data: L.map(l=>l.keyEvents), color:C.c },
+      ]);
+      // Impressions run millions against a CTR of a few percent, so CTR gets
+      // its own chart rather than being flattened to nothing beside them.
+      drawBars('repLangI', L.map(l=>l.label), [
+        { label:'Impressions', data: L.map(l=>l.impressions), color:C.b },
+      ]);
+    }
+    const withMeta = d.brands.filter(b=>b.meta);
+    if (withMeta.length) drawBars('repMeta', withMeta.map(b=>b.label), [
+      { label:'Spend ฿', data: withMeta.map(b=>Math.round(b.meta.spend)), color:C.e },
+    ]);
+  }
 
   document.querySelectorAll('[data-brand]').forEach(el =>
     el.addEventListener('click', () => { S.reportBrand = el.dataset.brand; render(); }));
@@ -4029,6 +4051,42 @@ function drawFunnelChart(canvasId, stages) {
   }
 }
 
+/**
+ * Categorical bars. drawChart() handles time series; this covers the
+ * comparisons a board deck is mostly made of \u2014 by hospital, by channel, by
+ * language. Horizontal by default because category labels are long and
+ * multilingual, and rotated labels are unreadable at slide size.
+ */
+function drawBars(canvasId, labels, datasets, opts = {}) {
+  const el = document.getElementById(canvasId);
+  if (!el || !window.Chart) return;
+  if (el._chart) el._chart.destroy();
+  const horizontal = opts.horizontal !== false;
+  el._chart = new Chart(el.getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: datasets.map(ds => ({
+      label: ds.label, data: ds.data, backgroundColor: ds.color,
+      borderRadius: 3, barPercentage: 0.82, categoryPercentage: 0.78,
+    })) },
+    options: {
+      indexAxis: horizontal ? 'y' : 'x',
+      responsive: true, maintainAspectRatio: false,
+      animation: false,          // print captures the canvas as-is
+      plugins: {
+        legend: { display: datasets.length > 1,
+          labels: { color:'#4C5878', font:{family:'Poppins',size:10}, usePointStyle:true, boxWidth:7 } },
+        tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${c.parsed[horizontal?'x':'y'].toLocaleString()}` } },
+      },
+      scales: {
+        x: { beginAtZero: true, grid:{ color:'#EEF1F8' },
+             ticks:{ color:'#8A94AD', font:{family:'Poppins',size:9},
+                     callback:(v)=> v>=1e6?(v/1e6)+'M' : v>=1e3?(v/1e3)+'K' : v } },
+        y: { grid:{ display:false }, ticks:{ color:'#4C5878', font:{family:'Poppins',size:10} } },
+      },
+    },
+  });
+}
+
 function drawChart(canvasId, rows, series) {
   const el = document.getElementById(canvasId);
   if (!el) return;
@@ -4114,7 +4172,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.72.0';
+const CLIENT_BUILD = '3.73.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
