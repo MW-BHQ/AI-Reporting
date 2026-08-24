@@ -1551,8 +1551,18 @@ async function buildReport(from, to) {
    */
   jobs.gbpKeywords = windsor("google_my_business",
     ["location_title", "search_keyword", "search_keyword_value", "search_keyword_threshold"], from, to);
+  /**
+   * Reviews year-to-date, not just the selected window: the monthly trend needs
+   * history, and the in-period slice is a filter on the same rows. One pull
+   * serves both. `review_reply_comment` is what makes an unanswered review
+   * visible — a 2-star with no reply is the single most actionable thing on a
+   * hospital's profile.
+   */
   jobs.gbpReviews = windsor("google_my_business",
-    ["review_create_time", "location_title", "review_star_rating"], from, to);
+    ["review_create_time", "location_title", "review_star_rating",
+      "review_comment", "review_reviewer", "review_reply_comment"], ytdFrom, to);
+  jobs.gbpLifetime = windsor("google_my_business",
+    ["location_title", "review_total_count", "review_average_rating_total"], from, to);
   jobs.gscLang = gscQuery(["page"], from, to);
   /**
    * ONE request covering all 40 hospital x language search pages. The page URL
@@ -1701,29 +1711,78 @@ async function buildReport(from, to) {
     logJson("WARNING", "gbp_listings_unmapped", { listings: gbpUnlisted.listings });
   }
 
-  // Reviews by star, per brand, plus the month's average.
-  const rvBlank = () => ({ count: 0, stars: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, avg: null });
-  const rvByBrand = {}; for (const b of BRANDS) rvByBrand[b.key] = rvBlank();
-  const rvAll = rvBlank();
-  for (const r of (data.gbpReviews || [])) {
-    const st = starOf(r.review_star_rating); if (!st) continue;
-    const owner = brandForGbpListing(r.location_title);
-    const targets = [rvAll];
-    if (owner && owner !== "SHARED") targets.push(rvByBrand[owner]);
-    for (const t of targets) { t.count += 1; t.stars[st] += 1; }
-  }
-  const finishRv = (t) => {
-    const tot = Object.entries(t.stars).reduce((a, [k, v]) => a + Number(k) * v, 0);
-    t.avg = t.count ? +(tot / t.count).toFixed(2) : null;
-    return t;
-  };
-  finishRv(rvAll); for (const b of BRANDS) finishRv(rvByBrand[b.key]);
+  /**
+   * Reviews per hospital: this period, the year's monthly trend, the lifetime
+   * position, and — the actionable part — which reviews are still unanswered.
+   * A rating average tells you where you ended up; an unanswered 2-star tells
+   * you what to do this afternoon.
+   */
+  const reviewsByBrand = (() => {
+    /**
+     * The hospital's OWN listing only, matching the GBP page beside it. Dental
+     * rolls into BGH on the group slides, but a per-hospital review page that
+     * silently included a second listing would not reconcile with the GBP page
+     * on the same tab.
+     */
+    const hospitalOnly = (title) => {
+      const t = norm(title);
+      const b = BRANDS.find((x) => norm(x.gbp[0]) === t);
+      return b ? b.key : null;
+    };
+    const blank = () => ({ count: 0, stars: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, replied: 0,
+      months: new Map(), unanswered: [] });
+    const acc = {}; for (const b of BRANDS) acc[b.key] = blank();
+    for (const r of (data.gbpReviews || [])) {
+      const st = starOf(r.review_star_rating); if (!st) continue;
+      const owner = hospitalOnly(r.location_title);
+      if (!owner || !acc[owner]) continue;
+      const a = acc[owner];
+      const when = String(r.review_create_time || "");
+      const month = when.slice(0, 7);
+      if (month) {
+        const m = a.months.get(month) || { month, count: 0, sum: 0 };
+        m.count += 1; m.sum += st; a.months.set(month, m);
+      }
+      // In-period slice, from the same year-to-date rows.
+      if (when.slice(0, 10) >= from) {
+        a.count += 1; a.stars[st] += 1;
+        const replied = String(r.review_reply_comment || "").trim().length > 0;
+        if (replied) a.replied += 1;
+        else if (st <= 3) {
+          a.unanswered.push({ stars: st, when: when.slice(0, 10),
+            reviewer: String(r.review_reviewer || "").slice(0, 40),
+            comment: String(r.review_comment || "").slice(0, 180) });
+        }
+      }
+    }
+    const life = new Map();
+    for (const r of (data.gbpLifetime || [])) {
+      const owner = hospitalOnly(r.location_title);
+      if (!owner) continue;
+      life.set(owner, { total: n(r.review_total_count), avg: n(r.review_average_rating_total) || null });
+    }
+    return BRANDS.map((b) => {
+      const a = acc[b.key];
+      const sum = Object.entries(a.stars).reduce((x, [k, v]) => x + Number(k) * v, 0);
+      return {
+        key: b.key, label: b.label,
+        count: a.count, avg: a.count ? +(sum / a.count).toFixed(2) : null,
+        stars: a.stars,
+        replyRate: a.count ? a.replied / a.count : null,
+        replied: a.replied,
+        lifetime: life.get(b.key) || null,
+        monthly: [...a.months.values()].sort((x, y) => x.month.localeCompare(y.month))
+          .map((m) => ({ month: m.month, count: m.count, avg: +(m.sum / m.count).toFixed(2) })),
+        unanswered: a.unanswered.sort((x, y) => x.stars - y.stars || y.when.localeCompare(x.when)).slice(0, 6),
+      };
+    });
+  })();
 
   const gbp = {
-    byBrand: BRANDS.map((b) => ({ key: b.key, label: b.label, ...gbpByBrand[b.key], reviews: rvByBrand[b.key] })),
+    byBrand: BRANDS.map((b) => ({ key: b.key, label: b.label, ...gbpByBrand[b.key] })),
     shared: gbpShared.listings.length ? gbpShared : null,
     unlisted: gbpUnlisted.listings.length ? gbpUnlisted : null,
-    reviewsAll: rvAll,
+    reviewsByBrand,
     available: data.gbp !== null,
   };
 

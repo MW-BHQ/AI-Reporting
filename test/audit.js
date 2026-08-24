@@ -191,7 +191,11 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
     .map((m) => m[1])
     // Rates, not changes: a CTR or a share legitimately renders as a raw
     // percentage and must not be capped at ">10x".
-    .filter((v) => !/^(frac|share)$/.test(v) && !/\.(ctr|rate|share)$/.test(v));
+    // Rates and shares render as raw percentages by definition and must not be
+    // capped at ">10x". Matches any identifier ending in Rate/Ratio/Share/Pct
+    // as well as the bare names, so replyRate and ctr are both covered.
+    .filter((v) => !/^(frac|share|pct)$/i.test(v)
+                && !/(ctr|rate|ratio|share|pct)$/i.test(v.split(".").pop()));
   raw.length
     ? fail("change:capped", `percentage change rendered outside changeText(): ${raw.join(", ")}`)
     : ok("change:capped", "all change renderers routed through changeText()");

@@ -646,6 +646,43 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.93.0 — Google reviews per hospital, rebuilt around what is actionable.**
+
+Was a four-up grid of ratings; now one page per hospital tab, matching GBP.
+With the space freed:
+
+- **Reply rate** — replied vs total for the period
+- **Lifetime** total and average beside the period figures, so a good month
+  against a weak base is visible
+- **Reviews by month** — count and average across the year, not just this window
+- **"Needs a reply"** — reviews of three stars or fewer left unanswered, with the
+  comment and date
+
+That last card is the point of the rebuild. A star average tells you where you
+landed; an unanswered 2-star tells you what to do this afternoon. Answering
+those moves a rating faster than chasing new reviews.
+
+**Scope matches the GBP page: the hospital's OWN listing only.** Dental rolls
+into BGH on group slides, but including it here made BGH show 4 reviews where
+its GBP page showed one listing — two pages on one tab that did not reconcile.
+
+**One pull, not two.** Reviews are fetched year-to-date; the in-period figures
+are a filter on the same rows, so the monthly trend costs nothing extra.
+`review_reply_comment` is what makes an unanswered review detectable.
+
+Fixtures carry two months and one unanswered low rating, so the trend line and
+the needs-a-reply path are both exercised rather than always empty.
+
+The `change:capped` audit fired on `RVB.replyRate` — a rate, not a change. The
+exemption now matches any identifier ending in Rate / Ratio / Share / Pct / CTR
+rather than a hand-listed few, so the next such name does not need a patch.
+Negative control re-run.
+
+**Backlog:** MW will share a Google Sheet of keyword rank / search volume from
+an SEO tool — to be added alongside the GBP keyword card, not instead of it.
+They answer different questions: what people typed to find you, versus what the
+market searches for.
+
 **v3.92.0 — GBP keyword counts DO exist. Correcting v3.91.0.**
 
 v3.91.0 dropped the keyword count column and recorded that Windsor "exposes the

@@ -267,9 +267,21 @@ global.fetch = async (url, opts = {}) => {
       "Japanese Medical Services (JMS) \u30d0\u30f3\u30b3\u30af\u75c5\u9662\u65e5\u672c\u4eba\u5c02\u9580\u30af\u30ea\u30cb\u30c3\u30af",
       "Some Other Clinic",
     ];
-    if (want.includes("review_star_rating") && !want.includes("review_comment")) {
+    if (want.includes("review_total_count")) {
       return jsonRes({ data: LOCS.map((location_title, i) => ({
-        review_create_time: "2026-07-15", location_title, review_star_rating: i % 5 === 0 ? "FOUR" : "FIVE" })) });
+        location_title, review_total_count: 500 + i * 100, review_average_rating_total: 4.7 })) });
+    }
+    if (want.includes("review_star_rating")) {
+      // Two months so the trend has a line, and one unanswered low rating so
+      // the "needs a reply" path is exercised rather than always empty.
+      return jsonRes({ data: LOCS.flatMap((location_title, i) => [
+        { review_create_time: "2026-06-15", location_title, review_star_rating: "FIVE",
+          review_comment: "great", review_reviewer: "A", review_reply_comment: "thank you" },
+        { review_create_time: "2026-07-15", location_title, review_star_rating: i % 5 === 0 ? "FOUR" : "FIVE",
+          review_comment: "good", review_reviewer: "B", review_reply_comment: "thanks" },
+        { review_create_time: "2026-07-20", location_title, review_star_rating: "TWO",
+          review_comment: "long wait at reception", review_reviewer: "C", review_reply_comment: "" },
+      ]) });
     }
     if (want.includes("search_keyword")) {
       // Third keyword returns a THRESHOLD instead of a value, mirroring how

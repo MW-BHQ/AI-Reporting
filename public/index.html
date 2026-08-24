@@ -1601,34 +1601,56 @@ function renderReport() {
    * The group average hid that one listing can carry the rating while another
    * quietly slides.
    */
-  const RV = (G && G.byBrand) ? G.byBrand.filter(b => b.reviews && b.reviews.count) : [];
-  const reviewBody = RV.length ? `
-    <div class="grid g-2">
-      ${RV.map(b => {
-        const r = b.reviews, five = r.count ? (r.stars['5']/r.count)*100 : 0;
-        return `<div class="card">
-          <div class="card-title">${esc(b.label)}</div>
-          <div class="grid g-3" style="margin-bottom:8px">
-            <div><div class="lab">Reviews</div><div style="font-size:19px;font-weight:700">${num(r.count)}</div></div>
-            <div><div class="lab">Average</div><div style="font-size:19px;font-weight:700;color:var(--violet)">${r.avg ?? '\u2014'}</div></div>
-            <div><div class="lab">5-star</div><div style="font-size:19px;font-weight:700">${five.toFixed(1)}%</div></div>
-          </div>
-          <table><tbody>
-          ${[5,4,3,2,1].map(st=>{
-            const v = r.stars[String(st)] || 0;
-            const pct = r.count ? (v/r.count)*100 : 0;
-            return `<tr><td class="strong" style="width:44px">${st}\u2605</td>
-              <td><div style="background:var(--line);border-radius:6px;height:9px">
-                <div style="width:${pct}%;background:${st>=4?'#2E9E6F':(st===3?'#F2A93B':'#D9534F')};height:9px;border-radius:6px"></div>
-              </div></td>
-              <td class="num" style="width:56px">${num(v)}</td></tr>`;
-          }).join('')}
-          </tbody></table>
-        </div>`;
-      }).join('')}
+  /**
+   * Reviews for the open hospital only. Replaces the four-up rating grid: a
+   * star average says where you landed, an unanswered 2-star says what to do
+   * today, so the reply rate and the unanswered list lead.
+   */
+  const RVB = (d.gbp && d.gbp.reviewsByBrand || []).find(x => x.key === sel);
+  const stars5 = (n5) => '\u2605'.repeat(n5) + '\u2606'.repeat(5 - n5);
+  const reviewBody = (RVB && (RVB.count || (RVB.lifetime && RVB.lifetime.total))) ? `
+    <div class="grid g-4" style="margin-bottom:10px">
+      <div class="stat card"><div class="lab">Reviews this period</div>
+        <div class="val">${num(RVB.count)}</div></div>
+      <div class="stat card"><div class="lab">Average this period</div>
+        <div class="val">${RVB.avg ?? '\u2014'}</div>
+        <div class="sub2">${RVB.lifetime && RVB.lifetime.avg ? `lifetime ${RVB.lifetime.avg}` : ''}</div></div>
+      <div class="stat card"><div class="lab">Replied</div>
+        <div class="val">${RVB.replyRate===null?'\u2014':(RVB.replyRate*100).toFixed(0)+'%'}</div>
+        <div class="sub2">${num(RVB.replied)} of ${num(RVB.count)}</div></div>
+      <div class="stat card"><div class="lab">Lifetime reviews</div>
+        <div class="val">${RVB.lifetime ? num(RVB.lifetime.total) : '\u2014'}</div></div>
     </div>
-    <div class="note">Reviews landing in this window, per hospital listing. Dental and JMS are counted in the
-    group totals elsewhere but are not shown here.</div>` : '';
+    <div class="grid g-2">
+      <div class="card">
+        <div class="card-title">Reviews by month</div>
+        <div class="chart-wrap" style="height:200px"><canvas id="rvMonth"></canvas></div>
+        <div class="card-title" style="margin-top:10px">Rating mix this period</div>
+        <table><tbody>
+        ${[5,4,3,2,1].map(st=>{
+          const v = RVB.stars[String(st)] || 0;
+          const pct = RVB.count ? (v/RVB.count)*100 : 0;
+          return `<tr><td class="strong" style="width:52px">${st}\u2605</td>
+            <td><div style="background:var(--line);border-radius:6px;height:9px">
+              <div style="width:${pct}%;background:${st>=4?'#2E9E6F':(st===3?'#F2A93B':'#D9534F')};height:9px;border-radius:6px"></div>
+            </div></td><td class="num" style="width:52px">${num(v)}</td></tr>`;
+        }).join('')}
+        </tbody></table>
+      </div>
+      <div class="card" ${RVB.unanswered.length?'style="border-color:#E4B84B"':''}>
+        <div class="card-title">Needs a reply \u00b7 ${num(RVB.unanswered.length)}</div>
+        ${RVB.unanswered.length ? `<table><tbody>
+        ${RVB.unanswered.map(u=>`<tr>
+          <td style="width:70px;color:${u.stars<=2?'#D9534F':'#F2A93B'};font-size:12px">${stars5(u.stars)}</td>
+          <td><div class="strong i18n" style="font-size:12px">${esc(u.comment) || '<span style="color:var(--faint)">rating only, no comment</span>'}</div>
+            <div style="font-size:10.5px;color:var(--faint)">${esc(u.reviewer)} \u00b7 ${esc(u.when)}</div></td>
+        </tr>`).join('')}
+        </tbody></table>
+        <div class="note">Three stars or fewer, left this period without a reply. Answering these moves the
+        rating more than chasing new reviews does.</div>`
+        : '<div class="note">Every review of three stars or fewer this period has a reply. Good.</div>'}
+      </div>
+    </div>` : '';
 
   const T = d.searchTerms || [];
   const termsBody = T.length ? `
@@ -1768,6 +1790,12 @@ function renderReport() {
         { label:'Direction clicks', key:'directions', color:'#E8607A', axis:'y' },
       ]);
     });
+    if (RVB && RVB.monthly && RVB.monthly.length) {
+      drawChart('rvMonth', RVB.monthly.map(m => ({ d: m.month, count: m.count, avg: m.avg })), [
+        { label:'Reviews', key:'count', color:'#6C5CE7', axis:'y' },
+        { label:'Average rating', key:'avg', color:'#2E9E6F', axis:'y1' },
+      ]);
+    }
     if (T.length) {
       const tt = T.slice(0, 12);
       // Long Thai queries need truncating or the axis eats the chart.
@@ -4655,7 +4683,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.92.0';
+const CLIENT_BUILD = '3.93.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
