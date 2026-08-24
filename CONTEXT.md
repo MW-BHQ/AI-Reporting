@@ -646,6 +646,33 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.92.0 — GBP keyword counts DO exist. Correcting v3.91.0.**
+
+v3.91.0 dropped the keyword count column and recorded that Windsor "exposes the
+keyword but not its count". **That was wrong** — the field is
+**`search_keyword_value`**: "the sum of the number of unique users that used the
+keyword in a month". I had guessed at `search_keyword_impressions`,
+`keyword_search_volume`, `value`, `threshold` and others, and concluded from
+their absence that the data was missing. Absence of a guessed name is not
+absence of the field.
+
+**No case for the Business Profile API here.** It would add an access-request
+process and a service-account grant that Business Profile does not readily
+support, to fetch something Windsor already returns.
+
+**`search_keyword_threshold`** is the paired field: Google withholds counts
+below a floor and returns a threshold instead — exactly one of the two is
+present per row. Rendered as **`<15`**, which is a real answer, not a zero.
+Disclosed counts sort above withheld ones. The fixture returns a threshold row
+so that path is exercised.
+
+Column relabelled **Searchers**, since it counts unique people rather than
+impressions.
+
+Note for the LS comparison: that deck's **Rank** and **Search Vol** columns
+(12100, 27100, 3600…) are Keyword Planner volumes and local-pack ranks from an
+SEO tool, not GBP — no connector will reproduce them.
+
 **v3.91.0 — five fixes from MW's review, plus a new audit rule.**
 
 1. **Delta chips say what they compare.** Every chip on this tab is MoM against

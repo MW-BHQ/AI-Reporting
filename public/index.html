@@ -1685,14 +1685,16 @@ function renderReport() {
         </div>
         <div class="card">
           <div class="card-title">Search keywords</div>
-          <table><thead><tr><th>#</th><th>Keyword</th></tr></thead><tbody>
+          <table><thead><tr><th>#</th><th>Keyword</th><th class="num">Searchers</th></tr></thead><tbody>
           ${g.keywords.length ? g.keywords.map((k,i)=>`<tr><td style="width:28px">${i+1}</td>
-            <td class="strong i18n">${esc(k.keyword)}</td></tr>`).join('')
-            : '<tr><td colspan="2" class="num">no keyword data</td></tr>'}
+            <td class="strong i18n">${esc(k.keyword)}</td>
+            <td class="num">${k.users > 0 ? num(k.users)
+              : (k.below ? `<span style="color:var(--faint)">&lt;${num(k.below)}</span>` : '\u2014')}</td></tr>`).join('')
+            : '<tr><td colspan="3" class="num">no keyword data</td></tr>'}
           </tbody></table>
-          <div class="note">The phrases people typed to find this listing, in the order Google returns them.
-          <b>No volume is shown because none is available</b> \u2014 the connector exposes the keyword but not its
-          impression count, so a figure here would have been a column of zeros.</div>
+          <div class="note">Unique people who searched that phrase and saw this listing. Google withholds
+          counts below a floor and returns only a threshold, shown as <b>&lt;15</b> \u2014 that is a real answer,
+          not a zero.</div>
         </div>
       </div>
     </div>`).join('');
@@ -4653,7 +4655,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.91.0';
+const CLIENT_BUILD = '3.92.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

@@ -1542,7 +1542,15 @@ async function buildReport(from, to) {
     "call_clicks", "website_clicks", "direction_requests"];
   jobs.gbpDaily = windsor("google_my_business", GBP_DAILY_FIELDS, from, to);
   jobs.gbpDailyPrev = windsor("google_my_business", GBP_DAILY_FIELDS, cwr.prev.from, cwr.prev.to);
-  jobs.gbpKeywords = windsor("google_my_business", ["location_title", "search_keyword", "impressions"], from, to);
+  /**
+   * `search_keyword_value` is the unique users who searched that phrase.
+   * Google withholds it below a floor and returns `search_keyword_threshold`
+   * instead — exactly one of the two is present. "<15" is a real answer and
+   * is shown as such rather than collapsed to 0, which is what an earlier
+   * attempt using the generic `impressions` field produced.
+   */
+  jobs.gbpKeywords = windsor("google_my_business",
+    ["location_title", "search_keyword", "search_keyword_value", "search_keyword_threshold"], from, to);
   jobs.gbpReviews = windsor("google_my_business",
     ["review_create_time", "location_title", "review_star_rating"], from, to);
   jobs.gscLang = gscQuery(["page"], from, to);
@@ -1983,7 +1991,16 @@ async function buildReport(from, to) {
     for (const r of (data.gbpKeywords || [])) {
       const k = listingOwner(r.location_title); if (!k) continue;
       const q = String(r.search_keyword || "").trim(); if (!q) continue;
-      kw[k].set(q, (kw[k].get(q) || 0) + n(r.impressions));
+      const e = kw[k].get(q) || { keyword: q, users: 0, below: null };
+      const val = n(r.search_keyword_value);
+      if (val > 0) e.users += val;
+      else if (r.search_keyword_threshold) {
+        // Below Google's disclosure floor: keep the smallest threshold seen so
+        // the label reads "<15" rather than pretending the count is zero.
+        const t = n(r.search_keyword_threshold);
+        e.below = e.below === null ? t : Math.min(e.below, t);
+      }
+      kw[k].set(q, e);
     }
     const chg2 = (a, b2) => (b2 && b2 > 0) ? (a - b2) / b2 : null;
     return BRANDS.map((b) => {
@@ -1994,8 +2011,11 @@ async function buildReport(from, to) {
         mom: { impressions: chg2(t.impressions, pv.impressions), calls: chg2(t.calls, pv.calls),
           website: chg2(t.website, pv.website), directions: chg2(t.directions, pv.directions) },
         daily: [...perBrandDaily[b.key].values()].sort((x, y) => x.d.localeCompare(y.d)),
-        keywords: [...kw[b.key].entries()].map(([keyword, impressions]) => ({ keyword, impressions }))
-          .sort((x, y) => y.impressions - x.impressions).slice(0, 10),
+        keywords: [...kw[b.key].values()]
+          // Disclosed counts first, then withheld ones — a withheld keyword is
+          // by definition smaller than any disclosed one.
+          .sort((x, y) => (y.users - x.users) || ((x.below || 0) - (y.below || 0)))
+          .slice(0, 10),
       };
     });
   })();

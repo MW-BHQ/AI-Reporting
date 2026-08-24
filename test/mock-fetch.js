@@ -272,9 +272,13 @@ global.fetch = async (url, opts = {}) => {
         review_create_time: "2026-07-15", location_title, review_star_rating: i % 5 === 0 ? "FOUR" : "FIVE" })) });
     }
     if (want.includes("search_keyword")) {
+      // Third keyword returns a THRESHOLD instead of a value, mirroring how
+      // Google withholds low counts \u2014 so the "<15" path is exercised.
       return jsonRes({ data: LOCS.flatMap((location_title, i) =>
-        ["\u0e42\u0e23\u0e07\u0e1e\u0e22\u0e32\u0e1a\u0e32\u0e25", "hospital near me", "heart hospital"].map((search_keyword, j) => ({
-          location_title, search_keyword, impressions: 500 - j * 100 + i }))) });
+        ["\u0e42\u0e23\u0e07\u0e1e\u0e22\u0e32\u0e1a\u0e32\u0e25", "hospital near me", "heart hospital"].map((search_keyword, j) => (
+          j === 2
+            ? { location_title, search_keyword, search_keyword_value: 0, search_keyword_threshold: 15 }
+            : { location_title, search_keyword, search_keyword_value: 500 - j * 100 + i }))) });
     }
     if (want.includes("call_clicks")) {
       // Two days, so the daily charts have a line rather than a point, and the
