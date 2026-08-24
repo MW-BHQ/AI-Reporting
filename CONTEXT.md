@@ -646,6 +646,38 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.97.0 — report cached to GCS; Facebook funnel; review chart restyled.**
+
+**LOAD TIME: the report is now cached in Cloud Storage, not just memory.**
+`/api/report` makes ~35 upstream requests behind a 6-slot gate, so a cold build
+is slow — and in-memory caching barely helped, because **Cloud Run scales to
+zero and every cold start threw the cache away**. The first person each morning,
+and anyone landing on a fresh instance, paid full price. It now reads
+`report/<from>_<to>.json` from the bucket first, writes it after a build, and
+holds the memory copy for 24h. A completed month cannot change, so the object is
+durable. `refresh=1` still forces a rebuild. Same pattern Benchmarks already
+used; falls back to memory when no bucket is configured.
+
+**Google reviews moved directly under Google Business Profile**, and both it and
+Facebook are now above the "not yet reviewed" divider.
+
+**Review chart restyled to match the GBP tab:** stacked star counts per month
+with a rating line, last six months, 5★ at the base so the small low-rating
+bands stay visible. The line is **that month's own average**, and the note says
+so — the GBP tab's all-time line needs an opening balance derived from the
+lifetime total, which is a different calculation and would be wrong to imply.
+The redundant line chart in the left card is gone; rating mix stays.
+
+**Facebook now follows the reference:** TOFU page impressions and post
+engagements, MOFU visits, BOFU actions, with **all nine key events** listed.
+
+Visits and actions are sessions whose source is Facebook **or Instagram** — the
+page and its ads run both surfaces, so splitting them would misattribute the
+paid side. Obtained by adding `session_manual_source` to the per-brand
+`s_`/`k_` pulls: **same number of requests**, more rows, and channels now
+aggregate over source. That also opens TikTok and LINE funnels later at no
+request cost.
+
 **v3.96.0 — Facebook slide; all-time card reworked.**
 
 **All-time card:** the "This period" row duplicated the KPI card directly above

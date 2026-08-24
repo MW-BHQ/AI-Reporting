@@ -1507,9 +1507,15 @@ async function buildReport(from, to) {
   // single wide landing-page pull in JS would drag tens of thousands of rows.
   const jobs = {};
   for (const b of BRANDS) {
-    jobs[`s_${b.key}`] = ga4Compat(["session_default_channel_group"], ["sessions", "engaged_sessions"],
-      from, to, { segments: [b.segment] });
-    jobs[`k_${b.key}`] = ga4KeyEvents(["session_default_channel_group"], from, to, [b.segment]);
+    /**
+     * Source is carried alongside the channel group so a platform funnel
+     * (Facebook, and later TikTok or LINE) can be built without extra requests.
+     * Same number of reports, more rows: channels aggregate over source.
+     */
+    jobs[`s_${b.key}`] = ga4Compat(["session_default_channel_group", "session_manual_source"],
+      ["sessions", "engaged_sessions"], from, to, { segments: [b.segment] });
+    jobs[`k_${b.key}`] = ga4KeyEvents(["session_default_channel_group", "session_manual_source"],
+      from, to, [b.segment]);
   }
   /**
    * Year-to-date monthly series per hospital, for the opening slide. The LS
@@ -1627,10 +1633,14 @@ async function buildReport(from, to) {
   for (const b of BRANDS) {
     const rows = data[`s_${b.key}`] || [];
     const ke = data[`k_${b.key}`] || { total: 0, byName: new Map(), rows: [] };
-    const chan = rows.map((r) => ({
-      channel: r.session_default_channel_group || "(unassigned)",
-      sessions: n(r.sessions), engaged: n(r.engaged_sessions),
-    })).sort((x, y) => y.sessions - x.sessions);
+    const chanMap = new Map();
+    for (const r of rows) {
+      const key = r.session_default_channel_group || "(unassigned)";
+      const e = chanMap.get(key) || { channel: key, sessions: 0, engaged: 0 };
+      e.sessions += n(r.sessions); e.engaged += n(r.engaged_sessions);
+      chanMap.set(key, e);
+    }
+    const chan = [...chanMap.values()].sort((x, y) => y.sessions - x.sessions);
     perBrand[b.key].sessions = chan.reduce((a, c) => a + c.sessions, 0);
     perBrand[b.key].engaged = chan.reduce((a, c) => a + c.engaged, 0);
     perBrand[b.key].channels = chan.slice(0, 6);
@@ -1784,8 +1794,8 @@ async function buildReport(from, to) {
       const when = String(r.review_create_time || "");
       const month = when.slice(0, 7);
       if (month) {
-        const m = a.months.get(month) || { month, count: 0, sum: 0 };
-        m.count += 1; m.sum += st; a.months.set(month, m);
+        const m = a.months.get(month) || { month, count: 0, sum: 0, s1: 0, s2: 0, s3: 0, s4: 0, s5: 0 };
+        m.count += 1; m.sum += st; m[`s${st}`] += 1; a.months.set(month, m);
       }
       // In-period slice, from the same year-to-date rows.
       if (when.slice(0, 10) >= from) {
@@ -1822,7 +1832,8 @@ async function buildReport(from, to) {
         lifetime: life.get(b.key) || null,
         samples: [5, 4, 3, 2, 1].map((st) => a.samples[st] || null),
         monthly: [...a.months.values()].sort((x, y) => x.month.localeCompare(y.month))
-          .map((m) => ({ month: m.month, count: m.count, avg: +(m.sum / m.count).toFixed(2) })),
+          .map((m) => ({ month: m.month, count: m.count, avg: +(m.sum / m.count).toFixed(2),
+            s1: m.s1, s2: m.s2, s3: m.s3, s4: m.s4, s5: m.s5 })),
       };
     });
   })();
@@ -2142,6 +2153,31 @@ async function buildReport(from, to) {
    * than being summed into one number.
    */
   const facebook = (() => {
+    /**
+     * Facebook-sourced sessions and key events, summed across all four
+     * hospitals — the page is shared, so its funnel is a BHQ figure. Matches
+     * Instagram too: the page and its ads run both surfaces, and splitting them
+     * here would misattribute the paid side.
+     */
+    const isFb = (src) => /facebook|^fb$|instagram|^ig$|\bm\.facebook\b/i.test(String(src || ""));
+    let fbVisits = 0, fbEngaged = 0;
+    const fbEvents = {};
+    for (const b of BRANDS) {
+      for (const r of (data[`s_${b.key}`] || [])) {
+        if (!isFb(r.session_manual_source)) continue;
+        fbVisits += n(r.sessions); fbEngaged += n(r.engaged_sessions);
+      }
+      const ke = data[`k_${b.key}`];
+      for (const r of ((ke && ke.rows) || [])) {
+        // key is channel\u0000source
+        if (!isFb(String(r.key).split("\u0000")[1])) continue;
+        fbEvents[r.eventName] = (fbEvents[r.eventName] || 0) + r.value;
+      }
+    }
+    const fbActions = KEY_EVENTS
+      .map((e) => ({ id: e.name, label: e.label, value: fbEvents[e.name] || 0 }))
+      .sort((a, b2) => b2.value - a.value);
+
     const page = data.fbOrganic === null ? null : {
       impressions: sumOrNull(data.fbOrganic, "page_impressions"),
       organicReach: sumOrNull(data.fbOrganic, "page_impressions_organic"),
@@ -2169,7 +2205,9 @@ async function buildReport(from, to) {
     const rate = (spend, unit) => (unit > 0 ? spend / unit : null);
     const shape = (t) => ({ ...t,
       cpr: rate(t.spend, t.reach), cpe: rate(t.spend, t.engagements), cpc: rate(t.spend, t.clicks) });
-    return { page, byBrand: BRANDS.map((b) => ({ key: b.key, label: b.label, ...shape(byBrand[b.key]) })),
+    return { page, visits: fbVisits, engaged: fbEngaged,
+      actions: fbActions, actionsTotal: fbActions.reduce((a, e) => a + e.value, 0),
+      byBrand: BRANDS.map((b) => ({ key: b.key, label: b.label, ...shape(byBrand[b.key]) })),
       shared: shared.accounts.length ? shape(shared) : null };
   })();
 
@@ -2204,9 +2242,30 @@ app.get("/api/report", requireTab("report"), async (req, res) => {
   const { from, to } = req.query;
   if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
   if (!WINDSOR_API_KEY) return res.status(500).json({ error: "Server missing WINDSOR_API_KEY" });
+  /**
+   * Cached in GCS as well as in memory.
+   *
+   * This endpoint makes ~35 upstream requests behind a 6-slot gate, so a cold
+   * build is slow. In-memory caching alone did not help much: Cloud Run scales
+   * to zero and every cold start threw the cache away, so the first person each
+   * morning — and anyone landing on a fresh instance — paid full price.
+   *
+   * A completed month cannot change, so the object is durable and the TTL long.
+   * `refresh=1` still forces a rebuild and overwrites it.
+   */
+  const refresh = req.query.refresh === "1";
+  const objectName = `report/${from}_${to}.json`;
   try {
-    const out = await withCache(`report:${from}:${to}`, req.query.refresh === "1", () => buildReport(from, to));
-    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+    if (!refresh) {
+      const stored = await gcsRead(objectName).catch(() => null);
+      if (stored) return res.json({ ...stored, cached: true, store: "gcs" });
+    }
+    const out = await withCache(`report:${from}:${to}`, refresh,
+      () => buildReport(from, to), 24 * 3600 * 1000);
+    gcsWrite(objectName, out.value)
+      .catch((e) => logJson("WARNING", "report_store_failed", { error: String(e.message || e) }));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec,
+      store: BENCH_BUCKET ? "gcs" : "memory" });
   } catch (err) {
     logJson("ERROR", "report_failed", { error: String(err.message || err) });
     res.status(500).json({ error: err.message || "Report failed" });

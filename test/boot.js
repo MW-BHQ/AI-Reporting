@@ -74,6 +74,9 @@ function reportFixture() {
     facebook: {
       page: { impressions: 15561576, organicReach: 900000, engagements: 230339,
         followers: 379931, newFollows: 196 },
+      visits: 17600, engaged: 9000, actionsTotal: 9090,
+      actions: [{ id: "view_item", label: "View item", value: 7660 },
+                { id: "contact_us", label: "Contact us", value: 772 }],
       byBrand: KEYS.map((k) => ({ key: k, label: k, spend: 253325, reach: 6900661,
         impressions: 7000000, clicks: 123277, engagements: 304989,
         cpr: 0.036, cpe: 0.83, cpc: 2.05, accounts: [k + " x ADA"] })),
