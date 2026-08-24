@@ -387,17 +387,70 @@ global.fetch = async (url, opts = {}) => {
     // Search-term rows are a different shape from campaign rows; without this
     // branch the report's term table silently renders empty.
     if (((new URL(u)).searchParams.get("fields") || "").includes("search_term")) {
+      /**
+       * Campaign codes carry the brand, so these rows must span more than one
+       * hospital or a broken split would still look right. BIH gets the two
+       * knee terms, BGH the gallbladder one, and the last row is a campaign
+       * that ignores the convention: it must appear in `unattributed` and in
+       * NO hospital. `bcm` is a real code brand but not a hospital, so it
+       * belongs in the same bucket.
+       */
       return jsonRes({ data: [
-        { search_term: "เอ็น หัว เข่า พลิก", impressions: 37745, clicks: 646, spend: 4200 },
-        { search_term: "เอ็น หัว เข่า ขาด อาการ", impressions: 15695, clicks: 348, spend: 2100 },
-        { search_term: "ผ่าตัดถุงน้ำดี", impressions: 2750, clicks: 152, spend: 900 },
-        { search_term: "bmi calculator", impressions: 56800, clicks: 4336, spend: 5100 },
+        { campaign: "260701-02_BIH_tra", search_term: "เอ็น หัว เข่า พลิก", impressions: 37745, clicks: 646, spend: 4200 },
+        { campaign: "260701-02_bih_tra", search_term: "เอ็น หัว เข่า ขาด อาการ", impressions: 15695, clicks: 348, spend: 2100 },
+        { campaign: "260701-08_BGH_Search", search_term: "ผ่าตัดถุงน้ำดี", impressions: 2750, clicks: 152, spend: 900 },
+        { campaign: "260710-03_bcm_tra", search_term: "ตรวจสุขภาพ บีซีเอ็ม", impressions: 4100, clicks: 210, spend: 700 },
+        { campaign: "rightchoice-google-reserve", search_term: "bmi calculator", impressions: 56800, clicks: 4336, spend: 5100 },
       ]});
     }
     return jsonRes({ data: [
       { date:"2026-07-05", account_name:"BGH x ADA", campaign:"260701-08_BGH_Search", adgroup:"Brand", campaign_type:"SEARCH", conversions:4, spend:1200, impressions:5000, clicks:300 },
       { date:"2026-07-05", account_name:"BGH x ADA", campaign:"260701-08_BGH_Search", adgroup:"Generic", campaign_type:"SEARCH", conversions:1, spend:400, impressions:2000, clicks:90 },
       { date:"2026-07-06", account_name:"BHQ X AIQ", campaign:"aiq_bhq_gg_search_uae", adgroup:"UAE", campaign_type:"SEARCH", conversions:0, spend:800, impressions:2000, clicks:120 },
+    ]});
+  }
+  /**
+   * TikTok has two shapes on one connector and the generic row builder cannot
+   * tell them apart — it would answer both with a single all-100s row, which
+   * is exactly the mock that cannot fail (§10.4). The Video pull is identified
+   * by `video_id`.
+   */
+  if (u.includes("connectors.windsor.ai/tiktok_organic")) {
+    const f = (new URL(u)).searchParams.get("fields") || "";
+    if (f.includes("video_id")) {
+      /**
+       * Distinct winners per metric, so a top-N that reads the wrong field is
+       * visible. The last video is under the 100-view rate floor and holds a
+       * 50% like rate: if it ever appears as Top Like Rate, the floor is gone.
+       */
+      return jsonRes({ data: [
+        { video_id: "v1", video_caption: "เมื่อต้องมารับสมัครหมอข้อสะโพกและข้อเข่า",
+          video_thumbnail_url: "https://p16.tiktokcdn.com/v1.jpg", video_share_url: "https://tiktok.com/@bkh/video/1",
+          video_views_count: 12608, video_reach: 9800, video_likes: 210, video_comments: 11,
+          video_shares: 46, video_favorites: 20 },
+        { video_id: "v2", video_caption: "3 คำ หลังเช็กร่างกาย ก่อนฤดูกาลใหม่",
+          video_thumbnail_url: "", video_share_url: "https://tiktok.com/@bkh/video/2",
+          video_views_count: 4200, video_reach: 3900, video_likes: 113, video_comments: 4,
+          video_shares: 9, video_favorites: 3 },
+        { video_id: "v3", video_caption: "ซื้อแพ็กเกจสุขภาพ ผ่านเว็บไซต์ได้ง่ายๆ",
+          video_thumbnail_url: "https://p16.tiktokcdn.com/v3.jpg", video_share_url: "https://tiktok.com/@bkh/video/3",
+          video_views_count: 2000, video_reach: 1850, video_likes: 30, video_comments: 2,
+          video_shares: 4, video_favorites: 12 },
+        { video_id: "v4", video_caption: "under the rate floor", video_thumbnail_url: "",
+          video_share_url: "", video_views_count: 6, video_reach: 6, video_likes: 3,
+          video_comments: 0, video_shares: 0, video_favorites: 0 },
+      ]});
+    }
+    // Two accounts on two dates: a daily series that assumed one row per date
+    // would halve the trend, and reach that read `reach` would be undefined.
+    const day = (date, account_name, o) => ({ date, account_name, ...o });
+    return jsonRes({ data: [
+      day("2026-07-15", "Bangkok Hospital", { video_views: 60000, unique_video_views: 11000,
+        profile_views: 1200, likes: 1200, comments: 20, shares: 240, bio_link_clicks: 20, phone_number_clicks: 5 }),
+      day("2026-07-15", "Bangkok Hospital TH", { video_views: 6941, unique_video_views: 1897,
+        profile_views: 168, likes: 155, comments: 4, shares: 37, bio_link_clicks: 4, phone_number_clicks: 1 }),
+      day("2026-07-16", "Bangkok Hospital", { video_views: 30000, unique_video_views: 5000,
+        profile_views: 500, likes: 500, comments: 6, shares: 80, bio_link_clicks: 6, phone_number_clicks: 2 }),
     ]});
   }
   // LINE is disconnected; any call reaching here is a regression.
@@ -464,9 +517,25 @@ global.fetch = async (url, opts = {}) => {
     });
   }
 
+  /**
+   * GCS reads must be routed BY OBJECT PATH.
+   *
+   * This stub used to answer every GET with the access list, whatever was
+   * asked for — so `/api/report` read that as its cached payload and returned
+   * a 200 carrying the users array instead of a report. A stub that answers
+   * the same however it is asked cannot tell a working cache from a broken one
+   * (§10.4), and it hid the report endpoint completely.
+   *
+   * Everything except the access list is a miss, so cached endpoints build
+   * their payload for real in the suite.
+   */
   if (u.includes("storage.googleapis.com")) {
-    if (opts.method === "POST") return jsonRes({ ok: true });
-    return jsonRes({ users: [{ email: "staff@bangkokhospital.com", tabs: ["overview"] }] });
+    if (opts.method === "POST" || u.includes("/upload/storage/")) return jsonRes({ ok: true });
+    const object = decodeURIComponent((u.match(/\/o\/([^?]+)/) || [])[1] || "");
+    if (/access|users/i.test(object)) {
+      return jsonRes({ users: [{ email: "staff@bangkokhospital.com", tabs: ["overview"] }] });
+    }
+    return jsonRes({ error: "Not Found" }, 404);
   }
 
   if (u.includes("metadata.google.internal")) {

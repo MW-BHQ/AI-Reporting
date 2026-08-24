@@ -83,7 +83,41 @@ function reportFixture() {
         impressions: 7000000, clicks: 123277, engagements: 304989,
         cpr: 0.036, cpe: 0.83, cpc: 2.05, accounts: [k + " x ADA"] })),
       shared: null },
-    searchTerms: [{ term: "bmi", impressions: 500, clicks: 30, spend: 100, ctr: 0.06 }],
+    /**
+     * One brand deliberately has NO search-ads data (WSH), so the empty-state
+     * path renders rather than only ever the populated one, and the
+     * unattributed line is present so its markup is executed too.
+     */
+    searchAds: { available: true,
+      byBrand: KEYS.map((k) => ({ key: k, label: k,
+        impressions: k === "WSH" ? 0 : 2750, clicks: k === "WSH" ? 0 : 152,
+        spend: k === "WSH" ? 0 : 900, ctr: k === "WSH" ? null : 0.055,
+        visits: k === "WSH" ? 0 : 100, actionsTotal: k === "WSH" ? 0 : 8,
+        actions: events,
+        terms: k === "WSH" ? []
+          : [{ term: "bmi", impressions: 500, clicks: 30, spend: 100, ctr: 0.06 }] })),
+      unattributed: { impressions: 60900, clicks: 4546, spend: 5800,
+        campaigns: ["260710-03_bcm_tra", "rightchoice-google-reserve"] } },
+    /**
+     * `top.favorites` is null and one card has no thumbnail, so the two
+     * fallback branches in the Top performances grid are exercised rather than
+     * assumed — a missing winner and a missing image are both normal.
+     */
+    tiktok: { available: true,
+      channel: { views: 96941, reach: 17897, profileViews: 1868,
+        likes: 1855, comments: 30, shares: 357, bioLinkClicks: 30, phoneClicks: 8,
+        daily: [{ d: "2026-07-15", views: 66941 }, { d: "2026-07-16", views: 30000 }],
+        accounts: ["Bangkok Hospital"] },
+      top: { available: true, videoCount: 4, minRateViews: 100,
+        views: { id: "v1", caption: "clinic tour", thumb: "https://cdn.test/v1.jpg",
+          views: 12608, likes: 210, comments: 11, shares: 46, favorites: 20 },
+        comments: { id: "v1", caption: "clinic tour", thumb: "", views: 12608, comments: 11 },
+        shares: { id: "v1", caption: "clinic tour", thumb: "https://cdn.test/v1.jpg", views: 12608, shares: 46 },
+        favorites: null,
+        likeRate: { id: "v2", caption: "check-up tips", thumb: "", views: 4200, rate: 0.0269 },
+        commentRate: { id: "v3", caption: "packages", thumb: "https://cdn.test/v3.jpg", views: 2000, rate: 0.001 },
+        shareRate: { id: "v1", caption: "clinic tour", thumb: "https://cdn.test/v1.jpg", views: 12608, rate: 0.0036 },
+        favoriteRate: { id: "v3", caption: "packages", thumb: "", views: 2000, rate: 0.006 } } },
     social: { facebook: { reach: 1000, engagements: 50 },
       tiktok: { views: 900, likes: 40, comments: 5, shares: 8 } },
     shared: { meta: { spend: 20, impressions: 200, clicks: 10, accounts: ["BHQ x AIQ"] }, note: "shared" },
@@ -194,6 +228,37 @@ setTimeout(() => {
       const slides = root ? root.querySelectorAll(".slide, .lang-page").length : 0;
       slides >= 8 ? ok("report slides", `${slides} sections`)
                   : fail("report slides", `only ${slides} rendered`);
+      /**
+       * A slide count alone cannot tell a rendered block from one that fell
+       * through to its "unavailable" branch — the section still exists, just
+       * empty. These assert the DATA reached the markup.
+       */
+      const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+      const present = (name, needle) => text.includes(needle)
+        ? ok(name, "rendered") : fail(name, `"${needle}" missing from the report`);
+      present("search ads rendered", "the keywords we bid on");
+      present("search ads unattributed", "not attributed to a hospital");
+      present("tiktok channel rendered", "daily reached audience");
+      present("tiktok clicks rendered", "Bio link clicks");
+      present("tiktok top rendered", "Top like rate");
+      /**
+       * The presence checks above can pass on a needle that also appears
+       * elsewhere, so assert the fallback branches did NOT fire. This pair
+       * caught a Search Ads needle that was really matching the GBP block.
+       */
+      const absent = (name, needle) => text.includes(needle)
+        ? fail(name, `fell through to "${needle}"`) : ok(name, "built from data");
+      absent("search ads not fallback", "Google Ads is unavailable");
+      absent("tiktok not fallback", "TikTok is unavailable");
+      // The title must follow the open tab, not read BHQ (MW, v3.100.0).
+      /Search Ads · BGH/.test(text)
+        ? ok("search ads titled BGH", "per hospital")
+        : fail("search ads titled BGH", "title is not per hospital");
+      // Nothing above the divider may claim the shared accounts are one
+      // hospital's, and the retired slide must be gone.
+      text.includes("Organic social")
+        ? fail("organic social retired", "superseded slide still renders")
+        : ok("organic social retired", "gone");
       finish();
     }, 500);
   }

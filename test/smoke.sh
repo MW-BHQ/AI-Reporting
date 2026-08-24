@@ -75,6 +75,37 @@ check "ecom migration" GET "/api/ecommerce/migration?from=$FROM&to=$TO"
 check "ecom churn"   GET "/api/ecommerce/churn?from=$FROM&to=$TO"
 check "ecom monthly" GET "/api/ecommerce/monthly?to=$TO"
 check "ecom roas"    GET "/api/ecommerce/roas?from=$FROM&to=$TO"
+check "report"       GET "/api/report?from=$FROM&to=$TO"
+
+# Monthly Reports had NO smoke coverage until v3.100.0 — the GCS stub answered
+# every read with the access list, so /api/report returned the users array with
+# a 200 and nobody noticed. These assert the payload, not the status.
+REPORT="/api/report?from=$FROM&to=$TO"
+SA="d.searchAds.byBrand.find(b=>b.key==="
+echo "--- monthly report: per-hospital split must be able to fail ---"
+# The brand comes from the campaign code. A boundary bug here sent every coded
+# campaign to unattributed and left the suite green.
+expect_field "sa BGH impressions"  "$REPORT" "${SA}'BGH').impressions===2750?2750:undefined"
+# Two rows, BIH and bih — a case-sensitive match would return 37745, not the sum.
+expect_field "sa BIH case-merged"  "$REPORT" "${SA}'BIH').impressions===53440?53440:undefined"
+expect_field "sa BIH terms"        "$REPORT" "${SA}'BIH').terms.length===2?2:undefined"
+# All nine key events, whether or not they fired.
+expect_field "sa nine key events"  "$REPORT" "${SA}'BGH').actions.length===9?9:undefined"
+# bcm is a real code brand but NOT a hospital; the uncoded campaign joins it.
+# If either leaks into a hospital this drops to 1.
+expect_field "sa unattributed"     "$REPORT" "d.searchAds.unattributed.campaigns.length===2?2:undefined"
+expect_field "sa bcm not a brand"  "$REPORT" "d.searchAds.byBrand.every(b=>b.impressions!==4100)?'ok':undefined"
+
+echo "--- monthly report: TikTok field names and floors ---"
+# reach is unique_video_views; there is no `reach` field on this connector.
+expect_field "tk reach"            "$REPORT" "d.tiktok.channel.reach===17897?17897:undefined"
+expect_field "tk profile views"    "$REPORT" "d.tiktok.channel.profileViews===1868?1868:undefined"
+expect_field "tk bio link clicks"  "$REPORT" "d.tiktok.channel.bioLinkClicks===30?30:undefined"
+# Two accounts post on the same date: one row per date would halve this.
+expect_field "tk daily multi-acct" "$REPORT" "d.tiktok.channel.daily[0].views===66941?66941:undefined"
+# v4 has a 50% like rate on 6 views. If the floor goes, it tops the ranking.
+expect_field "tk rate floor holds" "$REPORT" "d.tiktok.top.likeRate.id==='v2'?'v2':undefined"
+expect_field "tk top by favorites" "$REPORT" "d.tiktok.top.favorites.id==='v1'?'v1':undefined"
 echo "--- audiences field integrity (a dropped Windsor field must fail here) ---"
 CAMPD="/api/campaign?code=260701-08&from=$FROM&to=$TO"
 # Google Ads must reach campaign analysis through the shared platform registry.

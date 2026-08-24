@@ -12,29 +12,46 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.59.1.** Sections 1–9 below were written around v3.17 and remain
-accurate on the APIs, but the product has roughly doubled since. What changed:
+**Version 3.100.0.** Sections 1–9 were written around v3.17 and remain accurate
+on the APIs, but the product has more than doubled since. The dated entries
+under "Recent (August 2026)" further down are **newest-first** and are the real
+changelog — read those before the numbered sections.
 
-**Tabs now (14).** Overview · Google Profile · Campaigns · **Pages** ·
-Meta Ads (Benchmarks, Audiences, Tagging audit) · **Google Ads (Overview)** ·
-**E-commerce (Overview, Monthly report, Centers, Channels, ROAS, Churn,
-Migration)** · Topic Explorer · Users.
+**Tabs now.** Overview · **Monthly Reports (BGH / BIH / BHT / WSH)** ·
+Google Profile · Campaigns · Pages · Meta Ads (Benchmarks, Audiences, Tagging
+audit) · Google Ads (Overview) · E-commerce (Overview, Report, Centers,
+Channels, ROAS, Churn, Migration) · Topic Explorer · Users.
 
-**Connectors changed.** LINE was disconnected from Windsor in Aug 2026 and
-replaced by **Google Ads**. LINE code is behind `LINE_ENABLED` (default off),
-not deleted — see §6.
+**Monthly Reports is where the current work is.** It replaces a Looker Studio
+deck, is one nav section with a tab per hospital, and prints to 16:9 slides.
+Order is MW's; anything not yet reviewed sits below a marked divider in the
+template.
 
-**A second data source exists.** E-commerce reads a Google Sheet of normalised
-coupon orders, not Windsor — see §6a. ~85,500 rows, Jan 2024 to Jul 2026.
+**Vocabulary, and it matters.** **BHQ** = the four hospitals combined.
+**B+ / "group"** = the 27-branch GA4 property. **BGH / BIH / BHT / WSH** =
+individual hospitals. Using one word for two of these is how a board deck
+overstates by a factor of seven.
 
-**Testing is now four layers** and all four run on `npm test` — see §10. The
-boot test exists because a broken template literal passes every text-level
-check while breaking the whole app.
+**Data sources.** GA4 goes direct to the **Data API** and Search Console direct
+to its own API — Windsor silently ignores `filters` on its GA4 connector, which
+made server-side branch filtering impossible. Windsor still serves Meta Ads,
+Google Ads, Google Business Profile, Facebook organic and TikTok organic. A
+Google Sheet holds ~85,500 normalised e-commerce coupon orders.
 
-**Three silent-failure classes have each bitten more than once.** Read §10
-before making edits: a find-and-replace that matches nothing, a partial deploy,
-and a per-row counter on a connector that returns one row per
-campaign × ad set × date.
+**Performance.** `/api/report` makes ~35 upstream calls behind an 8-slot
+concurrency gate, cached in GCS keyed by build version, with an upstream memo
+below that. Before adding data, read the request-budget note (v3.87.1): derive
+from a pull already in flight, then one group-wide pull bucketed in JS, and only
+then per-brand requests.
+
+**Testing is four layers**, all on `npm test` — see §10. `boot.js` now renders
+the full report against a fixture, because parsing a template is not executing
+it and five render bugs shipped before it did.
+
+**The recurring failure is silence, not errors.** A filter that matches nothing,
+a job whose rejection becomes null, a metric summed that should not be, a cache
+that outlives its schema — all return 200 with plausible-looking numbers. Check
+the output, not the status code.
 
 ---
 
@@ -359,6 +376,29 @@ one. **This data is permanently unreachable.** Do not retry.
 The code already reads LINE request-ID UUIDs from UTM Builder columns N–P if they
 ever start being logged, and will light up automatically.
 
+### TikTok organic — field names verified Aug 2026 (v3.100.0)
+
+Checked against the connector, not guessed. **There is no `reach` field.**
+
+| Wanted | Field | Table |
+|---|---|---|
+| Views | `video_views` | Account |
+| Reach | **`unique_video_views`** ("daily reached audience") | Account |
+| Profile views | `profile_views` | Account |
+| Link / phone clicks | `bio_link_clicks` / `phone_number_clicks` | Account |
+| Per-video views | **`video_views_count`** | Video |
+| Per-video engagement | `video_likes`, `video_comments`, `video_shares`, `video_favorites` | Video |
+| Per-video media | `video_thumbnail_url`, `video_caption`, `video_share_url`, `video_reach` | Video |
+
+- **Account and Video are separate tables and need separate pulls.**
+  `video_views` (account total) and `video_views_count` (per video) are easy to
+  conflate and would double count.
+- `unique_video_views` is a DAILY figure. Summing it over a month counts a
+  repeat viewer twice — an upper bound on unique reach, never "unique reach".
+- No rate fields exist; like/comment/share/favourite rates are ours to define.
+- No website-click field: `bio_link_clicks` and `phone_number_clicks` are the
+  only profile actions exposed.
+
 ### Google Business Profile — 6 listings
 
 | Key | Exact `location_title` | Reviews | Rating |
@@ -553,6 +593,12 @@ server-side, pulled the whole property on every request, OOM-killed the
 container — and all four layers stayed green for two weeks, because the numbers
 were right. The output was correct; only the volume was insane.
 
+**The same bug, a second time, in the GCS stub (found v3.100.0).** It answered
+every read with the access list whatever object was requested, so `/api/report`
+served the users array with a 200 and `buildBenchmark` never ran at all —
+concealing a temporal dead zone error that would throw on any cold cache in
+production. Both stubs are now routed by what they were asked for.
+
 The rule: **a stub must be able to fail.** `ga4Report()` in `test/mock-fetch.js`
 reads the `dimensionFilter` it is sent and honours it, and its fixture includes
 a sibling page and a `login` event specifically so that dropping the filter,
@@ -645,6 +691,114 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.100.0 — Search Ads per hospital; Shared Paid Media; TikTok gets two slides.**
+
+**Search Ads is now per hospital, and the brand comes from the CAMPAIGN CODE.**
+There is no Google Ads account→brand registry and inventing one would have meant
+guessing. But Google Ads campaigns follow the same `YYMMDD-NN_brand_objective`
+convention as Meta (§7), so adding `campaign` to the search-term pull splits four
+ways for **zero extra requests** — rule 1 of the budget, more rows on a pull
+already in flight. `brandFromCampaignCode()` returns null for `bcm` (a real code
+brand, not a hospital) and for campaigns that ignore the convention
+(`rightchoice-google-reserve`); both land in a visible **unattributed** line
+rather than being spread across the four.
+
+Visits and actions cost nothing either: the per-brand `s_`/`k_` pulls already
+carry the channel group, so paid search is a filter on rows in hand. **All nine
+key events**, zeros included — "no purchases from search ads" is a finding.
+
+Paid search is `Paid Search`, **plus `Cross-network` only where the source is
+Google**. Cross-network on its own would fold in non-Google campaigns and
+inflate every hospital's funnel.
+
+**Two honest limits stated on the card rather than hidden.** TOFU impressions are
+the sum of the search terms Google reported, and Google withholds very
+low-volume terms, so the funnel top is a floor rather than the account total.
+And there is **no MoM column**: `srcKeyEventsPrev` is held for the four hospitals
+together, so a per-hospital month-back comparison would cost four more requests.
+
+**Paid media → Shared Paid Media, scorecard only** (MW). These accounts run
+across all four and the platform reports no allocation, so splitting them would
+be an invention. The per-hospital Meta spend chart is gone — superseded by the
+Meta Ad card, which already lists all four with the open one highlighted
+(v3.99.2). The **unmapped-accounts warning is deliberately kept**: it is a
+data-quality flag, not brand spend, and it is what stopped an agency's whole
+spend vanishing silently in v3.69.0.
+
+**TikTok: two slides, and one field name that would have been wrong.** Reach is
+**`unique_video_views`** ("daily reached audience"). There is **no `reach` field
+on `tiktok_organic` at all** — the guess would have shipped a zero. Verified
+against the connector, third time this rule has paid for itself after
+`search_keyword_value` and the GBP surface split.
+
+- Channel slide: views, reach, profile views, a daily views trend, likes /
+  comments / shares, and **`bio_link_clicks` / `phone_number_clicks`** — the only
+  two profile actions the connector exposes, so there is no website-click card.
+- **Reach is a sum of DAILY reached audience**, so someone who watched on two
+  days counts twice. It is an upper bound on monthly unique viewers, and the
+  card says so. Same family as the `page_follows` trap (v3.96.0) in the other
+  direction: that one must never be summed, this one may be but must not be
+  renamed "unique reach".
+- Top performances slide: top post by views / comments / shares / favourites,
+  then the four rates. **`video_views_count` is the per-video figure;
+  `video_views` is the ACCOUNT total** — different tables on one connector, and
+  mixing them double counts.
+- **Rates are our definition, not TikTok's** — the connector publishes no rate
+  field, so they are engagements ÷ views and the card says so; the LS deck may
+  divide by reach. Posts under **100 views are excluded from the rate ranking**,
+  or a video seen three times and liked once leads at 33%.
+
+The video pull is the **one genuinely unavoidable new request** in this release:
+it is the connector's Video table and cannot share the Account-table pull.
+
+**Organic social removed.** Fully superseded — its Facebook half duplicates the
+Facebook slide and its TikTok half duplicates these two. Its `repTt` and
+`repMeta` draw calls went with it; `charts:wired` confirmed no orphans.
+
+**Duplicate `jobs.langKeyEventsPrev` deleted.** Assigned twice since v3.99.0.
+Harmless — `memoUpstream` caches the promise, so the second call shared the
+first's round trip — but it read as two requests.
+
+**`change:capped` had an order dependency, now fixed.** The rule exempts
+`const pct = (v) => …` with a non-global regex, so a new local `pct` declared
+EARLIER in the file consumed the single replacement and left the real formatter
+flagged. The audit's own comment had predicted this. The exemption is now `/g`,
+and the local was renamed `ratePct`. Negative control re-run.
+
+**THE GCS TEST STUB ANSWERED EVERY READ WITH THE ACCESS LIST**, whatever object
+was asked for. Three consequences, and the third is the expensive one:
+
+1. `/api/report` returned the **users array with a 200**. The Monthly Reports
+   payload was never built in the suite.
+2. `/api/report` was **not in `smoke.sh` at all** — the tab under active
+   development had no endpoint coverage whatsoever.
+3. `buildBenchmark` had **never once executed**, which hid a live
+   `Cannot access 'keMonthly' before initialization` — used at the monthly
+   loop, `const`-declared forty lines below it. Same temporal dead zone class
+   as v3.12.1. **Benchmarks would throw on any cold cache in production.**
+   Hoisted; the endpoint now builds for real in the suite.
+
+The stub now routes by object path and 404s everything except
+`access/users.json`, so cached endpoints build their payload. This is §10.4
+again: **a stub that answers the same however it is asked cannot fail**, and it
+hid a broken endpoint for as long as it existed.
+
+`smoke.sh` gained `/api/report` plus 13 content assertions, chosen so each can
+fail: the per-hospital impressions, the case-insensitive `BIH`/`bih` merge, the
+nine key events, `bcm` staying out of every hospital, TikTok's reach field name,
+the multi-account daily sum, and the rate floor.
+
+**A slide count cannot tell a rendered block from an empty one.** `boot.js`
+asserted `slides >= 8`, which passes just as happily when a renderer falls
+through to its "unavailable" branch — the section still exists. It now checks
+for strings only the real blocks emit AND asserts the fallback text is absent.
+Worth the belt and braces: the first needle chosen for Search Ads was
+"Search keyword", which also matches the GBP card, so the negative control
+passed when it should have failed.
+
+**Fixtures exercise the awkward paths, not the happy one:** WSH has no search
+ads at all, `top.favorites` is null, and two cards have no thumbnail.
 
 **v3.99.2 — GCS cache is versioned; review mix relabelled; Meta Ad shows all four.**
 

@@ -1847,29 +1847,184 @@ function renderReport() {
       </div>
     </div>` : '';
 
-  const T = d.searchTerms || [];
-  const termsBody = T.length ? `
+  /**
+   * Search Ads, for the hospital whose tab is open. The brand comes from the
+   * campaign code server-side; campaigns outside the convention are shown in
+   * their own line rather than folded into a hospital.
+   */
+  const SA = d.searchAds || {};
+  const SAB = (SA.byBrand || []).find(x => x.key === sel) || null;
+  const searchAdsBody = (SA.available && SAB) ? (() => {
+    const mx = Math.max(SAB.impressions || 1, 1);
+    const pv = Math.max(8, Math.round((SAB.visits / mx) * 100));
+    const pa = Math.max(6, Math.round((SAB.actionsTotal / mx) * 100));
+    return `
     <div class="grid g-2">
-      <div class="card"><div class="card-title">Top search terms by clicks</div>
-        <div class="chart-wrap" style="height:300px"><canvas id="repTerms"></canvas></div></div>
-      <div class="card"><div class="card-title">Click-through by term</div>
-        <div class="chart-wrap" style="height:300px"><canvas id="repTermsCtr"></canvas></div></div>
+      <div class="card">
+        ${[['TOFU','Impressions',SAB.impressions,100,'#4B8DF8','#fff'],
+           ['MOFU','Visits',SAB.visits,pv,'#7FB0F5','#fff'],
+           ['BOFU','Actions',SAB.actionsTotal,pa,'#BFD8FA','#1B2340']].map(([stage,lab,val,w,bg,fg])=>`
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <div style="width:46px;font-size:10px;font-weight:700;color:var(--faint)">${stage}</div>
+            <div style="width:92px;font-size:11.5px;color:var(--ink-2)">${lab}</div>
+            <div style="flex:1;min-width:0">
+              <div style="width:${w}%;min-width:64px;background:${bg};color:${fg};border-radius:20px;
+                          padding:9px 14px;text-align:right;font-weight:700;font-size:16px">${num(val)}</div>
+            </div>
+          </div>`).join('')}
+        <div class="grid g-3" style="margin:14px 0 0">
+          ${kpi('Clicks', num(SAB.clicks))}
+          ${kpi('CTR', SAB.ctr===null?'\u2014':(SAB.ctr*100).toFixed(2)+'%')}
+          ${kpi('Cost', '฿'+num(Math.round(SAB.spend)))}
+        </div>
+        <div style="border-top:1px solid var(--line);margin:26px 0 0"></div>
+        <div class="card-title" style="margin-top:18px">Actions</div>
+        <table><thead><tr><th>Key event</th><th class="num">Count</th></tr></thead><tbody>
+          ${SAB.actions.map(a=>`<tr>
+            <td class="strong">${actIcon(a.id)}${esc(a.label)}</td>
+            <td class="num strong">${num(a.value)}</td></tr>`).join('')}
+        </tbody></table>
+        <div class="note">Bar widths are relative to impressions, so the narrowing is to scale.
+        <b>All nine key events are listed</b>, Better AI included \u2014 a zero is a finding, not a gap.
+        Visits and actions are sessions GA4 attributes to <b>Paid Search</b>, plus Performance Max and
+        Demand Gen where the source is Google.
+        <b>No MoM column:</b> the previous window is held for the four hospitals together, not per
+        hospital, so a month-back comparison here would cost four more requests. Say if it is wanted.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Search keywords \u00b7 what people typed</div>
+        <table class="sortable" data-heat="1"><thead><tr>
+          <th>Search keyword</th><th class="num">Impressions</th><th class="num">Clicks</th><th class="num">CTR</th>
+        </tr></thead><tbody>
+        ${SAB.terms.length ? SAB.terms.map(t=>`<tr>
+          <td class="strong i18n">${esc(t.term)}</td>
+          <td class="num">${num(t.impressions)}</td>
+          <td class="num">${num(t.clicks)}</td>
+          <td class="num">${t.ctr===null?'\u2014':(t.ctr*100).toFixed(1)+'%'}</td></tr>`).join('')
+          : '<tr><td colspan="4" class="num">no search terms for this hospital in range</td></tr>'}
+        </tbody></table>
+        <div class="note">These are the queries people actually typed, not the keywords we bid on \u2014 the two
+        diverge, and the query is what tells you what patients are looking for.
+        Impressions above are the sum of the terms Google reported; it withholds very low-volume terms,
+        so the funnel top is a floor rather than the account total.</div>
+      </div>
     </div>
-    <div class="note">These are the queries people actually typed, not the keywords we bid on \u2014 the two
-    diverge, and the query is what tells you what patients are looking for.</div>` : '';
+    ${SA.unattributed ? `<div class="card mt" style="border-color:#E4B84B">
+      <div class="card-title">Search spend not attributed to a hospital</div>
+      <div class="note">฿${num(Math.round(SA.unattributed.spend))} across
+      ${num(SA.unattributed.impressions)} impressions sits in campaigns whose names carry no hospital code
+      \u2014 <b>${esc(SA.unattributed.campaigns.join(', '))}</b>. Counted in no hospital above, shown here so it
+      is not silently lost. Naming these to the <code>YYMMDD-NN_brand</code> convention would place them.</div>
+    </div>` : ''}`;
+  })() : '<div class="note">Google Ads is unavailable for this range.</div>';
 
-  const SO = d.social || {};
-  const socialBody = (SO.facebook || SO.tiktok) ? `
-    <div class="grid g-4" style="margin-bottom:10px">
-      ${SO.facebook ? kpi('Facebook reach', num(SO.facebook.reach), 'includes Boost Post') : ''}
-      ${SO.facebook ? kpi('Post engagements', num(SO.facebook.engagements)) : ''}
-      ${SO.tiktok ? kpi('TikTok views', num(SO.tiktok.views)) : ''}
-      ${SO.tiktok ? kpi('TikTok engagements', num(n0(SO.tiktok.likes)+n0(SO.tiktok.comments)+n0(SO.tiktok.shares))) : ''}
+  /**
+   * TikTok, two slides. The channel is one BHQ-level asset like the Facebook
+   * page, so it carries the BHQ badge rather than a hospital logo \u2014 the
+   * accounts in scope are named on the card rather than assumed to be one.
+   */
+  const TK = d.tiktok || {};
+  const tkChannelBody = TK.available ? (() => {
+    const c = TK.channel;
+    const engMax = Math.max(c.likes, c.comments, c.shares, 1);
+    const clkMax = Math.max(c.bioLinkClicks, c.phoneClicks, 1);
+    const bar = (lab, val, max, col) => `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <div style="width:104px;font-size:11px;color:var(--ink-2)">${esc(lab)}</div>
+        <div style="flex:1;min-width:0">
+          <div style="width:${Math.max(4, Math.round((val/max)*100))}%;min-width:34px;background:${col};
+                      color:#fff;border-radius:4px;padding:3px 8px;text-align:right;
+                      font-size:11px;font-weight:700">${num(val)}</div>
+        </div>
+      </div>`;
+    return `
+    <div class="grid g-2">
+      <div class="card">
+        <div class="card-title">Channel</div>
+        <div class="grid g-3">
+          ${kpi('Views', num(c.views))}
+          ${kpi('Reach', num(c.reach))}
+          ${kpi('Profile views', num(c.profileViews))}
+        </div>
+        <div class="note"><b>Reach is the sum of the daily reached audience</b>, so someone who watched on
+        two days counts twice \u2014 it is an upper bound on the month's unique viewers, not a unique count.
+        TikTok publishes no monthly unique figure. A view counts autoplay, so views and reach are
+        different units and are never summed.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Views trend</div>
+        <div class="chart-wrap" style="height:200px"><canvas id="repTkViews"></canvas></div>
+      </div>
     </div>
-    ${SO.tiktok ? `<div class="card"><div class="card-title">TikTok engagement mix</div>
-      <div class="chart-wrap" style="height:200px"><canvas id="repTt"></canvas></div></div>` : ''}
-    <div class="note">Facebook page reach and TikTok views are <b>different units</b> and are never summed:
-    page reach counts boosted posts, so it overlaps Meta Ads, and a TikTok view counts autoplay.</div>` : '';
+    <div class="grid g-2 mt">
+      <div class="card">
+        <div class="card-title">Engagements</div>
+        <div class="grid g-3" style="margin-bottom:12px">
+          ${kpi('Likes', num(c.likes))}
+          ${kpi('Comments', num(c.comments))}
+          ${kpi('Shares', num(c.shares))}
+        </div>
+        ${bar('Likes', c.likes, engMax, '#4B8DF8')}
+        ${bar('Comments', c.comments, engMax, '#7FB0F5')}
+        ${bar('Shares', c.shares, engMax, '#BFD8FA')}
+      </div>
+      <div class="card">
+        <div class="card-title">Clicks</div>
+        <div class="grid g-2" style="margin-bottom:12px">
+          ${kpi('Bio link clicks', num(c.bioLinkClicks))}
+          ${kpi('Phone clicks', num(c.phoneClicks))}
+        </div>
+        ${bar('Bio link clicks', c.bioLinkClicks, clkMax, '#4B8DF8')}
+        ${bar('Phone clicks', c.phoneClicks, clkMax, '#7FB0F5')}
+        <div class="note">The only two profile actions TikTok exposes. There is no website-click field on
+        this connector${c.accounts.length ? ` \u2014 in scope: <b>${esc(c.accounts.join(', '))}</b>` : ''}.</div>
+      </div>
+    </div>`;
+  })() : '<div class="note">TikTok is unavailable for this range.</div>';
+
+  const tkTopBody = (TK.available && TK.top && TK.top.available) ? (() => {
+    const t = TK.top;
+    /**
+     * A thumbnail URL from the TikTok CDN can expire, so a broken image must
+     * collapse rather than leave a torn box on a printed slide.
+     */
+    const thumb = (v) => v && v.thumb
+      ? `<img src="${esc(v.thumb)}" alt="" loading="lazy"
+              style="width:74px;height:98px;object-fit:cover;border-radius:6px;background:var(--line)"
+              onerror="this.style.display='none'">`
+      : `<div style="width:74px;height:98px;border-radius:6px;background:var(--line)"></div>`;
+    const cell = (title, v, big) => `
+      <div class="card" style="display:flex;gap:10px;align-items:flex-start">
+        ${thumb(v)}
+        <div style="min-width:0;flex:1">
+          <div class="lab">${esc(title)}</div>
+          <div class="val" style="margin:2px 0 4px">${v ? big(v) : '\u2014'}</div>
+          <div class="note i18n" style="margin:0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">
+            ${v ? esc(v.caption || '(no caption)') : 'nothing in range'}</div>
+          ${v ? `<div style="font-size:10px;color:var(--faint);margin-top:3px">${num(v.views)} views</div>` : ''}
+        </div>
+      </div>`;
+    const ratePct = (v) => (v.rate * 100).toFixed(2) + '%';
+    return `
+    <div class="card-title">Top posts</div>
+    <div class="grid g-4">
+      ${cell('Top views', t.views, v => num(v.views))}
+      ${cell('Top comments', t.comments, v => num(v.comments))}
+      ${cell('Top shares', t.shares, v => num(v.shares))}
+      ${cell('Top favourites', t.favorites, v => num(v.favorites))}
+    </div>
+    <div class="card-title mt">Top rates</div>
+    <div class="grid g-4">
+      ${cell('Top like rate', t.likeRate, ratePct)}
+      ${cell('Top comment rate', t.commentRate, ratePct)}
+      ${cell('Top share rate', t.shareRate, ratePct)}
+      ${cell('Top favourite rate', t.favoriteRate, ratePct)}
+    </div>
+    <div class="note"><b>Rates are engagements &divide; views</b> \u2014 TikTok publishes no rate field, so this is
+    our definition and worth checking against the Looker deck, which may divide by reach.
+    Posts under ${num(t.minRateViews)} views are excluded from the rate ranking: a video seen three times
+    and liked once would otherwise lead at 33%. ${num(t.videoCount)} posts in range.</div>`;
+  })() : '';
 
   /**
    * One GBP page per hospital \u2014 the four hospital listings only. Dental and JMS
@@ -1929,16 +2084,23 @@ function renderReport() {
       </div>
     </div>`).join('');
 
+  /**
+   * Shared paid media. These accounts run across all four hospitals and the
+   * platform gives no way to say how much of the budget reached which one, so
+   * the slide is a scorecard and nothing else \u2014 the per-hospital spend chart
+   * that used to sit here is superseded by the Meta Ad card, which lists all
+   * four with the open hospital highlighted (MW, v3.99.2).
+   */
   const paidBody = `${d.shared && d.shared.meta ? `
     <div class="grid g-3" style="margin-bottom:10px">
       ${kpi('Shared spend', '฿'+num(Math.round(d.shared.meta.spend)))}
       ${kpi('Impressions', num(d.shared.meta.impressions))}
       ${kpi('Clicks', num(d.shared.meta.clicks))}
     </div>
-    <div class="card"><div class="card-title">Meta spend by hospital</div>
-      <div class="chart-wrap" style="height:200px"><canvas id="repMeta"></canvas></div>
-      <div class="note">${esc(d.shared.meta.accounts.join(', '))} \u2014 ${esc(d.shared.note)}</div>
-    </div>` : ''}
+    <div class="note"><b>${esc(d.shared.meta.accounts.join(', '))}</b> \u2014 ${esc(d.shared.note)}
+    There is no allocation behind these figures because the platform reports none: splitting them across
+    the four hospitals would be an invention, so they are held apart instead.</div>`
+    : '<div class="note">No shared ad spend in this range.</div>'}
     ${d.unmapped ? `<div class="card mt" style="border-color:#E4B84B">
       <div class="card-title">Unmapped ad accounts \u2014 not counted anywhere</div>
       <div class="note"><b>${esc(d.unmapped.accounts.join(', '))}</b> \u2014 ฿${num(Math.round(d.unmapped.spend))} spend,
@@ -1960,9 +2122,10 @@ function renderReport() {
     ${slide('Facebook', facebookBody)}
 
     <!-- ===== not yet reviewed by MW: below the agreed sequence ===== -->
-    ${slide('Search Ads \u00b7 what people typed', termsBody, false, true)}
-    ${slide('Paid media', paidBody.trim(), false, true)}
-    ${slide('Organic social', socialBody, false, true)}`;
+    ${slide(`Search Ads \u00b7 ${sel}`, searchAdsBody)}
+    ${slide('Shared Paid Media', paidBody.trim(), false, true)}
+    ${slide('TikTok', tkChannelBody, false, true)}
+    ${tkTopBody ? slide('TikTok \u00b7 Top performances', tkTopBody, false, true) : ''}`;
 
   // Charts must be drawn after the markup is in the DOM.
   if (U && U.months.length && window.Chart) {
@@ -2030,19 +2193,9 @@ function renderReport() {
         });
       }
     }
-    if (T.length) {
-      const tt = T.slice(0, 12);
-      // Long Thai queries need truncating or the axis eats the chart.
-      const lbl = tt.map(x => x.term.length > 34 ? x.term.slice(0, 33) + '\u2026' : x.term);
-      drawBars('repTerms', lbl, [{ label:'Clicks', data: tt.map(x=>x.clicks), color:C.b }]);
-      drawBars('repTermsCtr', lbl, [{ label:'CTR %', data: tt.map(x=>x.ctr?+(x.ctr*100).toFixed(2):0), color:C.d }]);
+    if (TK.available && TK.channel.daily.length) {
+      drawChart('repTkViews', TK.channel.daily, [{ key:'views', label:'Views', color:C.b }]);
     }
-    if (SO.tiktok) drawBars('repTt', ['Likes','Shares','Comments'],
-      [{ label:'TikTok', data:[n0(SO.tiktok.likes),n0(SO.tiktok.shares),n0(SO.tiktok.comments)], color:C.e }]);
-    const withMeta = d.brands.filter(b=>b.meta);
-    if (withMeta.length) drawBars('repMeta', withMeta.map(b=>b.label), [
-      { label:'Spend ฿', data: withMeta.map(b=>Math.round(b.meta.spend)), color:C.e },
-    ]);
   }
 
   document.querySelectorAll('[data-lang]').forEach(el =>
@@ -4917,7 +5070,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.99.2';
+const CLIENT_BUILD = '3.100.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

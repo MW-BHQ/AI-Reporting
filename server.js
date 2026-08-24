@@ -741,6 +741,32 @@ const brandForGbpListing = (title) => {
   return b ? b.key : null;
 };
 
+/**
+ * Brand from a campaign code. The convention is `YYMMDD-NN_brand_objective`
+ * (\u00a77) and Google Ads campaigns follow the same one as Meta, which is what lets
+ * Search Ads split per hospital off a single pull rather than needing a Google
+ * Ads account registry that does not exist yet.
+ *
+ * Two deliberate nulls, both of which land in the caller's unattributed bucket
+ * rather than being folded into a hospital:
+ *   - `bcm` is a real code brand but is not one of the four hospitals.
+ *   - Campaigns that ignore the convention entirely (`12th-checkup`,
+ *     `rightchoice-google-reserve`) are valid campaigns, not errors.
+ * Casing is inconsistent in the wild, so matching is case-insensitive.
+ *
+ * The trailing guard is `(?![A-Za-z])`, NOT `\b`: the separator after the brand
+ * is an underscore, which regex counts as a word character, so `\b` never fires
+ * and every coded campaign fell through to unattributed. Caught by reading the
+ * payload — the suite was green throughout.
+ */
+const CODE_BRAND_RE = /^\d{6}-\d{1,3}[_-]([A-Za-z]{3})(?![A-Za-z])/;
+const brandFromCampaignCode = (name) => {
+  const m = CODE_BRAND_RE.exec(String(name || "").trim());
+  if (!m) return null;
+  const k = m[1].toUpperCase();
+  return BRAND_KEYS.includes(k) ? k : null;
+};
+
 const TABS = [
   { id: "overview",  label: "Overview" },
   { id: "report",    label: "Monthly Reports" },
@@ -1634,7 +1660,13 @@ async function buildReport(from, to) {
     jobs[`c_${b.key}`] = ga4Compat(["country"], ["sessions"], from, to, { segments: [b.segment] });
     jobs[`cp_${b.key}`] = ga4Compat(["country"], ["sessions"], cwr.prev.from, cwr.prev.to, { segments: [b.segment] });
   }
-  jobs.gadsTerms = windsor("google_ads", ["search_term", "impressions", "clicks", "spend"], from, to);
+  /**
+   * `campaign` rides along on the search-term pull: the code carries the brand,
+   * so this is one request that buckets into four hospitals plus an
+   * unattributed remainder. Rule 1 of the request budget \u2014 more rows on a pull
+   * already in flight, not a second pull.
+   */
+  jobs.gadsTerms = windsor("google_ads", ["campaign", "search_term", "impressions", "clicks", "spend"], from, to);
   jobs.fbOrganic = windsor("facebook_organic",
     ["date", "page_impressions", "page_impressions_organic", "post_engagements",
       "page_follows", "page_daily_follows_unique"], from, to);
@@ -1645,7 +1677,30 @@ async function buildReport(from, to) {
   jobs.metaAds = windsor("facebook",
     ["account_name", "spend", "impressions", "reach", "clicks",
       "actions_link_click", "actions_post_engagement"], from, to);
-  jobs.ttOrganic = windsor("tiktok_organic", ["date", "video_views", "likes", "comments", "shares"], from, to);
+  /**
+   * TikTok, two pulls for two slides. Field names verified against the
+   * connector, not guessed \u2014 reach is `unique_video_views` ("daily reached
+   * audience"); there is no `reach` field on this connector at all.
+   *
+   * `account_name` rides along so the note can name which channels are in
+   * scope rather than assuming a single one.
+   */
+  jobs.ttOrganic = windsor("tiktok_organic",
+    ["date", "account_name", "video_views", "unique_video_views", "profile_views",
+      "likes", "comments", "shares", "bio_link_clicks", "phone_number_clicks"], from, to);
+  /**
+   * Per-video, for Top performances. This is the connector's Video table rather
+   * than its Account table, so it cannot share the pull above \u2014 the one place
+   * in this report where a second request is genuinely unavoidable.
+   *
+   * `video_views_count` is the per-video figure; `video_views` in the pull above
+   * is the ACCOUNT total. Summing the two together would double count, so they
+   * are deliberately never mixed.
+   */
+  jobs.ttVideos = windsor("tiktok_organic",
+    ["video_id", "video_caption", "video_thumbnail_url", "video_share_url",
+      "video_views_count", "video_reach", "video_likes", "video_comments",
+      "video_shares", "video_favorites"], from, to);
   jobs.gbp = windsor("google_my_business",
     ["location_title", "impressions", "call_clicks", "website_clicks", "direction_requests"], from, to);
   /**
@@ -1698,17 +1753,19 @@ async function buildReport(from, to) {
   // locale, so a single pull buckets into all 40 cells.
   jobs.langSessionsPrev = ga4Compat(["landing_page"], ["sessions"], cwr.prev.from, cwr.prev.to);
   jobs.langKeyEvents = ga4KeyEvents(["landing_page"], from, to);
-  // Previous window, for the MoM columns on the per-language Actions and
-  // Search blocks. Two group-wide requests rather than eight per-brand ones.
-  jobs.langKeyEventsPrev = ga4KeyEvents(["landing_page"], cwr.prev.from, cwr.prev.to);
-  jobs.srcKeyEventsPrev = ga4KeyEvents(["session_manual_source"], cwr.prev.from, cwr.prev.to);
   /**
-   * Previous window, for MoM on the per-language action lists. ONE request:
-   * the landing page carries hospital and locale, so it serves both the
-   * Actions-by-language table and every Search page. A per-source MoM (for the
-   * Facebook actions) would need four more — deliberately not added.
+   * Previous window, for the MoM columns on the per-language Actions and Search
+   * blocks. ONE request: the landing page carries hospital and locale, so it
+   * serves both the Actions-by-language table and every Search page.
+   *
+   * (This line was assigned twice until v3.100.0 — harmless, because
+   * `memoUpstream` caches the promise and the second call shared the first's
+   * round trip, but it read as two different requests.)
    */
   jobs.langKeyEventsPrev = ga4KeyEvents(["landing_page"], cwr.prev.from, cwr.prev.to);
+  // Keyed by source, so the Facebook actions carry MoM for one group-wide
+  // request rather than four per-brand ones.
+  jobs.srcKeyEventsPrev = ga4KeyEvents(["session_manual_source"], cwr.prev.from, cwr.prev.to);
   const { data } = await runJobs(jobs);
 
   for (const b of BRANDS) {
@@ -1935,17 +1992,85 @@ async function buildReport(from, to) {
     available: data.gbp !== null,
   };
 
-  // Top search terms, by clicks. One row per term after merging dates.
-  const termMap = new Map();
-  for (const r of (data.gadsTerms || [])) {
-    const t = String(r.search_term || "").trim(); if (!t) continue;
-    const e = termMap.get(t) || { term: t, impressions: 0, clicks: 0, spend: 0 };
-    e.impressions += n(r.impressions); e.clicks += n(r.clicks); e.spend += n(r.spend);
-    termMap.set(t, e);
-  }
-  const searchTerms = [...termMap.values()]
-    .map((t) => ({ ...t, ctr: t.impressions ? t.clicks / t.impressions : null }))
-    .sort((a, b) => b.clicks - a.clicks).slice(0, 15);
+  /**
+   * Search Ads, per hospital rather than per group.
+   *
+   * The brand comes from the CAMPAIGN CODE, not from an ad-account registry:
+   * Google Ads uses the same `YYMMDD-NN_brand_objective` convention as Meta, so
+   * one pull splits four ways. Campaigns outside the convention (and `bcm`,
+   * which is not a hospital) go to `unattributed` and are shown, never spread
+   * across the four \u2014 the same rule as unmapped Meta accounts.
+   *
+   * Visits and actions cost nothing: the per-brand `s_`/`k_` pulls already
+   * carry the channel group, so paid search is a filter on rows in hand.
+   */
+  const searchAds = (() => {
+    /**
+     * Google Ads traffic in GA4 is "Paid Search", plus the slice of
+     * "Cross-network" (Performance Max, Demand Gen) whose source is google.
+     * Cross-network is NOT matched on its own \u2014 it would fold in non-Google
+     * campaigns and inflate every hospital's funnel.
+     */
+    const isPaidSearch = (chan, src) => {
+      const c = String(chan || "").toLowerCase();
+      return c === "paid search" || (c === "cross-network" && /google/i.test(String(src || "")));
+    };
+
+    const perBrandTerms = {}; const spendBy = {};
+    for (const k of BRAND_KEYS) { perBrandTerms[k] = new Map(); spendBy[k] = { impressions: 0, clicks: 0, spend: 0 }; }
+    const unattributed = { impressions: 0, clicks: 0, spend: 0, campaigns: [] };
+
+    for (const r of (data.gadsTerms || [])) {
+      const owner = brandFromCampaignCode(r.campaign);
+      const imp = n(r.impressions), clk = n(r.clicks), sp = n(r.spend);
+      if (owner === null) {
+        unattributed.impressions += imp; unattributed.clicks += clk; unattributed.spend += sp;
+        const cn = String(r.campaign || "(unnamed)");
+        if (unattributed.campaigns.length < 8 && !unattributed.campaigns.includes(cn)) {
+          unattributed.campaigns.push(cn);
+        }
+        continue;
+      }
+      spendBy[owner].impressions += imp; spendBy[owner].clicks += clk; spendBy[owner].spend += sp;
+      const t = String(r.search_term || "").trim(); if (!t) continue;
+      const m = perBrandTerms[owner];
+      const e = m.get(t) || { term: t, impressions: 0, clicks: 0, spend: 0 };
+      e.impressions += imp; e.clicks += clk; e.spend += sp;
+      m.set(t, e);
+    }
+
+    const byBrand = BRANDS.map((b) => {
+      let visits = 0;
+      for (const r of (data[`s_${b.key}`] || [])) {
+        if (!isPaidSearch(r.session_default_channel_group, r.session_manual_source)) continue;
+        visits += n(r.sessions);
+      }
+      const ev = {};
+      const ke = data[`k_${b.key}`];
+      for (const r of ((ke && ke.rows) || [])) {
+        // key is channel\u0000source
+        const [chan, src] = String(r.key).split("\u0000");
+        if (!isPaidSearch(chan, src)) continue;
+        ev[r.eventName] = (ev[r.eventName] || 0) + r.value;
+      }
+      // All nine, in value order. A key event that did not fire is a zero row,
+      // not a missing one — "no purchases from search ads" is a finding.
+      const actions = KEY_EVENTS
+        .map((e) => ({ id: e.name, label: e.label, value: ev[e.name] || 0 }))
+        .sort((a, b2) => b2.value - a.value);
+      const terms = [...perBrandTerms[b.key].values()]
+        .map((t) => ({ ...t, ctr: t.impressions ? t.clicks / t.impressions : null }))
+        .sort((a, b2) => b2.clicks - a.clicks).slice(0, 20);
+      const s = spendBy[b.key];
+      return { key: b.key, label: b.label,
+        impressions: s.impressions, clicks: s.clicks, spend: s.spend,
+        ctr: s.impressions ? s.clicks / s.impressions : null,
+        visits, actions, actionsTotal: actions.reduce((a, e) => a + e.value, 0), terms };
+    });
+
+    return { available: data.gadsTerms !== null, byBrand,
+      unattributed: unattributed.impressions || unattributed.spend ? unattributed : null };
+  })();
 
   /**
    * Organic social. Facebook page reach INCLUDES Boost Post, and a TikTok view
@@ -1964,6 +2089,85 @@ async function buildReport(from, to) {
       shares: sumOrNull(data.ttOrganic, "shares"),
     },
   };
+
+  /**
+   * TikTok, two slides: the channel, and its top performing posts.
+   *
+   * ONE HONESTY NOTE THAT DRIVES THE LABELLING. `unique_video_views` is the
+   * DAILY reached audience, so summing it over a month counts a person who
+   * watched on Tuesday and Thursday twice. It is an upper bound on monthly
+   * unique reach, not unique reach, and the card says so. The same trap as
+   * `page_follows` (v3.96.0), in the other direction: that one must never be
+   * summed, this one may be but must not be renamed.
+   */
+  const tiktok = (() => {
+    if (data.ttOrganic === null) return { available: false };
+    const rows = data.ttOrganic || [];
+    const sum = (f) => rows.reduce((a, r) => a + n(r[f]), 0);
+
+    // Several accounts would mean several rows per date, so the daily series
+    // sums across accounts rather than assuming one channel.
+    const byDate = new Map();
+    for (const r of rows) {
+      const d0 = String(r.date || "").slice(0, 10); if (!d0) continue;
+      byDate.set(d0, (byDate.get(d0) || 0) + n(r.video_views));
+    }
+    const daily = [...byDate.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+      // `d` is the label key drawChart reads; `date` would render blank axes.
+      .map(([d0, views]) => ({ d: d0, views }));
+    const accounts = [...new Set(rows.map((r) => String(r.account_name || "").trim()).filter(Boolean))];
+
+    const channel = {
+      views: sum("video_views"),
+      reach: sum("unique_video_views"),
+      profileViews: sum("profile_views"),
+      likes: sum("likes"), comments: sum("comments"), shares: sum("shares"),
+      bioLinkClicks: sum("bio_link_clicks"), phoneClicks: sum("phone_number_clicks"),
+      daily, accounts,
+    };
+
+    /**
+     * Top performers. Rates are computed on VIEWS and the card says so — the
+     * connector publishes no rate field, so this is our definition rather than
+     * TikTok's, and the LS deck may well divide by reach instead.
+     *
+     * Rate rankings ignore posts under MIN_RATE_VIEWS. Without a floor a video
+     * seen three times and liked once tops the board at 33%, which is noise
+     * wearing a percentage sign.
+     */
+    const MIN_RATE_VIEWS = 100;
+    const vids = [];
+    for (const r of (data.ttVideos || [])) {
+      const id = String(r.video_id || "").trim(); if (!id) continue;
+      vids.push({
+        id, caption: String(r.video_caption || "").trim(),
+        thumb: String(r.video_thumbnail_url || "").trim(),
+        url: String(r.video_share_url || "").trim(),
+        views: n(r.video_views_count), reach: n(r.video_reach),
+        likes: n(r.video_likes), comments: n(r.video_comments),
+        shares: n(r.video_shares), favorites: n(r.video_favorites),
+      });
+    }
+    const topBy = (metric) => {
+      const best = vids.slice().sort((a, b) => b[metric] - a[metric])[0];
+      return best && best[metric] > 0 ? { ...best, metric, value: best[metric] } : null;
+    };
+    const topRate = (metric) => {
+      const eligible = vids.filter((v) => v.views >= MIN_RATE_VIEWS);
+      const scored = eligible.map((v) => ({ ...v, metric, rate: v.views ? v[metric] / v.views : 0 }));
+      const best = scored.sort((a, b) => b.rate - a.rate)[0];
+      return best && best.rate > 0 ? best : null;
+    };
+    const top = {
+      views: topBy("views"), comments: topBy("comments"),
+      shares: topBy("shares"), favorites: topBy("favorites"),
+      likeRate: topRate("likes"), commentRate: topRate("comments"),
+      shareRate: topRate("shares"), favoriteRate: topRate("favorites"),
+      videoCount: vids.length, minRateViews: MIN_RATE_VIEWS,
+      available: data.ttVideos !== null,
+    };
+    return { available: true, channel, top };
+  })();
 
   /** Month-by-month sessions per hospital, plus MoM / YoY on the headline. */
   const monthsSet = new Set();
@@ -2329,7 +2533,8 @@ async function buildReport(from, to) {
     actionsByLanguage,
     channelsByBrand,
     gbp,
-    searchTerms,
+    searchAds,
+    tiktok,
     social,
     languages,
     languagesAvailable: data.gscLang !== null || data.langSessions !== null,
@@ -3465,6 +3670,18 @@ async function buildBenchmark(anchorISO) {
       m.landingPageViews += n(r.actions_landing_page_view);
     }
   }
+  /**
+   * Declared BEFORE the monthly loop below, which reads `keMonthly`.
+   *
+   * These sat under that loop until v3.100.0 and threw "Cannot access
+   * 'keMonthly' before initialization" on every cold build — the same temporal
+   * dead zone class as v3.12.1. It survived because the test GCS stub answered
+   * every read with a stored object, so `buildBenchmark` never once ran in the
+   * suite; the endpoint returned a cached 200 and looked healthy.
+   */
+  const EMPTY_KE = { total: 0, byKey: new Map(), byName: new Map(), byKeyEvent: new Map(), rows: [], failed: true };
+  const keMonthly = data.keMonthly || EMPTY_KE;
+
   // Site-side metrics exist only in total, so they're attached to the roll-up.
   if (data.ga4Monthly !== null) for (const r of data.ga4Monthly) {
     const k = String(r.date || "").slice(0, 7);
@@ -3494,9 +3711,7 @@ async function buildBenchmark(anchorISO) {
   };
 
   const windowRows = { m3: data.ga4m3, m6: data.ga4m6, m12: data.ga4m12 };
-  const EMPTY_KE = { total: 0, byKey: new Map(), byName: new Map(), byKeyEvent: new Map(), rows: [], failed: true };
   const windowKe = { m3: data.keM3 || EMPTY_KE, m6: data.keM6 || EMPTY_KE, m12: data.keM12 || EMPTY_KE };
-  const keMonthly = data.keMonthly || EMPTY_KE;
 
   function buildAccount(acct) {
     const isAll = acct === "__all__";

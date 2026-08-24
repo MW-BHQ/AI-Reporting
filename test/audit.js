@@ -179,10 +179,11 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
  */
 {
   const exempt = [
-    // Anchored to the arrow-function formatter: there are other locals called
-    // `pct` earlier in the file, and a loose pattern removes one of those and
-    // leaves the real one flagged.
-    /const pct = \(v\) => [^;]+;/,
+    // Anchored to the arrow-function formatter, and GLOBAL: a `const pct`
+    // declared earlier in the file used to consume the single replacement and
+    // leave the real formatter flagged (hit in v3.100.0). Order must not
+    // decide whether this rule passes.
+    /const pct = \(v\) => [^;]+;/g,
     /function changeText\([\s\S]*?\n\}/,
   ];
   let scan = html;
