@@ -95,6 +95,22 @@ expect_field "sa nine key events"  "$REPORT" "${SA}'BGH').actions.length===9?9:u
 # If either leaks into a hospital this drops to 1.
 expect_field "sa unattributed"     "$REPORT" "d.searchAds.unattributed.campaigns.length===2?2:undefined"
 expect_field "sa bcm not a brand"  "$REPORT" "d.searchAds.byBrand.every(b=>b.impressions!==4100)?'ok':undefined"
+# Three sources are emitted under BOTH Paid Search and Cross-network. Only the
+# Paid Search ones count, because no source here is Google — 600 means the
+# Cross-network guard was relaxed to match the channel on its own.
+expect_field "sa excludes x-network" "$REPORT" "${SA}'BGH').visits===300?300:undefined"
+
+echo "--- monthly report: referral quality and the AI spotlight ---"
+expect_field "rf referrers found"  "$REPORT" "d.referral.byBrand[0].referrerCount>=2?d.referral.byBrand[0].referrerCount:undefined"
+# Only Referral-channel sources belong in this table.
+expect_field "rf referral only"    "$REPORT" "d.referral.byBrand[0].referrers.every(r=>r.channel==='Referral')?'ok':undefined"
+# chatgpt.com must be detected as an assistant wherever GA4 filed it.
+expect_field "rf ai detected"      "$REPORT" "d.referral.byBrand[0].ai.rows.some(r=>r.source==='chatgpt.com')?'ok':undefined"
+# The assistant appears under several channels; all must be listed, not just one.
+expect_field "rf ai multi-channel" "$REPORT" "d.referral.byBrand[0].ai.rows[0].channel.includes(',')?'ok':undefined"
+expect_field "rf ai nine events"   "$REPORT" "d.referral.byBrand[0].ai.actions.length===9?9:undefined"
+# pantip.com is not an assistant and must not leak into the AI block.
+expect_field "rf ai excludes plain" "$REPORT" "d.referral.byBrand[0].ai.rows.every(r=>r.source!=='pantip.com')?'ok':undefined"
 
 echo "--- monthly report: TikTok field names and floors ---"
 # reach is unique_video_views; there is no `reach` field on this connector.

@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.100.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.101.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -692,6 +692,54 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.101.0 — Referral quality slide with an AI-assistant spotlight; shared media scorecards.**
+
+**New Referral slide, inserted BEFORE Search in MW's sequence.** Per hospital,
+and it costs **nothing**: the per-brand `s_`/`k_` pulls already carry channel
+group and source, so this is a filter and a regroup on rows in hand.
+
+Ranked by sessions, but the two right-hand columns are the point — **engagement
+rate** and **actions per 100 sessions**. A referrer can send thousands of visits
+that bounce, and sorting on volume alone puts it top. Both are coloured against
+**this hospital's own site average** rather than an invented absolute: green at
+least 15% above, red at least 15% below.
+
+**AI assistants (LLMs) get their own sub-section**, matched by source across
+ALL channels, not just Referral. GA4 has no LLM channel — it scatters
+assistants across Referral and Organic Search and files some as Direct — so the
+channel each landed in is shown as a column, accumulated in a **Set** (a
+substring check would treat "Paid Search" as already covered by "Search").
+
+Two limits stated on the card, because the number is small enough that
+over-reading it would be easy: an assistant that strips the referrer arrives as
+**Direct and cannot be counted at all**, so this is a floor; and because the
+match is by name, **a new assistant is invisible until its name is added**.
+Current list: ChatGPT/OpenAI, Perplexity, Gemini/Bard, Claude/Anthropic,
+Copilot, Poe, You.com, DeepSeek, Grok/x.ai, Mistral, Meta.ai, Phind, Genspark,
+Felo.
+
+**Search Ads: the unattributed card is removed** (MW). The bucketing still
+exists server-side, so nothing is folded into a hospital — it is simply no
+longer shown.
+
+**Shared Paid Media metrics are now framed scorecards** with a derived rate
+beneath each: CPM under spend, CTR under impressions, cost per click under
+clicks. Same three figures, but each one now carries the ratio that makes it
+readable.
+
+**Two renames to satisfy `change:capped`, both of which improve the names.**
+`shareOfSite` → `siteShare` and the `qual(v, base)` parameter → `rate`. The rule
+keys "is this a rate or a change" off the identifier, so a value that is a rate
+should say so. Renaming was the right fix, not an exemption.
+
+**Mock widened, and it changed a real number.** `sessionDefaultChannelGroup`
+gained **Referral** and **Cross-network**, and `sessionManualSource` gained
+`pantip.com` and `chatgpt.com`. Without an AI source in the fixture, `isAi()`
+could have been broken with every layer green. Cross-network is there
+specifically to prove the Search Ads matcher does **not** count it when the
+source is not Google: BGH visits must be 300, and 600 means the guard was
+relaxed. Negative controls run on all three.
+
 **v3.100.0 — Search Ads per hospital; Shared Paid Media; TikTok gets two slides.**
 
 **Search Ads is now per hospital, and the brand comes from the CAMPAIGN CODE.**
@@ -1153,7 +1201,8 @@ permissions for no benefit.
 4. Sessions by language · BHQ *(was "Foreign language versions")*
 5. Actions by language · <hospital>
 6. Channels · where do they find us
-7. Search by language · <hospital> — ten pages
+7. Referral · who brings quality · <hospital> *(v3.101.0, with the AI-assistant spotlight)*
+8. Search by language · <hospital> — ten pages
 8. Google Business Profile · <hospital>
 
 Anything MW has not yet reviewed sits **below** that sequence: Google reviews,

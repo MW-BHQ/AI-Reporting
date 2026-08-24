@@ -99,6 +99,29 @@ function reportFixture() {
       unattributed: { impressions: 60900, clicks: 4546, spend: 5800,
         campaigns: ["260710-03_bcm_tra", "rightchoice-google-reserve"] } },
     /**
+     * One referrer above the site average and one below, so both the green and
+     * red quality branches render. The AI block carries a source GA4 filed
+     * under two different channels, which is the case the last column exists
+     * for.
+     */
+    referral: { byBrand: KEYS.map((k) => ({ key: k, label: k,
+      referrers: [
+        { source: "pantip.com", channel: "Referral", sessions: 400, engaged: 340, actions: 30,
+          engagementRate: 0.85, actionsPer100: 7.5 },
+        { source: "bounce.example", channel: "Referral", sessions: 300, engaged: 60, actions: 1,
+          engagementRate: 0.20, actionsPer100: 0.33 }],
+      referrerCount: 2,
+      totals: { sessions: 700, engaged: 400, actions: 31, engagementRate: 0.57, actionsPer100: 4.4 },
+      ai: { rows: [
+          { source: "chatgpt.com", channel: "Referral, Organic Search", sessions: 120, engaged: 100,
+            actions: 14, engagementRate: 0.83, actionsPer100: 11.7 },
+          { source: "perplexity.ai", channel: "Referral", sessions: 30, engaged: 22, actions: 2,
+            engagementRate: 0.73, actionsPer100: 6.7 }],
+        totals: { sessions: 150, engaged: 122, actions: 16, engagementRate: 0.81, actionsPer100: 10.7 },
+        actions: events, siteShare: 0.0075 },
+      site: { sessions: 20000, engaged: 11000, actions: 600,
+        engagementRate: 0.55, actionsPer100: 3.0 } })) },
+    /**
      * `top.favorites` is null and one card has no thumbnail, so the two
      * fallback branches in the Top performances grid are exercised rather than
      * assumed — a missing winner and a missing image are both normal.
@@ -237,7 +260,17 @@ setTimeout(() => {
       const present = (name, needle) => text.includes(needle)
         ? ok(name, "rendered") : fail(name, `"${needle}" missing from the report`);
       present("search ads rendered", "the keywords we bid on");
-      present("search ads unattributed", "not attributed to a hospital");
+      present("referral rendered", "Who refers, and how good is the traffic");
+      present("referral ai spotlight", "AI assistants (LLMs)");
+      present("referral ai source", "chatgpt.com");
+      // Referral must sit BEFORE Search in MW's sequence.
+      text.indexOf("Who refers") > 0 && text.indexOf("Who refers") < text.indexOf("Search \u00b7 Thai")
+        ? ok("referral before search", "ordered")
+        : fail("referral before search", "Referral is not ahead of the Search pages");
+      // Removed at MW's request in v3.100.1.
+      text.includes("not attributed to a hospital")
+        ? fail("unattributed card removed", "still rendering")
+        : ok("unattributed card removed", "gone");
       present("tiktok channel rendered", "daily reached audience");
       present("tiktok clicks rendered", "Bio link clicks");
       present("tiktok top rendered", "Top like rate");

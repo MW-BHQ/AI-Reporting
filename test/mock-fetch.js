@@ -226,14 +226,22 @@ function ga4Report(body) {
     const d = dims[i];
     const opts = d === "date" ? dates
       : d === "eventName" ? (allowedEvents || GA4_EVENTS)
-      : d === "sessionManualSource" ? ["facebook"]
+      /**
+       * `chatgpt.com` and a plain referrer are here so the Referral block and
+       * the AI-assistant match are both executed. Without an AI source in the
+       * fixture, `isAi()` could be broken and every layer would stay green.
+       */
+      : d === "sessionManualSource" ? ["facebook", "pantip.com", "chatgpt.com"]
       : d === "sessionManualMedium" ? ["paid"]
       // Thailand must be present so the render-time exclusion is exercised.
       : d === "country" ? ["Thailand", "Japan", "United States", "Germany", "Singapore", "Cambodia"]
       : d === "sessionManualCampaignName" ? [...campaigns, ...marker]
       // Paid Search must be present or the Google Ads impression mapping
-      // (IMPRESSION_SOURCE_BY_CHANNEL) is never exercised.
-      : d === "sessionDefaultChannelGroup" ? ["Organic Search", "Paid Social", "Paid Search", ...marker]
+      // (IMPRESSION_SOURCE_BY_CHANNEL) is never exercised. Referral must be
+      // present or the Referral block has nothing to filter, and Cross-network
+      // must be here so the Search Ads matcher is proved NOT to count it when
+      // the source is not Google.
+      : d === "sessionDefaultChannelGroup" ? ["Organic Search", "Paid Social", "Paid Search", "Referral", "Cross-network", ...marker]
       : d === "itemName" ? ["Heart Screening Package", ...marker]
       : d === "pageTitle" ? ["Heart Screening Package", "Annual Check-up", ...marker]
       : d === "pagePath" ? pages

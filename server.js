@@ -2073,6 +2073,105 @@ async function buildReport(from, to) {
   })();
 
   /**
+   * Referral, per hospital, and who brings QUALITY rather than volume.
+   *
+   * Costs nothing: the per-brand `s_`/`k_` pulls already carry channel group
+   * and source, so this is a filter and a regroup on rows already in hand.
+   *
+   * Quality here is two ratios, both of which a big but useless referrer fails:
+   * engagement rate (GA4's engaged sessions over sessions) and actions per 100
+   * sessions. A site can send thousands of visits that bounce; ranking on
+   * sessions alone would put it top of the table.
+   */
+  const referral = (() => {
+    /**
+     * AI assistants are spotlighted WHEREVER GA4 files them, not only under
+     * Referral. GA4 has no LLM channel: it scatters them across Referral and
+     * Organic Search, and files some as Direct when the tool strips the
+     * referrer. Matching on source and reporting the channel it landed in is
+     * the only way to see the whole picture.
+     */
+    const AI_SOURCES = [
+      "chatgpt", "openai", "perplexity", "gemini", "bard", "claude", "anthropic",
+      "copilot", "poe.com", "you.com", "deepseek", "grok", "x.ai", "mistral",
+      "meta.ai", "phind", "genspark", "felo",
+    ];
+    const isAi = (src) => {
+      const s = String(src || "").toLowerCase();
+      return AI_SOURCES.some((a) => s.includes(a));
+    };
+    const shape = (t) => ({ ...t,
+      engagementRate: t.sessions ? t.engaged / t.sessions : null,
+      actionsPer100: t.sessions ? (t.actions / t.sessions) * 100 : null });
+
+    const byBrand = BRANDS.map((b) => {
+      const rows = data[`s_${b.key}`] || [];
+      const ke = data[`k_${b.key}`];
+      // Key events keyed by channel\u0000source, so they join the session rows.
+      const evBySrc = new Map();
+      for (const r of ((ke && ke.rows) || [])) {
+        const [chan, src] = String(r.key).split("\u0000");
+        const k = `${chan}\u0000${src}`;
+        const e = evBySrc.get(k) || { total: 0, byName: {} };
+        e.total += r.value; e.byName[r.eventName] = (e.byName[r.eventName] || 0) + r.value;
+        evBySrc.set(k, e);
+      }
+      const blank = (source, channel) => ({ source, channel, sessions: 0, engaged: 0, actions: 0 });
+      const refMap = new Map(); const aiMap = new Map();
+      let siteSessions = 0;
+      const aiEvents = {};
+      for (const r of rows) {
+        const chan = String(r.session_default_channel_group || "(unassigned)");
+        const src = String(r.session_manual_source || "(not set)");
+        const s = n(r.sessions), eng = n(r.engaged_sessions);
+        const ev = evBySrc.get(`${chan}\u0000${src}`) || { total: 0, byName: {} };
+        siteSessions += s;
+        if (/^referral$/i.test(chan)) {
+          const t = refMap.get(src) || blank(src, chan);
+          t.sessions += s; t.engaged += eng; t.actions += ev.total;
+          refMap.set(src, t);
+        }
+        if (isAi(src)) {
+          const t = aiMap.get(src) || { ...blank(src, chan), channels: new Set() };
+          t.sessions += s; t.engaged += eng; t.actions += ev.total;
+          // Every channel this assistant landed in, as a Set: a substring
+          // check would treat "Paid Search" as already covered by "Search".
+          t.channels.add(chan);
+          aiMap.set(src, t);
+          for (const [nm, v] of Object.entries(ev.byName)) aiEvents[nm] = (aiEvents[nm] || 0) + v;
+        }
+      }
+      const referrers = [...refMap.values()].map(shape).sort((a, b2) => b2.sessions - a.sessions);
+      const ai = [...aiMap.values()]
+        .map((t) => {
+          const list = [...t.channels].sort();
+          return { ...shape(t), channels: undefined,
+            channel: list.slice(0, 3).join(", ") + (list.length > 3 ? ` +${list.length - 3}` : "") };
+        })
+        .sort((a, b2) => b2.sessions - a.sessions);
+      const totals = (list) => shape(list.reduce((a, t) => ({
+        sessions: a.sessions + t.sessions, engaged: a.engaged + t.engaged, actions: a.actions + t.actions,
+      }), { sessions: 0, engaged: 0, actions: 0 }));
+      const refTotal = totals(referrers), aiTotal = totals(ai);
+      // Site-wide baseline, so "good" is measured against this hospital's own
+      // average rather than an absolute anyone would have to invent.
+      let allEngaged = 0, allActions = 0;
+      for (const r of rows) allEngaged += n(r.engaged_sessions);
+      for (const r of ((ke && ke.rows) || [])) allActions += r.value;
+      const site = shape({ sessions: siteSessions, engaged: allEngaged, actions: allActions });
+      return { key: b.key, label: b.label,
+        referrers: referrers.slice(0, 15), referrerCount: referrers.length, totals: refTotal,
+        ai: { rows: ai, totals: aiTotal,
+          actions: KEY_EVENTS.map((e) => ({ id: e.name, label: e.label, value: aiEvents[e.name] || 0 }))
+            .sort((a, b2) => b2.value - a.value),
+          siteShare: siteSessions ? aiTotal.sessions / siteSessions : null },
+        site };
+    });
+    return { byBrand };
+  })();
+
+
+  /**
    * Organic social. Facebook page reach INCLUDES Boost Post, and a TikTok view
    * is not an impression, so the two are reported side by side and never summed
    * — same reasoning as the Overview funnel (§v3.68.0).
@@ -2534,6 +2633,7 @@ async function buildReport(from, to) {
     channelsByBrand,
     gbp,
     searchAds,
+    referral,
     tiktok,
     social,
     languages,
