@@ -646,6 +646,40 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.99.0 — MW review pass: 13 fixes.**
+
+**Bug:** GCS-served responses omitted `cacheAgeSec`, so the header read
+**"cached undefineds ago"**. Now returns 0.
+
+- Badge reads **BHQ**, not "all four hospitals".
+- Section gaps widened (`slide-title` margin 34→56px, `.slide + .slide` 6→34px).
+- Hospital codes use the existing `.hcode` / `.hcode-sm` (#002D73, 800). I had
+  started adding a second class for this before noticing one already existed —
+  removed.
+- **Sessions by language:** tooltip gone, "(MoM)" under the hospital code. New
+  `dltPlain()` for tables whose header already names the comparison —
+  `dlt(v, ' ')` still emitted `data-tip` and the hand cursor.
+- **Actions by language:** values at `.strong`, icons on all nine columns.
+- **Search pages:** Actions is its own sub-section with an **MoM column**; all
+  nine key events including Better AI. Keywords sortable.
+- **GBP scorecards show ABSOLUTE change**, not percent — "+1,240 calls" is
+  actionable, "+12%" makes the reader work out of what.
+- **GBP keywords:** column is **Search Vol**, sortable, and `รพ.กรุงเทพ` added
+  to the brand filter.
+- **Ranking position does not exist** in GBP: it reports which phrases found the
+  listing, never where it placed. Needs a rank tracker — same sheet as the
+  keyword table MW is sending. Said so on the card.
+- **Reviews:** monthly chart back on the left; the two long notes deleted and
+  the rating mix moved into the All time card.
+- **Missing 2★ sample explained:** samples only existed where a review carried a
+  comment, so a star level with rating-only reviews vanished. Those now render
+  "n reviews at this rating, none with a comment".
+- **Facebook:** Actions sub-section with MoM; card titled **Meta Ad**, Spend →
+  **Total cost**.
+
+MoM on the Actions blocks costs **two group-wide requests**
+(`langKeyEventsPrev`, `srcKeyEventsPrev`), not eight per-brand ones.
+
 **v3.98.0 — upstream memo: never fetch the same thing twice.**
 
 Endpoint caches are keyed by ENDPOINT. `memoUpstream` is keyed by the **request

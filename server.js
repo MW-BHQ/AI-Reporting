@@ -709,7 +709,7 @@ const ECOM_ONLY_META = ["BHQ Shopee x EGG"];
  */
 const BRAND_KW_GLOBAL = [
   "bangkok hospital", "bangkokhospital", "\u0e42\u0e23\u0e07\u0e1e\u0e22\u0e32\u0e1a\u0e32\u0e25\u0e01\u0e23\u0e38\u0e07\u0e40\u0e17\u0e1e",
-  "\u0e23\u0e1e \u0e01\u0e23\u0e38\u0e07\u0e40\u0e17\u0e1e", "\u0e23.\u0e1e.\u0e01\u0e23\u0e38\u0e07\u0e40\u0e17\u0e1e", "bdms",
+  "\u0e23\u0e1e \u0e01\u0e23\u0e38\u0e07\u0e40\u0e17\u0e1e", "\u0e23.\u0e1e.\u0e01\u0e23\u0e38\u0e07\u0e40\u0e17\u0e1e", "\u0e23\u0e1e.\u0e01\u0e23\u0e38\u0e07\u0e40\u0e17\u0e1e", "bdms",
   // address fragments: navigational, not competitive
   "phetchaburi", "\u0e40\u0e1e\u0e0a\u0e23\u0e1a\u0e38\u0e23\u0e35", "huai khwang", "\u0e2b\u0e49\u0e27\u0e22\u0e02\u0e27\u0e32\u0e07",
   "bang kapi", "\u0e1a\u0e32\u0e07\u0e01\u0e30\u0e1b\u0e34", "soi ", "\u0e0b\u0e2d\u0e22",
@@ -1698,6 +1698,17 @@ async function buildReport(from, to) {
   // locale, so a single pull buckets into all 40 cells.
   jobs.langSessionsPrev = ga4Compat(["landing_page"], ["sessions"], cwr.prev.from, cwr.prev.to);
   jobs.langKeyEvents = ga4KeyEvents(["landing_page"], from, to);
+  // Previous window, for the MoM columns on the per-language Actions and
+  // Search blocks. Two group-wide requests rather than eight per-brand ones.
+  jobs.langKeyEventsPrev = ga4KeyEvents(["landing_page"], cwr.prev.from, cwr.prev.to);
+  jobs.srcKeyEventsPrev = ga4KeyEvents(["session_manual_source"], cwr.prev.from, cwr.prev.to);
+  /**
+   * Previous window, for MoM on the per-language action lists. ONE request:
+   * the landing page carries hospital and locale, so it serves both the
+   * Actions-by-language table and every Search page. A per-source MoM (for the
+   * Facebook actions) would need four more — deliberately not added.
+   */
+  jobs.langKeyEventsPrev = ga4KeyEvents(["landing_page"], cwr.prev.from, cwr.prev.to);
   const { data } = await runJobs(jobs);
 
   for (const b of BRANDS) {
@@ -1900,7 +1911,8 @@ async function buildReport(from, to) {
         replyRate: a.count ? a.replied / a.count : null,
         replied: a.replied,
         lifetime: life.get(b.key) || null,
-        samples: [5, 4, 3, 2, 1].map((st) => a.samples[st] || null),
+        samples: [5, 4, 3, 2, 1].map((st) => a.samples[st]
+          || (a.stars[st] > 0 ? { stars: st, count: a.stars[st], comment: null } : null)),
         monthly: [...a.months.values()].sort((x, y) => x.month.localeCompare(y.month))
           .map((m) => ({ month: m.month, count: m.count, avg: +(m.sum / m.count).toFixed(2),
             s1: m.s1, s2: m.s2, s3: m.s3, s4: m.s4, s5: m.s5 })),
@@ -2048,7 +2060,7 @@ async function buildReport(from, to) {
    * every in-scope page so the combined view is a real sum, not an average.
    */
   const ALB = {};
-  const albBlank = () => ({ views: 0, sessions: 0, revenue: 0, events: {} });
+  const albBlank = () => ({ views: 0, sessions: 0, revenue: 0, events: {}, prevEvents: {} });
   for (const k of [...BRAND_KEYS, "BHQ"]) {
     ALB[k] = {}; for (const l of Object.keys(LOCALES)) ALB[k][l] = albBlank();
   }
@@ -2061,15 +2073,17 @@ async function buildReport(from, to) {
       target.revenue += n(r.purchase_revenue);
     }
   }
-  if (data.langKeyEvents && data.langKeyEvents.rows) {
-    for (const r of data.langKeyEvents.rows) {
+  const fillEvents = (src, field) => {
+    for (const r of ((src && src.rows) || [])) {
       const bk = brandForPath(r.key); if (!bk) continue;
       const lc = localeFromPath(r.key); if (!lc || !ALB[bk][lc]) continue;
       for (const target of [ALB[bk][lc], ALB.BHQ[lc]]) {
-        target.events[r.eventName] = (target.events[r.eventName] || 0) + r.value;
+        target[field][r.eventName] = (target[field][r.eventName] || 0) + r.value;
       }
     }
-  }
+  };
+  fillEvents(data.langKeyEvents, "events");
+  fillEvents(data.langKeyEventsPrev, "prevEvents");
   /**
    * Channels per hospital with MoM — the LS "Where do they find us" page.
    * Top five by sessions, matching the deck.
@@ -2121,8 +2135,13 @@ async function buildReport(from, to) {
     LANG_ORDER.map((l) => {
       const t = SL[k][l];
       const cell = (ALB[k] && ALB[k][l]) || { sessions: 0, events: {} };
+      const prev = cell.prevEvents || {};
       const actions = KEY_EVENTS
-        .map((e) => ({ id: e.name, label: e.label, value: (cell.events || {})[e.name] || 0 }))
+        .map((e) => {
+          const value = (cell.events || {})[e.name] || 0;
+          const was = prev[e.name] || 0;
+          return { id: e.name, label: e.label, value, mom: was > 0 ? (value - was) / was : null };
+        })
         .filter((e) => e.value > 0).sort((a, b) => b.value - a.value);
       return {
         key: l, label: LOCALES[l],
@@ -2244,8 +2263,18 @@ async function buildReport(from, to) {
         fbEvents[r.eventName] = (fbEvents[r.eventName] || 0) + r.value;
       }
     }
+    // Previous window, keyed by source, so the Facebook actions carry MoM for
+    // one extra group-wide request rather than four per-brand ones.
+    const fbPrev = {};
+    for (const r of ((data.srcKeyEventsPrev && data.srcKeyEventsPrev.rows) || [])) {
+      if (!isFb(r.key)) continue;
+      fbPrev[r.eventName] = (fbPrev[r.eventName] || 0) + r.value;
+    }
     const fbActions = KEY_EVENTS
-      .map((e) => ({ id: e.name, label: e.label, value: fbEvents[e.name] || 0 }))
+      .map((e) => {
+        const value = fbEvents[e.name] || 0, was = fbPrev[e.name] || 0;
+        return { id: e.name, label: e.label, value, mom: was > 0 ? (value - was) / was : null };
+      })
       .sort((a, b2) => b2.value - a.value);
 
     const page = data.fbOrganic === null ? null : {
@@ -2328,7 +2357,8 @@ app.get("/api/report", requireTab("report"), async (req, res) => {
   try {
     if (!refresh) {
       const stored = await gcsRead(objectName).catch(() => null);
-      if (stored) return res.json({ ...stored, cached: true, store: "gcs" });
+      // cacheAgeSec must be present or the client renders "cached undefineds ago".
+      if (stored) return res.json({ ...stored, cached: true, cacheAgeSec: 0, store: "gcs" });
     }
     const out = await withCache(`report:${from}:${to}`, refresh,
       () => buildReport(from, to), 24 * 3600 * 1000);
