@@ -646,6 +646,31 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.99.2 — GCS cache is versioned; review mix relabelled; Meta Ad shows all four.**
+
+**CACHE BUG, and the reason the rating mix showed all zeros.** The GCS object
+was keyed by date range alone, so after a deploy that ADDED a field the server
+happily served the previous build's payload — and the new UI rendered zeros
+against data that had no such key. The path now carries the build version
+(`report/v<VERSION>/<from>_<to>.json`), so a new build can never read an old
+shape. Worth remembering for any future durable cache: **key it by schema, not
+just by query.**
+
+**Rating mix is no longer called "year to date".** It is every review held,
+accumulated to the end of the selected period, and the heading now says
+`as at <period end>`. Renamed `ytdStars` → `mixToDate`. The note explains it
+covers reviews on record rather than the full lifetime count, since Google
+publishes a lifetime average and total but not the lifetime star split.
+
+The **"This year"** row is gone — MW: it invited confusion between three
+overlapping windows on one card.
+
+**Meta Ad card now lists all four hospitals**, with the open one highlighted.
+MW's reasoning, which is right: every account boosts posts on the *same* page,
+so the organic reach and engagement on the left are the product of all four
+budgets together — showing one hospital's spend beside a shared result implied
+a causal link that does not hold. Shared group accounts appear as their own row.
+
 **v3.99.1 — heat bars, wider gaps, reviews layout.**
 
 **Heat bars behind the SORTED column**, wired into the existing sort handler so

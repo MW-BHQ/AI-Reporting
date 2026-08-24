@@ -1911,7 +1911,10 @@ async function buildReport(from, to) {
         replyRate: a.count ? a.replied / a.count : null,
         replied: a.replied,
         lifetime: life.get(b.key) || null,
-        ytdStars: [...a.months.values()].reduce((acc, m) => {
+        // Every review held, cumulative to the end of the selected period.
+        // Not lifetime — Google does not publish the lifetime star split — but
+        // not "year to date" either, since the window follows the picker.
+        mixToDate: [...a.months.values()].reduce((acc, m) => {
           for (const st of [1, 2, 3, 4, 5]) acc[st] += m[`s${st}`] || 0;
           return acc;
         }, { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }),
@@ -2357,7 +2360,16 @@ app.get("/api/report", requireTab("report"), async (req, res) => {
    * `refresh=1` still forces a rebuild and overwrites it.
    */
   const refresh = req.query.refresh === "1";
-  const objectName = `report/${from}_${to}.json`;
+  /**
+   * VERSION is in the path deliberately.
+   *
+   * Without it, a deploy that adds a field to the payload keeps serving the
+   * previous build's object, and the new UI renders zeros against data that
+   * simply has no such key — which is exactly what happened to the review
+   * rating mix after v3.99.1. A cache keyed only by date range silently
+   * outlives the shape it was written for.
+   */
+  const objectName = `report/v${VERSION}/${from}_${to}.json`;
   try {
     if (!refresh) {
       const stored = await gcsRead(objectName).catch(() => null);

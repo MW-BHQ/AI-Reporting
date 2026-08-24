@@ -66,7 +66,7 @@ function reportFixture() {
       reviewsByBrand: KEYS.map((k) => ({ key: k, label: k, count: 12, avg: 4.6,
         stars: { 1: 0, 2: 1, 3: 1, 4: 3, 5: 7 }, replyRate: 0.75, replied: 9,
         lifetime: { total: 900, avg: 4.7 },
-        ytdStars: { 1: 1, 2: 1, 3: 2, 4: 5, 5: 11 },
+        mixToDate: { 1: 1, 2: 1, 3: 2, 4: 5, 5: 11 },
         monthly: [{ month: "2026-06", count: 8, avg: 4.5, s1:0,s2:1,s3:1,s4:2,s5:4 },
                   { month: "2026-07", count: 12, avg: 4.6, s1:1,s2:0,s3:1,s4:3,s5:7 }],
         samples: [{ stars: 5, when: "2026-07-20", reviewer: "A", comment: "excellent care", replied: true },

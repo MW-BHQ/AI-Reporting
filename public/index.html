@@ -1687,9 +1687,6 @@ function renderReport() {
    * which already lists every review with a Replied flag.
    */
   const RVB = (d.gbp && d.gbp.reviewsByBrand || []).find(x => x.key === sel);
-  const ytdCount = RVB ? (RVB.monthly || []).reduce((a, m) => a + m.count, 0) : 0;
-  const ytdAvg = (RVB && ytdCount)
-    ? +((RVB.monthly.reduce((a, m) => a + m.avg * m.count, 0)) / ytdCount).toFixed(2) : null;
   const stars5 = (n5) => '\u2605'.repeat(n5) + '\u2606'.repeat(5 - n5);
   const reviewBody = (RVB && (RVB.count || (RVB.lifetime && RVB.lifetime.total))) ? `
     <div class="grid g-3" style="margin-bottom:10px">
@@ -1727,18 +1724,13 @@ function renderReport() {
         </div>
         <div class="lab" style="margin-bottom:12px">lifetime average across
           ${RVB.lifetime ? num(RVB.lifetime.total) : '\u2014'} reviews</div>
-        <table style="margin-bottom:10px"><tbody>
-          <tr><td class="strong">This year</td>
-            <td class="num strong">${ytdAvg ?? '\u2014'}</td>
-            <td class="num" style="width:74px">${num(ytdCount)} reviews</td></tr>
-        </tbody></table>
         <div class="card-title">Last 6 months</div>
         <div class="chart-wrap" style="height:210px"><canvas id="rvStack"></canvas></div>
-        <div class="card-title" style="margin-top:12px">Rating mix \u00b7 year to date</div>
+        <div class="card-title" style="margin-top:12px">Rating mix \u00b7 as at ${esc(d.range.to)}</div>
         <table><tbody>
         ${[5,4,3,2,1].map(st=>{
-          const tot = [1,2,3,4,5].reduce((a2,k)=>a2+((RVB.ytdStars||{})[k]||0),0);
-          const v = (RVB.ytdStars||{})[st] || 0;
+          const tot = [1,2,3,4,5].reduce((a2,k)=>a2+((RVB.mixToDate||{})[k]||0),0);
+          const v = (RVB.mixToDate||{})[st] || 0;
           const pct = tot ? (v/tot)*100 : 0;
           return `<tr><td class="strong" style="width:52px">${st}\u2605</td>
             <td><div style="background:var(--line);border-radius:6px;height:9px">
@@ -1746,8 +1738,9 @@ function renderReport() {
             </div></td><td class="num" style="width:52px">${num(v)}</td></tr>`;
         }).join('')}
         </tbody></table>
-        <div class="note">Year to date, not lifetime: Google publishes a lifetime average and count but not
-        the lifetime star split, so this is the widest window that can be stated honestly.</div>
+        <div class="note">Every review held, accumulated to the end of the selected period. Google
+        publishes a lifetime average and count but not the lifetime star split, so this covers the reviews
+        on record rather than the full ${num((RVB.lifetime||{}).total||0)}.</div>
         ${(RVB.avg && RVB.lifetime && RVB.lifetime.avg) ? `<div class="note">
           This period is <b>${(RVB.avg - RVB.lifetime.avg >= 0 ? '+' : '') + (RVB.avg - RVB.lifetime.avg).toFixed(2)}</b>
           against the lifetime average \u2014 the direction of travel, which a single month's score alone does not show.
@@ -1820,25 +1813,37 @@ function renderReport() {
         Instagram, summed across the four hospitals.</div>` : '<div class="note">page data unavailable</div>'}
       </div>
       <div class="card">
-        <div class="card-title">Meta Ad \u00b7 <span class="hcode">${esc(sel)}</span></div>
-        ${fbMine && fbMine.spend ? `
-        <div class="grid g-2" style="margin-bottom:10px">
-          <div><div class="lab">Total cost</div><div style="font-size:22px;font-weight:700;color:var(--violet)">${money(fbMine.spend)}</div></div>
-          <div><div class="lab">Reach</div><div style="font-size:22px;font-weight:700">${num(fbMine.reach)}</div>
-            <div style="font-size:10.5px;color:var(--faint)">people, not impressions</div></div>
-        </div>
-        <table><tbody>
-          <tr><td class="strong">Post engagements</td><td class="num">${num(fbMine.engagements)}</td>
-              <td class="num" style="color:var(--faint)">CPE ${money(fbMine.cpe)}</td></tr>
-          <tr><td class="strong">Link clicks</td><td class="num">${num(fbMine.clicks)}</td>
-              <td class="num" style="color:var(--faint)">CPC ${money(fbMine.cpc)}</td></tr>
-          <tr><td class="strong">Reach</td><td class="num">${num(fbMine.reach)}</td>
-              <td class="num" style="color:var(--faint)">CPR ${money(fbMine.cpr)}</td></tr>
+        <div class="card-title">Meta Ad <span class="all-four">BHQ</span></div>
+        ${(FB.byBrand||[]).some(b=>b.spend) ? `
+        <table class="sortable" data-heat="1"><thead><tr>
+          <th>Hospital</th><th class="num">Total cost</th><th class="num">Reach</th>
+          <th class="num">Post eng.</th><th class="num">Link clicks</th>
+          <th class="num">CPR</th><th class="num">CPE</th><th class="num">CPC</th>
+        </tr></thead><tbody>
+        ${FB.byBrand.map(b=>`<tr${b.key===sel?' style="background:rgba(108,92,231,.05)"':''}>
+          <td><span class="hcode-sm">${esc(b.label)}</span></td>
+          <td class="num strong">${b.spend?money(b.spend):'\u2014'}</td>
+          <td class="num strong">${b.reach?num(b.reach):'\u2014'}</td>
+          <td class="num strong">${b.engagements?num(b.engagements):'\u2014'}</td>
+          <td class="num strong">${b.clicks?num(b.clicks):'\u2014'}</td>
+          <td class="num">${b.cpr?money(b.cpr):'\u2014'}</td>
+          <td class="num">${b.cpe?money(b.cpe):'\u2014'}</td>
+          <td class="num">${b.cpc?money(b.cpc):'\u2014'}</td>
+        </tr>`).join('')}
+        ${FB.shared ? `<tr><td><span class="hcode-sm">Shared</span></td>
+          <td class="num strong">${money(FB.shared.spend)}</td>
+          <td class="num strong">${num(FB.shared.reach)}</td>
+          <td class="num strong">${num(FB.shared.engagements)}</td>
+          <td class="num strong">${num(FB.shared.clicks)}</td>
+          <td class="num">${money(FB.shared.cpr)}</td>
+          <td class="num">${money(FB.shared.cpe)}</td>
+          <td class="num">${money(FB.shared.cpc)}</td></tr>` : ''}
         </tbody></table>
-        <div class="note">${esc((fbMine.accounts||[]).join(', '))}. Cost per reach, engagement and click for
-        this hospital's own accounts only \u2014 the shared group accounts are reported under Paid media.</div>`
-        : `<div class="note">No Meta ad spend for ${esc(sel)} in this range. The account exists; it simply
-           ran nothing.</div>`}
+        <div class="note"><b>All four hospitals are shown, not just ${esc(sel)}</b> \u2014 every account boosts
+        posts on the same page, so the reach and engagement on the left are the product of all of this spend
+        together. The current hospital's row is highlighted. A hospital with no spend shows dashes: the
+        account exists, it simply ran nothing.</div>`
+        : `<div class="note">No Meta ad spend in this range for any hospital.</div>`}
       </div>
     </div>` : '';
 
@@ -4912,7 +4917,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.99.1';
+const CLIENT_BUILD = '3.99.2';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
