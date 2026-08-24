@@ -258,7 +258,9 @@
   /* Every sortable header carries a faint chevron so it reads as clickable;
      the active one turns violet and points. Previously the marker appeared only
      after sorting, so nothing invited the first click. */
-  table.sortable thead th{cursor:pointer;user-select:none;white-space:nowrap;}
+  table.sortable thead th{cursor:pointer;user-select:none;white-space:nowrap;font-weight:700;color:var(--ink-2);}
+  table.sortable thead th.sorted{color:var(--violet);}
+  table.sortable td.heat{border-radius:4px;}
   table.sortable thead th:hover{color:var(--ink-2);}
   table.sortable thead th::after{content:'↕';margin-left:5px;font-size:9px;
     color:var(--faint);opacity:.55;font-weight:400;}
@@ -853,7 +855,51 @@ document.addEventListener('click', (e) => {
     return asc ? x.n - y.n : y.n - x.n;
   });
   rows.forEach(r => tbody.appendChild(r));
+  paintHeat_(table, idx, rows);
 });
+
+/**
+ * Heat bars behind the SORTED column.
+ *
+ * A column of numbers makes you read every one to see which is big. A bar
+ * behind them makes the shape obvious at a glance, and tying it to whichever
+ * column is sorted means it always marks what the reader is actually
+ * comparing. Filled from the right so it grows away from the right-aligned
+ * figure rather than sitting under it.
+ */
+/**
+ * Paint heat bars on a table's default column without waiting for a click.
+ * `data-heat` on the table names the column index to start on.
+ */
+function initHeat_(root) {
+  (root || document).querySelectorAll('table.sortable[data-heat]').forEach(table => {
+    const idx = Number(table.dataset.heat);
+    const tbody = table.tBodies[0]; if (!tbody) return;
+    const rows = [...tbody.rows].filter(r => !r.dataset.child && r.cells.length > idx);
+    if (rows.length < 2) return;
+    const th = table.tHead && table.tHead.rows[0] && table.tHead.rows[0].cells[idx];
+    if (th) th.classList.add('sorted');
+    paintHeat_(table, idx, rows);
+  });
+}
+
+function paintHeat_(table, idx, rows) {
+  table.querySelectorAll('td.heat').forEach(td => {
+    td.classList.remove('heat'); td.style.background = '';
+  });
+  const vals = rows.map(r => sortValue_(r.cells[idx]).n).filter(v => v !== null && isFinite(v));
+  const max = Math.max(...vals.map(Math.abs), 0);
+  if (!max) return;
+  rows.forEach(r => {
+    const cell = r.cells[idx];
+    const v = sortValue_(cell).n;
+    if (v === null || !isFinite(v)) return;
+    const pct = Math.max(2, Math.round((Math.abs(v) / max) * 100));
+    cell.classList.add('heat');
+    cell.style.background =
+      `linear-gradient(to left, rgba(108,92,231,.16) ${pct}%, rgba(108,92,231,0) ${pct}%)`;
+  });
+}
 
 const fmtISO = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -1323,6 +1369,10 @@ function render() {
   else if (S.view === 'pages') renderPages();
   else if (S.view === 'users') renderUsers();
   else renderTopics();
+
+  // Heat bars are painted after every render, so a table shows them on arrival
+  // rather than only after someone clicks a column.
+  initHeat_($('viewRoot'));
 }
 
 // ============================================================ BOARD REPORT
@@ -1364,7 +1414,7 @@ function renderReport() {
    */
   const slide = (title, body, first, allFour) => body
     ? `<div class="slide ${first ? '' : 'slide-break'}"><div class="slide-title">
-         <span>${esc(title)}${allFour ? ' <span class="all-four">BHQ</span>' : ''}</span>
+         <span>${esc(title)}${allFour && !/BHQ/.test(title) ? ' <span class="all-four">BHQ</span>' : ''}</span>
          ${logoImg}
        </div>${body}</div>`
     : '';
@@ -1485,7 +1535,7 @@ function renderReport() {
   const alv = (row, ev) => (row.events && row.events[ev]) || 0;
   const actionsLangBody = AL.length ? `
     <div class="card">
-      <table class="roomy sortable"><thead><tr>
+      <table class="roomy sortable" data-heat="2"><thead><tr>
         <th>Language</th>
         <th class="num">${actIcon('views')}Views</th>
         <th class="num">${actIcon('sessions')}Sessions</th>
@@ -1521,7 +1571,7 @@ function renderReport() {
     <div class="grid g-2">
       ${CH.map(c => `<div class="card">
         <div class="card-title"><span class="hcode">${esc(c.label)}</span></div>
-        <table><thead><tr><th>Channel</th><th class="num">Sessions</th><th class="num">MoM</th></tr></thead><tbody>
+        <table class="sortable" data-heat="1"><thead><tr><th>Channel</th><th class="num">Sessions</th><th class="num">MoM</th></tr></thead><tbody>
         ${c.rows.length ? c.rows.map((r,i)=>`<tr>
           <td class="strong">${i+1}. ${esc(r.channel)}</td>
           <td class="num" style="font-weight:600">${num(r.sessions)}</td>
@@ -1536,7 +1586,7 @@ function renderReport() {
     <div class="grid g-2">
       ${CO.map(c => `<div class="card">
         <div class="card-title"><span class="hcode">${esc(c.label)}</span></div>
-        <table><thead><tr><th>Country</th><th class="num">Sessions</th><th class="num">MoM</th></tr></thead><tbody>
+        <table class="sortable" data-heat="1"><thead><tr><th>Country</th><th class="num">Sessions</th><th class="num">MoM</th></tr></thead><tbody>
         ${c.rows.length ? c.rows.map((r,i)=>`<tr>
           <td class="strong">${i+1}. ${esc(r.country)}</td>
           <td class="num" style="font-weight:600">${num(r.sessions)}</td>
@@ -1574,6 +1624,7 @@ function renderReport() {
   const SB = (d.searchByLanguage || {})[sel] || [];
   const activeLang = S.reportLang && SB.some(x => x.key === S.reportLang) ? S.reportLang : (SB[0] || {}).key;
   const searchPagesBody = SB.length ? `
+    <div style="height:46px"></div>
     <div class="lang-tabs no-print">
       ${SB.map(x=>`<button class="lang-tab ${x.key===activeLang?'active':''}" data-lang="${esc(x.key)}">${esc(x.label)}</button>`).join('')}
     </div>
@@ -1596,7 +1647,8 @@ function renderReport() {
                               padding:9px 14px;text-align:right;font-weight:700;font-size:16px">${num(val)}</div>
                 </div>
               </div>`).join('')}
-            <div class="card-title" style="margin-top:16px">Actions</div>
+            <div style="border-top:1px solid var(--line);margin:26px 0 0"></div>
+            <div class="card-title" style="margin-top:18px">Actions</div>
             <table><thead><tr><th>Key event</th><th class="num">Count</th><th class="num">MoM</th></tr></thead><tbody>
               ${x.actions.length ? x.actions.map(a=>`<tr>
                 <td class="strong">${actIcon(a.id)}${esc(a.label)}</td>
@@ -1609,7 +1661,7 @@ function renderReport() {
           </div>
           <div class="card">
             <div class="card-title">Top keywords</div>
-            <table class="sortable"><thead><tr><th>Keyword</th><th class="num">Imp.</th><th class="num">Clicks</th><th class="num">CTR</th><th class="num">Pos.</th></tr></thead><tbody>
+            <table class="sortable" data-heat="2"><thead><tr><th>Keyword</th><th class="num">Imp.</th><th class="num">Clicks</th><th class="num">CTR</th><th class="num">Pos.</th></tr></thead><tbody>
             ${x.terms.map(t=>`<tr>
               <td class="strong i18n">${esc(t.query)}</td>
               <td class="num">${num(t.impressions)}</td>
@@ -1651,8 +1703,19 @@ function renderReport() {
     </div>
     <div class="grid g-2">
       <div class="card">
-        <div class="card-title">Reviews by month</div>
-        <div class="chart-wrap" style="height:250px"><canvas id="rvStack"></canvas></div>
+        <div class="card-title">Reviews this month</div>
+        <div class="chart-wrap" style="height:230px"><canvas id="rvMonth"></canvas></div>
+        <div class="card-title">Rating mix this period</div>
+        <table><tbody>
+        ${[5,4,3,2,1].map(st=>{
+          const v = RVB.stars[String(st)] || 0;
+          const pct = RVB.count ? (v/RVB.count)*100 : 0;
+          return `<tr><td class="strong" style="width:52px">${st}\u2605</td>
+            <td><div style="background:var(--line);border-radius:6px;height:9px">
+              <div style="width:${pct}%;background:${st>=4?'#2E9E6F':(st===3?'#F2A93B':'#D9534F')};height:9px;border-radius:6px"></div>
+            </div></td><td class="num" style="width:52px">${num(v)}</td></tr>`;
+        }).join('')}
+        </tbody></table>
       </div>
       <div class="card">
         <div class="card-title">All time</div>
@@ -1669,17 +1732,22 @@ function renderReport() {
             <td class="num strong">${ytdAvg ?? '\u2014'}</td>
             <td class="num" style="width:74px">${num(ytdCount)} reviews</td></tr>
         </tbody></table>
-        <div class="card-title">Rating mix this period</div>
+        <div class="card-title">Last 6 months</div>
+        <div class="chart-wrap" style="height:210px"><canvas id="rvStack"></canvas></div>
+        <div class="card-title" style="margin-top:12px">Rating mix \u00b7 year to date</div>
         <table><tbody>
         ${[5,4,3,2,1].map(st=>{
-          const v = RVB.stars[String(st)] || 0;
-          const pct = RVB.count ? (v/RVB.count)*100 : 0;
+          const tot = [1,2,3,4,5].reduce((a2,k)=>a2+((RVB.ytdStars||{})[k]||0),0);
+          const v = (RVB.ytdStars||{})[st] || 0;
+          const pct = tot ? (v/tot)*100 : 0;
           return `<tr><td class="strong" style="width:52px">${st}\u2605</td>
             <td><div style="background:var(--line);border-radius:6px;height:9px">
               <div style="width:${pct}%;background:${st>=4?'#2E9E6F':(st===3?'#F2A93B':'#D9534F')};height:9px;border-radius:6px"></div>
             </div></td><td class="num" style="width:52px">${num(v)}</td></tr>`;
         }).join('')}
         </tbody></table>
+        <div class="note">Year to date, not lifetime: Google publishes a lifetime average and count but not
+        the lifetime star split, so this is the widest window that can be stated honestly.</div>
         ${(RVB.avg && RVB.lifetime && RVB.lifetime.avg) ? `<div class="note">
           This period is <b>${(RVB.avg - RVB.lifetime.avg >= 0 ? '+' : '') + (RVB.avg - RVB.lifetime.avg).toFixed(2)}</b>
           against the lifetime average \u2014 the direction of travel, which a single month's score alone does not show.
@@ -1837,7 +1905,7 @@ function renderReport() {
         </div>
         <div class="card">
           <div class="card-title">Search keywords</div>
-          <table class="sortable"><thead><tr><th>#</th><th>Keyword</th><th class="num">Search Vol</th></tr></thead><tbody>
+          <table class="sortable" data-heat="2"><thead><tr><th>#</th><th>Keyword</th><th class="num">Search Vol</th></tr></thead><tbody>
           ${(g.keywords.rows||[]).length ? g.keywords.rows.map((k,i)=>`<tr><td style="width:28px">${i+1}</td>
             <td class="strong i18n">${esc(k.keyword)}</td>
             <td class="num">${k.users > 0 ? num(k.users)
@@ -1926,6 +1994,12 @@ function renderReport() {
         { label:'Direction clicks', key:'directions', color:'#E8607A', axis:'y' },
       ]);
     });
+    if (RVB && RVB.monthly && RVB.monthly.length) {
+      drawChart('rvMonth', RVB.monthly.map(m => ({ d: m.month, count: m.count, avg: m.avg })), [
+        { label:'Reviews', key:'count', color:'#6C5CE7', axis:'y' },
+        { label:'Average rating', key:'avg', color:'#2E9E6F', axis:'y1' },
+      ]);
+    }
     if (RVB && RVB.monthly && RVB.monthly.length && window.Chart) {
       const mm = RVB.monthly.slice(-6);
       const el = document.getElementById('rvStack');
@@ -4838,7 +4912,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.99.0';
+const CLIENT_BUILD = '3.99.1';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

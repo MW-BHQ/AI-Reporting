@@ -1911,6 +1911,10 @@ async function buildReport(from, to) {
         replyRate: a.count ? a.replied / a.count : null,
         replied: a.replied,
         lifetime: life.get(b.key) || null,
+        ytdStars: [...a.months.values()].reduce((acc, m) => {
+          for (const st of [1, 2, 3, 4, 5]) acc[st] += m[`s${st}`] || 0;
+          return acc;
+        }, { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }),
         samples: [5, 4, 3, 2, 1].map((st) => a.samples[st]
           || (a.stars[st] > 0 ? { stars: st, count: a.stars[st], comment: null } : null)),
         monthly: [...a.months.values()].sort((x, y) => x.month.localeCompare(y.month))

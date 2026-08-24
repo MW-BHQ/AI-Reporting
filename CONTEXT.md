@@ -646,6 +646,36 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.99.1 — heat bars, wider gaps, reviews layout.**
+
+**Heat bars behind the SORTED column**, wired into the existing sort handler so
+one implementation serves every sortable table. A column of numbers makes you
+read each one; a bar makes the shape obvious, and tying it to the sorted column
+means it always marks what the reader is comparing. Filled from the right so it
+grows away from the right-aligned figure. `data-heat="n"` sets the default
+column, painted on render by `initHeat_` rather than waiting for a click.
+Applied to Channels, Countries, Actions by language, Top keywords and GBP
+keywords. Sortable headers are bold; the active one takes the accent.
+
+`initHeat_` was first written inside `renderReport`'s scope but called from
+`render()` — boot caught the ReferenceError immediately. Hoisted.
+
+Gaps widened again (76px title margin, 48px between slides). The Search section
+gets an extra 46px plus a rule above its Actions table, which was colliding with
+the block above.
+
+**Duplicate BHQ removed:** the badge is suppressed when the title already
+contains BHQ.
+
+**Reviews layout per MW:** left is "Reviews this month" — back to the original
+count + average line chart — with Rating mix this period beneath. Right (All
+time) is the lifetime headline, the **last 6 months stacked chart**, and
+**Rating mix year to date**.
+
+That mix is **year to date, not lifetime**, and says so: Google publishes a
+lifetime average and count but not the lifetime star split, so YTD is the widest
+window that can be stated honestly.
+
 **v3.99.0 — MW review pass: 13 fixes.**
 
 **Bug:** GCS-served responses omitted `cacheAgeSec`, so the header read
