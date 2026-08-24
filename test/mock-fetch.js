@@ -287,7 +287,9 @@ global.fetch = async (url, opts = {}) => {
       // Third keyword returns a THRESHOLD instead of a value, mirroring how
       // Google withholds low counts \u2014 so the "<15" path is exercised.
       return jsonRes({ data: LOCS.flatMap((location_title, i) =>
-        ["\u0e42\u0e23\u0e07\u0e1e\u0e22\u0e32\u0e1a\u0e32\u0e25", "hospital near me", "heart hospital"].map((search_keyword, j) => (
+        // 1 brand (contains "bangkok hospital"), 2 non-brand, 1 withheld \u2014 so the
+        // brand split and the threshold path are both exercised.
+        ["bangkok hospital soi phetchaburi", "hospital near me", "chest pain treatment"].map((search_keyword, j) => (
           j === 2
             ? { location_title, search_keyword, search_keyword_value: 0, search_keyword_threshold: 15 }
             : { location_title, search_keyword, search_keyword_value: 500 - j * 100 + i }))) });

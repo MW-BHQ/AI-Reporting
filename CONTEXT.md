@@ -646,6 +646,54 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.95.0 — brand keywords filtered out; sample reviews per star.**
+
+**Replied KPI removed.** It read 100% of 550 — a constant is not a metric.
+
+**GBP keywords now exclude brand and address searches.** A profile's keyword
+list is dominated by people typing the hospital's own name and the soi, which
+confirms brand demand and says nothing about competitive ground. The card now
+shows non-brand phrases only — symptoms, treatments, category terms someone used
+*before* choosing where to go — and states how many brand phrases and searchers
+were excluded, so nothing is hidden.
+
+Two tiers of matching, and the distinction matters:
+- `BRAND_KW_GLOBAL` — brand for every hospital: "bangkok hospital",
+  "โรงพยาบาลกรุงเทพ", plus address fragments (phetchaburi, huai khwang, soi).
+  Someone typing the soi is navigating, not shopping.
+- `BRAND_KW_BY_BRAND` — brand only for its owner. **"heart hospital" is BHT's
+  own name but a genuinely competitive query for BGH**, so filtering it globally
+  would delete real signal from three hospitals.
+
+**Sample reviews per star**, under the trend and all-time blocks: the most
+recent commented review at each rating. The mix says 7% left two stars; the
+sample says what they said. `review_comment` and `review_reviewer` are back in
+the pull for this — removed in v3.94.0 when the triage list went.
+
+Fixtures carry one brand keyword, one non-brand, one withheld count and samples
+at two star levels, so the split, the `<15` path and the sample selection are
+all exercised.
+
+**v3.94.0 — Monthly Reports reviews: executive view, not a work queue.**
+
+**"Needs a reply" removed.** This report is read by executives; a list of
+unanswered 2-stars is a job for whoever works the profile. It was also
+duplicated work — the **Google Profile tab already lists every review with a
+Replied flag and an unreplied count in its header**, so nothing needed moving,
+only deleting. The server no longer builds the list or pulls
+`review_comment` / `review_reviewer` for this report.
+
+**That space is now "All time":** the lifetime average shown large with stars,
+over the lifetime review count, and a three-row ladder — **this period /
+this year / lifetime** — with a note giving the gap between period and lifetime.
+That gap is the executive question: a single month's score says nothing about
+direction, and a lifetime average over hundreds of reviews moves slowly, so a
+gap takes months to close.
+
+**Scope, now consistent across the tab:** GBP and reviews both count the
+hospital's **own listing only**. Dental and JMS appear nowhere in Monthly
+Reports — they still roll into group figures on the Overview tab.
+
 **v3.93.0 — Google reviews per hospital, rebuilt around what is actionable.**
 
 Was a four-up grid of ratings; now one page per hospital tab, matching GBP.

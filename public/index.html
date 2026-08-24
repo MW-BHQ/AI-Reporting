@@ -1602,22 +1602,22 @@ function renderReport() {
    * quietly slides.
    */
   /**
-   * Reviews for the open hospital only. Replaces the four-up rating grid: a
-   * star average says where you landed, an unanswered 2-star says what to do
-   * today, so the reply rate and the unanswered list lead.
+   * Reviews for the open hospital only. Executive view: reply rate, trend and
+   * lifetime position. Review-by-review triage lives on the Google Profile tab,
+   * which already lists every review with a Replied flag.
    */
   const RVB = (d.gbp && d.gbp.reviewsByBrand || []).find(x => x.key === sel);
+  const ytdCount = RVB ? (RVB.monthly || []).reduce((a, m) => a + m.count, 0) : 0;
+  const ytdAvg = (RVB && ytdCount)
+    ? +((RVB.monthly.reduce((a, m) => a + m.avg * m.count, 0)) / ytdCount).toFixed(2) : null;
   const stars5 = (n5) => '\u2605'.repeat(n5) + '\u2606'.repeat(5 - n5);
   const reviewBody = (RVB && (RVB.count || (RVB.lifetime && RVB.lifetime.total))) ? `
-    <div class="grid g-4" style="margin-bottom:10px">
+    <div class="grid g-3" style="margin-bottom:10px">
       <div class="stat card"><div class="lab">Reviews this period</div>
         <div class="val">${num(RVB.count)}</div></div>
       <div class="stat card"><div class="lab">Average this period</div>
         <div class="val">${RVB.avg ?? '\u2014'}</div>
         <div class="sub2">${RVB.lifetime && RVB.lifetime.avg ? `lifetime ${RVB.lifetime.avg}` : ''}</div></div>
-      <div class="stat card"><div class="lab">Replied</div>
-        <div class="val">${RVB.replyRate===null?'\u2014':(RVB.replyRate*100).toFixed(0)+'%'}</div>
-        <div class="sub2">${num(RVB.replied)} of ${num(RVB.count)}</div></div>
       <div class="stat card"><div class="lab">Lifetime reviews</div>
         <div class="val">${RVB.lifetime ? num(RVB.lifetime.total) : '\u2014'}</div></div>
     </div>
@@ -1637,20 +1637,47 @@ function renderReport() {
         }).join('')}
         </tbody></table>
       </div>
-      <div class="card" ${RVB.unanswered.length?'style="border-color:#E4B84B"':''}>
-        <div class="card-title">Needs a reply \u00b7 ${num(RVB.unanswered.length)}</div>
-        ${RVB.unanswered.length ? `<table><tbody>
-        ${RVB.unanswered.map(u=>`<tr>
-          <td style="width:70px;color:${u.stars<=2?'#D9534F':'#F2A93B'};font-size:12px">${stars5(u.stars)}</td>
-          <td><div class="strong i18n" style="font-size:12px">${esc(u.comment) || '<span style="color:var(--faint)">rating only, no comment</span>'}</div>
-            <div style="font-size:10.5px;color:var(--faint)">${esc(u.reviewer)} \u00b7 ${esc(u.when)}</div></td>
-        </tr>`).join('')}
+      <div class="card">
+        <div class="card-title">All time</div>
+        <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:2px">
+          <div style="font-size:38px;font-weight:700;color:var(--violet);line-height:1">
+            ${RVB.lifetime && RVB.lifetime.avg ? RVB.lifetime.avg : '\u2014'}</div>
+          <div style="font-size:15px;color:#F2A93B">${RVB.lifetime && RVB.lifetime.avg
+            ? stars5(Math.round(RVB.lifetime.avg)) : ''}</div>
+        </div>
+        <div class="lab" style="margin-bottom:12px">lifetime average across
+          ${RVB.lifetime ? num(RVB.lifetime.total) : '\u2014'} reviews</div>
+        <table><tbody>
+          <tr><td class="strong">This period</td>
+            <td class="num" style="font-weight:600">${RVB.avg ?? '\u2014'}</td>
+            <td class="num" style="width:80px">${num(RVB.count)} reviews</td></tr>
+          <tr><td class="strong">This year</td>
+            <td class="num" style="font-weight:600">${ytdAvg ?? '\u2014'}</td>
+            <td class="num">${num(ytdCount)} reviews</td></tr>
+          <tr><td class="strong">Lifetime</td>
+            <td class="num" style="font-weight:600">${RVB.lifetime && RVB.lifetime.avg ? RVB.lifetime.avg : '\u2014'}</td>
+            <td class="num">${RVB.lifetime ? num(RVB.lifetime.total) : '\u2014'} reviews</td></tr>
         </tbody></table>
-        <div class="note">Three stars or fewer, left this period without a reply. Answering these moves the
-        rating more than chasing new reviews does.</div>`
-        : '<div class="note">Every review of three stars or fewer this period has a reply. Good.</div>'}
+        ${(RVB.avg && RVB.lifetime && RVB.lifetime.avg) ? `<div class="note">
+          This period is <b>${(RVB.avg - RVB.lifetime.avg >= 0 ? '+' : '') + (RVB.avg - RVB.lifetime.avg).toFixed(2)}</b>
+          against the lifetime average \u2014 the direction of travel, which a single month's score alone does not show.
+          A lifetime average over hundreds of reviews moves slowly, so a gap here takes months to close.</div>` : ''}
       </div>
-    </div>` : '';
+    </div>
+    ${(RVB.samples || []).some(Boolean) ? `<div class="card mt">
+      <div class="card-title">What they actually said \u00b7 one review per rating</div>
+      <table><tbody>
+      ${RVB.samples.filter(Boolean).map(sm=>`<tr>
+        <td style="width:74px;vertical-align:top;color:${sm.stars>=4?'#2E9E6F':(sm.stars===3?'#F2A93B':'#D9534F')};
+                   font-size:12px;padding-top:3px">${stars5(sm.stars)}</td>
+        <td><div class="i18n" style="white-space:normal;font-size:12.5px">${esc(sm.comment)}</div>
+          <div style="font-size:10.5px;color:var(--faint);margin-top:2px">
+            ${esc(sm.reviewer)} \u00b7 ${esc(sm.when)}${sm.replied?'':' \u00b7 no reply yet'}</div></td>
+      </tr>`).join('')}
+      </tbody></table>
+      <div class="note">The most recent review carrying a comment at each star level. Ratings without a
+      comment are counted in the mix above but cannot be quoted.</div>
+    </div>` : ''}` : '';
 
   const T = d.searchTerms || [];
   const termsBody = T.length ? `
@@ -1708,15 +1735,17 @@ function renderReport() {
         <div class="card">
           <div class="card-title">Search keywords</div>
           <table><thead><tr><th>#</th><th>Keyword</th><th class="num">Searchers</th></tr></thead><tbody>
-          ${g.keywords.length ? g.keywords.map((k,i)=>`<tr><td style="width:28px">${i+1}</td>
+          ${(g.keywords.rows||[]).length ? g.keywords.rows.map((k,i)=>`<tr><td style="width:28px">${i+1}</td>
             <td class="strong i18n">${esc(k.keyword)}</td>
             <td class="num">${k.users > 0 ? num(k.users)
               : (k.below ? `<span style="color:var(--faint)">&lt;${num(k.below)}</span>` : '\u2014')}</td></tr>`).join('')
-            : '<tr><td colspan="3" class="num">no keyword data</td></tr>'}
+            : '<tr><td colspan="3" class="num">no non-brand keywords in range</td></tr>'}
           </tbody></table>
-          <div class="note">Unique people who searched that phrase and saw this listing. Google withholds
-          counts below a floor and returns only a threshold, shown as <b>&lt;15</b> \u2014 that is a real answer,
-          not a zero.</div>
+          <div class="note"><b>Brand and address searches are excluded</b> \u2014
+          ${num(g.keywords.brandCount||0)} phrases worth ${num(g.keywords.brandUsers||0)} searchers, people already
+          looking for this hospital by name. What is left is competitive ground: symptoms, treatments and
+          category terms someone used before choosing where to go.
+          Google withholds counts below a floor and returns a threshold instead, shown as <b>&lt;15</b>.</div>
         </div>
       </div>
     </div>`).join('');
@@ -4683,7 +4712,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.93.0';
+const CLIENT_BUILD = '3.95.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

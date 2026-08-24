@@ -631,6 +631,38 @@ const SHARED_ASSETS = {
 /** E-commerce only \u2014 excluded from the general report entirely. */
 const ECOM_ONLY_META = ["BHQ Shopee x EGG"];
 
+/**
+ * Brand-keyword detection for GBP search terms.
+ *
+ * A profile's keyword list is dominated by people typing the hospital's own
+ * name and address — useful for confirming brand demand, useless for finding
+ * competitive ground. These are split so the non-brand list can lead.
+ *
+ * GLOBAL terms are brand for every hospital. PER-BRAND terms are brand only for
+ * the hospital that owns them: "heart hospital" is BHT's own name but a
+ * genuinely competitive query for BGH, so it must not be filtered everywhere.
+ * Address fragments count as brand — someone typing the soi is navigating to a
+ * known destination, not shopping.
+ */
+const BRAND_KW_GLOBAL = [
+  "bangkok hospital", "bangkokhospital", "\u0e42\u0e23\u0e07\u0e1e\u0e22\u0e32\u0e1a\u0e32\u0e25\u0e01\u0e23\u0e38\u0e07\u0e40\u0e17\u0e1e",
+  "\u0e23\u0e1e \u0e01\u0e23\u0e38\u0e07\u0e40\u0e17\u0e1e", "\u0e23.\u0e1e.\u0e01\u0e23\u0e38\u0e07\u0e40\u0e17\u0e1e", "bdms",
+  // address fragments: navigational, not competitive
+  "phetchaburi", "\u0e40\u0e1e\u0e0a\u0e23\u0e1a\u0e38\u0e23\u0e35", "huai khwang", "\u0e2b\u0e49\u0e27\u0e22\u0e02\u0e27\u0e32\u0e07",
+  "bang kapi", "\u0e1a\u0e32\u0e07\u0e01\u0e30\u0e1b\u0e34", "soi ", "\u0e0b\u0e2d\u0e22",
+];
+const BRAND_KW_BY_BRAND = {
+  BGH: [],
+  BIH: ["bangkok international", "brain x bone", "\u0e2d\u0e34\u0e19\u0e40\u0e15\u0e2d\u0e23\u0e4c\u0e40\u0e19\u0e0a\u0e31\u0e19\u0e41\u0e25"],
+  BHT: ["heart hospital", "\u0e42\u0e23\u0e07\u0e1e\u0e22\u0e32\u0e1a\u0e32\u0e25\u0e2b\u0e31\u0e27\u0e43\u0e08"],
+  WSH: ["wattanosoth", "\u0e27\u0e31\u0e12\u0e42\u0e19\u0e2a\u0e16", "cancer hospital", "\u0e42\u0e23\u0e07\u0e1e\u0e22\u0e32\u0e1a\u0e32\u0e25\u0e21\u0e30\u0e40\u0e23\u0e47\u0e07"],
+};
+const isBrandKeyword = (kw, brandKey) => {
+  const k = norm(kw);
+  const terms = [...BRAND_KW_GLOBAL, ...(BRAND_KW_BY_BRAND[brandKey] || [])];
+  return terms.some((t) => k.includes(norm(t)));
+};
+
 const brandBySegment = (seg) => BRANDS.find((b) => b.segment === seg) || null;
 const brandForMetaAccount = (name) => {
   const n = norm(name);
@@ -1559,6 +1591,9 @@ async function buildReport(from, to) {
    * hospital's profile.
    */
   jobs.gbpReviews = windsor("google_my_business",
+    // Comment and reviewer are back, for ONE sample review per star rating —
+    // a rating mix says 7% left two stars; a sample says what they said.
+    // The full review-by-review list still belongs on the Google Profile tab.
     ["review_create_time", "location_title", "review_star_rating",
       "review_comment", "review_reviewer", "review_reply_comment"], ytdFrom, to);
   jobs.gbpLifetime = windsor("google_my_business",
@@ -1713,9 +1748,9 @@ async function buildReport(from, to) {
 
   /**
    * Reviews per hospital: this period, the year's monthly trend, the lifetime
-   * position, and — the actionable part — which reviews are still unanswered.
-   * A rating average tells you where you ended up; an unanswered 2-star tells
-   * you what to do this afternoon.
+   * position and the reply rate. Deliberately NO list of unanswered reviews —
+   * this report is read by executives, and the review-by-review triage lives on
+   * the Google Profile tab, which already flags every unreplied one.
    */
   const reviewsByBrand = (() => {
     /**
@@ -1730,7 +1765,7 @@ async function buildReport(from, to) {
       return b ? b.key : null;
     };
     const blank = () => ({ count: 0, stars: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, replied: 0,
-      months: new Map(), unanswered: [] });
+      months: new Map(), samples: {} });
     const acc = {}; for (const b of BRANDS) acc[b.key] = blank();
     for (const r of (data.gbpReviews || [])) {
       const st = starOf(r.review_star_rating); if (!st) continue;
@@ -1746,12 +1781,17 @@ async function buildReport(from, to) {
       // In-period slice, from the same year-to-date rows.
       if (when.slice(0, 10) >= from) {
         a.count += 1; a.stars[st] += 1;
-        const replied = String(r.review_reply_comment || "").trim().length > 0;
-        if (replied) a.replied += 1;
-        else if (st <= 3) {
-          a.unanswered.push({ stars: st, when: when.slice(0, 10),
-            reviewer: String(r.review_reviewer || "").slice(0, 40),
-            comment: String(r.review_comment || "").slice(0, 180) });
+        if (String(r.review_reply_comment || "").trim()) a.replied += 1;
+        // Keep the most recent commented review at each star level.
+        const body = String(r.review_comment || "").trim();
+        if (body) {
+          const prev = a.samples[st];
+          if (!prev || when > prev.when) {
+            a.samples[st] = { stars: st, when: when.slice(0, 10),
+              reviewer: String(r.review_reviewer || "").slice(0, 40),
+              comment: body.slice(0, 220),
+              replied: String(r.review_reply_comment || "").trim().length > 0 };
+          }
         }
       }
     }
@@ -1771,9 +1811,9 @@ async function buildReport(from, to) {
         replyRate: a.count ? a.replied / a.count : null,
         replied: a.replied,
         lifetime: life.get(b.key) || null,
+        samples: [5, 4, 3, 2, 1].map((st) => a.samples[st] || null),
         monthly: [...a.months.values()].sort((x, y) => x.month.localeCompare(y.month))
           .map((m) => ({ month: m.month, count: m.count, avg: +(m.sum / m.count).toFixed(2) })),
-        unanswered: a.unanswered.sort((x, y) => x.stars - y.stars || y.when.localeCompare(x.when)).slice(0, 6),
       };
     });
   })();
@@ -2070,11 +2110,18 @@ async function buildReport(from, to) {
         mom: { impressions: chg2(t.impressions, pv.impressions), calls: chg2(t.calls, pv.calls),
           website: chg2(t.website, pv.website), directions: chg2(t.directions, pv.directions) },
         daily: [...perBrandDaily[b.key].values()].sort((x, y) => x.d.localeCompare(y.d)),
-        keywords: [...kw[b.key].values()]
-          // Disclosed counts first, then withheld ones — a withheld keyword is
-          // by definition smaller than any disclosed one.
-          .sort((x, y) => (y.users - x.users) || ((x.below || 0) - (y.below || 0)))
-          .slice(0, 10),
+        keywords: (() => {
+          const all = [...kw[b.key].values()]
+            // Disclosed counts first, then withheld ones — a withheld keyword is
+            // by definition smaller than any disclosed one.
+            .sort((x, y) => (y.users - x.users) || ((x.below || 0) - (y.below || 0)));
+          const nonBrand = all.filter((x) => !isBrandKeyword(x.keyword, b.key));
+          const brandCount = all.length - nonBrand.length;
+          const brandUsers = all.filter((x) => isBrandKeyword(x.keyword, b.key))
+            .reduce((a, x) => a + x.users, 0);
+          return { rows: nonBrand.slice(0, 10), brandCount, brandUsers,
+            totalUsers: all.reduce((a, x) => a + x.users, 0) };
+        })(),
       };
     });
   })();
