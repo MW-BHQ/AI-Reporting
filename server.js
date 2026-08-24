@@ -1559,7 +1559,16 @@ async function buildReport(from, to) {
     jobs[`cp_${b.key}`] = ga4Compat(["country"], ["sessions"], cwr.prev.from, cwr.prev.to, { segments: [b.segment] });
   }
   jobs.gadsTerms = windsor("google_ads", ["search_term", "impressions", "clicks", "spend"], from, to);
-  jobs.fbOrganic = windsor("facebook_organic", ["date", "page_impressions", "post_engagements"], from, to);
+  jobs.fbOrganic = windsor("facebook_organic",
+    ["date", "page_impressions", "page_impressions_organic", "post_engagements",
+      "page_follows", "page_daily_follows_unique"], from, to);
+  /**
+   * Ad effort per hospital. `reach` is people, `impressions` is views — the LS
+   * card shows reach, so both are pulled and labelled distinctly.
+   */
+  jobs.metaAds = windsor("facebook",
+    ["account_name", "spend", "impressions", "reach", "clicks",
+      "actions_link_click", "actions_post_engagement"], from, to);
   jobs.ttOrganic = windsor("tiktok_organic", ["date", "video_views", "likes", "comments", "shares"], from, to);
   jobs.gbp = windsor("google_my_business",
     ["location_title", "impressions", "call_clicks", "website_clicks", "direction_requests"], from, to);
@@ -2126,9 +2135,48 @@ async function buildReport(from, to) {
     });
   })();
 
+  /**
+   * Facebook. ONE page serves all four hospitals, so the page funnel is
+   * identical on every tab and is badged as shared. What differs per hospital
+   * is the ad spend behind it, which is why the two sit side by side rather
+   * than being summed into one number.
+   */
+  const facebook = (() => {
+    const page = data.fbOrganic === null ? null : {
+      impressions: sumOrNull(data.fbOrganic, "page_impressions"),
+      organicReach: sumOrNull(data.fbOrganic, "page_impressions_organic"),
+      engagements: sumOrNull(data.fbOrganic, "post_engagements"),
+      // page_follows is a lifetime total, so take the latest row, never a sum.
+      followers: (() => {
+        const rows = (data.fbOrganic || []).filter((r) => n(r.page_follows) > 0)
+          .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+        return rows.length ? n(rows[rows.length - 1].page_follows) : null;
+      })(),
+      newFollows: sumOrNull(data.fbOrganic, "page_daily_follows_unique"),
+    };
+    const blank = () => ({ spend: 0, reach: 0, impressions: 0, clicks: 0, engagements: 0, accounts: [] });
+    const byBrand = {}; for (const b of BRANDS) byBrand[b.key] = blank();
+    const shared = blank();
+    for (const r of (data.metaAds || [])) {
+      const owner = brandForMetaAccount(r.account_name);
+      if (owner === "ECOM" || owner === null) continue;
+      const t = owner === "SHARED" ? shared : byBrand[owner];
+      t.spend += n(r.spend); t.reach += n(r.reach); t.impressions += n(r.impressions);
+      t.clicks += n(r.actions_link_click) || n(r.clicks);
+      t.engagements += n(r.actions_post_engagement);
+      if (r.account_name && !t.accounts.includes(r.account_name)) t.accounts.push(r.account_name);
+    }
+    const rate = (spend, unit) => (unit > 0 ? spend / unit : null);
+    const shape = (t) => ({ ...t,
+      cpr: rate(t.spend, t.reach), cpe: rate(t.spend, t.engagements), cpc: rate(t.spend, t.clicks) });
+    return { page, byBrand: BRANDS.map((b) => ({ key: b.key, label: b.label, ...shape(byBrand[b.key]) })),
+      shared: shared.accounts.length ? shape(shared) : null };
+  })();
+
   return {
     range: { from, to },
     bhq,
+    facebook,
     gbpDetail,
     searchByLanguage,
     usersOverview,

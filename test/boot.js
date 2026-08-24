@@ -71,6 +71,13 @@ function reportFixture() {
                   null, null,
                   { stars: 2, when: "2026-07-10", reviewer: "B", comment: "long wait", replied: false }, null],
         })) },
+    facebook: {
+      page: { impressions: 15561576, organicReach: 900000, engagements: 230339,
+        followers: 379931, newFollows: 196 },
+      byBrand: KEYS.map((k) => ({ key: k, label: k, spend: 253325, reach: 6900661,
+        impressions: 7000000, clicks: 123277, engagements: 304989,
+        cpr: 0.036, cpe: 0.83, cpc: 2.05, accounts: [k + " x ADA"] })),
+      shared: null },
     searchTerms: [{ term: "bmi", impressions: 500, clicks: 30, spend: 100, ctr: 0.06 }],
     social: { facebook: { reach: 1000, engagements: 50 },
       tiktok: { views: 900, likes: 40, comments: 5, shares: 8 } },

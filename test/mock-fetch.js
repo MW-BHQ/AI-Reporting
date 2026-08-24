@@ -43,6 +43,9 @@ function windsorRows(connector, fields) {
   const row = {};
   for (const name of f) {
     if (name === "date") row.date = "2026-07-15";
+    else if (name === "page_follows") row.page_follows = 379931;
+    else if (name === "page_daily_follows_unique") row.page_daily_follows_unique = 196;
+    else if (name === "page_impressions_organic") row.page_impressions_organic = 60;
     else if (name === "review_create_time") row.review_create_time = "2026-07-15T10:00:00Z";
     else if (name === "location_title") row.location_title = "Bangkok Hospital";
     else if (name === "review_star_rating") row.review_star_rating = "FIVE";
@@ -366,7 +369,8 @@ global.fetch = async (url, opts = {}) => {
       // Brand-owned, shared, and e-commerce-only accounts, so the registry split
       // in buildReport is verifiable end to end.
       const mk = (account_name, spend) => ({ date: "2026-07-15", account_name, spend,
-        impressions: spend * 10, clicks: spend / 2,
+        impressions: spend * 10, reach: spend * 6, clicks: spend / 2,
+        actions_link_click: spend / 2, actions_post_engagement: spend * 3,
         actions_onsite_conversion_total_messaging_connection: 5 });
       return jsonRes({ data: [
         mk("BGH x ADA", 100), mk("BIH x ADA", 80), mk("BHT x ADA", 60),

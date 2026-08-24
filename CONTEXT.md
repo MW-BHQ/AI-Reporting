@@ -646,6 +646,30 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.96.0 — Facebook slide; all-time card reworked.**
+
+**All-time card:** the "This period" row duplicated the KPI card directly above
+it. Replaced with the **last six months, rating and volume per month**, then
+This year and Lifetime — the same space now shows the shape of the trend
+instead of repeating a number.
+
+**New Facebook slide.** One page serves all four hospitals, so the funnel on the
+left is identical on every tab and is badged **shared by all four**; the ad
+effort on the right is that hospital's alone. Showing them side by side is the
+point — the same audience, different money behind it.
+
+- Page: impressions with **organic-only beneath**, followers, post engagements.
+  `page_follows` is a LIFETIME total, so the latest row is taken, never summed —
+  summing a lifetime metric across days is a classic way to invent a number.
+- Ad: spend, **reach (people, not impressions)**, post engagements, link clicks,
+  with CPR / CPE / CPC. Fields confirmed against Windsor: `reach`,
+  `actions_post_engagement`, `actions_link_click`.
+- WSH shows "the account exists; it simply ran nothing" rather than a blank —
+  no spend is a fact, not missing data.
+
+Shared group accounts stay under Paid media, so this slide is not double
+counting them.
+
 **v3.95.0 — brand keywords filtered out; sample reviews per star.**
 
 **Replied KPI removed.** It read 100% of 550 — a constant is not a metric.

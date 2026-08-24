@@ -1647,16 +1647,17 @@ function renderReport() {
         </div>
         <div class="lab" style="margin-bottom:12px">lifetime average across
           ${RVB.lifetime ? num(RVB.lifetime.total) : '\u2014'} reviews</div>
-        <table><tbody>
-          <tr><td class="strong">This period</td>
-            <td class="num" style="font-weight:600">${RVB.avg ?? '\u2014'}</td>
-            <td class="num" style="width:80px">${num(RVB.count)} reviews</td></tr>
+        <table><thead><tr><th>Month</th><th class="num">Rating</th><th class="num">Reviews</th></tr></thead><tbody>
+          ${(RVB.monthly||[]).slice(-6).reverse().map(m=>`<tr>
+            <td class="strong">${esc(m.month)}</td>
+            <td class="num" style="font-weight:600;color:${m.avg>=4.5?'#2E9E6F':(m.avg>=4?'#F2A93B':'#D9534F')}">${m.avg}</td>
+            <td class="num">${num(m.count)}</td></tr>`).join('')}
           <tr><td class="strong">This year</td>
             <td class="num" style="font-weight:600">${ytdAvg ?? '\u2014'}</td>
-            <td class="num">${num(ytdCount)} reviews</td></tr>
+            <td class="num">${num(ytdCount)}</td></tr>
           <tr><td class="strong">Lifetime</td>
             <td class="num" style="font-weight:600">${RVB.lifetime && RVB.lifetime.avg ? RVB.lifetime.avg : '\u2014'}</td>
-            <td class="num">${RVB.lifetime ? num(RVB.lifetime.total) : '\u2014'} reviews</td></tr>
+            <td class="num">${RVB.lifetime ? num(RVB.lifetime.total) : '\u2014'}</td></tr>
         </tbody></table>
         ${(RVB.avg && RVB.lifetime && RVB.lifetime.avg) ? `<div class="note">
           This period is <b>${(RVB.avg - RVB.lifetime.avg >= 0 ? '+' : '') + (RVB.avg - RVB.lifetime.avg).toFixed(2)}</b>
@@ -1678,6 +1679,54 @@ function renderReport() {
       <div class="note">The most recent review carrying a comment at each star level. Ratings without a
       comment are counted in the mix above but cannot be quoted.</div>
     </div>` : ''}` : '';
+
+  /**
+   * Facebook: one page for all four hospitals, so the funnel on the left is
+   * identical on every tab and says so. The ad effort on the right is this
+   * hospital's alone \u2014 which is the whole reason the two are shown together
+   * rather than as one number.
+   */
+  const FB = d.facebook || {};
+  const fbMine = (FB.byBrand || []).find(x => x.key === sel);
+  const money = (v) => v === null || v === undefined ? '\u2014' : '\u0e3f' + num(Math.round(v * 100) / 100);
+  const facebookBody = (FB.page || fbMine) ? `
+    <div class="grid g-2">
+      <div class="card">
+        <div class="card-title">The page <span class="all-four">shared by all four</span></div>
+        ${FB.page ? `
+        <div class="grid g-3" style="margin-bottom:10px">
+          <div><div class="lab">Page impressions</div><div style="font-size:19px;font-weight:700">${num(FB.page.impressions)}</div>
+            <div style="font-size:10.5px;color:var(--faint)">${num(FB.page.organicReach)} organic</div></div>
+          <div><div class="lab">Followers</div><div style="font-size:19px;font-weight:700">${num(FB.page.followers)}</div>
+            <div style="font-size:10.5px;color:var(--faint)">${FB.page.newFollows?'+'+num(FB.page.newFollows)+' this period':''}</div></div>
+          <div><div class="lab">Post engagements</div><div style="font-size:19px;font-weight:700">${num(FB.page.engagements)}</div></div>
+        </div>
+        <div class="note">One Facebook page serves all four hospitals, so these figures are identical on
+        every tab. Page impressions include Boost Post, which is why the organic-only figure sits beneath
+        it \u2014 the paid part is already counted in the ad spend opposite.</div>` : '<div class="note">page data unavailable</div>'}
+      </div>
+      <div class="card">
+        <div class="card-title">Ad effort \u00b7 ${esc(sel)}</div>
+        ${fbMine && fbMine.spend ? `
+        <div class="grid g-2" style="margin-bottom:10px">
+          <div><div class="lab">Spend</div><div style="font-size:22px;font-weight:700;color:var(--violet)">${money(fbMine.spend)}</div></div>
+          <div><div class="lab">Reach</div><div style="font-size:22px;font-weight:700">${num(fbMine.reach)}</div>
+            <div style="font-size:10.5px;color:var(--faint)">people, not impressions</div></div>
+        </div>
+        <table><tbody>
+          <tr><td class="strong">Post engagements</td><td class="num">${num(fbMine.engagements)}</td>
+              <td class="num" style="color:var(--faint)">CPE ${money(fbMine.cpe)}</td></tr>
+          <tr><td class="strong">Link clicks</td><td class="num">${num(fbMine.clicks)}</td>
+              <td class="num" style="color:var(--faint)">CPC ${money(fbMine.cpc)}</td></tr>
+          <tr><td class="strong">Reach</td><td class="num">${num(fbMine.reach)}</td>
+              <td class="num" style="color:var(--faint)">CPR ${money(fbMine.cpr)}</td></tr>
+        </tbody></table>
+        <div class="note">${esc((fbMine.accounts||[]).join(', '))}. Cost per reach, engagement and click for
+        this hospital's own accounts only \u2014 the shared group accounts are reported under Paid media.</div>`
+        : `<div class="note">No Meta ad spend for ${esc(sel)} in this range. The account exists; it simply
+           ran nothing.</div>`}
+      </div>
+    </div>` : '';
 
   const T = d.searchTerms || [];
   const termsBody = T.length ? `
@@ -1779,6 +1828,7 @@ function renderReport() {
     ${gbpDetailBody}
 
     <!-- ===== not yet reviewed by MW: below the agreed sequence ===== -->
+    ${slide('Facebook', facebookBody)}
     ${slide('Google reviews', reviewBody, false, true)}
     ${slide('Search Ads \u00b7 what people typed', termsBody, false, true)}
     ${slide('Paid media', paidBody.trim(), false, true)}
@@ -4712,7 +4762,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.95.0';
+const CLIENT_BUILD = '3.96.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
