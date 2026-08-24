@@ -24,6 +24,18 @@ const { GoogleAuth } = require("google-auth-library");
 const app = express();
 app.use(express.json({ limit: "256kb" }));
 
+/**
+ * `refresh=1` must reach the wire, not stop at the upstream memo.
+ *
+ * Done here rather than at each endpoint so a route added later cannot forget:
+ * a Refresh button that quietly returns memoised data is worse than no button,
+ * because the person believes they have fresh numbers.
+ */
+app.use((req, res, next) => {
+  if (req.query && req.query.refresh === "1") bustUpstream();
+  next();
+});
+
 const PORT = process.env.PORT || 8080;
 const WINDSOR_API_KEY = process.env.WINDSOR_API_KEY;
 const WINDSOR_BASE = "https://connectors.windsor.ai";
@@ -160,7 +172,45 @@ const GA4_DIMENSION_LIMIT = 9;
  * Requests now queue behind a fixed number of slots. Slower by a little,
  * deterministic instead of arbitrary.
  */
-const GA4_MAX_CONCURRENT = Number(process.env.GA4_MAX_CONCURRENT || 6);
+/**
+ * UPSTREAM MEMO — one line of defence below every endpoint cache.
+ *
+ * Endpoint caches are keyed by endpoint. This is keyed by the REQUEST itself,
+ * so an identical upstream call is never made twice within the window no
+ * matter which endpoint asked. Two things it buys:
+ *
+ *  1. Cross-endpoint reuse — Overview and Monthly Reports pull overlapping GA4
+ *     reports; the second one to run gets them free.
+ *  2. In-flight de-duplication — the PROMISE is cached, not the result, so two
+ *     identical calls fired in the same tick share one round trip instead of
+ *     racing. With ~35 parallel jobs that happens more than you would think.
+ *
+ * Failures are evicted rather than cached: a transient 500 must not stick.
+ * `refresh=1` bumps the generation, which invalidates everything at once.
+ */
+const UPSTREAM_TTL_MS = Number(process.env.UPSTREAM_TTL_MS || 5 * 60 * 1000);
+const UPSTREAM_MAX = 500;
+const _upstream = new Map();
+let _upstreamGen = 0;
+function bustUpstream() { _upstreamGen++; _upstream.clear(); }
+function memoUpstream(key, fn) {
+  const k = `${_upstreamGen}|${key}`;
+  const hit = _upstream.get(k);
+  if (hit && Date.now() - hit.at < UPSTREAM_TTL_MS) return hit.p;
+  const p = fn();
+  _upstream.set(k, { at: Date.now(), p });
+  p.catch(() => _upstream.delete(k));
+  if (_upstream.size > UPSTREAM_MAX) {
+    // Oldest first; these are all cheap to refetch.
+    const oldest = [...(_upstream.entries())].sort((a, b) => a[1].at - b[1].at)[0];
+    if (oldest) _upstream.delete(oldest[0]);
+  }
+  return p;
+}
+
+// 8 of GA4's 10 concurrent slots, leaving room for another endpoint to run
+// alongside without either being rejected.
+const GA4_MAX_CONCURRENT = Number(process.env.GA4_MAX_CONCURRENT || 8);
 let _ga4Active = 0;
 const _ga4Queue = [];
 function ga4Slot() {
@@ -173,7 +223,14 @@ function ga4Release() {
   else _ga4Active--;
 }
 
-async function ga4RunReport({ dimensions, metrics, from, to, dimensionFilter, limit = 100000 }) {
+function ga4RunReport(opts) {
+  const { dimensions, metrics, from, to, dimensionFilter, limit = 100000 } = opts;
+  return memoUpstream(
+    `ga4|${from}|${to}|${limit}|${dimensions.join(",")}|${metrics.join(",")}|${JSON.stringify(dimensionFilter || null)}`,
+    () => ga4RunReportGated({ dimensions, metrics, from, to, dimensionFilter, limit }));
+}
+
+async function ga4RunReportGated({ dimensions, metrics, from, to, dimensionFilter, limit }) {
   /**
    * The Data API caps a request at 10 metrics and 9 dimensions, exactly as
    * Windsor did. This guard used to live in ga4Fields(), which every Windsor
@@ -425,7 +482,13 @@ async function gscToken() {
  * comfortably; rows come back sorted by clicks, so a truncated tail costs the
  * long tail rather than the headline, but paging keeps the buckets honest.
  */
-async function gscQuery(dimensions, from, to, { rowLimit = 25000, noBranchFilter = false, maxPages = 1 } = {}) {
+function gscQuery(dimensions, from, to, opts = {}) {
+  const { rowLimit = 25000, noBranchFilter = false, maxPages = 1 } = opts;
+  return memoUpstream(`gsc|${from}|${to}|${dimensions.join(",")}|${rowLimit}|${maxPages}|${noBranchFilter}`,
+    () => gscQueryUncached(dimensions, from, to, { rowLimit, noBranchFilter, maxPages }));
+}
+
+async function gscQueryUncached(dimensions, from, to, { rowLimit, noBranchFilter, maxPages }) {
   const out = [];
   for (let page = 0; page < maxPages; page++) {
     const batch = await gscQueryPage(dimensions, from, to, { rowLimit, noBranchFilter, startRow: page * rowLimit });
@@ -850,7 +913,14 @@ async function withCache(key, refresh, producer, ttlMs) {
 
 // ------------------------------------------------------------------ windsor
 
-async function windsor(connector, fields, from, to, { accounts, filters, options } = {}) {
+function windsor(connector, fields, from, to, opts = {}) {
+  const { accounts, filters, options } = opts;
+  return memoUpstream(
+    `ws|${connector}|${from}|${to}|${fields.join(",")}|${JSON.stringify(accounts || null)}|${JSON.stringify(filters || null)}|${JSON.stringify(options || null)}`,
+    () => windsorUncached(connector, fields, from, to, { accounts, filters, options }));
+}
+
+async function windsorUncached(connector, fields, from, to, { accounts, filters, options } = {}) {
   const params = new URLSearchParams();
   params.set("api_key", WINDSOR_API_KEY);
   params.set("fields", fields.join(","));

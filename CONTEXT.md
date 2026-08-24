@@ -646,6 +646,35 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.98.0 — upstream memo: never fetch the same thing twice.**
+
+Endpoint caches are keyed by ENDPOINT. `memoUpstream` is keyed by the **request
+itself**, wrapping `ga4RunReport`, `gscQuery` and `windsor`, so an identical
+upstream call is never made twice within 5 minutes regardless of which endpoint
+asked. Two wins:
+
+1. **Cross-endpoint reuse** — Overview and Monthly Reports pull overlapping GA4
+   reports; whichever runs second gets them free.
+2. **In-flight de-duplication** — the **promise** is cached, not the result, so
+   identical calls fired in the same tick share one round trip rather than
+   racing. Verified: three concurrent identical calls → one upstream hit.
+
+Failures are evicted rather than cached, so a transient 500 does not stick.
+
+**`refresh=1` busts the memo, via one middleware** rather than at each endpoint
+— a route added later cannot forget. A Refresh button that quietly returns
+memoised data is worse than no button, because the person believes the numbers
+are fresh. Verified the generation bump reaches the wire.
+
+`GA4_MAX_CONCURRENT` raised 6 → 8, of GA4's 10 per-property slots, leaving room
+for a second endpoint to run alongside without either being rejected. Cuts the
+report from ~6 waves to ~4.
+
+**Honest limit:** none of this speeds up a genuinely cold build of a date range
+never seen before — that is bounded by GA4 latency × waves. What it fixes is
+everything after the first: repeat loads, overlapping endpoints, and the
+duplicate calls inside a single build.
+
 **v3.97.0 — report cached to GCS; Facebook funnel; review chart restyled.**
 
 **LOAD TIME: the report is now cached in Cloud Storage, not just memory.**
