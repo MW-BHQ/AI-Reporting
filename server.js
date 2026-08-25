@@ -1808,17 +1808,20 @@ async function buildReport(from, to) {
     dimensionFilter: contentPageFilter(),
   });
   /**
-   * The four actions the cards report, as event rows against the page. Only
-   * these four are requested: the cards pair one action per content type, and a
-   * nine-event pull here would multiply rows for columns nothing displays.
+   * All nine key events against the page, not just the four the columns show.
+   *
+   * MW's pairing for Articles (`view_item`) turned out to be wrong, and the
+   * only way to answer "which event should this column be" is to measure what
+   * actually fires on those pages. Requesting all nine costs the SAME request
+   * — more rows on a pull already in flight — and each card now reports its own
+   * event mix, so the next wrong pairing answers itself.
    */
   jobs.contentEvents = ga4RunReport({
     dimensions: ["pagePath", "eventName"],
     metrics: ["eventCount"],
     from, to, limit: 20000, orderBy: "eventCount",
     dimensionFilter: contentPageFilter([
-      { filter: { fieldName: "eventName",
-        inListFilter: { values: ["appointments", "add_to_cart", "view_item", "contact_us"] } } },
+      { filter: { fieldName: "eventName", inListFilter: { values: KEY_EVENT_NAMES } } },
     ]),
   });
   const { data } = await runJobs(jobs);
@@ -2334,6 +2337,17 @@ async function buildReport(from, to) {
     { id: "article", segment: "content",       label: "Articles", action: "view_item" },
     { id: "center",  segment: "center-clinic", label: "Center",   action: "contact_us" },
   ];
+  /**
+   * CATEGORY PAGES, excluded from the content tables (MW).
+   *
+   * `/package/health-check-up-packages` is a listing of packages, not a
+   * package. It outranks every real package on views while representing no
+   * single thing anyone can act on, so it crowds the top of the table and tells
+   * you nothing. Matched on the slug, exactly, per type.
+   */
+  const CONTENT_EXCLUDE = {
+    package: ["health-check-up-packages"],
+  };
   const content = (() => {
     if (data.contentViews === null) return { available: false };
     const SEG_TO_TYPE = Object.fromEntries(CONTENT_TYPES.map((t) => [t.segment, t.id]));
@@ -2372,11 +2386,14 @@ async function buildReport(from, to) {
     }
 
     const bucket = new Map();   // brand \u0000 locale \u0000 type -> Map(path -> row)
-    let unmatched = 0;
+    let unmatched = 0, excluded = 0;
     for (const r of (data.contentViews || [])) {
       const p = parse(r.pagePath);
       if (!p) { unmatched += n(r.screenPageViews); continue; }
       if (!p.locale) continue;
+      // Category pages are dropped before bucketing, so they cannot appear in a
+      // top-10 nor inflate that type's totals.
+      if ((CONTENT_EXCLUDE[p.type] || []).includes(p.slug)) { excluded += n(r.screenPageViews); continue; }
       const k = `${p.brand}\u0000${p.locale}\u0000${p.type}`;
       const m = bucket.get(k) || new Map();
       // Several titles can share a path (A/B tests, title changes mid-month);
@@ -2387,11 +2404,27 @@ async function buildReport(from, to) {
       m.set(p.path, row);
       bucket.set(k, m);
     }
+    /**
+     * Per-page action for the column, and per-TYPE mix of all nine events.
+     * The mix is what answers "is this column the right event for these
+     * pages" — it is measured, not assumed.
+     */
+    const mixByType = {};
+    for (const t of CONTENT_TYPES) mixByType[t.id] = {};
     for (const [k, m] of bucket) {
       const type = k.split("\u0000")[2];
       const action = (CONTENT_TYPES.find((t) => t.id === type) || {}).action;
-      for (const row of m.values()) row.action = (evByPath.get(row.path) || {})[action] || 0;
+      for (const row of m.values()) {
+        const ev = evByPath.get(row.path) || {};
+        row.action = ev[action] || 0;
+        for (const [nm, v] of Object.entries(ev)) {
+          mixByType[type][nm] = (mixByType[type][nm] || 0) + v;
+        }
+      }
     }
+    const mixFor = (type) => KEY_EVENTS
+      .map((e) => ({ id: e.name, label: e.label, value: mixByType[type][e.name] || 0 }))
+      .sort((a, b2) => b2.value - a.value);
 
     const byBrand = {};
     for (const b of BRANDS) {
@@ -2422,9 +2455,33 @@ async function buildReport(from, to) {
      * took down `buildBenchmark` (v3.100.0); the difference is this one was
      * caught before shipping.
      */
-    return { available: true, byBrand, unmatchedViews: unmatched,
+    /**
+     * `suggestedAction` is the event that ACTUALLY fires most on this type's
+     * pages, and it is only reported when it beats the configured column by a
+     * clear margin.
+     *
+     * STRICTLY GREATER, and by more than 20%: an earlier version suggested a
+     * swap whenever the top event had a different id, so a TIE produced a
+     * confident "the column is wrong" warning pointing at whichever event
+     * happened to sort first. A warning that fires on noise gets ignored, and
+     * then the real one (Articles) gets ignored with it.
+     */
+    const types = CONTENT_TYPES.map(({ id, label, action }) => {
+      const mix = mixFor(id);
+      const configured = mix.find((e) => e.id === action);
+      const configuredValue = configured ? configured.value : 0;
+      const top = mix.find((e) => e.value > 0) || null;
+      const clearlyBetter = top && top.id !== action && top.value > configuredValue * 1.2;
+      return { id, label, action,
+        actionLabel: (KEY_EVENTS.find((e) => e.name === action) || {}).label || action,
+        actionValue: configuredValue,
+        mix: mix.slice(0, 4),
+        suggestedAction: clearlyBetter ? top : null };
+    });
+    return { available: true, byBrand, unmatchedViews: unmatched, excludedViews: excluded,
+      excluded: CONTENT_EXCLUDE,
       locales: Object.keys(LOCALES).map((k) => ({ key: k, label: LOCALES[k] })),
-      types: CONTENT_TYPES.map(({ id, label, action }) => ({ id, label, action })) };
+      types };
   })();
 
   /**

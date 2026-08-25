@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.106.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.107.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -691,6 +691,47 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.107.0 — category pages excluded; content cards measure their own key event.**
+
+**`/package/health-check-up-packages` excluded** (MW) — a listing of packages,
+not a package. It outranked every real package on views while representing
+nothing anyone can act on. Dropped BEFORE bucketing, so it neither appears in a
+top-10 nor inflates that type's totals; `CONTENT_EXCLUDE` is keyed by type and
+matches the slug exactly.
+
+**MW asked which key event Articles should show instead of `view_item`. Rather
+than guess a second time, the card now measures it.** The content event pull
+requests ALL NINE key events instead of four — the same request, more rows — and
+each type reports its own event mix. Where the configured column is not what
+actually fires, the card says so in amber and names the alternative.
+
+This turns a guess into an observation, and it generalises: the next wrong
+pairing announces itself instead of sitting there looking plausible.
+
+**A false-warning bug, caught by the mock's flat values.** The first version
+suggested a swap whenever the top event had a different id from the configured
+one — so a TIE produced a confident "this column is wrong" pointing at whichever
+event sorted first. Now it must beat the configured event **by more than 20%**.
+A warning that fires on noise gets ignored, and the real one gets ignored with
+it.
+
+**Two fixture lessons behind that:**
+
+- A flat tie could NOT test the guard: ties keep `KEY_EVENTS` order and
+  `add_to_cart` sorts first, which is exactly what Package configures, so the
+  tie resolved to the configured event and the control passed either way. The
+  fixture now has a **near-tie** — Appointments edging Add to cart by 10%, under
+  the margin.
+- `EVENT_WEIGHT` gives content pages a per-EVENT distribution. Before it, every
+  key event returned the same count and the whole mix was untestable. Articles
+  are weighted so `find_doctors` clearly beats `view_item`, which is the real
+  case MW reported: people read an article, then look for a doctor.
+- `dr-second` has fewer views but MORE appointments than `dr-valailuck`, so
+  "ranked by views" and "the action column reads the action" stay independently
+  checkable. They agreed by accident after the weighting change, which would
+  have let a card that sorted on the wrong column pass.
+
 
 **v3.106.0 — Content slides; real platform logos; GA4 reports can sort.**
 

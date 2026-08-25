@@ -127,11 +127,22 @@ function reportFixture() {
      */
     content: { available: true, unmatchedViews: 0,
       locales: [{ key: "th", label: "Thai" }, { key: "en", label: "English" }],
+      /**
+       * `actionLabel` and `mix` now come from the server. Articles carries a
+       * `suggestedAction`, so the "this column is the wrong event" warning is
+       * exercised — that is the case MW hit with view_item.
+       */
       types: [
-        { id: "doctor", label: "Doctor", action: "appointments" },
-        { id: "package", label: "Package", action: "add_to_cart" },
-        { id: "article", label: "Articles", action: "view_item" },
-        { id: "center", label: "Center", action: "contact_us" }],
+        { id: "doctor", label: "Doctor", action: "appointments", actionLabel: "Appointments",
+          mix: [{ id: "appointments", label: "Appointments", value: 52 }], suggestedAction: null },
+        { id: "package", label: "Package", action: "add_to_cart", actionLabel: "Add to cart",
+          mix: [{ id: "add_to_cart", label: "Add to cart", value: 25 }], suggestedAction: null },
+        { id: "article", label: "Articles", action: "view_item", actionLabel: "View item",
+          mix: [{ id: "find_doctors", label: "Find doctors", value: 140 },
+                { id: "view_item", label: "View item", value: 8 }],
+          suggestedAction: { id: "find_doctors", label: "Find doctors", value: 140 } },
+        { id: "center", label: "Center", action: "contact_us", actionLabel: "Contact us",
+          mix: [{ id: "contact_us", label: "Contact us", value: 17 }], suggestedAction: null }],
       byBrand: Object.fromEntries(KEYS.map((k) => [k, {
         th: { hasData: true,
           doctor:  { pageCount: 2, views: 1400, actions: 52,
@@ -474,9 +485,16 @@ setTimeout(() => {
         // English has no package pages: the empty row must render.
         const en = pages.filter(p => String(p.dataset.clangpage || "").startsWith("en-"));
         const emptyShown = en.some(p => /no package pages in this language/i.test(p.textContent));
-        emptyShown
-          ? ok("content cards", `2 slides x ${ctabs.length} languages, ranked, empty state shown`)
-          : fail("content cards", "missing empty state for a language with no pages");
+        if (!emptyShown) return fail("content cards", "missing empty state for a language with no pages");
+        /**
+         * When the configured column is not the event that actually fires
+         * most, the card must SAY so — silence is how `view_item` sat on
+         * Articles unnoticed.
+         */
+        const warned = thai[1].textContent.includes("but Find doctors fires more");
+        warned
+          ? ok("content cards", `2 slides x ${ctabs.length} languages, ranked, mismatch flagged`)
+          : fail("content cards", "wrong-column warning not shown for Articles");
       })();
       finish();
     }, 500);

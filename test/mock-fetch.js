@@ -118,6 +118,10 @@ const GA4_PAGES = [
   "/th/bangkok/doctor/dr-valailuck",
   "/th/bangkok/doctor/dr-second",
   "/th/bangkok/package/rsv-vaccine-for-pregnant-women",
+  // Category page (MW): must be excluded from the Package table. Given the
+  // highest package view count in the fixture, so a failed exclusion puts it
+  // straight to the top of the card.
+  "/th/bangkok/package/health-check-up-packages",
   "/th/bangkok/content/bully-and-cyberbullying",
   "/th/bangkok/center-clinic/health-screening-check-up",
   "/en/bangkok/doctor/dr-valailuck-en",
@@ -239,6 +243,7 @@ function ga4Report(body) {
     "/th/bangkok/doctor/dr-valailuck": 900,
     "/th/bangkok/doctor/dr-second": 500,
     "/th/bangkok/package/rsv-vaccine-for-pregnant-women": 700,
+    "/th/bangkok/package/health-check-up-packages": 5000,
     "/th/bangkok/content/bully-and-cyberbullying": 650,
     "/th/bangkok/center-clinic/health-screening-check-up": 300,
     "/en/bangkok/doctor/dr-valailuck-en": 200,
@@ -251,20 +256,49 @@ function ga4Report(body) {
     "/th/bangkok/doctor/dr-valailuck": 12,
     "/th/bangkok/doctor/dr-second": 40,
     "/th/bangkok/package/rsv-vaccine-for-pregnant-women": 25,
+    "/th/bangkok/package/health-check-up-packages": 90,
     "/th/bangkok/content/bully-and-cyberbullying": 8,
     "/th/bangkok/center-clinic/health-screening-check-up": 17,
     "/en/bangkok/doctor/dr-valailuck-en": 3,
     "/th/bangkok-heart/doctor/dr-heart": 6,
   };
+  /**
+   * Per-EVENT weighting on content pages. Without it every key event returned
+   * the same count, the per-type mix was a flat tie, and the "which event
+   * should this column be" logic could not be tested at all — worse, a tie made
+   * an early version emit a false "wrong column" warning.
+   *
+   * Articles are weighted so `find_doctors` clearly beats `view_item`, which is
+   * the real case MW reported: people read an article, then look for a doctor.
+   */
+  const EVENT_WEIGHT = {
+    "/th/bangkok/content/bully-and-cyberbullying": { find_doctors: 14, view_item: 1, contact_us: 4, appointments: 2 },
+    "/th/bangkok/doctor/dr-valailuck": { appointments: 9, find_doctors: 3, contact_us: 2, view_item: 1 },
+    // Fewer views than dr-valailuck but MORE appointments, so ranking by views
+    // and reading the action column stay independently checkable.
+    "/th/bangkok/doctor/dr-second": { appointments: 20, find_doctors: 1, contact_us: 1, view_item: 1 },
+    "/th/bangkok/center-clinic/health-screening-check-up": { contact_us: 7, appointments: 3, find_doctors: 2, view_item: 1 },
+    /**
+     * NEAR-TIE, on purpose. Appointments edges the configured Add to cart by
+     * 10% — under the 20% margin, so no "wrong column" warning should appear.
+     * A flat tie could not test this: it resolved to the configured event
+     * anyway, because ties keep KEY_EVENTS order and add_to_cart sorts first.
+     */
+    "/th/bangkok/package/rsv-vaccine-for-pregnant-women": { add_to_cart: 10, appointments: 11, contact_us: 2, find_doctors: 1 },
+  };
   const emit = (vals) => {
     const pageIdx = dims.indexOf("pagePath");
     const page = pageIdx >= 0 ? vals[pageIdx] : null;
+    const evIdx = dims.indexOf("eventName");
+    const evName = evIdx >= 0 ? vals[evIdx] : null;
+    const weight = (page && evName && EVENT_WEIGHT[page]) ? EVENT_WEIGHT[page][evName] : undefined;
     rows.push({
       dimensionValues: vals.map((value) => ({ value })),
       metricValues: mets.map((m) => ({ value:
         m === "keyEvents" ? "3"
         : m === "engagedSessions" ? "60"
         : (m === "screenPageViews" && page && PAGE_VIEWS[page] !== undefined) ? String(PAGE_VIEWS[page])
+        : (m === "eventCount" && weight !== undefined) ? String(weight * 10)
         : (m === "eventCount" && page && PAGE_ACTIONS[page] !== undefined) ? String(PAGE_ACTIONS[page])
         : "100" })),
     });

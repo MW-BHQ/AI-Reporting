@@ -145,13 +145,30 @@ echo "--- monthly report: content pages are PAGE-scoped, not landing-scoped ---"
 expect_field "ct excludes off-scope" "$REPORT" "JSON.stringify(d.content.byBrand).indexOf('dr-out-of-scope')===-1?'ok':undefined"
 # Ranked by views: 900 before 500.
 expect_field "ct ranked by views"  "$REPORT" "d.content.byBrand.BGH.th.doctor.rows[0].slug==='dr-valailuck'?'ok':undefined"
-# Actions are NOT proportional to views in the fixture, so a card reading the
-# wrong metric shows up: the top doctor by views has FEWER appointments.
-expect_field "ct action not views" "$REPORT" "d.content.byBrand.BGH.th.doctor.rows[0].action===12?12:undefined"
+# Ranking is by VIEWS, the column reads APPOINTMENTS, and in the fixture the
+# two disagree: dr-valailuck leads on views (900) while dr-second has more
+# appointments (200 vs 90). So a card that sorts on the action column, or reads
+# views into it, changes this row.
+expect_field "ct ranks on views"   "$REPORT" "d.content.byBrand.BGH.th.doctor.rows[0].action===90?90:undefined"
+expect_field "ct action beats top" "$REPORT" "d.content.byBrand.BGH.th.doctor.rows[1].action>d.content.byBrand.BGH.th.doctor.rows[0].action?'ok':undefined"
+# A NEAR-TIE must not produce a "wrong column" warning: on package pages
+# Appointments edges the configured Add to cart by 10%, under the 20% margin.
+# A flat tie could not test this — it resolves to the configured event anyway,
+# because ties keep KEY_EVENTS order and add_to_cart sorts first.
+expect_field "ct no tie warning"   "$REPORT" "(d.content.types.find(t=>t.id==='package')||{}).suggestedAction===null?'ok':undefined"
+# Articles: find_doctors clearly beats the configured view_item, so it IS flagged.
+expect_field "ct article suggests" "$REPORT" "((d.content.types.find(t=>t.id==='article')||{}).suggestedAction||{}).id==='find_doctors'?'ok':undefined"
 expect_field "ct type split"       "$REPORT" "d.content.byBrand.BGH.th.package.rows.length>=1&&d.content.byBrand.BGH.th.center.rows.length>=1?'ok':undefined"
 # Locale comes from the path, so an English doctor page must not land in Thai.
 expect_field "ct locale split"     "$REPORT" "d.content.byBrand.BGH.en.doctor.rows[0].slug==='dr-valailuck-en'?'ok':undefined"
 expect_field "ct top ten cap"      "$REPORT" "Object.values(d.content.byBrand).every(b=>Object.values(b).every(c=>['doctor','package','article','center'].every(t=>c[t].rows.length<=10)))?'ok':undefined"
+# Category page (MW): 5,000 views in the fixture, more than any real package.
+# A failed exclusion puts it top of the Package card and inflates that total.
+expect_field "ct category excluded" "$REPORT" "d.content.byBrand.BGH.th.package.rows.every(r=>r.slug!=='health-check-up-packages')?'ok':undefined"
+expect_field "ct category untotalled" "$REPORT" "d.content.byBrand.BGH.th.package.views<5000?'ok':undefined"
+# All nine events are measured per type, which is what identifies a wrong column.
+expect_field "ct mix measured"     "$REPORT" "d.content.types.every(t=>Array.isArray(t.mix))?'ok':undefined"
+expect_field "ct article flagged"  "$REPORT" "(d.content.types.find(t=>t.id==='article')||{}).action==='view_item'?'ok':undefined"
 # GA4's own "AI Assistant" channel. pantip.com is NOT in the name list, so it
 # can only appear here via the channel — 0 means native detection is dead.
 # Counter populated only. This does NOT prove native detection works — with

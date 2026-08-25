@@ -1964,12 +1964,10 @@ function renderReport() {
     const activeC = S.reportContentLang && langs.some(l => l.key === S.reportContentLang)
       ? S.reportContentLang : langs[0].key;
     const TYPE = Object.fromEntries((CT.types || []).map(t => [t.id, t]));
-    const actionLabel = { appointments:'Appointments', add_to_cart:'Add to cart',
-                          view_item:'View item', contact_us:'Contact us' };
-
     const table = (cell, typeId) => {
-      const t = TYPE[typeId] || { label: typeId, action: '' };
+      const t = TYPE[typeId] || { label: typeId, action: '', mix: [] };
       const rows = (cell[typeId] || {}).rows || [];
+      const mix = (t.mix || []).filter(e => e.value > 0);
       return `<div class="card">
         <div class="card-title">${t.label}
           <span style="font-weight:400;color:var(--faint);font-size:10.5px">
@@ -1977,7 +1975,7 @@ function renderReport() {
         <table class="sortable" data-heat="1"><thead><tr>
           <th>${esc(t.label)}</th>
           <th class="num">${actIcon('views')}Views</th>
-          <th class="num">${actIcon(t.action)}${esc(actionLabel[t.action] || t.action)}</th>
+          <th class="num">${actIcon(t.action)}${esc(t.actionLabel || t.action)}</th>
         </tr></thead><tbody>
         ${rows.length ? rows.map(r=>`<tr>
           <td class="strong i18n" title="${esc(r.path)}">${esc(r.title || r.slug)}</td>
@@ -1985,6 +1983,13 @@ function renderReport() {
           <td class="num strong">${num(r.action)}</td></tr>`).join('')
           : `<tr><td colspan="3" class="num">no ${esc(t.label.toLowerCase())} pages in this language</td></tr>`}
         </tbody></table>
+        ${mix.length ? `<div class="note" style="margin-top:8px">
+          <b>What actually fires on ${esc(t.label.toLowerCase())} pages</b> (all four hospitals, all
+          languages): ${mix.map(e=>`${esc(e.label)} ${num(e.value)}`).join(' \u00b7 ')}.
+          ${t.suggestedAction ? `<br><b style="color:var(--amber)">The column shows
+            ${esc(t.actionLabel || t.action)}, but ${esc(t.suggestedAction.label)} fires more
+            (${num(t.suggestedAction.value)}).</b> Say the word and the column switches.` : ''}
+        </div>` : ''}
       </div>`;
     };
 
@@ -5441,7 +5446,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.106.0';
+const CLIENT_BUILD = '3.107.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
