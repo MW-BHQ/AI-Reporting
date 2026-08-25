@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.104.1.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.105.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -691,6 +691,56 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.105.0 — platform marks on slide titles; mini scorecards restyled; one icon set.**
+
+**Platform marks (MW).** Slide titles now lead with the platform: Google on the
+Search pages, Business Profile on GBP and Google reviews, Facebook, Meta on
+Shared Paid Media, TikTok, Google Ads on Search Ads, Analytics on Channels.
+
+**Trademarks are NOT redrawn by hand.** `plogo()` renders a coloured monogram
+and layers the real logo file over it when one exists at
+`public/brand/<file>.svg`. Drop the official asset in and it appears with no
+code change; `onerror` removes the image so a missing file falls back to the
+monogram rather than printing a broken-image box onto a slide. **MW already has
+the correct assets from the LS deck** — filenames are in the `PLATFORM` map.
+
+**Mini scorecards.** The 2x5 grid read as a wall of numbers. New `.mini` card:
+tinted panel, accent rule on top, larger figure, and an icon FROM THE SHARED SET
+on every label. A zero is styled down but stays legible — it is still a real
+answer.
+
+**One icon set (MW).** Both tables on the Referral slide now take their column
+icons from the same `ICON` map as the cards, so the icon beside "Appointments"
+on a card is the icon beside "Appointments" in the table. The remaining glyph
+usages (`★` in GBP ratings, `▲▼` in the benchmark tab) are outside Monthly
+Reports and untouched.
+
+**Two negative controls exposed weak assertions, both threshold-based:**
+
+- `ai card layout` counted `.stat, .kpi`, so restyling to `.mini` reported zero
+  cards. Now counts all three classes.
+- `platform marks` asserted "6 or more logos" and PASSED when the Facebook mark
+  was deleted, because other slides made up the number. Now asserts each
+  platform BY NAME. Third time a loose assertion has given a false pass
+  (v3.103.0 text match, v3.104.1 native-signal counter) — the pattern is that a
+  count or a substring is never a substitute for naming the specific thing.
+
+**Still blocked: the Content cards.** MW asked for top-10-by-views per content
+type (Doctor / Package / Articles / Center) with language tabs. The data costs
+nothing extra in principle — `langSessions` already carries
+`landing_page x screen_page_views` — but two things must be settled first:
+
+1. **`screen_page_views` against a LANDING PAGE dimension counts every page view
+   in those sessions, not views OF that page.** Using it as "Views" would
+   overstate a doctor page by the whole session. A page-scoped pull
+   (`pagePath x screenPageViews`, plus `pagePath x eventName` for the actions)
+   is the correct source and costs two group-wide requests.
+2. **The URL patterns are unknown.** The only confirmed content segment is
+   `/package/` (from a fixture path). Doctor, article and centre segments have
+   not been verified, and guessing them would produce four empty cards or, worse,
+   four plausible wrong ones. Asked MW.
+
 
 **v3.104.1 — GA4 now HAS an AI Assistant channel; AI card rebuilt.**
 

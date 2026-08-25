@@ -320,7 +320,9 @@ setTimeout(() => {
           .find(c => (c.querySelector(".card-title") || {}).textContent === "AI assistants (LLMs)");
         if (!card) return fail("ai card layout", "AI card not found");
         const rows = [...card.querySelectorAll(".grid.g-5")];
-        const cards = rows.reduce((a, r) => a + r.querySelectorAll(".stat, .kpi").length, 0);
+        // `.mini` is the styled scorecard added in v3.105.0; `.stat` is the
+        // plain one. Both counted, so restyling cannot silently drop a card.
+        const cards = rows.reduce((a, r) => a + r.querySelectorAll(".mini, .stat, .kpi").length, 0);
         const th = [...card.querySelectorAll("thead th")].map(t => t.textContent.trim());
         if (rows.length !== 2) return fail("ai card layout", `${rows.length} scorecard rows, expected 2`);
         if (cards !== 10) return fail("ai card layout", `${cards} scorecards, expected 10`);
@@ -379,6 +381,34 @@ setTimeout(() => {
       text.includes("Organic social")
         ? fail("organic social retired", "superseded slide still renders")
         : ok("organic social retired", "gone");
+      /**
+       * Platform marks on slide titles, and icons sourced from the SHARED set.
+       * Counted through the DOM: a monogram with no `.plogo` wrapper, or a mini
+       * card whose label has no <svg>, is the inconsistency MW asked to remove.
+       */
+      (() => {
+        const marks = [...(root ? root.querySelectorAll(".slide-title .plogo") : [])];
+        /**
+         * Each platform asserted BY NAME. A "6 or more" count passed when the
+         * Facebook mark was deleted, because other slides made up the number —
+         * a threshold cannot tell which mark went missing.
+         */
+        const want = ["Google", "Business Profile", "Facebook", "Meta", "TikTok",
+                      "Google Ads", "Analytics"];
+        const seen = new Set(marks.map(m => m.getAttribute("title")));
+        const missing = want.filter(w => !seen.has(w));
+        if (missing.length) return fail("platform marks", `no mark for: ${missing.join(", ")}`);
+        // Every mark must have both states: a real logo file and the monogram
+        // beneath it, so a missing asset degrades instead of leaving a gap.
+        const complete = marks.every(m => m.querySelector("img") && m.querySelector("b"));
+        if (!complete) return fail("platform marks", "a mark is missing its image or monogram");
+        const minis = [...(root ? root.querySelectorAll(".mini") : [])];
+        const withIcon = minis.filter(m => m.querySelector(".lab svg")).length;
+        // The Sessions card plus nine key events all carry an icon.
+        minis.length && withIcon === minis.length
+          ? ok("platform marks", `${want.length} platforms, ${minis.length} mini cards all iconed`)
+          : fail("platform marks", `${withIcon}/${minis.length} mini cards have a shared icon`);
+      })();
       finish();
     }, 500);
   }

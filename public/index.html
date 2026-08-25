@@ -494,6 +494,39 @@
   @media print{ .lang-page{display:block!important;break-before:page;page-break-before:always;} }
   .lang-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
   /**
+   * Platform mark on a slide title. The monogram sits underneath and the real
+   * logo covers it when the file exists, so both states occupy the same box and
+   * the title never reflows depending on which assets are installed.
+   */
+  .plogo{position:relative;display:inline-flex;align-items:center;justify-content:center;
+    width:22px;height:22px;border-radius:5px;margin-right:8px;vertical-align:-4px;
+    background:var(--pc);overflow:hidden;flex:0 0 auto;}
+  .plogo b{font-size:11.5px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.2px;}
+  .plogo img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;
+    background:#fff;padding:2px;box-sizing:border-box;}
+  @media print{ .plogo{-webkit-print-color-adjust:exact;print-color-adjust:exact;} }
+  /**
+   * MINI SCORECARDS (the 2x5 grids). The plain stack of numbers read as a wall
+   * of text, so these get a tinted panel, a rule in the accent colour and a
+   * larger figure. A zero is deliberately muted rather than hidden — it still
+   * has to be readable as a real answer.
+   */
+  .mini{border:1px solid var(--line);border-radius:10px;padding:9px 11px 10px;
+    background:linear-gradient(180deg,rgba(108,92,231,.055),rgba(108,92,231,0));
+    border-top:2px solid var(--violet);}
+  .mini .lab{display:flex;align-items:center;gap:5px;font-size:9.5px;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--faint);margin-bottom:3px;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;}
+  /* actIcon carries its own right margin; the flex gap already spaces it. */
+  .mini .lab svg{margin-right:0;flex:0 0 auto;opacity:.85;}
+  .mini .val{font-size:23px;font-weight:750;line-height:1.05;color:var(--ink);}
+  .mini.is-zero{border-top-color:var(--line);background:none;}
+  .mini.is-zero .val{color:var(--faint);font-weight:600;}
+  .mini .sub2{font-size:9.5px;color:var(--faint);margin-top:2px;}
+  .mini.lead{border-top-color:var(--violet);
+    background:linear-gradient(180deg,rgba(108,92,231,.13),rgba(108,92,231,.02));}
+  .mini.lead .val{color:var(--violet);}
+  /**
    * Referrer blacklist switch. Both sets of numbers are in the DOM and CSS
    * picks one, so the scorecards and the table can never disagree and no
    * recompute is needed on toggle. `.bl-hidden` on the wrapper means the
@@ -1426,9 +1459,37 @@ function renderReport() {
    * belong in a single-hospital export, badged so nobody mistakes them for that
    * hospital's own numbers.
    */
-  const slide = (title, body, first, allFour) => body
+  /**
+   * PLATFORM MARKS on slide titles, so a reader knows at a glance which source
+   * a slide is about — the LS deck leads every page with the platform logo.
+   *
+   * Real logo files are used when present and a coloured monogram shows until
+   * then. Drop the official asset at the path below and it appears with no code
+   * change; the `onerror` removes the image so the monogram underneath shows,
+   * which also means a missing file degrades quietly instead of printing a
+   * broken-image box onto a slide.
+   *
+   * Trademarks are not redrawn here by hand: an approximated logo is worse than
+   * an honest monogram, and MW already holds the correct assets from the deck.
+   */
+  const PLATFORM = {
+    google:    { label: 'Google',       mono: 'G',  color: '#4285F4', file: 'google.svg' },
+    google_ads:{ label: 'Google Ads',   mono: 'Ad', color: '#3C8BD9', file: 'google-ads.svg' },
+    gbp:       { label: 'Business Profile', mono: 'B', color: '#34A853', file: 'gbp.svg' },
+    facebook:  { label: 'Facebook',     mono: 'f',  color: '#1877F2', file: 'facebook.svg' },
+    meta:      { label: 'Meta',         mono: 'M',  color: '#0866FF', file: 'meta.svg' },
+    tiktok:    { label: 'TikTok',       mono: 'T',  color: '#111111', file: 'tiktok.svg' },
+    ga4:       { label: 'Analytics',    mono: 'A',  color: '#E8710A', file: 'ga4.svg' },
+  };
+  const plogo = (id) => {
+    const p = PLATFORM[id]; if (!p) return '';
+    return `<span class="plogo" style="--pc:${p.color}" title="${esc(p.label)}"
+      ><img src="brand/${esc(p.file)}" alt="" onerror="this.remove()"
+      ><b>${esc(p.mono)}</b></span>`;
+  };
+  const slide = (title, body, first, allFour, platform) => body
     ? `<div class="slide ${first ? '' : 'slide-break'}"><div class="slide-title">
-         <span>${esc(title)}${allFour && !/BHQ/.test(title) ? ' <span class="all-four">BHQ</span>' : ''}</span>
+         <span>${platform ? plogo(platform) : ''}${esc(title)}${allFour && !/BHQ/.test(title) ? ' <span class="all-four">BHQ</span>' : ''}</span>
          ${logoImg}
        </div>${body}</div>`
     : '';
@@ -1437,6 +1498,21 @@ function renderReport() {
   const n0 = (v) => (v === null || v === undefined || isNaN(Number(v))) ? 0 : Number(v);
   const kpi = (lab, val, sub) => `<div class="stat"><div class="lab">${lab}</div>
     <div class="val">${val}</div>${sub?`<div class="sub2">${sub}</div>`:''}</div>`;
+  /**
+   * Mini scorecard for the dense 2x5 grids. Takes a key-event id so the icon
+   * comes from the SHARED set rather than a one-off glyph, which is what keeps
+   * the icons consistent between the cards and the table beneath them.
+   * `lead` marks the headline card; a zero is styled down but stays legible.
+   */
+  const mini = (lab, val, opts = {}) => {
+    const zero = opts.zero === true;
+    const cls = `mini${opts.lead ? ' lead' : ''}${zero ? ' is-zero' : ''}`;
+    return `<div class="${cls}">
+      <div class="lab">${opts.icon ? actIcon(opts.icon) : ''}${esc(lab)}</div>
+      <div class="val">${val}</div>
+      ${opts.sub ? `<div class="sub2">${opts.sub}</div>` : ''}
+    </div>`;
+  };
 
   /**
    * Opening slide, mirroring the LS "Users Overview": stacked months on the
@@ -1647,7 +1723,7 @@ function renderReport() {
       const pv = Math.max(8, Math.round((x.visits/mx)*100));
       const pa = Math.max(6, Math.round((x.actionsTotal/mx)*100));
       return `<div class="lang-page ${x.key===activeLang?'active':''}" data-langpage="${esc(x.key)}">
-        <div class="slide-title" style="margin-top:0"><span>Search \u00b7 ${esc(x.label)} \u00b7 ${esc(sel)}</span>${logoImg}</div>
+        <div class="slide-title" style="margin-top:0"><span>${plogo('google')}Search \u00b7 ${esc(x.label)} \u00b7 ${esc(sel)}</span>${logoImg}</div>
         <div class="grid g-2">
           <div class="card">
             ${[['TOFU','Impressions',x.impressions,100,'#4B8DF8','#fff'],
@@ -1752,8 +1828,8 @@ function renderReport() {
           ];
           return `
         <table class="sortable" data-heat="1"><thead><tr>
-          <th>Source</th><th class="num">Sessions</th>
-          ${COLS.map(([,lab])=>`<th class="num">${esc(lab)}</th>`).join('')}
+          <th>Source</th><th class="num">${actIcon('sessions')}Sessions</th>
+          ${COLS.map(([id,lab])=>`<th class="num">${actIcon(id)}${esc(lab)}</th>`).join('')}
         </tr></thead><tbody>
         ${RF.referrers.length ? RF.referrers.map(r=>`<tr${r.blacklisted?' class="bl-row"':''}>
           <td class="strong i18n">${esc(r.source)}${r.blacklisted?' <span style="font-size:9.5px;color:var(--faint)">blacklisted</span>':''}</td>
@@ -1774,12 +1850,14 @@ function renderReport() {
       <div class="card-title">AI assistants (LLMs)</div>
       ${A.rows.length ? `
       <div class="grid g-5" style="margin-bottom:8px">
-        ${kpi('Sessions', num(A.totals.sessions),
-              A.siteShare===null?'':`${(A.siteShare*100).toFixed(2)}% of all sessions`)}
-        ${A.actions.slice(0, 4).map(a=>kpi(a.label, num(a.value))).join('')}
+        ${mini('Sessions', num(A.totals.sessions), { lead: true, icon: 'sessions',
+               sub: A.siteShare===null?'':`${(A.siteShare*100).toFixed(2)}% of all sessions` })}
+        ${A.actions.slice(0, 4).map(a=>mini(a.label, num(a.value),
+               { icon: a.id, zero: !a.value })).join('')}
       </div>
       <div class="grid g-5" style="margin-bottom:12px">
-        ${A.actions.slice(4, 9).map(a=>kpi(a.label, num(a.value))).join('')}
+        ${A.actions.slice(4, 9).map(a=>mini(a.label, num(a.value),
+               { icon: a.id, zero: !a.value })).join('')}
       </div>
       ${(() => {
         /**
@@ -1790,8 +1868,8 @@ function renderReport() {
          */
         return `
       <table class="sortable" data-heat="1"><thead><tr>
-        <th>Assistant</th><th class="num">Sessions</th>
-        ${A.actions.map(a=>`<th class="num">${esc(a.label)}</th>`).join('')}
+        <th>Assistant</th><th class="num">${actIcon('sessions')}Sessions</th>
+        ${A.actions.map(a=>`<th class="num">${actIcon(a.id)}${esc(a.label)}</th>`).join('')}
       </tr></thead><tbody>
       ${A.rows.map(r=>`<tr>
         <td class="strong i18n">${esc(r.source)}</td>
@@ -2176,7 +2254,7 @@ function renderReport() {
   const GD = (d.gbpDetail || []).filter(x => x.key === sel && x.totals && x.totals.impressions);
   const gbpDetailBody = GD.map((g, gi) => `
     <div class="slide slide-break">
-      <div class="slide-title"><span>Google Business Profile \u00b7 ${esc(g.label)}</span>${logoImg}</div>
+      <div class="slide-title"><span>${plogo('gbp')}Google Business Profile \u00b7 ${esc(g.label)}</span>${logoImg}</div>
       <div class="grid g-4" style="margin-bottom:10px">
         ${[['Impressions', g.totals.impressions, g.mom.impressions],
            ['Call clicks', g.totals.calls, g.mom.calls],
@@ -2265,18 +2343,18 @@ function renderReport() {
     ${slide('Actions \u00b7 what we want them to do \u00b7 BHQ', actionsBody, false, true)}
     ${slide('Sessions by language \u00b7 BHQ', langMatrixBody, false, true)}
     ${slide(`Actions by language \u00b7 ${sel}`, actionsLangBody)}
-    ${slide('Channels \u00b7 where do they find us', channelsBody, false, true)}
+    ${slide('Channels \u00b7 where do they find us', channelsBody, false, true, 'ga4')}
     ${referralBody ? slide(`Referral \u00b7 Back Links \u00b7 ${sel}`, referralBody) : ''}
     ${searchPagesBody}
     ${gbpDetailBody}
-    ${slide('Google reviews', reviewBody)}
-    ${slide('Facebook', facebookBody)}
+    ${slide('Google reviews', reviewBody, false, false, 'gbp')}
+    ${slide('Facebook', facebookBody, false, false, 'facebook')}
 
     <!-- ===== not yet reviewed by MW: below the agreed sequence ===== -->
-    ${slide(`Search Ads \u00b7 ${sel}`, searchAdsBody)}
-    ${slide('Shared Paid Media', paidBody.trim(), false, true)}
-    ${slide('TikTok', tkChannelBody, false, true)}
-    ${tkTopBody ? slide('TikTok \u00b7 Top performances', tkTopBody, false, true) : ''}`;
+    ${slide(`Search Ads \u00b7 ${sel}`, searchAdsBody, false, false, 'google_ads')}
+    ${slide('Shared Paid Media', paidBody.trim(), false, true, 'meta')}
+    ${slide('TikTok', tkChannelBody, false, true, 'tiktok')}
+    ${tkTopBody ? slide('TikTok \u00b7 Top performances', tkTopBody, false, true, 'tiktok') : ''}`;
 
   // Charts must be drawn after the markup is in the DOM.
   if (U && U.months.length && window.Chart) {
@@ -5236,7 +5314,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.104.1';
+const CLIENT_BUILD = '3.105.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
