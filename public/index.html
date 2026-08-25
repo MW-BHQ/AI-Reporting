@@ -491,6 +491,10 @@
    * page per language; the browser does not want forty stacked sections.
    */
   @media screen{ .lang-page:not(.active){display:none;} }
+  /* Content tabs: own namespace, so switching a content language cannot blank
+     a Search page for a locale that has articles but no search data. */
+  @media screen{ .clang-page:not(.active){display:none;} }
+  @media print{ .clang-page{display:block!important;break-before:page;page-break-before:always;} }
   @media print{ .lang-page{display:block!important;break-before:page;page-break-before:always;} }
   .lang-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
   /**
@@ -538,11 +542,11 @@
   .bl-wrap:not(.bl-hidden) .bl-row{display:none;}
   /* With no blacklist configured, the clean and full figures are identical. */
   .bl-wrap.bl-none .bl-off{display:none;}
-  .lang-tab{
+  .lang-tab, .clang-tab{
     padding:5px 12px;border-radius:20px;font-size:11.5px;font-weight:600;cursor:pointer;
     border:1px solid var(--stroke);background:#fff;color:var(--ink-2);
   }
-  .lang-tab.active{background:var(--violet);color:#fff;border-color:transparent;}
+  .lang-tab.active, .clang-tab.active{background:var(--violet);color:#fff;border-color:transparent;}
   @media print{ .lang-tabs{display:none;} }
   .all-four{
     font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:none;
@@ -812,6 +816,8 @@ const S = {
   longRangeOn: false, rangeBefore: null,
   // Referrer blacklist ON by default; survives a hospital-tab re-render.
   reportBlacklist: true,
+  // Content language tab, independent of the Search one.
+  reportContentLang: null,
   ecomchurn: null, ecomchurnKey: null, ecomchurnLoading: false, ecomchurnError: null, churnWindow: 365,
   ecommon: null, ecommonKey: null, ecommonLoading: false, ecommonError: null,
   ecomroas: null, ecomroasKey: null, ecomroasLoading: false, ecomroasError: null,
@@ -1463,29 +1469,67 @@ function renderReport() {
    * PLATFORM MARKS on slide titles, so a reader knows at a glance which source
    * a slide is about — the LS deck leads every page with the platform logo.
    *
-   * Real logo files are used when present and a coloured monogram shows until
-   * then. Drop the official asset at the path below and it appears with no code
-   * change; the `onerror` removes the image so the monogram underneath shows,
-   * which also means a missing file degrades quietly instead of printing a
-   * broken-image box onto a slide.
+   * THREE STAGES, tried in order, so the mark is never a broken box:
+   *   1. `brand/<file>` — a local asset, if one has been added. Preferred:
+   *      it prints reliably and works offline.
+   *   2. `url` — the Wikimedia original MW supplied. Works today with no
+   *      asset pipeline. The build container cannot reach Wikimedia (the egress
+   *      proxy returns 403), which is why these could not be bundled; the
+   *      BROWSER fetches them, so this is a runtime path only.
+   *   3. The coloured monogram underneath. Trademarks are deliberately not
+   *      redrawn by hand — an approximated logo is worse than an honest letter.
    *
-   * Trademarks are not redrawn here by hand: an approximated logo is worse than
-   * an honest monogram, and MW already holds the correct assets from the deck.
+   * Wikimedia thumbnails are requested at 240px: these render at 22px, so a
+   * 3840px original would be several hundred KB per slide for nothing.
    */
+  const WIKI = 'https://upload.wikimedia.org/wikipedia';
   const PLATFORM = {
-    google:    { label: 'Google',       mono: 'G',  color: '#4285F4', file: 'google.svg' },
-    google_ads:{ label: 'Google Ads',   mono: 'Ad', color: '#3C8BD9', file: 'google-ads.svg' },
-    gbp:       { label: 'Business Profile', mono: 'B', color: '#34A853', file: 'gbp.svg' },
-    facebook:  { label: 'Facebook',     mono: 'f',  color: '#1877F2', file: 'facebook.svg' },
-    meta:      { label: 'Meta',         mono: 'M',  color: '#0866FF', file: 'meta.svg' },
-    tiktok:    { label: 'TikTok',       mono: 'T',  color: '#111111', file: 'tiktok.svg' },
-    ga4:       { label: 'Analytics',    mono: 'A',  color: '#E8710A', file: 'ga4.svg' },
+    google:    { label: 'Google', mono: 'G', color: '#4285F4', file: 'google.svg',
+                 url: `${WIKI}/commons/thumb/c/c1/Google_%22G%22_logo.svg/240px-Google_%22G%22_logo.svg.png` },
+    google_ads:{ label: 'Google Ads', mono: 'Ad', color: '#3C8BD9', file: 'google-ads.svg',
+                 url: `${WIKI}/commons/thumb/c/c7/Google_Ads_logo.svg/240px-Google_Ads_logo.svg.png` },
+    gbp:       { label: 'Business Profile', mono: 'B', color: '#34A853', file: 'gbp.svg',
+                 url: `${WIKI}/fr/thumb/a/a4/Google-My-Business_logo.svg/240px-Google-My-Business_logo.svg.png` },
+    facebook:  { label: 'Facebook', mono: 'f', color: '#1877F2', file: 'facebook.svg',
+                 url: `${WIKI}/commons/thumb/b/b9/2023_Facebook_icon.svg/240px-2023_Facebook_icon.svg.png` },
+    meta:      { label: 'Meta', mono: 'M', color: '#0866FF', file: 'meta.svg',
+                 url: `${WIKI}/commons/thumb/0/05/Meta_Platforms_Inc._logo_%28cropped%29.svg/240px-Meta_Platforms_Inc._logo_%28cropped%29.svg.png` },
+    tiktok:    { label: 'TikTok', mono: 'T', color: '#111111', file: 'tiktok.svg',
+                 url: `${WIKI}/en/a/a9/TikTok_logo.svg` },
+    ga4:       { label: 'Analytics', mono: 'A', color: '#E8710A', file: 'ga4.svg',
+                 url: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSopdCEj9_HhQExvA062era1kwbfyXQWNIg3RMXffXWEA&s=10' },
+    // Not yet on a slide. Held here so the next block that needs one does not
+    // have to go hunting: YouTube and LINE are open items, and the assistant
+    // marks label rows in the AI table.
+    youtube:   { label: 'YouTube', mono: 'Y', color: '#FF0000', file: 'youtube.svg',
+                 url: `${WIKI}/commons/thumb/0/09/YouTube_full-color_icon_%282017%29.svg/240px-YouTube_full-color_icon_%282017%29.svg.png` },
+    instagram: { label: 'Instagram', mono: 'IG', color: '#C13584', file: 'instagram.svg',
+                 url: `${WIKI}/commons/9/95/Instagram_logo_2022.svg` },
+    line:      { label: 'LINE', mono: 'L', color: '#06C755', file: 'line.svg',
+                 url: `${WIKI}/commons/thumb/4/41/LINE_logo.svg/240px-LINE_logo.svg.png` },
+    messenger: { label: 'Messenger', mono: 'Me', color: '#00B2FF', file: 'messenger.svg',
+                 url: `${WIKI}/commons/thumb/6/6c/Facebook_Messenger_logo_2018.svg/240px-Facebook_Messenger_logo_2018.svg.png` },
+    whatsapp:  { label: 'WhatsApp', mono: 'W', color: '#25D366', file: 'whatsapp.svg',
+                 url: `${WIKI}/commons/thumb/6/6b/WhatsApp.svg/240px-WhatsApp.svg.png` },
+    chatgpt:   { label: 'ChatGPT', mono: 'C', color: '#10A37F', file: 'chatgpt.svg',
+                 url: `${WIKI}/commons/thumb/e/ef/ChatGPT-Logo.svg/240px-ChatGPT-Logo.svg.png` },
+    gemini:    { label: 'Gemini', mono: 'G', color: '#8E7CF3', file: 'gemini.svg',
+                 url: `${WIKI}/commons/thumb/1/1d/Google_Gemini_icon_2025.svg/240px-Google_Gemini_icon_2025.svg.png` },
   };
-  const plogo = (id) => {
+  const plogo = (id, size) => {
     const p = PLATFORM[id]; if (!p) return '';
-    return `<span class="plogo" style="--pc:${p.color}" title="${esc(p.label)}"
-      ><img src="brand/${esc(p.file)}" alt="" onerror="this.remove()"
+    const sz = size ? ` style="--pc:${p.color};width:${size}px;height:${size}px"` : ` style="--pc:${p.color}"`;
+    return `<span class="plogo"${sz} title="${esc(p.label)}"
+      ><img src="brand/${esc(p.file)}" alt="" loading="lazy" data-alt="${esc(p.url || '')}"
+        onerror="if(this.dataset.alt){this.src=this.dataset.alt;this.dataset.alt='';}else{this.remove();}"
       ><b>${esc(p.mono)}</b></span>`;
+  };
+  /** Assistant source -> platform mark, for the AI table rows. */
+  const assistantLogo = (src) => {
+    const s = String(src || '').toLowerCase();
+    if (s.includes('chatgpt') || s.includes('openai')) return plogo('chatgpt', 16);
+    if (s.includes('gemini') || s.includes('bard')) return plogo('gemini', 16);
+    return '';
   };
   const slide = (title, body, first, allFour, platform) => body
     ? `<div class="slide ${first ? '' : 'slide-break'}"><div class="slide-title">
@@ -1872,7 +1916,7 @@ function renderReport() {
         ${A.actions.map(a=>`<th class="num">${actIcon(a.id)}${esc(a.label)}</th>`).join('')}
       </tr></thead><tbody>
       ${A.rows.map(r=>`<tr>
-        <td class="strong i18n">${esc(r.source)}</td>
+        <td class="strong i18n">${assistantLogo(r.source)}${esc(r.source)}</td>
         <td class="num">${num(r.sessions)}</td>
         ${A.actions.map(a=>`<td class="num">${num((r.events||{})[a.id]||0)}</td>`).join('')}
         </tr>`).join('')}
@@ -1899,7 +1943,77 @@ function renderReport() {
     </div></div>`;
   })() : '';
 
+  /**
+   * CONTENT, two slides of paired tables. Each content type is shown with the
+   * one action that matters for it (MW): a doctor page is judged on
+   * appointments, a package on add-to-cart, an article on packages viewed, a
+   * centre page on contact.
+   *
+   * Language tabs work like Search, but on their own namespace and state.
+   * Sharing Search's would mean a locale that has articles but no search data
+   * blanks the Search pages when clicked.
+   */
+  const CT = d.content || {};
+  const contentBody = (() => {
+    if (!CT.available || !CT.byBrand || !CT.byBrand[sel]) return '';
+    const cells = CT.byBrand[sel];
+    // Locale labels come from the payload; the client keeps no locale table.
+    const langs = (CT.locales || [])
+      .filter(l => cells[l.key] && cells[l.key].hasData);
+    if (!langs.length) return '';
+    const activeC = S.reportContentLang && langs.some(l => l.key === S.reportContentLang)
+      ? S.reportContentLang : langs[0].key;
+    const TYPE = Object.fromEntries((CT.types || []).map(t => [t.id, t]));
+    const actionLabel = { appointments:'Appointments', add_to_cart:'Add to cart',
+                          view_item:'View item', contact_us:'Contact us' };
+
+    const table = (cell, typeId) => {
+      const t = TYPE[typeId] || { label: typeId, action: '' };
+      const rows = (cell[typeId] || {}).rows || [];
+      return `<div class="card">
+        <div class="card-title">${t.label}
+          <span style="font-weight:400;color:var(--faint);font-size:10.5px">
+            top ${Math.min(10, rows.length)} of ${num((cell[typeId]||{}).pageCount||0)} pages</span></div>
+        <table class="sortable" data-heat="1"><thead><tr>
+          <th>${esc(t.label)}</th>
+          <th class="num">${actIcon('views')}Views</th>
+          <th class="num">${actIcon(t.action)}${esc(actionLabel[t.action] || t.action)}</th>
+        </tr></thead><tbody>
+        ${rows.length ? rows.map(r=>`<tr>
+          <td class="strong i18n" title="${esc(r.path)}">${esc(r.title || r.slug)}</td>
+          <td class="num">${num(r.views)}</td>
+          <td class="num strong">${num(r.action)}</td></tr>`).join('')
+          : `<tr><td colspan="3" class="num">no ${esc(t.label.toLowerCase())} pages in this language</td></tr>`}
+        </tbody></table>
+      </div>`;
+    };
+
+    const page = (lc, label, pair, idx) => {
+      const cell = cells[lc];
+      return `<div class="clang-page ${lc===activeC?'active':''}" data-clangpage="${esc(lc)}-${idx}">
+        <div class="slide-title" style="margin-top:0"><span>${plogo('ga4')}Content \u00b7 ${esc(label)} \u00b7 ${esc(sel)}</span>${logoImg}</div>
+        <div class="grid g-2">${pair.map(id=>table(cell, id)).join('')}</div>
+        <div class="note">Ranked by <b>page views of the page itself</b>, not by the sessions that started
+        there \u2014 a landing-page metric would credit a doctor page with every other page in the visit.
+        Each type carries the one action it is judged on. The full path is on hover.</div>
+      </div>`;
+    };
+
+    const tabs = `<div class="lang-tabs no-print">
+      ${langs.map(l=>`<button class="clang-tab ${l.key===activeC?'active':''}"
+        data-clang="${esc(l.key)}">${esc(l.label)}</button>`).join('')}
+    </div>`;
+
+    return [['doctor','package'], ['article','center']].map((pair, idx) => `
+      <div class="slide slide-break">
+        <div style="height:46px"></div>
+        ${idx===0 ? tabs : ''}
+        ${langs.map(l=>page(l.key, l.label, pair, idx)).join('')}
+      </div>`).join('');
+  })();
+
   const G = d.gbp;
+
 
   /**
    * Reviews per hospital, one card each, rather than a single group figure.
@@ -2345,6 +2459,7 @@ function renderReport() {
     ${slide(`Actions by language \u00b7 ${sel}`, actionsLangBody)}
     ${slide('Channels \u00b7 where do they find us', channelsBody, false, true, 'ga4')}
     ${referralBody ? slide(`Referral \u00b7 Back Links \u00b7 ${sel}`, referralBody) : ''}
+    ${contentBody}
     ${searchPagesBody}
     ${gbpDetailBody}
     ${slide('Google reviews', reviewBody, false, false, 'gbp')}
@@ -2426,6 +2541,18 @@ function renderReport() {
       drawChart('repTkViews', TK.channel.daily, [{ key:'views', label:'Views', color:C.b }]);
     }
   }
+
+  document.querySelectorAll('[data-clang]').forEach(el =>
+    el.addEventListener('click', () => {
+      S.reportContentLang = el.dataset.clang;
+      document.querySelectorAll('.clang-tab').forEach(t =>
+        t.classList.toggle('active', t.dataset.clang === S.reportContentLang));
+      // Both Content slides key off the same locale, so the page id carries the
+      // slide index and the prefix is what is matched.
+      document.querySelectorAll('.clang-page').forEach(pg =>
+        pg.classList.toggle('active',
+          String(pg.dataset.clangpage || '').split('-')[0] === S.reportContentLang));
+    }));
 
   document.querySelectorAll('[data-lang]').forEach(el =>
     el.addEventListener('click', () => {
@@ -5314,7 +5441,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.105.0';
+const CLIENT_BUILD = '3.106.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

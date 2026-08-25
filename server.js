@@ -224,13 +224,18 @@ function ga4Release() {
 }
 
 function ga4RunReport(opts) {
-  const { dimensions, metrics, from, to, dimensionFilter, limit = 100000 } = opts;
+  const { dimensions, metrics, from, to, dimensionFilter, limit = 100000, orderBy } = opts;
+  /**
+   * `orderBy` is part of the memo key. Left out, two requests differing only in
+   * sort order would share one cached promise and the second would silently get
+   * the first one's ordering.
+   */
   return memoUpstream(
-    `ga4|${from}|${to}|${limit}|${dimensions.join(",")}|${metrics.join(",")}|${JSON.stringify(dimensionFilter || null)}`,
-    () => ga4RunReportGated({ dimensions, metrics, from, to, dimensionFilter, limit }));
+    `ga4|${from}|${to}|${limit}|${dimensions.join(",")}|${metrics.join(",")}|${JSON.stringify(dimensionFilter || null)}|${orderBy || ""}`,
+    () => ga4RunReportGated({ dimensions, metrics, from, to, dimensionFilter, limit, orderBy }));
 }
 
-async function ga4RunReportGated({ dimensions, metrics, from, to, dimensionFilter, limit }) {
+async function ga4RunReportGated({ dimensions, metrics, from, to, dimensionFilter, limit, orderBy }) {
   /**
    * The Data API caps a request at 10 metrics and 9 dimensions, exactly as
    * Windsor did. This guard used to live in ga4Fields(), which every Windsor
@@ -246,13 +251,13 @@ async function ga4RunReportGated({ dimensions, metrics, from, to, dimensionFilte
   }
   await ga4Slot();
   try {
-    return await ga4RunReportInner({ dimensions, metrics, from, to, dimensionFilter, limit });
+    return await ga4RunReportInner({ dimensions, metrics, from, to, dimensionFilter, limit, orderBy });
   } finally {
     ga4Release();
   }
 }
 
-async function ga4RunReportInner({ dimensions, metrics, from, to, dimensionFilter, limit }) {
+async function ga4RunReportInner({ dimensions, metrics, from, to, dimensionFilter, limit, orderBy }) {
   const token = await ga4Token();
   const body = {
     dateRanges: [{ startDate: from, endDate: to }],
@@ -262,6 +267,12 @@ async function ga4RunReportInner({ dimensions, metrics, from, to, dimensionFilte
     returnPropertyQuota: false,
   };
   if (dimensionFilter) body.dimensionFilter = dimensionFilter;
+  /**
+   * Sort server-side on a metric, descending. This is what makes a row limit
+   * safe on a high-cardinality page report: truncation then drops the tail
+   * rather than an arbitrary slice, the same reasoning as the GSC query pull.
+   */
+  if (orderBy) body.orderBys = [{ metric: { metricName: orderBy }, desc: true }];
 
   const res = await fetch(`${GA4_API_BASE}/properties/${GA4_ACCOUNT}:runReport`, {
     method: "POST",
@@ -1766,6 +1777,50 @@ async function buildReport(from, to) {
   // Keyed by source, so the Facebook actions carry MoM for one group-wide
   // request rather than four per-brand ones.
   jobs.srcKeyEventsPrev = ga4KeyEvents(["session_manual_source"], cwr.prev.from, cwr.prev.to);
+  /**
+   * CONTENT PAGES, top performers per type. Two group-wide pulls that serve all
+   * four hospitals, every locale and all four content types — rule 2 of the
+   * budget, not per-brand requests.
+   *
+   * WHY NOT `langSessions`, which is already in flight: `screen_page_views`
+   * against a LANDING PAGE dimension counts every page view in those sessions,
+   * not views OF that page. A doctor page would be credited with the whole
+   * visit. Page-scoped `pagePath x screenPageViews` is the only correct source.
+   *
+   * Both are filtered to the four content segments AND the branch regex, which
+   * is what keeps a 44,000-page property down to a sane row count, and both are
+   * sorted server-side so the row cap drops the tail rather than a random slice.
+   */
+  const CONTENT_SEGMENT_RE = "/(doctor|package|content|center-clinic)/";
+  const contentPageFilter = (extra) => ({
+    andGroup: { expressions: [
+      { filter: { fieldName: "pagePath",
+        stringFilter: { matchType: "PARTIAL_REGEXP", value: CONTENT_SEGMENT_RE, caseSensitive: false } } },
+      { filter: { fieldName: "pagePath",
+        stringFilter: { matchType: "PARTIAL_REGEXP", value: BRANCH_REGEX, caseSensitive: false } } },
+      ...(extra || []),
+    ] },
+  });
+  jobs.contentViews = ga4RunReport({
+    dimensions: ["pagePath", "pageTitle"],
+    metrics: ["screenPageViews"],
+    from, to, limit: 20000, orderBy: "screenPageViews",
+    dimensionFilter: contentPageFilter(),
+  });
+  /**
+   * The four actions the cards report, as event rows against the page. Only
+   * these four are requested: the cards pair one action per content type, and a
+   * nine-event pull here would multiply rows for columns nothing displays.
+   */
+  jobs.contentEvents = ga4RunReport({
+    dimensions: ["pagePath", "eventName"],
+    metrics: ["eventCount"],
+    from, to, limit: 20000, orderBy: "eventCount",
+    dimensionFilter: contentPageFilter([
+      { filter: { fieldName: "eventName",
+        inListFilter: { values: ["appointments", "add_to_cart", "view_item", "contact_us"] } } },
+    ]),
+  });
   const { data } = await runJobs(jobs);
 
   for (const b of BRANDS) {
@@ -2265,6 +2320,114 @@ async function buildReport(from, to) {
 
 
   /**
+   * Content performance, per hospital and locale. Four types, each paired with
+   * the one action that matters for it (MW):
+   *   Doctor -> Appointments, Package -> Add to cart,
+   *   Articles -> View item, Center -> Contact us.
+   *
+   * The path carries type, hospital and locale, so two group-wide pulls bucket
+   * into every combination at once.
+   */
+  const CONTENT_TYPES = [
+    { id: "doctor",  segment: "doctor",        label: "Doctor",   action: "appointments" },
+    { id: "package", segment: "package",       label: "Package",  action: "add_to_cart" },
+    { id: "article", segment: "content",       label: "Articles", action: "view_item" },
+    { id: "center",  segment: "center-clinic", label: "Center",   action: "contact_us" },
+  ];
+  const content = (() => {
+    if (data.contentViews === null) return { available: false };
+    const SEG_TO_TYPE = Object.fromEntries(CONTENT_TYPES.map((t) => [t.segment, t.id]));
+    /**
+     * `/{locale}/{brand}/{segment}/{slug}`. The locale is optional in the
+     * pattern because a path without one still names a real page; it simply
+     * cannot be filed under a language tab.
+     *
+     * The slug capture takes the WHOLE remainder, not one segment:
+     * `/package/x` and `/package/x/details` are different pages, and capturing
+     * only the first segment labelled both of them "x".
+     */
+    const PAGE_RE = /^\/(?:([a-z]{2})\/)?([a-z-]+)\/(doctor|package|content|center-clinic)\/([^?#]+)/i;
+    const parse = (raw) => {
+      const path = pagePath(raw);
+      const m = PAGE_RE.exec(path);
+      if (!m) return null;
+      const brand = brandBySegment(norm(m[2]));
+      if (!brand) return null;                       // out-of-scope branch
+      const type = SEG_TO_TYPE[String(m[3]).toLowerCase()];
+      if (!type) return null;
+      const locale = (m[1] || "").toLowerCase();
+      return { path, brand: brand.key, type,
+        slug: String(m[4]).replace(/\/+$/, ""),
+        locale: LOCALES[locale] ? locale : null };
+    };
+
+    // Events first, so views rows can pick their action up by path.
+    const evByPath = new Map();
+    for (const r of (data.contentEvents || [])) {
+      const path = pagePath(r.pagePath);
+      const name = String(r.eventName || "");
+      const e = evByPath.get(path) || {};
+      e[name] = (e[name] || 0) + n(r.eventCount);
+      evByPath.set(path, e);
+    }
+
+    const bucket = new Map();   // brand \u0000 locale \u0000 type -> Map(path -> row)
+    let unmatched = 0;
+    for (const r of (data.contentViews || [])) {
+      const p = parse(r.pagePath);
+      if (!p) { unmatched += n(r.screenPageViews); continue; }
+      if (!p.locale) continue;
+      const k = `${p.brand}\u0000${p.locale}\u0000${p.type}`;
+      const m = bucket.get(k) || new Map();
+      // Several titles can share a path (A/B tests, title changes mid-month);
+      // views are summed and the first title kept rather than duplicating rows.
+      const row = m.get(p.path) || { path: p.path, slug: p.slug,
+        title: String(r.pageTitle || "").trim(), views: 0, action: 0 };
+      row.views += n(r.screenPageViews);
+      m.set(p.path, row);
+      bucket.set(k, m);
+    }
+    for (const [k, m] of bucket) {
+      const type = k.split("\u0000")[2];
+      const action = (CONTENT_TYPES.find((t) => t.id === type) || {}).action;
+      for (const row of m.values()) row.action = (evByPath.get(row.path) || {})[action] || 0;
+    }
+
+    const byBrand = {};
+    for (const b of BRANDS) {
+      byBrand[b.key] = {};
+      for (const lc of Object.keys(LOCALES)) {
+        const cell = {};
+        let any = 0;
+        for (const t of CONTENT_TYPES) {
+          const m = bucket.get(`${b.key}\u0000${lc}\u0000${t.id}`);
+          const rows = m ? [...m.values()].sort((x, y) => y.views - x.views) : [];
+          cell[t.id] = { rows: rows.slice(0, 10), pageCount: rows.length,
+            views: rows.reduce((a, r) => a + r.views, 0),
+            actions: rows.reduce((a, r) => a + r.action, 0) };
+          any += cell[t.id].views;
+        }
+        cell.hasData = any > 0;
+        byBrand[b.key][lc] = cell;
+      }
+    }
+    /**
+     * Locale labels travel WITH the payload. The client has no locale table of
+     * its own, and duplicating one there would be a second place for the
+     * language list to drift.
+     *
+     * `LOCALES` (module scope) rather than `LANG_ORDER`, which is declared
+     * ~260 lines BELOW this IIFE — reading it here throws "Cannot access
+     * before initialization" the moment this runs. Same temporal dead zone that
+     * took down `buildBenchmark` (v3.100.0); the difference is this one was
+     * caught before shipping.
+     */
+    return { available: true, byBrand, unmatchedViews: unmatched,
+      locales: Object.keys(LOCALES).map((k) => ({ key: k, label: LOCALES[k] })),
+      types: CONTENT_TYPES.map(({ id, label, action }) => ({ id, label, action })) };
+  })();
+
+  /**
    * Organic social. Facebook page reach INCLUDES Boost Post, and a TikTok view
    * is not an impression, so the two are reported side by side and never summed
    * — same reasoning as the Overview funnel (§v3.68.0).
@@ -2727,6 +2890,7 @@ async function buildReport(from, to) {
     gbp,
     searchAds,
     referral,
+    content,
     tiktok,
     social,
     languages,

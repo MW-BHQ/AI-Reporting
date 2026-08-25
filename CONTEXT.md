@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.105.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.106.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -691,6 +691,70 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.106.0 — Content slides; real platform logos; GA4 reports can sort.**
+
+**CONTENT, two slides of paired tables** (MW), inserted after Referral and
+before Search. MW confirmed the URL patterns, which is what unblocked this:
+
+| Type | Path segment | Paired action |
+|---|---|---|
+| Doctor | `/doctor/` | Appointments |
+| Package | `/package/` | Add to cart |
+| Articles | **`/content/`** | View item |
+| Center | **`/center-clinic/`** | Contact us |
+
+Slide 1 is Doctor + Package, slide 2 Articles + Center, top 10 by views each,
+with **language tabs on their own namespace** (`clang-*`). Reusing Search's
+would mean clicking a locale that has articles but no search data blanks the
+Search pages.
+
+**THE METRIC TRAP, AVOIDED.** `screen_page_views` against a LANDING PAGE
+dimension counts every page view in those sessions, not views OF that page — a
+doctor page would have been credited with the whole visit. `langSessions` was
+already in flight and would have been free, and wrong. Content uses two
+page-scoped pulls instead (`pagePath x screenPageViews`, and
+`pagePath x eventName` for the four actions), filtered to the content segments
+AND the branch regex. **+2 group-wide requests**, serving four hospitals x ten
+locales x four types.
+
+**`ga4RunReport` now supports `orderBy`**, sorting server-side on a metric
+descending. This is what makes a row cap safe on a high-cardinality page report:
+truncation drops the tail rather than an arbitrary slice, the same reasoning as
+the GSC query pull. `orderBy` is part of the memo key — left out, two requests
+differing only in sort order would share one cached promise.
+
+**A temporal dead zone caught BEFORE shipping.** The content builder first read
+`LANG_ORDER` for its locale labels; that `const` is declared ~260 lines below
+the IIFE, so it would have thrown "Cannot access before initialization" on every
+report. Same bug class as `buildBenchmark` (v3.100.0) — the difference is this
+one never reached a deploy. It reads module-scope `LOCALES` instead.
+
+**Slug capture takes the whole path remainder.** `/package/x` and
+`/package/x/details` are different pages and a single-segment capture labelled
+both "x".
+
+**Real platform logos.** MW supplied Wikimedia URLs. `plogo()` is now three
+stages: local `brand/<file>` if present, else the remote URL, else the coloured
+monogram. **The build container cannot reach Wikimedia** (egress proxy 403), so
+these could not be bundled — the browser fetches them, and thumbnails are
+requested at 240px because they render at 22px. Fourteen platforms registered
+including YouTube, LINE, Instagram, Messenger, WhatsApp, ChatGPT and Gemini;
+the assistant marks now label rows in the AI table.
+
+**Mock now varies metrics per page.** `PAGE_VIEWS` and `PAGE_ACTIONS` give each
+content page a distinct value, and **actions are deliberately not proportional
+to views** — the top doctor by views has the FEWER appointments, so a card
+reading the wrong metric into the wrong column is visible. A flat 100 everywhere
+would have made any top-N look correct however it sorted.
+
+**One assertion honestly downgraded.** `ct excludes off-scope` is guarded twice
+— the branch regex on the pull and the `brandBySegment` check in `parse()` — and
+either alone is sufficient, so removing one kept it green. It took removing BOTH
+to make it fail. The comment now says it tests out-of-scope exclusion overall,
+not the presence of the pull filter, which earns its place on row volume that no
+output assertion can observe.
+
 
 **v3.105.0 — platform marks on slide titles; mini scorecards restyled; one icon set.**
 

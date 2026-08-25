@@ -120,6 +120,36 @@ function reportFixture() {
      * under two different channels, which is the case the last column exists
      * for.
      */
+    /**
+     * Two locales so the tabs are exercised, and Thai carries all four types
+     * while English is missing three — the empty-state row must render rather
+     * than the card vanishing.
+     */
+    content: { available: true, unmatchedViews: 0,
+      locales: [{ key: "th", label: "Thai" }, { key: "en", label: "English" }],
+      types: [
+        { id: "doctor", label: "Doctor", action: "appointments" },
+        { id: "package", label: "Package", action: "add_to_cart" },
+        { id: "article", label: "Articles", action: "view_item" },
+        { id: "center", label: "Center", action: "contact_us" }],
+      byBrand: Object.fromEntries(KEYS.map((k) => [k, {
+        th: { hasData: true,
+          doctor:  { pageCount: 2, views: 1400, actions: 52,
+            rows: [{ path: "/th/bangkok/doctor/dr-a", slug: "dr-a", title: "Dr A", views: 900, action: 12 },
+                   { path: "/th/bangkok/doctor/dr-b", slug: "dr-b", title: "", views: 500, action: 40 }] },
+          package: { pageCount: 1, views: 700, actions: 25,
+            rows: [{ path: "/th/bangkok/package/rsv", slug: "rsv", title: "RSV vaccine", views: 700, action: 25 }] },
+          article: { pageCount: 1, views: 650, actions: 8,
+            rows: [{ path: "/th/bangkok/content/bully", slug: "bully", title: "Bullying", views: 650, action: 8 }] },
+          center:  { pageCount: 1, views: 300, actions: 17,
+            rows: [{ path: "/th/bangkok/center-clinic/screening", slug: "screening", title: "Screening", views: 300, action: 17 }] } },
+        en: { hasData: true,
+          doctor:  { pageCount: 1, views: 200, actions: 3,
+            rows: [{ path: "/en/bangkok/doctor/dr-a-en", slug: "dr-a-en", title: "Dr A", views: 200, action: 3 }] },
+          package: { pageCount: 0, views: 0, actions: 0, rows: [] },
+          article: { pageCount: 0, views: 0, actions: 0, rows: [] },
+          center:  { pageCount: 0, views: 0, actions: 0, rows: [] } },
+      }])) },
     referral: { byBrand: KEYS.map((k) => ({ key: k, label: k,
       referrers: [
         { source: "pantip.com", channel: "Referral", sessions: 400, engaged: 340, actions: 30,
@@ -408,6 +438,45 @@ setTimeout(() => {
         minis.length && withIcon === minis.length
           ? ok("platform marks", `${want.length} platforms, ${minis.length} mini cards all iconed`)
           : fail("platform marks", `${withIcon}/${minis.length} mini cards have a shared icon`);
+      })();
+      /**
+       * Content: two slides, four paired tables, MW's type-to-action pairing,
+       * and language tabs on their OWN namespace.
+       */
+      (() => {
+        const pages = [...(root ? root.querySelectorAll(".clang-page") : [])];
+        if (!pages.length) return fail("content cards", "no content language pages rendered");
+        const thai = pages.filter(p => String(p.dataset.clangpage || "").startsWith("th-"));
+        if (thai.length !== 2) return fail("content cards", `${thai.length} Thai content slides, expected 2`);
+        // MW's pairing: Doctor+Package on the first slide, Articles+Center on
+        // the second, each beside the one action it is judged on.
+        const want = [["Doctor", "Appointments", "Package", "Add to cart"],
+                      ["Articles", "View item", "Center", "Contact us"]];
+        for (let i = 0; i < 2; i++) {
+          const heads = [...thai[i].querySelectorAll("thead th")].map(t => t.textContent.trim());
+          for (const h of want[i]) {
+            if (!heads.includes(h)) return fail("content cards", `slide ${i + 1} has no "${h}" column`);
+          }
+        }
+        // Ranked by views, descending.
+        const first = thai[0].querySelector("tbody");
+        const views = [...first.querySelectorAll("tr")]
+          .map(tr => Number((tr.children[1] || {}).textContent.replace(/[^\d]/g, "")))
+          .filter(v => !isNaN(v) && v > 0);
+        if (views.length > 1 && views.some((v, i) => i && v > views[i - 1])) {
+          return fail("content cards", `rows not ranked by views: ${views.join(",")}`);
+        }
+        // Content tabs must not share Search's namespace, or switching a
+        // content language would blank a Search page.
+        const ctabs = root.querySelectorAll(".clang-tab");
+        if (!ctabs.length) return fail("content cards", "no content language tabs");
+        if (thai[0].querySelector(".lang-tab")) return fail("content cards", "content reuses Search tabs");
+        // English has no package pages: the empty row must render.
+        const en = pages.filter(p => String(p.dataset.clangpage || "").startsWith("en-"));
+        const emptyShown = en.some(p => /no package pages in this language/i.test(p.textContent));
+        emptyShown
+          ? ok("content cards", `2 slides x ${ctabs.length} languages, ranked, empty state shown`)
+          : fail("content cards", "missing empty state for a language with no pages");
       })();
       finish();
     }, 500);

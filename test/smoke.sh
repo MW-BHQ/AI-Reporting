@@ -132,7 +132,26 @@ expect_field "rf keeps real links" "$REPORT" "(d.referral.byBrand[0].referrers.f
 expect_field "rf per-source events" "$REPORT" "d.referral.byBrand[0].referrers.every(r=>r.events&&typeof r.events==='object')?'ok':undefined"
 expect_field "rf events sum to total" "$REPORT" "d.referral.byBrand[0].referrers.every(r=>Object.values(r.events).reduce((a,b)=>a+b,0)===r.actions)?'ok':undefined"
 
-echo "--- monthly report: AI detection is a hybrid, both halves must work ---"
+echo "--- monthly report: content pages are PAGE-scoped, not landing-scoped ---"
+# The out-of-scope branch has the highest view count in the fixture (9999), so
+# a leak puts it top of every doctor table.
+#
+# TWO guards block it and either alone is sufficient: the branch regex on the
+# pull, and the `brandBySegment` check in `parse()`. Removing just one keeps
+# this green — it took removing BOTH to make it fail. So read this as a check on
+# out-of-scope exclusion overall, NOT as proof the pull filter is present.
+# The pull filter earns its place on ROW VOLUME (a 44,000-page property), which
+# no assertion on the output can observe.
+expect_field "ct excludes off-scope" "$REPORT" "JSON.stringify(d.content.byBrand).indexOf('dr-out-of-scope')===-1?'ok':undefined"
+# Ranked by views: 900 before 500.
+expect_field "ct ranked by views"  "$REPORT" "d.content.byBrand.BGH.th.doctor.rows[0].slug==='dr-valailuck'?'ok':undefined"
+# Actions are NOT proportional to views in the fixture, so a card reading the
+# wrong metric shows up: the top doctor by views has FEWER appointments.
+expect_field "ct action not views" "$REPORT" "d.content.byBrand.BGH.th.doctor.rows[0].action===12?12:undefined"
+expect_field "ct type split"       "$REPORT" "d.content.byBrand.BGH.th.package.rows.length>=1&&d.content.byBrand.BGH.th.center.rows.length>=1?'ok':undefined"
+# Locale comes from the path, so an English doctor page must not land in Thai.
+expect_field "ct locale split"     "$REPORT" "d.content.byBrand.BGH.en.doctor.rows[0].slug==='dr-valailuck-en'?'ok':undefined"
+expect_field "ct top ten cap"      "$REPORT" "Object.values(d.content.byBrand).every(b=>Object.values(b).every(c=>['doctor','package','article','center'].every(t=>c[t].rows.length<=10)))?'ok':undefined"
 # GA4's own "AI Assistant" channel. pantip.com is NOT in the name list, so it
 # can only appear here via the channel — 0 means native detection is dead.
 # Counter populated only. This does NOT prove native detection works — with

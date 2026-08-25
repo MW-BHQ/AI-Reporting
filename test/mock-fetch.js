@@ -109,6 +109,20 @@ const GA4_PAGES = [
   "/th/bangkok-heart/package/x/details",
   "/th/bangkok-heart/package/x-other",   // sibling: BEGINS_WITH catches it, match() must not
   "/th/somewhere-else/page",
+  /**
+   * CONTENT PAGES, one per type, with DISTINCT view counts in PAGE_VIEWS below
+   * so a top-10 that sorts on the wrong field or loses its ordering is visible.
+   * A second doctor page ranks below the first; an English doctor page keeps the
+   * locale tabs honest; and the out-of-scope branch below must never appear.
+   */
+  "/th/bangkok/doctor/dr-valailuck",
+  "/th/bangkok/doctor/dr-second",
+  "/th/bangkok/package/rsv-vaccine-for-pregnant-women",
+  "/th/bangkok/content/bully-and-cyberbullying",
+  "/th/bangkok/center-clinic/health-screening-check-up",
+  "/en/bangkok/doctor/dr-valailuck-en",
+  "/th/bangkok-heart/doctor/dr-heart",
+  "/th/samitivej-srinakarin/doctor/dr-out-of-scope",
   // Section root with a UTM: the segment ends with "?" not "/". An earlier
   // pattern dropped these, excluding every campaign landing on a section root.
   "/th/bangkok-heart?utm_source=facebook",
@@ -217,10 +231,44 @@ function ga4Report(body) {
     .filter((c) => keep("sessionManualCampaignName", c));
   const dates = ["20260714", "20260715"];
   const rows = [];
-  const emit = (vals) => rows.push({
-    dimensionValues: vals.map((value) => ({ value })),
-    metricValues: mets.map((m) => ({ value: m === "keyEvents" ? "3" : m === "engagedSessions" ? "60" : "100" })),
-  });
+  /**
+   * Per-page metric values, so the content cards can be ranked. A flat 100 for
+   * every page would make any top-N look correct however it sorted.
+   */
+  const PAGE_VIEWS = {
+    "/th/bangkok/doctor/dr-valailuck": 900,
+    "/th/bangkok/doctor/dr-second": 500,
+    "/th/bangkok/package/rsv-vaccine-for-pregnant-women": 700,
+    "/th/bangkok/content/bully-and-cyberbullying": 650,
+    "/th/bangkok/center-clinic/health-screening-check-up": 300,
+    "/en/bangkok/doctor/dr-valailuck-en": 200,
+    "/th/bangkok-heart/doctor/dr-heart": 400,
+    "/th/samitivej-srinakarin/doctor/dr-out-of-scope": 9999,
+  };
+  // Deliberately NOT proportional to views: an action count that merely tracked
+  // views would hide a card reading the wrong metric into the wrong column.
+  const PAGE_ACTIONS = {
+    "/th/bangkok/doctor/dr-valailuck": 12,
+    "/th/bangkok/doctor/dr-second": 40,
+    "/th/bangkok/package/rsv-vaccine-for-pregnant-women": 25,
+    "/th/bangkok/content/bully-and-cyberbullying": 8,
+    "/th/bangkok/center-clinic/health-screening-check-up": 17,
+    "/en/bangkok/doctor/dr-valailuck-en": 3,
+    "/th/bangkok-heart/doctor/dr-heart": 6,
+  };
+  const emit = (vals) => {
+    const pageIdx = dims.indexOf("pagePath");
+    const page = pageIdx >= 0 ? vals[pageIdx] : null;
+    rows.push({
+      dimensionValues: vals.map((value) => ({ value })),
+      metricValues: mets.map((m) => ({ value:
+        m === "keyEvents" ? "3"
+        : m === "engagedSessions" ? "60"
+        : (m === "screenPageViews" && page && PAGE_VIEWS[page] !== undefined) ? String(PAGE_VIEWS[page])
+        : (m === "eventCount" && page && PAGE_ACTIONS[page] !== undefined) ? String(PAGE_ACTIONS[page])
+        : "100" })),
+    });
+  };
   const expand = (i, acc) => {
     if (i === dims.length) return emit(acc);
     const d = dims[i];
