@@ -243,10 +243,12 @@ function ga4Report(body) {
       : d === "sessionManualCampaignName" ? [...campaigns, ...marker]
       // Paid Search must be present or the Google Ads impression mapping
       // (IMPRESSION_SOURCE_BY_CHANNEL) is never exercised. Referral must be
-      // present or the Referral block has nothing to filter, and Cross-network
+      // present or the Referral block has nothing to filter, Cross-network
       // must be here so the Search Ads matcher is proved NOT to count it when
-      // the source is not Google.
-      : d === "sessionDefaultChannelGroup" ? ["Organic Search", "Paid Social", "Paid Search", "Referral", "Cross-network", ...marker]
+      // the source is not Google, and "AI Assistant" is GA4's own channel for
+      // assistant traffic (live from Aug 2026) — it is paired with a source
+      // that is NOT on the name list, so channel detection has to do the work.
+      : d === "sessionDefaultChannelGroup" ? ["Organic Search", "Paid Social", "Paid Search", "Referral", "Cross-network", "AI Assistant", ...marker]
       : d === "itemName" ? ["Heart Screening Package", ...marker]
       : d === "pageTitle" ? ["Heart Screening Package", "Annual Check-up", ...marker]
       : d === "pagePath" ? pages

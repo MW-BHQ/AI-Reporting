@@ -21,6 +21,22 @@ function reportFixture() {
   const KEYS = ["BGH", "BIH", "BHT", "WSH"];
   const events = [{ id: "find_doctors", label: "Find doctors", value: 5 },
                   { id: "view_item", label: "View item", value: 3 }];
+  /**
+   * All nine, because the AI card renders one scorecard per key event and a
+   * short list would silently produce a short grid. Three are zero on purpose:
+   * a key event that did not fire still gets a card.
+   */
+  const allNineEvents = [
+    { id: "view_item", label: "View item", value: 1500 },
+    { id: "contact_us", label: "Contact us", value: 812 },
+    { id: "appointments", label: "Appointments", value: 336 },
+    { id: "find_doctors", label: "Find doctors", value: 266 },
+    { id: "add_to_cart", label: "Add to cart", value: 15 },
+    { id: "view_cart", label: "View cart", value: 11 },
+    { id: "purchase", label: "Purchase", value: 0 },
+    { id: "better_ai_start", label: "Better AI start", value: 0 },
+    { id: "better_ai_result", label: "Better AI result", value: 0 },
+  ];
   const brand = (key) => ({ key, label: key, sessions: 100, engaged: 60, keyEvents: 8,
     channels: [{ channel: "Organic Search", sessions: 80, engaged: 50 }],
     keyEventBreakdown: events, meta: { spend: 10, impressions: 100, clicks: 5, accounts: [key + " x ADA"] },
@@ -120,12 +136,17 @@ function reportFixture() {
       totals: { sessions: 700, engaged: 400, actions: 31, engagementRate: 0.57, actionsPer100: 4.4 },
       totalsAll: { sessions: 1600, engaged: 900, actions: 43, engagementRate: 0.56, actionsPer100: 2.7 },
       ai: { rows: [
-          { source: "chatgpt.com", channel: "Referral, Organic Search", sessions: 120, engaged: 100,
-            actions: 14, engagementRate: 0.83, actionsPer100: 11.7 },
-          { source: "perplexity.ai", channel: "Referral", sessions: 30, engaged: 22, actions: 2,
-            engagementRate: 0.73, actionsPer100: 6.7 }],
+          { source: "chatgpt.com", channel: "AI Assistant, Organic Search, Referral", sessions: 120,
+            engaged: 100, actions: 14, engagementRate: 0.83, actionsPer100: 11.7,
+            events: { view_item: 8, contact_us: 3, appointments: 2, find_doctors: 1 } },
+          { source: "perplexity.ai", channel: "AI Assistant", sessions: 30, engaged: 22, actions: 2,
+            engagementRate: 0.73, actionsPer100: 6.7, events: { view_item: 2 } }],
         totals: { sessions: 150, engaged: 122, actions: 16, engagementRate: 0.81, actionsPer100: 10.7 },
-        actions: events, referralSessions: 90, referralSessionsAll: 150,
+        actions: allNineEvents,
+        // Split across both signals, so the note cannot report one as zero
+        // and pass — and 96 + 54 must equal the 150 total.
+        nativeSessions: 96, namedSessions: 54,
+        referralSessions: 90, referralSessionsAll: 150,
         shareOfReferral: 0.129, shareOfReferralAll: 0.094, siteShare: 0.0075 },
       site: { sessions: 20000, engaged: 11000, actions: 600,
         engagementRate: 0.55, actionsPer100: 3.0 } })) },
@@ -288,6 +309,28 @@ setTimeout(() => {
       })();
       present("referral ai spotlight", "AI assistants (LLMs)");
       present("referral ai source", "chatgpt.com");
+      /**
+       * The AI card is 10 scorecards (Sessions + all nine key events) in two
+       * rows of five, and its table carries the same nine as columns. Queried
+       * through the card's own DOM, because these labels appear in other
+       * tables too — a loose text match gave a false pass in v3.103.0.
+       */
+      (() => {
+        const card = [...(root ? root.querySelectorAll(".card") : [])]
+          .find(c => (c.querySelector(".card-title") || {}).textContent === "AI assistants (LLMs)");
+        if (!card) return fail("ai card layout", "AI card not found");
+        const rows = [...card.querySelectorAll(".grid.g-5")];
+        const cards = rows.reduce((a, r) => a + r.querySelectorAll(".stat, .kpi").length, 0);
+        const th = [...card.querySelectorAll("thead th")].map(t => t.textContent.trim());
+        if (rows.length !== 2) return fail("ai card layout", `${rows.length} scorecard rows, expected 2`);
+        if (cards !== 10) return fail("ai card layout", `${cards} scorecards, expected 10`);
+        if (th.length !== 11) return fail("ai card layout", `${th.length} columns, expected 11`);
+        // The three columns MW removed must be gone from THIS table.
+        const banned = th.filter(h => /engagement|actions \/ 100|ga4 channel/i.test(h));
+        banned.length
+          ? fail("ai card layout", `removed column still present: ${banned.join(", ")}`)
+          : ok("ai card layout", "2\u00d75 scorecards, 11 columns, none removed");
+      })();
       // The switch must exist, and the blacklisted row must be in the DOM
       // (hidden by CSS) rather than dropped — the toggle has to reveal it.
       present("blacklist switch", "Hide blacklisted referrers");

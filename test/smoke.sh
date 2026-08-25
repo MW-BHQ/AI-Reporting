@@ -109,8 +109,10 @@ expect_field "rf ai detected"      "$REPORT" "d.referral.byBrand[0].ai.rows.some
 # The assistant appears under several channels; all must be listed, not just one.
 expect_field "rf ai multi-channel" "$REPORT" "d.referral.byBrand[0].ai.rows[0].channel.includes(',')?'ok':undefined"
 expect_field "rf ai nine events"   "$REPORT" "d.referral.byBrand[0].ai.actions.length===9?9:undefined"
-# pantip.com is not an assistant and must not leak into the AI block.
-expect_field "rf ai excludes plain" "$REPORT" "d.referral.byBrand[0].ai.rows.every(r=>r.source!=='pantip.com')?'ok':undefined"
+# A source that is NOT on the assistant name list may only appear in the AI
+# block via GA4's channel — so its channel list must be exactly "AI Assistant".
+# If name matching were leaking, pantip.com would show up under Referral too.
+expect_field "rf ai name no leak" "$REPORT" "(d.referral.byBrand[0].ai.rows.find(r=>r.source==='pantip.com')||{}).channel==='AI Assistant'?'ok':undefined"
 # Both totals must be present so the blacklist switch has something to show.
 expect_field "rf dual totals"      "$REPORT" "d.referral.byBrand[0].totalsAll.sessions>=d.referral.byBrand[0].totals.sessions?'ok':undefined"
 expect_field "rf blacklist flag"   "$REPORT" "d.referral.byBrand[0].referrers.every(r=>typeof r.blacklisted==='boolean')?'ok':undefined"
@@ -129,6 +131,29 @@ expect_field "rf keeps real links" "$REPORT" "(d.referral.byBrand[0].referrers.f
 # columns have nothing to read.
 expect_field "rf per-source events" "$REPORT" "d.referral.byBrand[0].referrers.every(r=>r.events&&typeof r.events==='object')?'ok':undefined"
 expect_field "rf events sum to total" "$REPORT" "d.referral.byBrand[0].referrers.every(r=>Object.values(r.events).reduce((a,b)=>a+b,0)===r.actions)?'ok':undefined"
+
+echo "--- monthly report: AI detection is a hybrid, both halves must work ---"
+# GA4's own "AI Assistant" channel. pantip.com is NOT in the name list, so it
+# can only appear here via the channel — 0 means native detection is dead.
+# Counter populated only. This does NOT prove native detection works — with
+# detection reduced to name matching it still passed, because a name-matched
+# row arriving on the AI Assistant channel is counted native. The real proof of
+# native detection is "ai channel-only hit" below.
+expect_field "ai native counter"   "$REPORT" "d.referral.byBrand[0].ai.nativeSessions>0?'ok':undefined"
+expect_field "ai channel-only hit" "$REPORT" "d.referral.byBrand[0].ai.rows.some(r=>r.source==='pantip.com')?'ok':undefined"
+# The name list. chatgpt.com arrives under channels GA4 did not classify.
+expect_field "ai named signal"     "$REPORT" "d.referral.byBrand[0].ai.namedSessions>0?'ok':undefined"
+expect_field "ai named hit"        "$REPORT" "d.referral.byBrand[0].ai.rows.some(r=>r.source==='chatgpt.com')?'ok':undefined"
+# The two signals partition the total; overlap or a gap means double counting.
+expect_field "ai split partitions" "$REPORT" "(d.referral.byBrand[0].ai.nativeSessions+d.referral.byBrand[0].ai.namedSessions)===d.referral.byBrand[0].ai.totals.sessions?'ok':undefined"
+# All nine on the scorecards, and per assistant in the table.
+expect_field "ai per-assistant KEs" "$REPORT" "d.referral.byBrand[0].ai.rows.every(r=>r.events&&typeof r.events==='object')?'ok':undefined"
+# GA4's own "AI Assistant" channel must be picked up on its own. `facebook` is
+# not on the assistant name list, so if it appears in the AI rows the ONLY
+# thing that could have put it there is the channel.
+expect_field "rf ai by channel"    "$REPORT" "d.referral.byBrand[0].ai.rows.some(r=>r.source==='facebook')?'ok':undefined"
+# Per-assistant event columns need per-assistant counts.
+expect_field "rf ai per-row events" "$REPORT" "d.referral.byBrand[0].ai.rows.every(r=>r.events&&typeof r.events==='object')?'ok':undefined"
 
 echo "--- monthly report: TikTok field names and floors ---"
 # reach is unique_video_views; there is no `reach` field on this connector.

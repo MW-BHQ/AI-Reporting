@@ -2115,21 +2115,36 @@ async function buildReport(from, to) {
       return BLACKLIST.some((p) => s.includes(String(p).toLowerCase()));
     };
     /**
-     * AI assistants are spotlighted WHEREVER GA4 files them, not only under
-     * Referral. GA4 has no LLM channel: it scatters them across Referral and
-     * Organic Search, and files some as Direct when the tool strips the
-     * referrer. Matching on source and reporting the channel it landed in is
-     * the only way to see the whole picture.
+     * GA4 ADDED AN "AI Assistant" DEFAULT CHANNEL GROUP on 13 May 2026
+     * (medium `ai-assistant`), confirmed against the live data. That is the
+     * primary signal, because it catches assistants Google recognises without
+     * us naming them.
+     *
+     * Name matching is KEPT alongside it, not replaced, and MW's own numbers
+     * show why: `gemini.google.com` arrives as AI Assistant, but `perplexity`
+     * lands in Unassigned, `openai` in Organic Search and `felo.ai` in
+     * Referral. Google has not published its recognised list and Perplexity is
+     * a known omission. A session counts if EITHER signal fires.
+     *
+     * Three limits follow, all stated on the card:
+     *   - The native channel is FORWARD-ONLY from 13 May 2026 and GA4 did not
+     *     reclassify history, so a comparison spanning that date compares two
+     *     different definitions.
+     *   - Referrer-less arrivals still land in Direct and cannot be counted.
+     *   - Because half the match is by name, a new assistant stays invisible
+     *     until its name is added above.
      */
     const AI_SOURCES = [
       "chatgpt", "openai", "perplexity", "gemini", "bard", "claude", "anthropic",
       "copilot", "poe.com", "you.com", "deepseek", "grok", "x.ai", "mistral",
       "meta.ai", "phind", "genspark", "felo",
     ];
-    const isAi = (src) => {
+    const isAiSource = (src) => {
       const s = String(src || "").toLowerCase();
       return AI_SOURCES.some((a) => s.includes(a));
     };
+    const isAiChannel = (chan) => /^ai\s*assistant/i.test(String(chan || "").trim());
+    const isAi = (src, chan) => isAiSource(src) || isAiChannel(chan);
     const shape = (t) => ({ ...t,
       engagementRate: t.sessions ? t.engaged / t.sessions : null,
       actionsPer100: t.sessions ? (t.actions / t.sessions) * 100 : null });
@@ -2152,6 +2167,7 @@ async function buildReport(from, to) {
       const aiEvents = {};
       const aiRef = { sessions: 0, engaged: 0, actions: 0 };
       let aiRefBlacklisted = 0;
+      let aiNativeSessions = 0, aiNamedSessions = 0;
       for (const r of rows) {
         const chan = String(r.session_default_channel_group || "(unassigned)");
         const src = String(r.session_manual_source || "(not set)");
@@ -2170,17 +2186,23 @@ async function buildReport(from, to) {
           // denominator must describe the same channel. Dividing all-channel
           // assistant sessions by referral-only sessions produced 250% in
           // testing — a ratio of two different populations.
-          if (isAi(src)) {
+          if (isAiSource(src)) {
             aiRef.sessions += s; aiRef.engaged += eng; aiRef.actions += ev.total;
             if (isBlacklisted(src)) aiRefBlacklisted += s;
           }
         }
-        if (isAi(src)) {
+        if (isAi(src, chan)) {
           const t = aiMap.get(src) || { ...blank(src, chan), channels: new Set() };
           t.sessions += s; t.engaged += eng; t.actions += ev.total;
+          // Which signal found it. Reported as a note rather than a column,
+          // because it says how much of this depends on our name list still
+          // being current — the part that rots.
+          if (isAiChannel(chan)) aiNativeSessions += s; else aiNamedSessions += s;
           // Every channel this assistant landed in, as a Set: a substring
           // check would treat "Paid Search" as already covered by "Search".
           t.channels.add(chan);
+          // Per-assistant event counts, for the columns in the table.
+          for (const [nm, v] of Object.entries(ev.byName)) t.events[nm] = (t.events[nm] || 0) + v;
           aiMap.set(src, t);
           for (const [nm, v] of Object.entries(ev.byName)) aiEvents[nm] = (aiEvents[nm] || 0) + v;
         }
@@ -2229,6 +2251,8 @@ async function buildReport(from, to) {
         ai: { rows: ai, totals: aiTotal,
           actions: KEY_EVENTS.map((e) => ({ id: e.name, label: e.label, value: aiEvents[e.name] || 0 }))
             .sort((a, b2) => b2.value - a.value),
+          nativeSessions: aiNativeSessions,
+          namedSessions: aiNamedSessions,
           referralSessions: aiRef.sessions - aiRefBlacklisted,
           referralSessionsAll: aiRef.sessions,
           shareOfReferral: aiShare(refTotalClean, aiRef.sessions - aiRefBlacklisted),

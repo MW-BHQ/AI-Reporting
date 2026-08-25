@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.103.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.104.1.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -692,6 +692,75 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.104.1 — GA4 now HAS an AI Assistant channel; AI card rebuilt.**
+
+**THE DEAD END IS NO LONGER DEAD.** Previous releases said "GA4 has no LLM
+channel" and matched assistants by source name. MW asked for a re-check and was
+right: **`AI Assistant` is now a GA4 default channel group value**, confirmed
+from live production data.
+
+**Google added it on 13 May 2026** (medium `ai-assistant`, campaign
+`(ai-assistant)`), verified against Google's release notes as well as the live
+data. Two properties of that rollout that change how the numbers read:
+
+- **It is forward-only.** GA4 did not reclassify history, so any comparison
+  spanning 13 May 2026 compares two different definitions. Stated on the card.
+- **Google has not published its recognised list**, and Perplexity is a known
+  omission — which is exactly what MW's data shows.
+
+The card now reports **how many sessions each signal found**
+(`ai.nativeSessions` / `ai.namedSessions`), because that ratio says how much of
+the figure still depends on our hand-maintained name list. Smoke asserts the two
+partition the total exactly, so neither double counting nor a gap can pass.
+
+**A negative control caught a weak assertion.** `ai native signal` still passed
+with native detection removed, because a name-matched row arriving on the AI
+Assistant channel is counted as native. Renamed `ai native counter` and the
+comment now points at `ai channel-only hit`, which is the assertion that
+actually proves native detection: `pantip.com` is not in the name list, so it
+can only appear via the channel.
+
+It is now the primary signal. **Name matching is kept as a fallback, not
+replaced** — the same live data shows assistant sources also landing under
+Organic Search, Referral and Unassigned, so the channel alone would miss them.
+A session counts if either fires (`isAi(src, chan)`).
+
+One scoping detail: inside the Referral branch the channel is by definition
+Referral, so the "% of all referral" numerator uses `isAiSource()` only.
+Using the combined test there would have been a category error.
+
+**AI card rebuilt to MW's layout.** All nine key events are now scorecards —
+**two rows of five**, Sessions first then the nine by value — replacing
+Engagement rate and Actions per 100. The table drops Engagement, Actions / 100
+and GA4 channel, and carries **the same nine key events as columns** instead, so
+the card reads consistently across and down.
+
+`qual()` and `per100()` had no callers left and were deleted with those columns,
+along with the now-unused `site` baseline binding in the referral block.
+
+**Two fixture lessons.**
+
+1. The shared `events` fixture had only TWO entries, so the nine-scorecard grid
+   rendered three cards and the DOM assertion caught it. A card-per-event
+   layout needs a fixture with every event, including **zeros** — Purchase and
+   both Better AI events are zero on purpose, because a key event that did not
+   fire still gets a card.
+2. `rf ai excludes plain` asserted that `pantip.com` never appears in the AI
+   rows. Once the mock gained an `AI Assistant` channel that became **false by
+   construction** — the mock is a cartesian product, so every source appears in
+   every channel. The assertion now checks that a non-assistant source appears
+   with channel exactly `AI Assistant`, which proves it arrived by channel and
+   not by a leaking name match. When a mock changes shape, assertions written
+   against the old shape can quietly stop meaning anything.
+
+**Still open (not done, MW to decide):** the live data shows the same assistant
+split across several source spellings — `chatgpt.com`, `chatgpt`, `chatgpt.com)`
+with a stray bracket, and `perplexity` separately from `perplexity.ai`. Grouping
+them under one normalised name would cut the table roughly in half and make the
+per-assistant numbers真 comparable, but it changes what a row means, so it is
+not being done unasked.
+
+
 **v3.103.0 — Back links table shows named key events; two more blacklist entries.**
 
 **Columns after Sessions are now MW's five named key events** — Find Doctor,
@@ -788,10 +857,12 @@ that bounce, and sorting on volume alone puts it top. Both are coloured against
 least 15% above, red at least 15% below.
 
 **AI assistants (LLMs) get their own sub-section**, matched by source across
-ALL channels, not just Referral. GA4 has no LLM channel — it scatters
-assistants across Referral and Organic Search and files some as Direct — so the
-channel each landed in is shown as a column, accumulated in a **Set** (a
-substring check would treat "Paid Search" as already covered by "Search").
+ALL channels, not just Referral. ~~GA4 has no LLM channel~~ — **superseded in
+v3.104.0: GA4 added an `AI Assistant` channel on 13 May 2026.** At the time of
+this release it scattered assistants across Referral and Organic Search and
+filed some as Direct, so the channel each landed in is shown as a column,
+accumulated in a **Set** (a substring check would treat "Paid Search" as already
+covered by "Search").
 
 Two limits stated on the card, because the number is small enough that
 over-reading it would be easy: an assistant that strips the referrer arrives as
