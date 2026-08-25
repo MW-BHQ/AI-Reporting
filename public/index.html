@@ -1748,24 +1748,39 @@ function renderReport() {
       referrers to exclude and they will be filtered by default, with this switch to show them again.</div>`}
       <div class="card">
         <div class="card-title">Back links, and how good is the traffic</div>
+        ${(() => {
+          /**
+           * MW's five columns. Named key events rather than one total: the
+           * question a back link has to answer is which action it produced,
+           * and "8 key events" does not distinguish a page view from an
+           * appointment. Order is MW's.
+           */
+          const COLS = [
+            ['find_doctors', 'Find Doctor'],
+            ['appointments', 'Appointments'],
+            ['contact_us',   'Contact us'],
+            ['view_item',    'View Item'],
+            ['add_to_cart',  'Add to cart'],
+          ];
+          return `
         <table class="sortable" data-heat="1"><thead><tr>
-          <th>Source</th><th class="num">Sessions</th><th class="num">Engagement rate</th>
-          <th class="num">Key events</th><th class="num">Actions / 100</th>
+          <th>Source</th><th class="num">Sessions</th>
+          ${COLS.map(([,lab])=>`<th class="num">${esc(lab)}</th>`).join('')}
         </tr></thead><tbody>
         ${RF.referrers.length ? RF.referrers.map(r=>`<tr${r.blacklisted?' class="bl-row"':''}>
           <td class="strong i18n">${esc(r.source)}${r.blacklisted?' <span style="font-size:9.5px;color:var(--faint)">blacklisted</span>':''}</td>
           <td class="num">${num(r.sessions)}</td>
-          <td class="num">${qual(r.engagementRate, site.engagementRate)}</td>
-          <td class="num">${num(r.actions)}</td>
-          <td class="num">${per100(r.actionsPer100, site.actionsPer100)}</td></tr>`).join('')
-          : '<tr><td colspan="5" class="num">no referral traffic in range</td></tr>'}
-        </tbody></table>
-        <div class="note">Sorted by sessions, but <b>read the two right-hand columns</b> \u2014 they are what
-        separates a back link worth cultivating from one that sends volume that leaves.
-        Green is at least 15% above this hospital's site average
-        (${site.engagementRate===null?'\u2014':(site.engagementRate*100).toFixed(1)+'%'} engagement,
-        ${site.actionsPer100===null?'\u2014':site.actionsPer100.toFixed(1)} actions per 100 sessions),
-        amber within it, red at least 15% below.</div>
+          ${COLS.map(([id])=>`<td class="num">${num((r.events||{})[id]||0)}</td>`).join('')}
+          </tr>`).join('')
+          : `<tr><td colspan="${COLS.length+2}" class="num">no referral traffic in range</td></tr>`}
+        </tbody></table>`;
+        })()}
+        <div class="note">Sorted by sessions, but <b>read the action columns</b> \u2014 they are what separates
+        a back link worth cultivating from one that sends volume that leaves. A source with traffic and
+        no actions is a link, not a referral.
+        These five are MW's selection, not all nine key events: Purchase, View cart and the two Better AI
+        events are tracked elsewhere and are near-zero from referral.
+        A zero is a real answer, not missing data.</div>
       </div>
     <div class="card mt" style="border-color:#4B8DF8">
       <div class="card-title">AI assistants (LLMs)</div>
@@ -5232,7 +5247,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.102.1';
+const CLIENT_BUILD = '3.103.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

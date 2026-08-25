@@ -125,6 +125,10 @@ expect_field "rf clean below all"  "$REPORT" "d.referral.byBrand[0].totals.sessi
 expect_field "rf blacklist active" "$REPORT" "d.referral.byBrand[0].blacklistActive===true?'ok':undefined"
 # pantip.com is NOT on the list and must survive the filter.
 expect_field "rf keeps real links" "$REPORT" "(d.referral.byBrand[0].referrers.find(r=>r.source==='pantip.com')||{}).blacklisted===false?'ok':undefined"
+# Each referrer needs its own event breakdown, not just a total, or MW's five
+# columns have nothing to read.
+expect_field "rf per-source events" "$REPORT" "d.referral.byBrand[0].referrers.every(r=>r.events&&typeof r.events==='object')?'ok':undefined"
+expect_field "rf events sum to total" "$REPORT" "d.referral.byBrand[0].referrers.every(r=>Object.values(r.events).reduce((a,b)=>a+b,0)===r.actions)?'ok':undefined"
 
 echo "--- monthly report: TikTok field names and floors ---"
 # reach is unique_video_views; there is no `reach` field on this connector.

@@ -2107,6 +2107,8 @@ async function buildReport(from, to) {
       "teams.public.onecdn.static.microsoft",              // Teams link unfurling
       "bangkokhospital.app.agnoshealth.com",               // Agnos partner app
       "bhq-cms-v2.local",                                  // our own CMS, internal
+      "excel.officeapps.live.com",                         // links opened from Excel
+      "linktr.ee",                                         // link-in-bio hop, not a back link
     ];
     const isBlacklisted = (src) => {
       const s = String(src || "").toLowerCase();
@@ -2144,7 +2146,7 @@ async function buildReport(from, to) {
         e.total += r.value; e.byName[r.eventName] = (e.byName[r.eventName] || 0) + r.value;
         evBySrc.set(k, e);
       }
-      const blank = (source, channel) => ({ source, channel, sessions: 0, engaged: 0, actions: 0 });
+      const blank = (source, channel) => ({ source, channel, sessions: 0, engaged: 0, actions: 0, events: {} });
       const refMap = new Map(); const aiMap = new Map();
       let siteSessions = 0;
       const aiEvents = {};
@@ -2159,6 +2161,9 @@ async function buildReport(from, to) {
         if (/^referral$/i.test(chan)) {
           const t = refMap.get(src) || blank(src, chan);
           t.sessions += s; t.engaged += eng; t.actions += ev.total;
+          // Per-event counts, so the table can show which back links drive
+          // Find doctors and Appointments rather than one opaque total.
+          for (const [nm, v] of Object.entries(ev.byName)) t.events[nm] = (t.events[nm] || 0) + v;
           refMap.set(src, t);
           // Assistants arriving THROUGH referral, tracked separately: the
           // scorecard ratio is "% of all referral", so numerator and

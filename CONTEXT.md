@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.102.1.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.103.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -691,6 +691,35 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.103.0 — Back links table shows named key events; two more blacklist entries.**
+
+**Columns after Sessions are now MW's five named key events** — Find Doctor,
+Appointments, Contact us, View Item, Add to cart — replacing engagement rate,
+the key-event total and actions per 100. The reason is that "8 key events" does
+not distinguish a page view from an appointment, and a back link has to answer
+which action it produced. Order is MW's.
+
+Deliberately **not all nine**: Purchase, View cart and the two Better AI events
+are near-zero from referral. The engagement-rate colouring survives on the AI
+assistants table, where the comparison against site average still earns its
+place.
+
+Server now accumulates **per-source event counts** (`referrers[].events`), not
+just a total. Smoke asserts the per-source breakdown sums exactly to that
+source's `actions`, so a dropped event cannot pass.
+
+**Blacklist: `excel.officeapps.live.com` and `linktr.ee` added** — nine entries
+now.
+
+**A second test that could not fail.** The five-column check used
+`text.includes("Appointments")` against the whole report — but that label
+appears in several other Actions tables, so deleting a column from THIS table
+still passed. It now reads the header row of the back links table through the
+DOM and compares the full list in order, which catches both a removed column and
+a reordered one. Second time in two releases that a loose text match gave a
+false pass; assertions on a specific block should query that block.
+
 
 **v3.102.1 — MW's referrer blacklist populated.**
 

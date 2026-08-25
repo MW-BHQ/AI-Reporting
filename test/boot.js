@@ -107,11 +107,15 @@ function reportFixture() {
     referral: { byBrand: KEYS.map((k) => ({ key: k, label: k,
       referrers: [
         { source: "pantip.com", channel: "Referral", sessions: 400, engaged: 340, actions: 30,
-          engagementRate: 0.85, actionsPer100: 7.5, blacklisted: false },
+          engagementRate: 0.85, actionsPer100: 7.5, blacklisted: false,
+          events: { find_doctors: 12, appointments: 9, contact_us: 5, view_item: 4, add_to_cart: 0 } },
+        // Traffic but no actions at all: the "a link, not a referral" case, and
+        // it proves a zero renders as 0 rather than blank or NaN.
         { source: "bounce.example", channel: "Referral", sessions: 300, engaged: 60, actions: 1,
-          engagementRate: 0.20, actionsPer100: 0.33, blacklisted: false },
+          engagementRate: 0.20, actionsPer100: 0.33, blacklisted: false, events: {} },
         { source: "bangkokhospital.com", channel: "Referral", sessions: 900, engaged: 500, actions: 12,
-          engagementRate: 0.56, actionsPer100: 1.3, blacklisted: true }],
+          engagementRate: 0.56, actionsPer100: 1.3, blacklisted: true,
+          events: { find_doctors: 3, appointments: 1, contact_us: 8, view_item: 0, add_to_cart: 0 } }],
       referrerCount: 3, blacklistedCount: 1, blacklistActive: true,
       totals: { sessions: 700, engaged: 400, actions: 31, engagementRate: 0.57, actionsPer100: 4.4 },
       totalsAll: { sessions: 1600, engaged: 900, actions: 43, engagementRate: 0.56, actionsPer100: 2.7 },
@@ -265,6 +269,23 @@ setTimeout(() => {
         ? ok(name, "rendered") : fail(name, `"${needle}" missing from the report`);
       present("search ads rendered", "the keywords we bid on");
       present("referral rendered", "Back links, and how good is the traffic");
+      /**
+       * Checked against THIS table's header row, not the page text: the label
+       * "Appointments" appears in several other Actions tables, so deleting a
+       * column here still left a loose text match passing.
+       */
+      (() => {
+        const want = ["Source", "Sessions", "Find Doctor", "Appointments",
+                      "Contact us", "View Item", "Add to cart"];
+        const tables = [...(root ? root.querySelectorAll(".card") : [])]
+          .filter(c => (c.textContent || "").includes("Back links, and how good"));
+        const tbl = tables.length ? tables[0].querySelector("table") : null;
+        if (!tbl) return fail("referral five columns", "back links table not found");
+        const got = [...tbl.querySelectorAll("thead th")].map(th => th.textContent.trim());
+        got.join("|") === want.join("|")
+          ? ok("referral five columns", got.length + " columns in MW's order")
+          : fail("referral five columns", `headers are ${got.join(", ")}`);
+      })();
       present("referral ai spotlight", "AI assistants (LLMs)");
       present("referral ai source", "chatgpt.com");
       // The switch must exist, and the blacklisted row must be in the DOM
