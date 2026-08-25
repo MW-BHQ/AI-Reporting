@@ -95,10 +95,10 @@ expect_field "sa nine key events"  "$REPORT" "${SA}'BGH').actions.length===9?9:u
 # If either leaks into a hospital this drops to 1.
 expect_field "sa unattributed"     "$REPORT" "d.searchAds.unattributed.campaigns.length===2?2:undefined"
 expect_field "sa bcm not a brand"  "$REPORT" "d.searchAds.byBrand.every(b=>b.impressions!==4100)?'ok':undefined"
-# Three sources are emitted under BOTH Paid Search and Cross-network. Only the
-# Paid Search ones count, because no source here is Google — 600 means the
+# Four sources are emitted under BOTH Paid Search and Cross-network. Only the
+# Paid Search ones count, because no source here is Google — 800 means the
 # Cross-network guard was relaxed to match the channel on its own.
-expect_field "sa excludes x-network" "$REPORT" "${SA}'BGH').visits===300?300:undefined"
+expect_field "sa excludes x-network" "$REPORT" "${SA}'BGH').visits===400?400:undefined"
 
 echo "--- monthly report: referral quality and the AI spotlight ---"
 expect_field "rf referrers found"  "$REPORT" "d.referral.byBrand[0].referrerCount>=2?d.referral.byBrand[0].referrerCount:undefined"
@@ -111,6 +111,20 @@ expect_field "rf ai multi-channel" "$REPORT" "d.referral.byBrand[0].ai.rows[0].c
 expect_field "rf ai nine events"   "$REPORT" "d.referral.byBrand[0].ai.actions.length===9?9:undefined"
 # pantip.com is not an assistant and must not leak into the AI block.
 expect_field "rf ai excludes plain" "$REPORT" "d.referral.byBrand[0].ai.rows.every(r=>r.source!=='pantip.com')?'ok':undefined"
+# Both totals must be present so the blacklist switch has something to show.
+expect_field "rf dual totals"      "$REPORT" "d.referral.byBrand[0].totalsAll.sessions>=d.referral.byBrand[0].totals.sessions?'ok':undefined"
+expect_field "rf blacklist flag"   "$REPORT" "d.referral.byBrand[0].referrers.every(r=>typeof r.blacklisted==='boolean')?'ok':undefined"
+# The scorecard ratio counts assistants WITHIN referral, so it cannot exceed
+# 100%. Dividing all-channel assistant sessions by referral sessions gave 250%.
+expect_field "rf ai share bounded" "$REPORT" "(d.referral.byBrand[0].ai.shareOfReferral===null||d.referral.byBrand[0].ai.shareOfReferral<=1)?'ok':undefined"
+# canva.com is on MW's blacklist. It must be flagged, and the clean total must
+# be strictly lower than the full one — equal totals mean nothing was excluded.
+expect_field "rf blacklist hits"   "$REPORT" "d.referral.byBrand[0].blacklistedCount>=1?d.referral.byBrand[0].blacklistedCount:undefined"
+expect_field "rf canva flagged"    "$REPORT" "(d.referral.byBrand[0].referrers.find(r=>r.source==='www.canva.com')||{}).blacklisted===true?'ok':undefined"
+expect_field "rf clean below all"  "$REPORT" "d.referral.byBrand[0].totals.sessions<d.referral.byBrand[0].totalsAll.sessions?'ok':undefined"
+expect_field "rf blacklist active" "$REPORT" "d.referral.byBrand[0].blacklistActive===true?'ok':undefined"
+# pantip.com is NOT on the list and must survive the filter.
+expect_field "rf keeps real links" "$REPORT" "(d.referral.byBrand[0].referrers.find(r=>r.source==='pantip.com')||{}).blacklisted===false?'ok':undefined"
 
 echo "--- monthly report: TikTok field names and floors ---"
 # reach is unique_video_views; there is no `reach` field on this connector.

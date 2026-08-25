@@ -107,18 +107,22 @@ function reportFixture() {
     referral: { byBrand: KEYS.map((k) => ({ key: k, label: k,
       referrers: [
         { source: "pantip.com", channel: "Referral", sessions: 400, engaged: 340, actions: 30,
-          engagementRate: 0.85, actionsPer100: 7.5 },
+          engagementRate: 0.85, actionsPer100: 7.5, blacklisted: false },
         { source: "bounce.example", channel: "Referral", sessions: 300, engaged: 60, actions: 1,
-          engagementRate: 0.20, actionsPer100: 0.33 }],
-      referrerCount: 2,
+          engagementRate: 0.20, actionsPer100: 0.33, blacklisted: false },
+        { source: "bangkokhospital.com", channel: "Referral", sessions: 900, engaged: 500, actions: 12,
+          engagementRate: 0.56, actionsPer100: 1.3, blacklisted: true }],
+      referrerCount: 3, blacklistedCount: 1, blacklistActive: true,
       totals: { sessions: 700, engaged: 400, actions: 31, engagementRate: 0.57, actionsPer100: 4.4 },
+      totalsAll: { sessions: 1600, engaged: 900, actions: 43, engagementRate: 0.56, actionsPer100: 2.7 },
       ai: { rows: [
           { source: "chatgpt.com", channel: "Referral, Organic Search", sessions: 120, engaged: 100,
             actions: 14, engagementRate: 0.83, actionsPer100: 11.7 },
           { source: "perplexity.ai", channel: "Referral", sessions: 30, engaged: 22, actions: 2,
             engagementRate: 0.73, actionsPer100: 6.7 }],
         totals: { sessions: 150, engaged: 122, actions: 16, engagementRate: 0.81, actionsPer100: 10.7 },
-        actions: events, siteShare: 0.0075 },
+        actions: events, referralSessions: 90, referralSessionsAll: 150,
+        shareOfReferral: 0.129, shareOfReferralAll: 0.094, siteShare: 0.0075 },
       site: { sessions: 20000, engaged: 11000, actions: 600,
         engagementRate: 0.55, actionsPer100: 3.0 } })) },
     /**
@@ -260,11 +264,30 @@ setTimeout(() => {
       const present = (name, needle) => text.includes(needle)
         ? ok(name, "rendered") : fail(name, `"${needle}" missing from the report`);
       present("search ads rendered", "the keywords we bid on");
-      present("referral rendered", "Who refers, and how good is the traffic");
+      present("referral rendered", "Back links, and how good is the traffic");
       present("referral ai spotlight", "AI assistants (LLMs)");
       present("referral ai source", "chatgpt.com");
+      // The switch must exist, and the blacklisted row must be in the DOM
+      // (hidden by CSS) rather than dropped — the toggle has to reveal it.
+      present("blacklist switch", "Hide blacklisted referrers");
+      present("blacklisted row present", "bangkokhospital.com");
+      (() => {
+        const wrap = root && root.querySelector('[data-blwrap]');
+        const box = root && root.querySelector('[data-blacklist]');
+        const row = root && root.querySelector('.bl-row');
+        if (!wrap || !box || !row) return fail("blacklist wiring", "wrapper, switch or flagged row missing");
+        if (!box.checked) return fail("blacklist wiring", "blacklist is not on by default");
+        if (wrap.classList.contains('bl-hidden')) return fail("blacklist wiring", "starts in the off state");
+        box.checked = false;
+        box.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+        wrap.classList.contains('bl-hidden')
+          ? ok("blacklist wiring", "toggles both ways")
+          : fail("blacklist wiring", "switch did not reveal blacklisted rows");
+        box.checked = true;
+        box.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+      })();
       // Referral must sit BEFORE Search in MW's sequence.
-      text.indexOf("Who refers") > 0 && text.indexOf("Who refers") < text.indexOf("Search \u00b7 Thai")
+      text.indexOf("Back links") > 0 && text.indexOf("Back links") < text.indexOf("Search \u00b7 Thai")
         ? ok("referral before search", "ordered")
         : fail("referral before search", "Referral is not ahead of the Search pages");
       // Removed at MW's request in v3.100.1.

@@ -493,6 +493,18 @@
   @media screen{ .lang-page:not(.active){display:none;} }
   @media print{ .lang-page{display:block!important;break-before:page;page-break-before:always;} }
   .lang-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+  /**
+   * Referrer blacklist switch. Both sets of numbers are in the DOM and CSS
+   * picks one, so the scorecards and the table can never disagree and no
+   * recompute is needed on toggle. `.bl-hidden` on the wrapper means the
+   * blacklist is OFF (everything shown).
+   */
+  .bl-wrap .bl-off{display:none;}
+  .bl-wrap.bl-hidden .bl-on{display:none;}
+  .bl-wrap.bl-hidden .bl-off{display:inline;}
+  .bl-wrap:not(.bl-hidden) .bl-row{display:none;}
+  /* With no blacklist configured, the clean and full figures are identical. */
+  .bl-wrap.bl-none .bl-off{display:none;}
   .lang-tab{
     padding:5px 12px;border-radius:20px;font-size:11.5px;font-weight:600;cursor:pointer;
     border:1px solid var(--stroke);background:#fff;color:var(--ink-2);
@@ -765,6 +777,8 @@ const S = {
   ecomch: null, ecomchKey: null, ecomchLoading: false, ecomchError: null, ecomMixMode: 'abs',
   ecommig: null, ecommigKey: null, ecommigLoading: false, ecommigError: null,
   longRangeOn: false, rangeBefore: null,
+  // Referrer blacklist ON by default; survives a hospital-tab re-render.
+  reportBlacklist: true,
   ecomchurn: null, ecomchurnKey: null, ecomchurnLoading: false, ecomchurnError: null, churnWindow: 365,
   ecommon: null, ecommonKey: null, ecommonLoading: false, ecommonError: null,
   ecomroas: null, ecomroasKey: null, ecomroasLoading: false, ecomroasError: null,
@@ -1698,37 +1712,61 @@ function renderReport() {
       return `<span class="dlt ${cls}">${v.toFixed(1)}</span>`;
     };
     const A = RF.ai;
+    /**
+     * Both sets of numbers are rendered, and the switch shows one or the other
+     * with CSS. Nothing is recomputed on toggle and nothing is fetched, so the
+     * two views cannot disagree — and whichever is on screen is what prints.
+     */
+    const swap = (clean, all) =>
+      `<span class="bl-on">${clean}</span><span class="bl-off">${all}</span>`;
+    // Named `share`, not `v`: this renders a share, not a change.
+    const pctOrDash = (share) => share === null ? '\u2014' : (share * 100).toFixed(1) + '%';
     return `
-    <div class="grid g-4" style="margin-bottom:10px">
-      ${kpi('Referral sessions', num(RF.totals.sessions), `${num(RF.referrerCount)} sources`)}
-      ${kpi('Engagement rate', RF.totals.engagementRate===null?'\u2014':(RF.totals.engagementRate*100).toFixed(1)+'%',
-            site.engagementRate===null?'':`site ${(site.engagementRate*100).toFixed(1)}%`)}
-      ${kpi('Actions', num(RF.totals.actions),
-            RF.totals.actionsPer100===null?'':`${RF.totals.actionsPer100.toFixed(1)} per 100 sessions`)}
-      ${kpi('AI assistants', num(A.totals.sessions),
-            A.siteShare===null?'':`${(A.siteShare*100).toFixed(2)}% of all sessions`)}
-    </div>
-    <div class="card">
-      <div class="card-title">Who refers, and how good is the traffic</div>
-      <table class="sortable" data-heat="1"><thead><tr>
-        <th>Source</th><th class="num">Sessions</th><th class="num">Engagement rate</th>
-        <th class="num">Actions</th><th class="num">Actions / 100</th>
-      </tr></thead><tbody>
-      ${RF.referrers.length ? RF.referrers.map(r=>`<tr>
-        <td class="strong i18n">${esc(r.source)}</td>
-        <td class="num">${num(r.sessions)}</td>
-        <td class="num">${qual(r.engagementRate, site.engagementRate)}</td>
-        <td class="num">${num(r.actions)}</td>
-        <td class="num">${per100(r.actionsPer100, site.actionsPer100)}</td></tr>`).join('')
-        : '<tr><td colspan="5" class="num">no referral traffic in range</td></tr>'}
-      </tbody></table>
-      <div class="note">Sorted by sessions, but <b>read the two right-hand columns</b> \u2014 they are what
-      separates a referrer worth cultivating from one that sends volume that leaves.
-      Green is at least 15% above this hospital's site average
-      (${site.engagementRate===null?'\u2014':(site.engagementRate*100).toFixed(1)+'%'} engagement,
-      ${site.actionsPer100===null?'\u2014':site.actionsPer100.toFixed(1)} actions per 100 sessions),
-      amber within it, red at least 15% below.</div>
-    </div>
+    <div class="bl-wrap${RF.blacklistActive ? '' : ' bl-none'}" data-blwrap="1">
+      <div class="grid g-3" style="margin-bottom:10px">
+        ${kpi('Referral sessions',
+              swap(num(RF.totals.sessions), num(RF.totalsAll.sessions)),
+              swap(`${num(RF.referrerCount - RF.blacklistedCount)} back links`,
+                   `${num(RF.referrerCount)} sources, blacklist off`))}
+        ${kpi('AI assistants',
+              swap(pctOrDash(A.shareOfReferral), pctOrDash(A.shareOfReferralAll)),
+              swap(`${num(A.referralSessions)} of referral sessions`,
+                   `${num(A.referralSessionsAll)} of referral sessions`))}
+        ${kpi('Key events',
+              swap(num(RF.totals.actions), num(RF.totalsAll.actions)),
+              swap(RF.totals.actionsPer100 === null ? '' : `${RF.totals.actionsPer100.toFixed(1)} per 100 sessions`,
+                   RF.totalsAll.actionsPer100 === null ? '' : `${RF.totalsAll.actionsPer100.toFixed(1)} per 100 sessions`))}
+      </div>
+      ${RF.blacklistActive ? `
+      <label class="bl-switch" style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;
+             font-size:11px;color:var(--ink-2);margin-bottom:8px">
+        <input type="checkbox" data-blacklist="1" checked style="cursor:pointer">
+        <span>Hide blacklisted referrers
+        (<b>${num(RF.blacklistedCount)}</b> of ${num(RF.referrerCount)})</span>
+      </label>` : `
+      <div class="note" style="margin-top:0"><b>No blacklist is configured yet.</b> Send the list of
+      referrers to exclude and they will be filtered by default, with this switch to show them again.</div>`}
+      <div class="card">
+        <div class="card-title">Back links, and how good is the traffic</div>
+        <table class="sortable" data-heat="1"><thead><tr>
+          <th>Source</th><th class="num">Sessions</th><th class="num">Engagement rate</th>
+          <th class="num">Key events</th><th class="num">Actions / 100</th>
+        </tr></thead><tbody>
+        ${RF.referrers.length ? RF.referrers.map(r=>`<tr${r.blacklisted?' class="bl-row"':''}>
+          <td class="strong i18n">${esc(r.source)}${r.blacklisted?' <span style="font-size:9.5px;color:var(--faint)">blacklisted</span>':''}</td>
+          <td class="num">${num(r.sessions)}</td>
+          <td class="num">${qual(r.engagementRate, site.engagementRate)}</td>
+          <td class="num">${num(r.actions)}</td>
+          <td class="num">${per100(r.actionsPer100, site.actionsPer100)}</td></tr>`).join('')
+          : '<tr><td colspan="5" class="num">no referral traffic in range</td></tr>'}
+        </tbody></table>
+        <div class="note">Sorted by sessions, but <b>read the two right-hand columns</b> \u2014 they are what
+        separates a back link worth cultivating from one that sends volume that leaves.
+        Green is at least 15% above this hospital's site average
+        (${site.engagementRate===null?'\u2014':(site.engagementRate*100).toFixed(1)+'%'} engagement,
+        ${site.actionsPer100===null?'\u2014':site.actionsPer100.toFixed(1)} actions per 100 sessions),
+        amber within it, red at least 15% below.</div>
+      </div>
     <div class="card mt" style="border-color:#4B8DF8">
       <div class="card-title">AI assistants (LLMs)</div>
       ${A.rows.length ? `
@@ -1766,6 +1804,9 @@ function renderReport() {
       <div class="note"><b>Small numbers, watched deliberately.</b> This is people arriving because an
       assistant recommended us, and the question is whether that traffic converts better than the site
       average \u2014 the columns above answer it. All nine key events are listed.<br>
+      <b>The scorecard percentage counts only assistants arriving through Referral</b>, so it is a share
+      of the same population it is divided by. The table below is wider: it counts every assistant
+      session whichever channel GA4 filed it under, so its total will usually be the larger of the two.<br>
       <b>GA4 has no LLM channel</b>, so assistants are matched by source and appear here whichever channel
       GA4 filed them under, shown in the last column. Two consequences worth stating: an assistant that
       strips the referrer arrives as Direct and <b>cannot be counted at all</b>, so this is a floor; and
@@ -1773,7 +1814,7 @@ function renderReport() {
       : `<div class="note"><b>No assistant traffic identified in this range.</b> That is a real answer, not
       a gap \u2014 but it is a floor: an assistant that strips the referrer arrives as Direct and cannot be
       told apart from any other direct visit.</div>`}
-    </div>`;
+    </div></div>`;
   })() : '';
 
   const G = d.gbp;
@@ -2221,7 +2262,7 @@ function renderReport() {
     ${slide('Sessions by language \u00b7 BHQ', langMatrixBody, false, true)}
     ${slide(`Actions by language \u00b7 ${sel}`, actionsLangBody)}
     ${slide('Channels \u00b7 where do they find us', channelsBody, false, true)}
-    ${referralBody ? slide(`Referral \u00b7 who brings quality \u00b7 ${sel}`, referralBody) : ''}
+    ${referralBody ? slide(`Referral \u00b7 Back Links \u00b7 ${sel}`, referralBody) : ''}
     ${searchPagesBody}
     ${gbpDetailBody}
     ${slide('Google reviews', reviewBody)}
@@ -2310,6 +2351,21 @@ function renderReport() {
       document.querySelectorAll('.lang-tab').forEach(t => t.classList.toggle('active', t.dataset.lang === S.reportLang));
       document.querySelectorAll('.lang-page').forEach(pg => pg.classList.toggle('active', pg.dataset.langpage === S.reportLang));
     }));
+
+  /**
+   * Blacklist switch. Checked (default) hides blacklisted referrers and shows
+   * the clean totals; unchecking reveals both. State lives in S so it survives
+   * a re-render when the hospital tab changes.
+   */
+  document.querySelectorAll('[data-blacklist]').forEach(el => {
+    el.checked = S.reportBlacklist !== false;
+    const wrap = el.closest('[data-blwrap]');
+    if (wrap) wrap.classList.toggle('bl-hidden', !el.checked);
+    el.addEventListener('change', () => {
+      S.reportBlacklist = el.checked;
+      if (wrap) wrap.classList.toggle('bl-hidden', !el.checked);
+    });
+  });
 
   document.querySelectorAll('[data-brand]').forEach(el =>
     el.addEventListener('click', () => { S.reportBrand = el.dataset.brand; render(); }));
@@ -5176,7 +5232,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.101.0';
+const CLIENT_BUILD = '3.102.1';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

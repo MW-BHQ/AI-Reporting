@@ -230,8 +230,13 @@ function ga4Report(body) {
        * `chatgpt.com` and a plain referrer are here so the Referral block and
        * the AI-assistant match are both executed. Without an AI source in the
        * fixture, `isAi()` could be broken and every layer would stay green.
+       *
+       * `www.canva.com` is a SUBDOMAIN of a blacklisted entry, so the match has
+       * to be a substring one. With an exact-equality match this row escapes
+       * the filter and the suite still passed — which is why the fixture uses
+       * the subdomain rather than the bare host.
        */
-      : d === "sessionManualSource" ? ["facebook", "pantip.com", "chatgpt.com"]
+      : d === "sessionManualSource" ? ["facebook", "pantip.com", "chatgpt.com", "www.canva.com"]
       : d === "sessionManualMedium" ? ["paid"]
       // Thailand must be present so the render-time exclusion is exercised.
       : d === "country" ? ["Thailand", "Japan", "United States", "Germany", "Singapore", "Cambodia"]

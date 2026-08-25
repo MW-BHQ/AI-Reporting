@@ -2085,6 +2085,34 @@ async function buildReport(from, to) {
    */
   const referral = (() => {
     /**
+     * REFERRER BLACKLIST — MW's list. Add entries here.
+     *
+     * Substring match on a lowercased source, so "doubleclick" catches every
+     * subdomain. These are referrers that are not editorial back links: our own
+     * properties, payment gateways, ad and tag infrastructure, translation
+     * proxies. They inflate the table without representing anyone choosing to
+     * link to us.
+     *
+     * Nothing is deleted. Blacklisted rows are flagged, not dropped, and the
+     * slide carries a switch — the numbers are reported both ways and the
+     * default is simply the more useful one.
+     */
+    const BLACKLIST = [
+      // MW's list, Aug 2026. Not editorial back links — internal tools, portals
+      // and partner systems that link to us as plumbing, not as endorsement.
+      "shop.bedee.com",                                    // partner storefront
+      "bangkokhospital.lightning.force.com",               // Salesforce console
+      "bangkokhospitalpartnerprogram.rocket-loyalty.app",  // partner loyalty portal
+      "canva.com",                                         // design tool previews
+      "teams.public.onecdn.static.microsoft",              // Teams link unfurling
+      "bangkokhospital.app.agnoshealth.com",               // Agnos partner app
+      "bhq-cms-v2.local",                                  // our own CMS, internal
+    ];
+    const isBlacklisted = (src) => {
+      const s = String(src || "").toLowerCase();
+      return BLACKLIST.some((p) => s.includes(String(p).toLowerCase()));
+    };
+    /**
      * AI assistants are spotlighted WHEREVER GA4 files them, not only under
      * Referral. GA4 has no LLM channel: it scatters them across Referral and
      * Organic Search, and files some as Direct when the tool strips the
@@ -2120,6 +2148,8 @@ async function buildReport(from, to) {
       const refMap = new Map(); const aiMap = new Map();
       let siteSessions = 0;
       const aiEvents = {};
+      const aiRef = { sessions: 0, engaged: 0, actions: 0 };
+      let aiRefBlacklisted = 0;
       for (const r of rows) {
         const chan = String(r.session_default_channel_group || "(unassigned)");
         const src = String(r.session_manual_source || "(not set)");
@@ -2130,6 +2160,15 @@ async function buildReport(from, to) {
           const t = refMap.get(src) || blank(src, chan);
           t.sessions += s; t.engaged += eng; t.actions += ev.total;
           refMap.set(src, t);
+          // Assistants arriving THROUGH referral, tracked separately: the
+          // scorecard ratio is "% of all referral", so numerator and
+          // denominator must describe the same channel. Dividing all-channel
+          // assistant sessions by referral-only sessions produced 250% in
+          // testing — a ratio of two different populations.
+          if (isAi(src)) {
+            aiRef.sessions += s; aiRef.engaged += eng; aiRef.actions += ev.total;
+            if (isBlacklisted(src)) aiRefBlacklisted += s;
+          }
         }
         if (isAi(src)) {
           const t = aiMap.get(src) || { ...blank(src, chan), channels: new Set() };
@@ -2141,7 +2180,9 @@ async function buildReport(from, to) {
           for (const [nm, v] of Object.entries(ev.byName)) aiEvents[nm] = (aiEvents[nm] || 0) + v;
         }
       }
-      const referrers = [...refMap.values()].map(shape).sort((a, b2) => b2.sessions - a.sessions);
+      const referrers = [...refMap.values()]
+        .map((t) => ({ ...shape(t), blacklisted: isBlacklisted(t.source) }))
+        .sort((a, b2) => b2.sessions - a.sessions);
       const ai = [...aiMap.values()]
         .map((t) => {
           const list = [...t.channels].sort();
@@ -2152,7 +2193,22 @@ async function buildReport(from, to) {
       const totals = (list) => shape(list.reduce((a, t) => ({
         sessions: a.sessions + t.sessions, engaged: a.engaged + t.engaged, actions: a.actions + t.actions,
       }), { sessions: 0, engaged: 0, actions: 0 }));
-      const refTotal = totals(referrers), aiTotal = totals(ai);
+      const refTotalAll = totals(referrers);
+      const kept = referrers.filter((r) => !r.blacklisted);
+      const refTotalClean = totals(kept);
+      const aiTotal = totals(ai);
+      /**
+       * AI share is measured against REFERRAL sessions (MW), and against the
+       * clean total when the blacklist is on, so both halves of the ratio
+       * describe the same population.
+       *
+       * It can exceed 100%: assistants are counted wherever GA4 files them,
+       * including Organic Search and Cross-network, while the denominator is
+       * the Referral channel alone. That is a real property of the ratio, not
+       * a bug, and the card says so.
+       */
+      const aiShare = (base, aiSessions) =>
+        (base && base.sessions ? aiSessions / base.sessions : null);
       // Site-wide baseline, so "good" is measured against this hospital's own
       // average rather than an absolute anyone would have to invent.
       let allEngaged = 0, allActions = 0;
@@ -2160,10 +2216,18 @@ async function buildReport(from, to) {
       for (const r of ((ke && ke.rows) || [])) allActions += r.value;
       const site = shape({ sessions: siteSessions, engaged: allEngaged, actions: allActions });
       return { key: b.key, label: b.label,
-        referrers: referrers.slice(0, 15), referrerCount: referrers.length, totals: refTotal,
+        referrers: referrers.slice(0, 20),
+        referrerCount: referrers.length,
+        blacklistedCount: referrers.length - kept.length,
+        blacklistActive: BLACKLIST.length > 0,
+        totals: refTotalClean, totalsAll: refTotalAll,
         ai: { rows: ai, totals: aiTotal,
           actions: KEY_EVENTS.map((e) => ({ id: e.name, label: e.label, value: aiEvents[e.name] || 0 }))
             .sort((a, b2) => b2.value - a.value),
+          referralSessions: aiRef.sessions - aiRefBlacklisted,
+          referralSessionsAll: aiRef.sessions,
+          shareOfReferral: aiShare(refTotalClean, aiRef.sessions - aiRefBlacklisted),
+          shareOfReferralAll: aiShare(refTotalAll, aiRef.sessions),
           siteShare: siteSessions ? aiTotal.sessions / siteSessions : null },
         site };
     });

@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.101.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.102.1.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -691,6 +691,60 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.102.1 — MW's referrer blacklist populated.**
+
+Seven entries, all internal tooling or partner plumbing rather than editorial
+back links: `shop.bedee.com`, `bangkokhospital.lightning.force.com` (Salesforce),
+`bangkokhospitalpartnerprogram.rocket-loyalty.app`, `canva.com`,
+`teams.public.onecdn.static.microsoft` (Teams link unfurling),
+`bangkokhospital.app.agnoshealth.com`, `bhq-cms-v2.local`.
+
+The switch is now live, since `blacklistActive` is true once the list is
+non-empty.
+
+**A test that could not fail, caught by a negative control.** Swapping the
+substring match for exact equality broke nothing — because the fixture used the
+bare host `canva.com`, which matches either way. The fixture now uses
+**`www.canva.com`**, a subdomain, so exact equality fails three assertions.
+Subdomains are the normal case in GA4 source data, so the substring behaviour is
+the thing that actually needs proving.
+
+
+**v3.102.0 — Referral becomes Back Links; referrer blacklist with a switch.**
+
+Retitled **Referral · Back Links · <hospital>** (MW), and the card below it
+reads "Back links, and how good is the traffic".
+
+**Scorecards are now the three MW asked for:** Referral sessions | AI assistants
+(% of all referral) | Key events. Engagement rate moved out of the scorecards —
+it is still the per-source column in the table, which is where it is read.
+
+**REFERRER BLACKLIST — the list lives in one place**, `BLACKLIST` inside the
+`referral` builder in `server.js`, and is currently **empty pending MW's list**.
+Substring match on a lowercased source, so `doubleclick` catches every
+subdomain.
+
+Blacklisted referrers are **flagged, never dropped**. The server returns both
+sets of totals (`totals` clean, `totalsAll` full), every row carries a
+`blacklisted` boolean, and the slide has a switch, on by default. Both sets of
+numbers are rendered into the DOM and **CSS picks one**, so nothing is
+recomputed on toggle, the scorecards and the table cannot disagree, and whatever
+is on screen is what prints. State is `S.reportBlacklist`, so it survives a
+hospital-tab re-render.
+
+**A ratio bug caught by reading the output.** The AI scorecard divided
+all-channel assistant sessions by referral-only sessions — two different
+populations — and the mock showed **250%**. The numerator now counts only
+assistants arriving THROUGH referral, so the figure is a share of the thing it
+is divided by and cannot exceed 100%. The table below still counts every
+assistant session whichever channel GA4 filed it under, so its total is usually
+larger; the card says so. A smoke assertion now bounds the ratio at 1.
+
+**Third `change:capped` rename in two releases:** `pctOrDash(v)` → `(share)`.
+The rule keys "rate or change" off the identifier, so a share should be named
+one. Renaming keeps being the right fix rather than widening the exemption.
+
 
 **v3.101.0 — Referral quality slide with an AI-assistant spotlight; shared media scorecards.**
 
