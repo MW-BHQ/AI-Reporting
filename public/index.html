@@ -500,15 +500,15 @@
    * A channel with no clicks is muted but still shown — "nobody used WeChat" is
    * a finding, and hiding it would make the set look shorter than it is.
    */
-  .cbc{border:1px solid var(--line);border-radius:10px;padding:10px 12px 11px;
+  .cbc{border:1px solid var(--line);border-radius:12px;padding:12px 16px 13px;
     background:linear-gradient(180deg,rgba(108,92,231,.055),rgba(108,92,231,0));
     border-top:2px solid var(--violet);min-width:0;}
-  .cbc-top{display:flex;align-items:center;justify-content:space-between;gap:8px;
-    margin-bottom:6px;min-height:30px;}
-  .cbc-lab{font-size:11.5px;font-weight:650;color:var(--ink-2);line-height:1.25;
-    overflow-wrap:anywhere;}
-  .cbc-top .plogo{margin-right:0;}
-  .cbc-num{font-size:24px;font-weight:750;line-height:1.05;color:var(--ink);}
+  .cbc-body{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .cbc-txt{min-width:0;}
+  .cbc-lab{font-size:13px;font-weight:700;color:var(--ink);line-height:1.25;
+    overflow-wrap:anywhere;margin-bottom:2px;}
+  .cbc-body .plogo{margin-right:0;vertical-align:0;}
+  .cbc-num{font-size:26px;font-weight:750;line-height:1.05;color:var(--ink);}
   .cbc-unit{font-size:11px;font-weight:600;color:var(--faint);}
   .cbc-foot{font-size:10px;margin-top:3px;}
   .cbc-prev{color:var(--faint);}
@@ -527,22 +527,12 @@
    * the title never reflows depending on which assets are installed.
    */
   /**
-   * The real asset sits on TRANSPARENT ground with no padding, plate or shadow
-   * (MW: "make it big, dont be shine"). The white inner plate and inset padding
-   * that were here made every mark look like a glossy sticker and shrank the
-   * art inside its own box.
-   *
-   * The coloured `--pc` background belongs to the MONOGRAM only, so it is
-   * applied to `b` rather than the wrapper — otherwise a transparent logo sits
-   * on an unrelated brand colour.
+   * Marks are the artwork and nothing else: no plate, no padding, no shadow,
+   * no border-radius imposed on top of a logo that already has its own shape.
+   * Filling a background behind these broke every transparent SVG.
    */
-  .plogo{position:relative;display:inline-flex;align-items:center;justify-content:center;
-    width:26px;height:26px;margin-right:8px;vertical-align:-6px;
-    overflow:visible;flex:0 0 auto;}
-  .plogo b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-    background:var(--pc);border-radius:6px;
-    font-size:11.5px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.2px;}
-  .plogo img{position:relative;z-index:1;width:100%;height:100%;object-fit:contain;}
+  .plogo{display:inline-block;width:26px;height:26px;object-fit:contain;
+    margin-right:8px;vertical-align:-7px;flex:0 0 auto;}
   @media print{ .plogo{-webkit-print-color-adjust:exact;print-color-adjust:exact;} }
   /**
    * MINI SCORECARDS (the 2x5 grids). The plain stack of numbers read as a wall
@@ -1549,12 +1539,19 @@ function renderReport() {
     chatgpt:   { label: 'ChatGPT', mono: 'C', color: '#10A37F', file: 'chatgpt.svg' },
     gemini:    { label: 'Gemini', mono: 'G', color: '#8E7CF3', file: 'gemini.svg' },
   };
+  /**
+   * Image only. NO coloured plate and NO monogram underneath.
+   *
+   * The plate was showing through every transparent SVG as a solid box — most
+   * visibly on Messenger — and the monogram sitting behind the art meant a
+   * logo with any transparency rendered on an unrelated brand colour. All 19
+   * assets exist, so the fallback was buying nothing and costing correctness.
+   */
   const plogo = (id, size) => {
     const p = PLATFORM[id]; if (!p) return '';
-    const sz = size ? ` style="--pc:${p.color};width:${size}px;height:${size}px"` : ` style="--pc:${p.color}"`;
-    return `<span class="plogo"${sz} title="${esc(p.label)}"
-      ><img src="brand/${esc(p.file)}" alt="" loading="lazy" onerror="this.remove()"
-      ><b>${esc(p.mono)}</b></span>`;
+    const sz = size ? ` style="width:${size}px;height:${size}px"` : '';
+    return `<img class="plogo"${sz} src="brand/${esc(p.file)}" alt="${esc(p.label)}"
+      title="${esc(p.label)}" loading="lazy" onerror="this.remove()">`;
   };
   /** Assistant source -> platform mark, for the AI table rows. */
   const assistantLogo = (src) => {
@@ -2072,38 +2069,34 @@ function renderReport() {
        * figure, MoM beneath. The previous pill-plus-floating-number layout put
        * the value outside the card it belonged to, which is what read as odd.
        */
+      /**
+       * Two per row (MW's 1 1 / 1 1 / 1 1 / 1 1), mark at 44px. The label and
+       * the figure sit in the same card as the mark so each channel reads as
+       * one object.
+       */
       const card = (r) => `<div class="cbc${r.clicks ? '' : ' is-zero'}">
-        <div class="cbc-top">
-          <span class="cbc-lab">${esc(r.label)}${r.assumed
-            ? ' <span class="cb-ask" title="Label assumed \u2014 confirm which language this number serves">?</span>' : ''}</span>
-          ${r.logo ? plogo(r.logo, 30) : ''}
+        <div class="cbc-body">
+          <div class="cbc-txt">
+            <div class="cbc-lab">${esc(r.label)}</div>
+            <div class="cbc-num">${num(r.clicks)} <span class="cbc-unit">clicks</span></div>
+            <div class="cbc-foot">${r.prev
+              ? `${changeText((r.clicks - r.prev) / r.prev)} <span class="cbc-prev">vs ${num(r.prev)}</span>`
+              : '<span class="dlt none">new this month</span>'}</div>
+          </div>
+          ${r.logo ? plogo(r.logo, 44) : ''}
         </div>
-        <div class="cbc-num">${num(r.clicks)} <span class="cbc-unit">clicks</span></div>
-        <div class="cbc-foot">${r.prev
-          ? `${changeText((r.clicks - r.prev) / r.prev)} <span class="cbc-prev">vs ${num(r.prev)}</span>`
-          : '<span class="dlt none">new this month</span>'}</div>
       </div>`;
       return `<div class="cb-page ${idx === 0 ? 'active' : ''}" data-cbpage="${esc(key)}">
-        <div class="grid g-3" style="margin-bottom:14px">
+        <div class="grid g-2" style="margin-bottom:14px">
           ${mini('Chat clicks', num(s.total), { lead: true, icon: 'sessions',
             sub: s.totalPrev ? `${num(s.totalPrev)} last month` : '' })}
           ${mini('Month on month', s.totalChangePct === null ? '\u2014'
-            : changeText(s.totalChangePct), { icon: 'views' })}
-          ${mini('Channels used', num(shown.filter(r => r.clicks).length),
-            { icon: 'find_doctors', sub: `of ${num(s.rows.length)} tracked` })}
+            : changeText(s.totalChangePct), { icon: 'views',
+            sub: `${num(s.channelClicks)} channel clicks` })}
         </div>
-        <div class="grid g-4">${shown.map(card).join('')}</div>
+        <div class="grid g-2">${shown.map(card).join('')}</div>
       </div>`;
     };
-    const evNote = (CB.events || []).length
-      ? `Tracked under the GA4 event${CB.events.length > 1 ? 's' : ''}
-         <b>${CB.events.map(e => `${esc(e.name)} (${num(e.clicks)})`).join(', ')}</b>.`
-      : '';
-    const unmapped = (CB.unmapped || []).length
-      ? `<br><b style="color:var(--amber)">Unrecognised click ids:</b>
-         ${CB.unmapped.map(u => `${esc(u.key)} (${num(u.clicks)})`).join(' \u00b7 ')}.
-         Counted in the total but in no channel \u2014 send the mapping and they land.`
-      : '';
     return `
     <div class="cb-wrap">
       <div class="lang-tabs no-print">
@@ -2112,11 +2105,6 @@ function renderReport() {
       </div>
       ${scope(sel, sel, 0)}
       ${scope('BHQ', 'BHQ', 1)}
-      <div class="note">Clicks on the chat bubble, identified by the GTM click id. A click is an
-      INTENT to chat, not a conversation: the platform owns what happens next, so nothing here says
-      whether anyone replied. ${evNote}
-      Channels are told apart by click id, and where one id serves two channels
-      (LINE, WhatsApp) by the destination URL.${unmapped}</div>
     </div>`;
   })() : '';
 
@@ -5559,7 +5547,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.111.0';
+const CLIENT_BUILD = '3.112.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

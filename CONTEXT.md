@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.111.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.112.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -691,6 +691,48 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.112.0 — Chat Bubble scoped to /bangkok*; total from top-parent; marks fixed.**
+
+**OUT-OF-SCOPE BRANCHES WERE IN THE BHQ TOTAL.** The tally added to the BHQ
+scope BEFORE checking the brand, so chat clicks from other branches counted into
+the group figure. That is exactly the B+/BHQ conflation this project exists to
+avoid, and it was sitting in a headline number. Rows now resolve the brand first
+and anything not under `/bangkok*` is dropped (MW).
+
+**The headline is `chat-bubble-top-parent`** — the bubble being OPENED — not the
+sum of channel clicks (MW). They are different acts: one person can open the
+bubble and click two channels, so the sum overstates. Channel clicks are still
+reported, as the sub-line on the MoM card.
+
+**Messenger labels were BACKWARDS.** MW's figures — Messenger 84, Messenger
+(Burmese) 44 — put the larger count under the plain label, and the original
+guess had `facebook-messenger` as Burmese. Swapped. Both `assumed` flags and the
+amber `?` markers are gone now the labels are confirmed.
+
+**Marks: no plate, no monogram, bigger.** `plogo()` is now a bare `<img>`. The
+coloured plate was showing through every transparent SVG as a solid box (most
+visibly Messenger), and the monogram behind the art put transparent logos on an
+unrelated brand colour. All 19 assets exist, so the fallback bought nothing and
+cost correctness. 44px in the channel cards.
+
+**Layout is two per row** (MW's 1 1 / 1 1 / 1 1 / 1 1). Footer removed, and the
+"Channels used" card with it.
+
+**Unmapped ids stay in the PAYLOAD but off the slide.** With the footer gone, an
+unrecognised channel id on an in-scope page would vanish with no trace anywhere
+— the silent-zero failure mode. Not rendered; there when something looks wrong.
+
+**Two mock lessons, both about invariants that could not fail:**
+
+- Defaulting an unknown brand to BGH still satisfied "BHQ == sum of the four",
+  so the scoping guard tested nothing. In-scope chat rows are now exactly 100
+  and the out-of-scope branch 9,997, which makes a leak arithmetically visible:
+  the totals stop being round.
+- That only worked after **decoupling chat counts from `PAGE_ACTIONS`**, which
+  belongs to the content pull. Sharing it meant every chat total inherited
+  content-page numbers and no round-number invariant could hold.
+
 
 **v3.111.0 — all 19 icons bundled; remote fallback removed; chat channels are scorecards.**
 

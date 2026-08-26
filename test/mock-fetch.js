@@ -111,6 +111,10 @@ const CHAT_LINKS = [
   ["chat-bubble-channel-wechat", "weixin://bangkokhospital"],
   ["chat-bubble-channel-webchat", ""],
   ["chat-bubble-channel-unknown", "https://example.com/new-channel"],
+  // The bubble itself being opened. MW: this is the headline click count, so it
+  // must NOT be counted as a channel — a matcher that treats every
+  // `chat-bubble*` id as a channel would add a phantom row.
+  ["chat-bubble-top-parent", ""],
 ];
 
 const GA4_PAGES = [
@@ -280,6 +284,14 @@ function ga4Report(body) {
     "/th/bangkok/center-clinic/health-screening-check-up": 17,
     "/en/bangkok/doctor/dr-valailuck-en": 3,
     "/th/bangkok-heart/doctor/dr-heart": 6,
+    /**
+     * Out-of-scope branch, given a count that is NOT a multiple of 100 while
+     * every in-scope chat row is exactly 100. That makes a leak arithmetically
+     * visible: if this page is ever counted, the chat totals stop being round.
+     * Without it, defaulting an unknown brand to BGH still satisfied
+     * "BHQ == sum of four" and the guard tested nothing.
+     */
+
   };
   /**
    * Per-EVENT weighting on content pages. Without it every key event returned
@@ -320,6 +332,17 @@ function ga4Report(body) {
         m === "keyEvents" ? "3"
         : m === "engagedSessions" ? "60"
         : (m === "screenPageViews" && page && PAGE_VIEWS[page] !== undefined) ? String(PAGE_VIEWS[page])
+        /**
+         * CHAT rows get their own scale, independent of PAGE_ACTIONS, which
+         * belongs to the content pull. Sharing it made every chat total inherit
+         * content-page numbers, so the "totals stay round" invariant that
+         * detects an out-of-scope leak could not hold.
+         *
+         * In-scope chat rows are exactly 100; the out-of-scope branch is 9,997.
+         * A leak therefore makes the chat totals stop being multiples of 100.
+         */
+        : (m === "eventCount" && dims.includes("linkId"))
+          ? (page === "/th/somewhere-else/page" ? "9997" : "100")
         : (m === "eventCount" && weight !== undefined) ? String(weight * 10)
         : (m === "eventCount" && page && PAGE_ACTIONS[page] !== undefined) ? String(PAGE_ACTIONS[page])
         : "100" })),

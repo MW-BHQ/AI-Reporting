@@ -207,15 +207,29 @@ expect_field "cb line split"       "$REPORT" "$CBB.filter(r=>r.label.indexOf('LI
 expect_field "cb whatsapp split"   "$REPORT" "$CBB.filter(r=>r.label.indexOf('WhatsApp')===0&&r.clicks>0).length===2?2:undefined"
 expect_field "cb messenger split"  "$REPORT" "$CBB.filter(r=>r.label.indexOf('Messenger')===0&&r.clicks>0).length===2?2:undefined"
 expect_field "cb all channels"     "$REPORT" "$CBB.filter(r=>r.clicks>0).length===10?10:undefined"
-# An id we do not recognise is reported, not dropped.
+# An id we do not recognise stays in the payload even though the slide no longer
+# shows a footer, so a new channel is never silently lost.
 expect_field "cb unmapped shown"   "$REPORT" "d.chatBubble.unmapped.some(u=>u.key.indexOf('unknown')>=0)?'ok':undefined"
+# `chat-bubble-top-parent` is the bubble OPENING, not a channel. It must be the
+# headline total and must NOT appear as an eleventh channel row.
+expect_field "cb opens not channel" "$REPORT" "$CBB.every(r=>r.label.indexOf('parent')<0)?'ok':undefined"
+expect_field "cb total is opens"   "$REPORT" "d.chatBubble.byScope.BHQ.total>0&&d.chatBubble.byScope.BHQ.total!==d.chatBubble.byScope.BHQ.channelClicks?'ok':undefined"
+# Out-of-scope branches are dropped: /th/somewhere-else/page is in the fixture
+# and must contribute to neither a hospital nor the BHQ total.
+expect_field "cb bhq is four only" "$REPORT" "d.chatBubble.byScope.BHQ.total===(d.chatBubble.byScope.BGH.total+d.chatBubble.byScope.BIH.total+d.chatBubble.byScope.BHT.total+d.chatBubble.byScope.WSH.total)?'ok':undefined"
+# Every in-scope chat row is exactly 100 in the fixture; the out-of-scope branch
+# is 9,997. So a leak makes the totals stop being round — which the identity
+# above cannot see, because an unknown brand defaulted to BGH satisfies it.
+expect_field "cb no offscope leak" "$REPORT" "(d.chatBubble.byScope.BHQ.channelClicks%100===0&&d.chatBubble.byScope.BHQ.total%100===0)?'ok':undefined"
 # The GA4 event name is discovered rather than assumed — Webchat is an on-site
 # widget and may not arrive as `click` at all.
 expect_field "cb events listed"    "$REPORT" "d.chatBubble.events.length>0?'ok':undefined"
 # BHQ is all four hospitals, so it cannot be smaller than one of them.
 expect_field "cb bhq superset"     "$REPORT" "d.chatBubble.byScope.BHQ.total>=d.chatBubble.byScope.BGH.total?'ok':undefined"
-# The two guessed labels stay flagged until MW confirms them.
-expect_field "cb assumed flagged"  "$REPORT" "$CBB.filter(r=>r.assumed).length===2?2:undefined"
+# Labels confirmed by MW in v3.112.0, so nothing is flagged as assumed any more.
+# The messenger pair was SWAPPED from the original guess: the plain label is the
+# larger of the two (84 vs 44).
+expect_field "cb none assumed"     "$REPORT" "$CBB.every(r=>!r.assumed)?'ok':undefined"
 
 echo "--- monthly report: TikTok field names and floors ---"
 # reach is unique_video_views; there is no `reach` field on this connector.

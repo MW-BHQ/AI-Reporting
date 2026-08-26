@@ -482,10 +482,11 @@ setTimeout(() => {
         const seen = new Set(marks.map(m => m.getAttribute("title")));
         const missing = want.filter(w => !seen.has(w));
         if (missing.length) return fail("platform marks", `no mark for: ${missing.join(", ")}`);
-        // Every mark must have both states: a real logo file and the monogram
-        // beneath it, so a missing asset degrades instead of leaving a gap.
-        const complete = marks.every(m => m.querySelector("img") && m.querySelector("b"));
-        if (!complete) return fail("platform marks", "a mark is missing its image or monogram");
+        // Marks are a bare <img> as of v3.112.0 — the monogram and its coloured
+        // plate were removed because the plate showed through transparent SVGs
+        // as a solid box. Each mark must therefore point at a real asset.
+        const bad = marks.filter(m => !/^brand\/[\w.-]+\.svg$/.test(m.getAttribute("src") || ""));
+        if (bad.length) return fail("platform marks", `${bad.length} mark(s) with no brand asset src`);
         const minis = [...(root ? root.querySelectorAll(".mini") : [])];
         const withIcon = minis.filter(m => m.querySelector(".lab svg")).length;
         // The Sessions card plus nine key events all carry an icon.
@@ -566,9 +567,6 @@ setTimeout(() => {
         // Infinity, so it must render as "new".
         if (!/\bnew\b/.test(active[0].textContent)) return fail("chat bubble", "no 'new' state for a channel with no prior month");
         // The assumed label must stay visibly flagged.
-        if (!wrap.textContent.includes("Unrecognised click ids")) {
-          return fail("chat bubble", "unmapped click ids not surfaced");
-        }
         /**
          * Counted by LABEL TEXT, not by a layout class.
          *
@@ -586,9 +584,15 @@ setTimeout(() => {
         // Every channel with an asset shows its mark, and the marks live in the
         // same container as the figure rather than floating beside it.
         const marks = pages[0].querySelectorAll(".plogo").length;
-        marks >= labels.length
-          ? ok("chat bubble", `2 scopes, ${labels.length} channels, ${marks} marks, unmapped surfaced`)
-          : fail("chat bubble", `${marks} marks for ${labels.length} channels`);
+        if (marks < labels.length) return fail("chat bubble", `${marks} marks for ${labels.length} channels`);
+        // Two per row (MW). Footer removed, so no note should remain.
+        if (/Unrecognised click ids/.test(pages[0].textContent)) {
+          return fail("chat bubble", "footer still rendering");
+        }
+        const cols = pages[0].querySelectorAll(".grid.g-2").length;
+        cols >= 2
+          ? ok("chat bubble", `2 scopes, ${labels.length} channels, ${marks} marks, 2-up grid`)
+          : fail("chat bubble", "channel cards are not in a 2-column grid");
       })();
       finish();
     }, 500);

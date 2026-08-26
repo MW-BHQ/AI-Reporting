@@ -1840,7 +1840,14 @@ async function buildReport(from, to) {
    * `pagePath` carries the hospital, which is what lets one pull serve both the
    * per-hospital and the BHQ tab.
    */
-  const CHAT_ID_RE = "chat-bubble-channel";
+  /**
+   * `chat-bubble` catches BOTH the channel ids and `chat-bubble-top-parent`,
+   * which is the bubble itself being opened. MW: the headline click count comes
+   * from that id, not from summing the channels — opening the bubble and
+   * picking a channel are different acts, and summing channels would report the
+   * second as if it were the first.
+   */
+  const CHAT_ID_RE = "chat-bubble";
   const chatFilter = {
     filter: { fieldName: "linkId",
       stringFilter: { matchType: "PARTIAL_REGEXP", value: CHAT_ID_RE, caseSensitive: false } },
@@ -2379,11 +2386,18 @@ async function buildReport(from, to) {
   const CHAT_CHANNELS = [
     { id: "line",     url: "@bhqjp",        label: "LINE (\u65e5\u672c\u8a9e)", logo: "line" },
     { id: "line",     url: null,            label: "LINE",                      logo: "line" },
-    { id: "whatsapp", url: "66641405673",   label: "WhatsApp (\u0627\u0644\u0639\u0631\u0628\u064a\u0629)", logo: "whatsapp", assumed: true },
+    { id: "whatsapp", url: "66641405673",   label: "WhatsApp (\u0627\u0644\u0639\u0631\u0628\u064a\u0629)", logo: "whatsapp" },
     { id: "whatsapp", url: "wa.me/message", label: "WhatsApp",                  logo: "whatsapp" },
     { id: "whatsapp", url: null,            label: "WhatsApp (other)",          logo: "whatsapp" },
-    { id: "facebook-messenger", url: null,  label: "Messenger (\u1019\u103c\u1014\u103a\u1019\u102c\u1018\u102c\u101e\u102c)", logo: "messenger", assumed: true },
-    { id: "messenger", url: null,           label: "Messenger",                 logo: "messenger" },
+    /**
+     * MESSENGER IDS ARE SWAPPED relative to the first guess.
+     *
+     * MW's figures: Messenger 84, Messenger (Burmese) 44 — the plain label is
+     * the LARGER. The first mapping had `facebook-messenger` as Burmese, which
+     * put the larger count under the Burmese label. Corrected from the data.
+     */
+    { id: "facebook-messenger", url: null,  label: "Messenger",                 logo: "messenger" },
+    { id: "messenger", url: null,           label: "Messenger (\u1019\u103c\u1014\u103a\u1019\u102c\u1018\u102c\u101e\u102c)", logo: "messenger" },
     { id: "telegram", url: null,            label: "Telegram",                  logo: "telegram" },
     { id: "zalo",     url: null,            label: "ZALO",                      logo: "zalo" },
     { id: "wechat",   url: null,            label: "\u5fae\u4fe1 WeChat",       logo: "wechat" },
@@ -2429,8 +2443,15 @@ async function buildReport(from, to) {
       return b ? b.key : null;
     };
     const tally = (rows) => {
-      const per = {};   // brandKey|BHQ -> label -> clicks
+      const per = {};     // brandKey|BHQ -> label -> clicks
+      const opens = {};   // brandKey|BHQ -> bubble opens
       const events = {};
+      /**
+       * Kept in the PAYLOAD but off the slide (MW removed the footer). An
+       * unrecognised channel id on an in-scope page would otherwise vanish with
+       * no trace anywhere — the silent-zero failure this project keeps getting
+       * bitten by. Not rendered; available when something looks wrong.
+       */
       const unmapped = {};
       const add = (scope, label, v) => {
         per[scope] = per[scope] || {};
@@ -2438,7 +2459,24 @@ async function buildReport(from, to) {
       };
       for (const r of (rows || [])) {
         const v = n(r.eventCount); if (!v) continue;
+        /**
+         * OUT-OF-SCOPE PAGES ARE DROPPED FIRST (MW: ignore anything not under
+         * /bangkok*). The bubble runs on other branches too, and their clicks
+         * were being counted into BHQ — the previous version added to the BHQ
+         * scope before checking the brand, so the group total included branches
+         * that are not BHQ. That is the B+/BHQ conflation the whole project
+         * guards against, and it was in the total.
+         */
+        const b = brandOfPath(pagePath(r.pagePath));
+        if (!b) continue;
+        const id = String(r.linkId || "").toLowerCase();
         events[String(r.eventName || "(unnamed)")] = (events[String(r.eventName || "(unnamed)")] || 0) + v;
+        // The bubble being opened, which is the headline figure.
+        if (id.includes("top-parent")) {
+          opens.BHQ = (opens.BHQ || 0) + v;
+          opens[b] = (opens[b] || 0) + v;
+          continue;
+        }
         const ch = matchChannel(r.linkId, r.linkUrl);
         if (!ch) {
           const k = `${r.linkId || "(no id)"} ${r.linkUrl || ""}`.trim();
@@ -2446,16 +2484,17 @@ async function buildReport(from, to) {
           continue;
         }
         add("BHQ", ch.label, v);
-        const b = brandOfPath(pagePath(r.pagePath));
-        if (b) add(b, ch.label, v);
+        add(b, ch.label, v);
       }
-      return { per, events, unmapped };
+      return { per, opens, events, unmapped };
     };
     const now = tally(data.chatBubble);
     const prev = tally(data.chatBubblePrev);
     const scopeRows = (scope) => {
       const cur = now.per[scope] || {};
       const was = prev.per[scope] || {};
+      const opens = now.opens[scope] || 0;
+      const opensPrev = prev.opens[scope] || 0;
       const seen = [...new Set([...CHAT_CHANNELS.map((c) => c.label), ...Object.keys(cur)])];
       const rows = seen.map((label) => {
         const cfg = CHAT_CHANNELS.find((c) => c.label === label) || {};
@@ -2464,10 +2503,14 @@ async function buildReport(from, to) {
           change: (cur[label] || 0) - (was[label] || 0) };
       }).filter((r) => r.clicks || r.prev)
         .sort((a, b) => b.clicks - a.clicks);
-      const total = rows.reduce((a, r) => a + r.clicks, 0);
-      const totalPrev = rows.reduce((a, r) => a + r.prev, 0);
-      return { rows, total, totalPrev,
-        totalChangePct: totalPrev ? (total - totalPrev) / totalPrev : null };
+      /**
+       * `total` is bubble OPENS (`chat-bubble-top-parent`), not the sum of
+       * channel clicks. They are different acts and the sum would overstate:
+       * one person can open the bubble and click two channels.
+       */
+      const channelClicks = rows.reduce((a, r) => a + r.clicks, 0);
+      return { rows, total: opens, totalPrev: opensPrev, channelClicks,
+        totalChangePct: opensPrev ? (opens - opensPrev) / opensPrev : null };
     };
     const byScope = { BHQ: scopeRows("BHQ") };
     for (const b of BRANDS) byScope[b.key] = scopeRows(b.key);
@@ -2478,7 +2521,8 @@ async function buildReport(from, to) {
       events: Object.entries(now.events).map(([name, clicks]) => ({ name, clicks }))
         .sort((a, b) => b.clicks - a.clicks),
       unmapped: Object.entries(now.unmapped).map(([key, clicks]) => ({ key, clicks }))
-        .sort((a, b) => b.clicks - a.clicks).slice(0, 8) };
+        .sort((a, b) => b.clicks - a.clicks).slice(0, 12),
+    };
   })();
 
   const CONTENT_TYPES = [
