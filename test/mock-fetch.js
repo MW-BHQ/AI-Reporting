@@ -341,7 +341,7 @@ function ga4Report(body) {
          * In-scope chat rows are exactly 100; the out-of-scope branch is 9,997.
          * A leak therefore makes the chat totals stop being multiples of 100.
          */
-        : (m === "eventCount" && dims.includes("linkId"))
+        : (m === "eventCount" && (dims.includes("linkId") || dims.includes("customEvent:Click_ID")))
           ? (page === "/th/somewhere-else/page" ? "9997" : "100")
         : (m === "eventCount" && weight !== undefined) ? String(weight * 10)
         : (m === "eventCount" && page && PAGE_ACTIONS[page] !== undefined) ? String(PAGE_ACTIONS[page])
@@ -360,6 +360,17 @@ function ga4Report(body) {
   const expand = (i, acc) => {
     if (i === dims.length) return emit(acc);
     const d = dims[i];
+    /**
+     * The GTM custom event's parameters, paired the same way as the link
+     * dimensions — `customEvent:Click_ID` and `customEvent:Click_URL` are the
+     * same id/url pairs arriving under a different name.
+     */
+    if (d === "customEvent:Click_ID" && dims[i + 1] === "customEvent:Click_URL") {
+      for (const [id, url] of CHAT_LINKS) expand(i + 2, [...acc, id, url]);
+      return;
+    }
+    if (d === "customEvent:Click_ID") { for (const [id] of CHAT_LINKS) expand(i + 1, [...acc, id]); return; }
+    if (d === "customEvent:Click_URL") { for (const [, url] of CHAT_LINKS) expand(i + 1, [...acc, url]); return; }
     if (d === "linkId" && dims[i + 1] === "linkUrl") {
       for (const [id, url] of CHAT_LINKS) expand(i + 2, [...acc, id, url]);
       return;

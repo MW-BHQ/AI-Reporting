@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.112.1.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.113.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -691,6 +691,34 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.113.0 — Chat Bubble reads the GTM custom event; bubble opens now work.**
+
+**THE ROOT CAUSE OF "Chat clicks 0".** MW's Tag Assistant screenshot settled it:
+GTM fires a CUSTOM event `click_chat_bubble` carrying `Click_ID`, `Click_URL`,
+`Page_Path`, `Click_Text`, `Click_Classes`, `Referrer`. The earlier version read
+GA4's *enhanced measurement* `click` event via `linkId` / `linkUrl` instead.
+
+That is why the channels worked and the total did not: **LINE, WhatsApp and the
+rest are outbound `<a>` links, so enhanced measurement sees them. The bubble
+button is a div — no outbound click, no link params, zero.** A partly-correct
+source is more dangerous than a broken one, because the part that works makes
+the part that does not look like a data problem.
+
+Primary source is now `customEvent:Click_ID` / `customEvent:Click_URL` filtered
+to `eventName == click_chat_bubble`.
+
+**The link pulls are KEPT as a backstop.** `customEvent:` dimensions only
+resolve if the parameter is REGISTERED as a custom dimension in GA4; an
+unregistered name fails the request outright, and with no fallback the whole
+slide would empty. Cost is 2 extra requests, and `source` on the payload says
+which one is in use. **Once registration is confirmed, drop the link pulls and
+reclaim them** — noted so it does not become permanent.
+
+**Not a bug, twice over.** The channel figures MW compared were the BGH tab
+against a BHQ deck slide; and BGH carries the BHQ logo, which is what made the
+tab look like BHQ. Scope, not arithmetic.
+
 
 **v3.112.1 — chat headline no longer prints a confident zero; scorecards flattened.**
 

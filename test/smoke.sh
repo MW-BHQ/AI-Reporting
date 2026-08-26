@@ -225,8 +225,9 @@ expect_field "cb bhq is four only" "$REPORT" "d.chatBubble.byScope.BHQ.total===(
 # is 9,997. So a leak makes the totals stop being round — which the identity
 # above cannot see, because an unknown brand defaulted to BGH satisfies it.
 expect_field "cb no offscope leak" "$REPORT" "(d.chatBubble.byScope.BHQ.channelClicks%100===0&&d.chatBubble.byScope.BHQ.total%100===0)?'ok':undefined"
-# The GA4 event name is discovered rather than assumed — Webchat is an on-site
-# widget and may not arrive as `click` at all.
+# The GTM custom event is the source when it has data — it is the only one that
+# sees the bubble button, which is a div and fires no outbound link click.
+expect_field "cb source is gtm"    "$REPORT" "d.chatBubble.source==='click_chat_bubble'?'ok':undefined"
 expect_field "cb events listed"    "$REPORT" "d.chatBubble.events.length>0?'ok':undefined"
 # BHQ is all four hospitals, so it cannot be smaller than one of them.
 expect_field "cb bhq superset"     "$REPORT" "d.chatBubble.byScope.BHQ.total>=d.chatBubble.byScope.BGH.total?'ok':undefined"

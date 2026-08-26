@@ -1826,40 +1826,46 @@ async function buildReport(from, to) {
     ]),
   });
   /**
-   * CHAT BUBBLE. Clicks are identified by the GTM click id, which every bubble
-   * channel prefixes with `chat-bubble-channel`. Verified field names:
-   * `linkId` / `linkUrl` are the GA4 API dimensions behind the `link_id` /
-   * `link_url` click parameters.
+   * CHAT BUBBLE. TWO SOURCES, because they see different things.
    *
-   * `eventName` is a DIMENSION here rather than a filter. Enhanced measurement
-   * only fires `click` on OUTBOUND links, and Webchat opens an on-site widget,
-   * so its clicks may well arrive under a different, GTM-defined event. Filter
-   * on the event name and that channel would silently read zero; group by it
-   * and the payload says which events are actually in play.
+   * 1. `click_chat_bubble` — the GTM custom event (confirmed by MW from Tag
+   *    Assistant). Its parameters are `Click_ID` / `Click_URL` / `Page_Path`,
+   *    which reach the Data API as `customEvent:Click_ID` and so on. This is
+   *    the authoritative source and the ONLY one that sees
+   *    `chat-bubble-top-parent` — the bubble button itself.
    *
-   * `pagePath` carries the hospital, which is what lets one pull serve both the
-   * per-hospital and the BHQ tab.
-   */
-  /**
-   * `chat-bubble` catches BOTH the channel ids and `chat-bubble-top-parent`,
-   * which is the bubble itself being opened. MW: the headline click count comes
-   * from that id, not from summing the channels — opening the bubble and
-   * picking a channel are different acts, and summing channels would report the
-   * second as if it were the first.
+   * 2. `click` with `linkId` / `linkUrl` — GA4 enhanced measurement. This is
+   *    what the earlier version used, and it worked for the channels precisely
+   *    because LINE, WhatsApp and the rest are OUTBOUND LINKS. The bubble
+   *    button is a div, fires no outbound click, and so read zero. That was the
+   *    bug behind "Chat clicks 0".
+   *
+   * Both are pulled and the custom event wins wherever it has data. The link
+   * event stays as a backstop because `customEvent:` dimensions only resolve if
+   * the parameter has been REGISTERED as a custom dimension in GA4 — an
+   * unregistered name fails the request, and with no fallback the whole slide
+   * would empty. Once registration is confirmed, drop the two link pulls and
+   * reclaim the requests.
    */
   const CHAT_ID_RE = "chat-bubble";
-  const chatFilter = {
-    filter: { fieldName: "linkId",
-      stringFilter: { matchType: "PARTIAL_REGEXP", value: CHAT_ID_RE, caseSensitive: false } },
-  };
-  const chatPull = (f, t) => ga4RunReport({
+  const chatCustomPull = (f, t) => ga4RunReport({
+    dimensions: ["pagePath", "customEvent:Click_ID", "customEvent:Click_URL"],
+    metrics: ["eventCount"],
+    from: f, to: t, limit: 20000, orderBy: "eventCount",
+    dimensionFilter: { filter: { fieldName: "eventName",
+      stringFilter: { matchType: "EXACT", value: "click_chat_bubble" } } },
+  });
+  const chatLinkPull = (f, t) => ga4RunReport({
     dimensions: ["pagePath", "eventName", "linkId", "linkUrl"],
     metrics: ["eventCount"],
     from: f, to: t, limit: 20000, orderBy: "eventCount",
-    dimensionFilter: chatFilter,
+    dimensionFilter: { filter: { fieldName: "linkId",
+      stringFilter: { matchType: "PARTIAL_REGEXP", value: CHAT_ID_RE, caseSensitive: false } } },
   });
-  jobs.chatBubble = chatPull(from, to);
-  jobs.chatBubblePrev = chatPull(cwr.prev.from, cwr.prev.to);
+  jobs.chatCustom = chatCustomPull(from, to);
+  jobs.chatCustomPrev = chatCustomPull(cwr.prev.from, cwr.prev.to);
+  jobs.chatBubble = chatLinkPull(from, to);
+  jobs.chatBubblePrev = chatLinkPull(cwr.prev.from, cwr.prev.to);
   const { data } = await runJobs(jobs);
 
   for (const b of BRANDS) {
@@ -2404,7 +2410,24 @@ async function buildReport(from, to) {
     { id: "webchat",  url: null,            label: "Webchat (TH/EN)",           logo: "webchat" },
   ];
   const chatBubble = (() => {
-    if (data.chatBubble === null) return { available: false };
+    /**
+     * Normalise both shapes to { pagePath, id, url } so the tally does not care
+     * which source it came from. The custom event is preferred whenever it
+     * returned rows; the link event is the fallback.
+     */
+    const fromCustom = (rows) => (rows || []).map((r) => ({
+      pagePath: r.pagePath, id: r["customEvent:Click_ID"], url: r["customEvent:Click_URL"],
+      eventName: "click_chat_bubble", eventCount: r.eventCount,
+    }));
+    const fromLink = (rows) => (rows || []).map((r) => ({
+      pagePath: r.pagePath, id: r.linkId, url: r.linkUrl,
+      eventName: r.eventName, eventCount: r.eventCount,
+    }));
+    const customOk = Array.isArray(data.chatCustom) && data.chatCustom.length > 0;
+    const source = customOk ? "click_chat_bubble" : "click (enhanced measurement)";
+    const cur = customOk ? fromCustom(data.chatCustom) : fromLink(data.chatBubble);
+    const was = customOk ? fromCustom(data.chatCustomPrev) : fromLink(data.chatBubblePrev);
+    if (!cur.length && data.chatBubble === null) return { available: false };
     /**
      * `facebook-messenger` contains `messenger`, so the two must not merge.
      *
@@ -2459,6 +2482,7 @@ async function buildReport(from, to) {
       };
       for (const r of (rows || [])) {
         const v = n(r.eventCount); if (!v) continue;
+        const linkId = r.id, linkUrl = r.url;
         /**
          * OUT-OF-SCOPE PAGES ARE DROPPED FIRST (MW: ignore anything not under
          * /bangkok*). The bubble runs on other branches too, and their clicks
@@ -2469,7 +2493,7 @@ async function buildReport(from, to) {
          */
         const b = brandOfPath(pagePath(r.pagePath));
         if (!b) continue;
-        const id = String(r.linkId || "").toLowerCase();
+        const id = String(linkId || "").toLowerCase();
         events[String(r.eventName || "(unnamed)")] = (events[String(r.eventName || "(unnamed)")] || 0) + v;
         // The bubble being opened, which is the headline figure.
         if (id.includes("top-parent")) {
@@ -2477,9 +2501,9 @@ async function buildReport(from, to) {
           opens[b] = (opens[b] || 0) + v;
           continue;
         }
-        const ch = matchChannel(r.linkId, r.linkUrl);
+        const ch = matchChannel(linkId, linkUrl);
         if (!ch) {
-          const k = `${r.linkId || "(no id)"} ${r.linkUrl || ""}`.trim();
+          const k = `${linkId || "(no id)"} ${linkUrl || ""}`.trim();
           unmapped[k] = (unmapped[k] || 0) + v;
           continue;
         }
@@ -2488,8 +2512,8 @@ async function buildReport(from, to) {
       }
       return { per, opens, events, unmapped };
     };
-    const now = tally(data.chatBubble);
-    const prev = tally(data.chatBubblePrev);
+    const now = tally(cur);
+    const prev = tally(was);
     const scopeRows = (scope) => {
       const cur = now.per[scope] || {};
       const was = prev.per[scope] || {};
@@ -2531,7 +2555,7 @@ async function buildReport(from, to) {
     };
     const byScope = { BHQ: scopeRows("BHQ") };
     for (const b of BRANDS) byScope[b.key] = scopeRows(b.key);
-    return { available: true, byScope,
+    return { available: true, byScope, source,
       // Which GA4 events these clicks actually arrived under, so a channel
       // reading zero can be told apart from a channel tracked under an event
       // nobody expected.
