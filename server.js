@@ -1777,6 +1777,7 @@ async function buildReport(from, to) {
   // Keyed by source, so the Facebook actions carry MoM for one group-wide
   // request rather than four per-brand ones.
   jobs.srcKeyEventsPrev = ga4KeyEvents(["session_manual_source"], cwr.prev.from, cwr.prev.to);
+
   /**
    * CONTENT PAGES, top performers per type. Two group-wide pulls that serve all
    * four hospitals, every locale and all four content types — rule 2 of the
@@ -1824,6 +1825,34 @@ async function buildReport(from, to) {
       { filter: { fieldName: "eventName", inListFilter: { values: KEY_EVENT_NAMES } } },
     ]),
   });
+  /**
+   * CHAT BUBBLE. Clicks are identified by the GTM click id, which every bubble
+   * channel prefixes with `chat-bubble-channel`. Verified field names:
+   * `linkId` / `linkUrl` are the GA4 API dimensions behind the `link_id` /
+   * `link_url` click parameters.
+   *
+   * `eventName` is a DIMENSION here rather than a filter. Enhanced measurement
+   * only fires `click` on OUTBOUND links, and Webchat opens an on-site widget,
+   * so its clicks may well arrive under a different, GTM-defined event. Filter
+   * on the event name and that channel would silently read zero; group by it
+   * and the payload says which events are actually in play.
+   *
+   * `pagePath` carries the hospital, which is what lets one pull serve both the
+   * per-hospital and the BHQ tab.
+   */
+  const CHAT_ID_RE = "chat-bubble-channel";
+  const chatFilter = {
+    filter: { fieldName: "linkId",
+      stringFilter: { matchType: "PARTIAL_REGEXP", value: CHAT_ID_RE, caseSensitive: false } },
+  };
+  const chatPull = (f, t) => ga4RunReport({
+    dimensions: ["pagePath", "eventName", "linkId", "linkUrl"],
+    metrics: ["eventCount"],
+    from: f, to: t, limit: 20000, orderBy: "eventCount",
+    dimensionFilter: chatFilter,
+  });
+  jobs.chatBubble = chatPull(from, to);
+  jobs.chatBubblePrev = chatPull(cwr.prev.from, cwr.prev.to);
   const { data } = await runJobs(jobs);
 
   for (const b of BRANDS) {
@@ -2331,6 +2360,127 @@ async function buildReport(from, to) {
    * The path carries type, hospital and locale, so two group-wide pulls bucket
    * into every combination at once.
    */
+  /**
+   * CHAT BUBBLE channels. Rules are ordered and FIRST MATCH WINS, so the
+   * URL-qualified variants must come before their bare id.
+   *
+   * Two ids carry two different channels each, separable only by URL:
+   *   - `line` is Thai or Japanese, told apart by `@bhqjp`.
+   *   - `whatsapp` is two numbers.
+   * And there are two distinct messenger ids.
+   *
+   * TWO LABELS ARE MW'S TO CONFIRM, marked `assumed` below: which WhatsApp is
+   * the Arabic one, and which messenger id is Burmese. Nothing distinguishes
+   * them in the tracking itself — a click id does not carry a language — so
+   * these are the one place in this block that is a guess rather than a
+   * reading. They are labelled and flagged in the UI rather than quietly
+   * asserted, and each is a one-line change.
+   */
+  const CHAT_CHANNELS = [
+    { id: "line",     url: "@bhqjp",        label: "LINE (\u65e5\u672c\u8a9e)", logo: "line" },
+    { id: "line",     url: null,            label: "LINE",                      logo: "line" },
+    { id: "whatsapp", url: "66641405673",   label: "WhatsApp (\u0627\u0644\u0639\u0631\u0628\u064a\u0629)", logo: "whatsapp", assumed: true },
+    { id: "whatsapp", url: "wa.me/message", label: "WhatsApp",                  logo: "whatsapp" },
+    { id: "whatsapp", url: null,            label: "WhatsApp (other)",          logo: "whatsapp" },
+    { id: "facebook-messenger", url: null,  label: "Messenger (\u1019\u103c\u1014\u103a\u1019\u102c\u1018\u102c\u101e\u102c)", logo: "messenger", assumed: true },
+    { id: "messenger", url: null,           label: "Messenger",                 logo: "messenger" },
+    { id: "telegram", url: null,            label: "Telegram",                  logo: "telegram" },
+    { id: "zalo",     url: null,            label: "ZALO",                      logo: "zalo" },
+    { id: "wechat",   url: null,            label: "\u5fae\u4fe1 WeChat",       logo: "wechat" },
+    { id: "webchat",  url: null,            label: "Webchat (TH/EN)",           logo: "webchat" },
+  ];
+  const chatBubble = (() => {
+    if (data.chatBubble === null) return { available: false };
+    /**
+     * `facebook-messenger` contains `messenger`, so the two must not merge.
+     *
+     * TWO independent things stop that, and negative controls show EITHER
+     * alone is sufficient: the segment match (`facebook-messenger` is not
+     * `messenger` and does not start with `messenger-`), and the longest-id
+     * sort below, which picks the more specific rule when both match. Neither
+     * control fails on its own; the redundancy is deliberate, and neither
+     * should be removed on the grounds that the tests stay green without it.
+     */
+    const matchChannel = (linkId, linkUrl) => {
+      const id = String(linkId || "").toLowerCase();
+      const url = String(linkUrl || "").toLowerCase();
+      const seg = (id.split("chat-bubble-channel-")[1] || "").split(/[|,\s]/)[0];
+      const candidates = CHAT_CHANNELS
+        .filter((c) => seg === c.id || seg.startsWith(`${c.id}-`) || id.includes(`channel-${c.id}`))
+        .sort((a, b) => b.id.length - a.id.length);
+      // URL-qualified rules first; the unqualified one is the fallback.
+      return candidates.find((c) => c.url && url.includes(c.url.toLowerCase()))
+        || candidates.find((c) => !c.url)
+        || null;
+    };
+    /**
+     * Brand from the page the click happened on.
+     *
+     * Resolved locally rather than calling `brandForPath`, which is declared
+     * ~1,000 lines BELOW this IIFE — referencing it here throws "Cannot access
+     * before initialization". Third time this file's declaration order has set
+     * that trap (v3.100.0 `keMonthly`, v3.106.0 `LANG_ORDER`), and the first
+     * two only surfaced because something else was being tested at the time.
+     */
+    const brandOfPath = (path) => {
+      const m = String(path || "").match(/^\/(?:[a-z]{2}\/)?([a-z-]+)(?:[/?]|$)/i);
+      if (!m) return null;
+      const b = brandBySegment(norm(m[1]));
+      return b ? b.key : null;
+    };
+    const tally = (rows) => {
+      const per = {};   // brandKey|BHQ -> label -> clicks
+      const events = {};
+      const unmapped = {};
+      const add = (scope, label, v) => {
+        per[scope] = per[scope] || {};
+        per[scope][label] = (per[scope][label] || 0) + v;
+      };
+      for (const r of (rows || [])) {
+        const v = n(r.eventCount); if (!v) continue;
+        events[String(r.eventName || "(unnamed)")] = (events[String(r.eventName || "(unnamed)")] || 0) + v;
+        const ch = matchChannel(r.linkId, r.linkUrl);
+        if (!ch) {
+          const k = `${r.linkId || "(no id)"} ${r.linkUrl || ""}`.trim();
+          unmapped[k] = (unmapped[k] || 0) + v;
+          continue;
+        }
+        add("BHQ", ch.label, v);
+        const b = brandOfPath(pagePath(r.pagePath));
+        if (b) add(b, ch.label, v);
+      }
+      return { per, events, unmapped };
+    };
+    const now = tally(data.chatBubble);
+    const prev = tally(data.chatBubblePrev);
+    const scopeRows = (scope) => {
+      const cur = now.per[scope] || {};
+      const was = prev.per[scope] || {};
+      const seen = [...new Set([...CHAT_CHANNELS.map((c) => c.label), ...Object.keys(cur)])];
+      const rows = seen.map((label) => {
+        const cfg = CHAT_CHANNELS.find((c) => c.label === label) || {};
+        return { label, logo: cfg.logo || null, assumed: !!cfg.assumed,
+          clicks: cur[label] || 0, prev: was[label] || 0,
+          change: (cur[label] || 0) - (was[label] || 0) };
+      }).filter((r) => r.clicks || r.prev)
+        .sort((a, b) => b.clicks - a.clicks);
+      const total = rows.reduce((a, r) => a + r.clicks, 0);
+      const totalPrev = rows.reduce((a, r) => a + r.prev, 0);
+      return { rows, total, totalPrev,
+        totalChangePct: totalPrev ? (total - totalPrev) / totalPrev : null };
+    };
+    const byScope = { BHQ: scopeRows("BHQ") };
+    for (const b of BRANDS) byScope[b.key] = scopeRows(b.key);
+    return { available: true, byScope,
+      // Which GA4 events these clicks actually arrived under, so a channel
+      // reading zero can be told apart from a channel tracked under an event
+      // nobody expected.
+      events: Object.entries(now.events).map(([name, clicks]) => ({ name, clicks }))
+        .sort((a, b) => b.clicks - a.clicks),
+      unmapped: Object.entries(now.unmapped).map(([key, clicks]) => ({ key, clicks }))
+        .sort((a, b) => b.clicks - a.clicks).slice(0, 8) };
+  })();
+
   const CONTENT_TYPES = [
     { id: "doctor",  segment: "doctor",        label: "Doctor",   action: "appointments" },
     /**
@@ -2962,6 +3112,7 @@ async function buildReport(from, to) {
     searchAds,
     referral,
     content,
+    chatBubble,
     tiktok,
     social,
     languages,

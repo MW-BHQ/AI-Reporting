@@ -165,6 +165,24 @@ function reportFixture() {
           article: { pageCount: 0, views: 0, actions: 0, rows: [] },
           center:  { pageCount: 0, views: 0, actions: 0, rows: [] } },
       }])) },
+    /**
+     * Chat bubble: both scopes present, an `assumed` label, a brand-new channel
+     * with no previous month, and an unmapped id.
+     */
+    chatBubble: { available: true,
+      events: [{ name: "click", clicks: 15600 }],
+      unmapped: [{ key: "chat-bubble-channel-unknown https://example.com", clicks: 12 }],
+      byScope: Object.fromEntries([...KEYS, "BHQ"].map((k) => [k, {
+        total: k === "BHQ" ? 15600 : 3900,
+        totalPrev: k === "BHQ" ? 15070 : 3800,
+        totalChangePct: 0.035,
+        rows: [
+          { label: "LINE", logo: "line", assumed: false, clicks: 1678, prev: 1539, change: 139 },
+          { label: "WhatsApp (AR)", logo: "whatsapp", assumed: true, clicks: 1347, prev: 1246, change: 101 },
+          { label: "LINE (JP)", logo: "line", assumed: false, clicks: 380, prev: 389, change: -9 },
+          { label: "Webchat (TH/EN)", logo: "webchat", assumed: false, clicks: 102, prev: 105, change: -3 },
+          { label: "Telegram", logo: "telegram", assumed: false, clicks: 47, prev: 0, change: 47 },
+        ] }])) },
     referral: { byBrand: KEYS.map((k) => ({ key: k, label: k,
       referrers: [
         { source: "pantip.com", channel: "Referral", sessions: 400, engaged: 340, actions: 30,
@@ -508,6 +526,28 @@ setTimeout(() => {
         warned
           ? ok("content cards", `2 slides x ${ctabs.length} languages, ranked, mismatch flagged`)
           : fail("content cards", "wrong-column warning not shown for Articles");
+      })();
+      /**
+       * Chat bubble: BOTH scope pages must be in the DOM (CSS shows one), the
+       * hospital tab active first, and the "new" state used where a channel has
+       * no previous month rather than a divide-by-zero percentage.
+       */
+      (() => {
+        const wrap = root && root.querySelector(".cb-wrap");
+        if (!wrap) return fail("chat bubble", "no chat bubble slide rendered");
+        const pages = [...wrap.querySelectorAll(".cb-page")];
+        if (pages.length !== 2) return fail("chat bubble", `${pages.length} scope pages, expected 2`);
+        const active = pages.filter(p => p.classList.contains("active"));
+        if (active.length !== 1) return fail("chat bubble", `${active.length} active scopes, expected 1`);
+        if (active[0].dataset.cbpage === "BHQ") return fail("chat bubble", "opens on BHQ, not the hospital");
+        if (!wrap.querySelector('[data-cb="BHQ"]')) return fail("chat bubble", "no BHQ tab");
+        // Telegram has prev 0 in the fixture: a percentage there would be
+        // Infinity, so it must render as "new".
+        if (!/\bnew\b/.test(active[0].textContent)) return fail("chat bubble", "no 'new' state for a channel with no prior month");
+        // The assumed label must stay visibly flagged.
+        wrap.textContent.includes("Unrecognised click ids")
+          ? ok("chat bubble", `2 scopes, ${pages[0].querySelectorAll("tbody tr").length} channels, unmapped surfaced`)
+          : fail("chat bubble", "unmapped click ids not surfaced");
       })();
       finish();
     }, 500);

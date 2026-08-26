@@ -494,6 +494,9 @@
   /* Content tabs: own namespace, so switching a content language cannot blank
      a Search page for a locale that has articles but no search data. */
   @media screen{ .clang-page:not(.active){display:none;} }
+  /* Chat bubble scope tabs: hospital vs BHQ, same show-one-of-two mechanism. */
+  @media screen{ .cb-page:not(.active){display:none;} }
+  @media print{ .cb-page{display:block!important;} }
   @media print{ .clang-page{display:block!important;break-before:page;page-break-before:always;} }
   @media print{ .lang-page{display:block!important;break-before:page;page-break-before:always;} }
   .lang-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
@@ -2019,7 +2022,67 @@ function renderReport() {
       </div>`).join('');
   })();
 
+  /**
+   * CHAT BUBBLE. Two scope tabs (MW): the open hospital, and BHQ, so a hospital
+   * can be read against all four. Both sets are rendered and CSS picks one, so
+   * the tabs cannot disagree and nothing refetches.
+   */
+  const CB = d.chatBubble || {};
+  const chatBody = CB.available ? (() => {
+    const scope = (key, label, idx) => {
+      const s = (CB.byScope || {})[key];
+      if (!s) return '';
+      const mx = Math.max(1, ...s.rows.map(r => r.clicks));
+      return `<div class="cb-page ${idx === 0 ? 'active' : ''}" data-cbpage="${esc(key)}">
+        <div class="grid g-3" style="margin-bottom:12px">
+          ${mini('Chat clicks', num(s.total), { lead: true, icon: 'sessions',
+            sub: s.totalPrev ? `${num(s.totalPrev)} last month` : '' })}
+          ${mini('Month on month', s.totalChangePct === null ? '\u2014'
+            : changeText(s.totalChangePct), { icon: 'views' })}
+          ${mini('Channels used', num(s.rows.filter(r => r.clicks).length),
+            { icon: 'find_doctors', sub: `of ${num(s.rows.length)} tracked` })}
+        </div>
+        <table class="sortable"><thead><tr>
+          <th>Channel</th><th class="num">Clicks</th><th></th><th class="num">MoM</th>
+        </tr></thead><tbody>
+        ${s.rows.map(r => `<tr>
+          <td class="strong">${r.logo ? plogo(r.logo, 16) : ''}${esc(r.label)}${
+            r.assumed ? ' <span style="font-size:9px;color:var(--amber)" title="Label assumed \u2014 confirm with MW">?</span>' : ''}</td>
+          <td class="num strong">${num(r.clicks)}</td>
+          <td style="width:38%"><div style="height:7px;border-radius:4px;background:var(--violet);
+            width:${Math.max(2, Math.round((r.clicks / mx) * 100))}%"></div></td>
+          <td class="num">${r.prev ? changeText((r.clicks - r.prev) / r.prev) : '<span class="dlt none">new</span>'}</td>
+        </tr>`).join('')}
+        </tbody></table>
+      </div>`;
+    };
+    const evNote = (CB.events || []).length
+      ? `Tracked under the GA4 event${CB.events.length > 1 ? 's' : ''}
+         <b>${CB.events.map(e => `${esc(e.name)} (${num(e.clicks)})`).join(', ')}</b>.`
+      : '';
+    const unmapped = (CB.unmapped || []).length
+      ? `<br><b style="color:var(--amber)">Unrecognised click ids:</b>
+         ${CB.unmapped.map(u => `${esc(u.key)} (${num(u.clicks)})`).join(' \u00b7 ')}.
+         Counted in the total but in no channel \u2014 send the mapping and they land.`
+      : '';
+    return `
+    <div class="cb-wrap">
+      <div class="lang-tabs no-print">
+        <button class="clang-tab active" data-cb="${esc(sel)}">${esc(sel)}</button>
+        <button class="clang-tab" data-cb="BHQ">BHQ \u00b7 all four</button>
+      </div>
+      ${scope(sel, sel, 0)}
+      ${scope('BHQ', 'BHQ', 1)}
+      <div class="note">Clicks on the chat bubble, identified by the GTM click id. A click is an
+      INTENT to chat, not a conversation: the platform owns what happens next, so nothing here says
+      whether anyone replied. ${evNote}
+      Channels are told apart by click id, and where one id serves two channels
+      (LINE, WhatsApp) by the destination URL.${unmapped}</div>
+    </div>`;
+  })() : '';
+
   const G = d.gbp;
+
 
 
   /**
@@ -2476,6 +2539,7 @@ function renderReport() {
     ${slide('Shared Paid Media', paidBody.trim(), false, true, 'meta')}
     ${slide('TikTok', tkChannelBody, false, true, 'tiktok')}
     ${tkTopBody ? slide('TikTok \u00b7 Top performances', tkTopBody, false, true, 'tiktok') : ''}
+    ${chatBody ? slide(`Chat Bubble \u00b7 ${sel}`, chatBody) : ''}
     ${contentBody}`;
 
   // Charts must be drawn after the markup is in the DOM.
@@ -2548,6 +2612,14 @@ function renderReport() {
       drawChart('repTkViews', TK.channel.daily, [{ key:'views', label:'Views', color:C.b }]);
     }
   }
+
+  document.querySelectorAll('[data-cb]').forEach(el =>
+    el.addEventListener('click', () => {
+      const pick = el.dataset.cb;
+      document.querySelectorAll('[data-cb]').forEach(t => t.classList.toggle('active', t === el));
+      document.querySelectorAll('.cb-page').forEach(pg =>
+        pg.classList.toggle('active', pg.dataset.cbpage === pick));
+    }));
 
   document.querySelectorAll('[data-clang]').forEach(el =>
     el.addEventListener('click', () => {
@@ -5448,7 +5520,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.108.0';
+const CLIENT_BUILD = '3.109.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

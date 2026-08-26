@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.108.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.109.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -691,6 +691,53 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.109.0 — Chat Bubble, with hospital / BHQ scope tabs.**
+
+Open item 2 closed: the GTM work is done, so chat bubble is reportable. One pull
+for the window and one for the previous month, **+2 requests**.
+
+**Verified field names**: `linkId` / `linkUrl` are the GA4 API dimensions behind
+the `link_id` / `link_url` click parameters. Clicks are found by filtering
+`linkId` on the `chat-bubble-channel` prefix.
+
+**`eventName` is a DIMENSION, not a filter — deliberately.** Enhanced
+measurement only fires `click` on OUTBOUND links, and Webchat opens an on-site
+widget, so its clicks may arrive under some other GTM-defined event. Filtering
+on an assumed event name would have read zero for that one channel and looked
+fine. Grouping by it means the payload reports which events are actually in
+play, and the card prints them.
+
+**Three pairs share a click id** and are separated by destination URL:
+LINE Thai vs Japanese (`@bhqjp`), the two WhatsApp numbers, and the two
+messenger ids. `facebook-messenger` contains `messenger` as a substring; two
+independent guards stop them merging (exact segment match, and longest-id-first
+selection) and **negative controls show either alone suffices** — the redundancy
+is deliberate, so neither should be removed for being individually untestable.
+
+**TWO LABELS ARE GUESSES AND ARE MARKED AS SUCH** — which WhatsApp number is the
+Arabic one, and which messenger id is Burmese. A click id does not carry a
+language, so nothing in the tracking distinguishes them. They render with an
+amber `?` and are flagged in the payload as `assumed`, rather than quietly
+asserted. Each is a one-line change once MW confirms.
+
+Unrecognised click ids are counted in the total and listed on the card, so a new
+channel appears as a named gap instead of vanishing.
+
+**A FOURTH temporal dead zone, caught by the smoke test.** The builder was
+placed before `const { data } = await runJobs(jobs)` and threw "Cannot access
+'data' before initialization"; `brandForPath` is also declared ~1,000 lines
+below it, so the brand resolver is inlined. This file's declaration order has
+now set that trap four times (v3.100.0 `keMonthly`, v3.106.0 `LANG_ORDER`, and
+both of these). **Anything added to `buildReport` should be checked against
+where its helpers are declared, not just whether it parses.**
+
+**Mock: `linkId`/`linkUrl` are emitted as PAIRS, not a cross product.** The
+generic expansion multiplies every dimension by every other, which would pair
+the Japanese LINE URL with a WhatsApp id — inventing channels, and worse, making
+a matcher that IGNORES the URL look correct, since every id would appear with
+every URL anyway.
+
 
 **v3.108.0 — Articles column is Contact us; Package footer suppressed; Content moved last.**
 

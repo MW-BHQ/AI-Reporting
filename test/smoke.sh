@@ -198,6 +198,25 @@ expect_field "rf ai by channel"    "$REPORT" "d.referral.byBrand[0].ai.rows.some
 # Per-assistant event columns need per-assistant counts.
 expect_field "rf ai per-row events" "$REPORT" "d.referral.byBrand[0].ai.rows.every(r=>r.events&&typeof r.events==='object')?'ok':undefined"
 
+echo "--- monthly report: chat bubble channel disambiguation ---"
+CBB="d.chatBubble.byScope.BHQ.rows"
+# Three PAIRS share a click id and must not collapse. LINE th/jp and the two
+# WhatsApp numbers differ only by destination URL; `facebook-messenger`
+# contains `messenger` as a substring, so a loose id match merges them.
+expect_field "cb line split"       "$REPORT" "$CBB.filter(r=>r.label.indexOf('LINE')===0&&r.clicks>0).length===2?2:undefined"
+expect_field "cb whatsapp split"   "$REPORT" "$CBB.filter(r=>r.label.indexOf('WhatsApp')===0&&r.clicks>0).length===2?2:undefined"
+expect_field "cb messenger split"  "$REPORT" "$CBB.filter(r=>r.label.indexOf('Messenger')===0&&r.clicks>0).length===2?2:undefined"
+expect_field "cb all channels"     "$REPORT" "$CBB.filter(r=>r.clicks>0).length===10?10:undefined"
+# An id we do not recognise is reported, not dropped.
+expect_field "cb unmapped shown"   "$REPORT" "d.chatBubble.unmapped.some(u=>u.key.indexOf('unknown')>=0)?'ok':undefined"
+# The GA4 event name is discovered rather than assumed — Webchat is an on-site
+# widget and may not arrive as `click` at all.
+expect_field "cb events listed"    "$REPORT" "d.chatBubble.events.length>0?'ok':undefined"
+# BHQ is all four hospitals, so it cannot be smaller than one of them.
+expect_field "cb bhq superset"     "$REPORT" "d.chatBubble.byScope.BHQ.total>=d.chatBubble.byScope.BGH.total?'ok':undefined"
+# The two guessed labels stay flagged until MW confirms them.
+expect_field "cb assumed flagged"  "$REPORT" "$CBB.filter(r=>r.assumed).length===2?2:undefined"
+
 echo "--- monthly report: TikTok field names and floors ---"
 # reach is unique_video_views; there is no `reach` field on this connector.
 expect_field "tk reach"            "$REPORT" "d.tiktok.channel.reach===17897?17897:undefined"

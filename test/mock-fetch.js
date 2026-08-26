@@ -94,6 +94,25 @@ function windsorRows(connector, fields) {
  * was asked of it. A mock that ignores filters cannot tell a working filter
  * from a discarded one, so this one refuses to.
  */
+/**
+ * [click id, click url] for the chat bubble. Emitted as a PAIRED list, not as a
+ * cross product: pairing every id with every URL would invent a Japanese
+ * WhatsApp and make the URL disambiguation look like it worked when it did not.
+ */
+const CHAT_LINKS = [
+  ["chat-bubble-channel-telegram", "https://t.me/bangkokhospital"],
+  ["chat-bubble-channel-whatsapp", "https://api.whatsapp.com/send?phone=66641405673"],
+  ["chat-bubble-channel-whatsapp", "https://wa.me/message/T2ER6M3BLR7EE1"],
+  ["chat-bubble-channel-facebook-messenger", "https://m.me/bangkokhospital.my"],
+  ["chat-bubble-channel-messenger", "https://m.me/bangkokhospital"],
+  ["chat-bubble-channel-line", "https://line.me/R/ti/p/@bangkokhospital"],
+  ["chat-bubble-channel-line", "https://line.me/ti/p/~@bhqjp"],
+  ["chat-bubble-channel-zalo", "https://zalo.me/bangkokhospital"],
+  ["chat-bubble-channel-wechat", "weixin://bangkokhospital"],
+  ["chat-bubble-channel-webchat", ""],
+  ["chat-bubble-channel-unknown", "https://example.com/new-channel"],
+];
+
 const GA4_PAGES = [
   // One page per brand so the per-brand segment filter is actually exercised;
   // with only bangkok-heart present, three of four brands read zero and a
@@ -306,9 +325,24 @@ function ga4Report(body) {
         : "100" })),
     });
   };
+  /**
+   * linkId and linkUrl are emitted as PAIRS, not as a cross product.
+   *
+   * The generic expansion multiplies every dimension by every other, which
+   * would pair the Japanese LINE URL with the WhatsApp id and invent channels
+   * that do not exist — and, worse, would let a matcher that IGNORES the URL
+   * look correct, since every id would then appear with every URL anyway.
+   * Telling the paired channels apart by URL is the whole point of this block.
+   */
   const expand = (i, acc) => {
     if (i === dims.length) return emit(acc);
     const d = dims[i];
+    if (d === "linkId" && dims[i + 1] === "linkUrl") {
+      for (const [id, url] of CHAT_LINKS) expand(i + 2, [...acc, id, url]);
+      return;
+    }
+    if (d === "linkId") { for (const [id] of CHAT_LINKS) expand(i + 1, [...acc, id]); return; }
+    if (d === "linkUrl") { for (const [, url] of CHAT_LINKS) expand(i + 1, [...acc, url]); return; }
     const opts = d === "date" ? dates
       : d === "eventName" ? (allowedEvents || GA4_EVENTS)
       /**
