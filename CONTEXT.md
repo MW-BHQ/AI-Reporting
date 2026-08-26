@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.112.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.112.1.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -691,6 +691,27 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.112.1 — chat headline no longer prints a confident zero; scorecards flattened.**
+
+**`chat-bubble-top-parent` produced 0.** GA4 only populates `link_id` /
+`link_url` for real `<a>` clicks. If that id sits on a `div` launcher — which a
+chat bubble usually is — the parameter never arrives and the filter sees
+nothing. **Still needs MW to confirm what GTM sends for it.**
+
+Meanwhile the headline falls back to channel clicks and **the card states which
+quantity it is showing** (`basis: "opens" | "channels"`). A zero in a headline is
+worse than a labelled substitute: it reads as "nobody used the bubble".
+
+**Not a bug: the channel numbers.** MW compared the BGH tab against an LS slide
+that is BHQ. 744 is BGH alone; the 1,087 is all four. Scope, not arithmetic.
+
+**Shading removed from every scorecard** (MW). Gradients, the violet accent
+rule, the `lead` tint and the muted `is-zero` variant are all gone — flat white
+cards with one border. Shading was encoding things the number already says, and
+per-card tints made a set of scorecards read like a chart. `mini()` still accepts
+`lead` and `zero` and ignores them, so call sites did not all have to change.
+
 
 **v3.112.0 — Chat Bubble scoped to /bangkok*; total from top-parent; marks fixed.**
 

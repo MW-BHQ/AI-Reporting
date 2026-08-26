@@ -2509,8 +2509,25 @@ async function buildReport(from, to) {
        * one person can open the bubble and click two channels.
        */
       const channelClicks = rows.reduce((a, r) => a + r.clicks, 0);
-      return { rows, total: opens, totalPrev: opensPrev, channelClicks,
-        totalChangePct: opensPrev ? (opens - opensPrev) / opensPrev : null };
+      const channelPrev = rows.reduce((a, r) => a + r.prev, 0);
+      /**
+       * `chat-bubble-top-parent` is the preferred headline, but GA4 only
+       * populates `link_id` for real <a> clicks — if that id sits on a div
+       * launcher the parameter never arrives and opens read 0. Rather than
+       * print a confident zero, fall back to channel clicks and SAY which one
+       * is being shown, so the number is never silently the wrong quantity.
+       */
+      const hasOpens = opens > 0;
+      return { rows,
+        total: hasOpens ? opens : channelClicks,
+        totalPrev: hasOpens ? opensPrev : channelPrev,
+        basis: hasOpens ? "opens" : "channels",
+        opens, channelClicks,
+        totalChangePct: (() => {
+          const cur = hasOpens ? opens : channelClicks;
+          const was = hasOpens ? opensPrev : channelPrev;
+          return was ? (cur - was) / was : null;
+        })() };
     };
     const byScope = { BHQ: scopeRows("BHQ") };
     for (const b of BRANDS) byScope[b.key] = scopeRows(b.key);

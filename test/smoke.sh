@@ -213,7 +213,11 @@ expect_field "cb unmapped shown"   "$REPORT" "d.chatBubble.unmapped.some(u=>u.ke
 # `chat-bubble-top-parent` is the bubble OPENING, not a channel. It must be the
 # headline total and must NOT appear as an eleventh channel row.
 expect_field "cb opens not channel" "$REPORT" "$CBB.every(r=>r.label.indexOf('parent')<0)?'ok':undefined"
-expect_field "cb total is opens"   "$REPORT" "d.chatBubble.byScope.BHQ.total>0&&d.chatBubble.byScope.BHQ.total!==d.chatBubble.byScope.BHQ.channelClicks?'ok':undefined"
+# When bubble opens are present the headline is opens, not the channel sum.
+expect_field "cb total is opens"   "$REPORT" "(d.chatBubble.byScope.BHQ.basis==='opens'&&d.chatBubble.byScope.BHQ.total===d.chatBubble.byScope.BHQ.opens)?'ok':undefined"
+# And the card must SAY which quantity it is showing, so a fallback to channel
+# clicks is never mistaken for bubble opens.
+expect_field "cb basis declared"   "$REPORT" "['opens','channels'].indexOf(d.chatBubble.byScope.BHQ.basis)>=0?'ok':undefined"
 # Out-of-scope branches are dropped: /th/somewhere-else/page is in the fixture
 # and must contribute to neither a hospital nor the BHQ total.
 expect_field "cb bhq is four only" "$REPORT" "d.chatBubble.byScope.BHQ.total===(d.chatBubble.byScope.BGH.total+d.chatBubble.byScope.BIH.total+d.chatBubble.byScope.BHT.total+d.chatBubble.byScope.WSH.total)?'ok':undefined"

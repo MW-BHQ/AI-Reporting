@@ -500,9 +500,13 @@
    * A channel with no clicks is muted but still shown — "nobody used WeChat" is
    * a finding, and hiding it would make the set look shorter than it is.
    */
+  /**
+   * Flat and uniform (MW): no gradient, no accent rule, no muted variant for a
+   * zero. Shading was carrying meaning that the number already carries, and a
+   * tint that differs per card makes a set of scorecards look like a chart.
+   */
   .cbc{border:1px solid var(--line);border-radius:12px;padding:12px 16px 13px;
-    background:linear-gradient(180deg,rgba(108,92,231,.055),rgba(108,92,231,0));
-    border-top:2px solid var(--violet);min-width:0;}
+    background:#fff;min-width:0;}
   .cbc-body{display:flex;align-items:center;justify-content:space-between;gap:12px;}
   .cbc-txt{min-width:0;}
   .cbc-lab{font-size:13px;font-weight:700;color:var(--ink);line-height:1.25;
@@ -512,8 +516,7 @@
   .cbc-unit{font-size:11px;font-weight:600;color:var(--faint);}
   .cbc-foot{font-size:10px;margin-top:3px;}
   .cbc-prev{color:var(--faint);}
-  .cbc.is-zero{border-top-color:var(--line);background:none;}
-  .cbc.is-zero .cbc-num{color:var(--faint);font-weight:600;}
+  /* A zero reads as a zero; it does not also need to be greyed. */
   .cb-ask{font-size:9.5px;color:var(--amber);font-weight:700;vertical-align:2px;}
   /* Chat bubble scope tabs: hospital vs BHQ, same show-one-of-two mechanism. */
   @media screen{ .cb-page:not(.active){display:none;} }
@@ -541,20 +544,16 @@
    * has to be readable as a real answer.
    */
   .mini{border:1px solid var(--line);border-radius:10px;padding:9px 11px 10px;
-    background:linear-gradient(180deg,rgba(108,92,231,.055),rgba(108,92,231,0));
-    border-top:2px solid var(--violet);}
+    background:#fff;}
   .mini .lab{display:flex;align-items:center;gap:5px;font-size:9.5px;letter-spacing:.06em;
     text-transform:uppercase;color:var(--faint);margin-bottom:3px;white-space:nowrap;
     overflow:hidden;text-overflow:ellipsis;}
   /* actIcon carries its own right margin; the flex gap already spaces it. */
   .mini .lab svg{margin-right:0;flex:0 0 auto;opacity:.85;}
   .mini .val{font-size:23px;font-weight:750;line-height:1.05;color:var(--ink);}
-  .mini.is-zero{border-top-color:var(--line);background:none;}
-  .mini.is-zero .val{color:var(--faint);font-weight:600;}
+
   .mini .sub2{font-size:9.5px;color:var(--faint);margin-top:2px;}
-  .mini.lead{border-top-color:var(--violet);
-    background:linear-gradient(180deg,rgba(108,92,231,.13),rgba(108,92,231,.02));}
-  .mini.lead .val{color:var(--violet);}
+
   /**
    * Referrer blacklist switch. Both sets of numbers are in the DOM and CSS
    * picks one, so the scorecards and the table can never disagree and no
@@ -1582,9 +1581,9 @@ function renderReport() {
    * `lead` marks the headline card; a zero is styled down but stays legible.
    */
   const mini = (lab, val, opts = {}) => {
-    const zero = opts.zero === true;
-    const cls = `mini${opts.lead ? ' lead' : ''}${zero ? ' is-zero' : ''}`;
-    return `<div class="${cls}">
+    // `lead` and `zero` no longer change the styling (MW: no shading carrying
+    // meaning). Accepted and ignored so call sites need not all be rewritten.
+    return `<div class="mini">
       <div class="lab">${opts.icon ? actIcon(opts.icon) : ''}${esc(lab)}</div>
       <div class="val">${val}</div>
       ${opts.sub ? `<div class="sub2">${opts.sub}</div>` : ''}
@@ -2074,7 +2073,7 @@ function renderReport() {
        * the figure sit in the same card as the mark so each channel reads as
        * one object.
        */
-      const card = (r) => `<div class="cbc${r.clicks ? '' : ' is-zero'}">
+      const card = (r) => `<div class="cbc">
         <div class="cbc-body">
           <div class="cbc-txt">
             <div class="cbc-lab">${esc(r.label)}</div>
@@ -2088,11 +2087,14 @@ function renderReport() {
       </div>`;
       return `<div class="cb-page ${idx === 0 ? 'active' : ''}" data-cbpage="${esc(key)}">
         <div class="grid g-2" style="margin-bottom:14px">
-          ${mini('Chat clicks', num(s.total), { lead: true, icon: 'sessions',
-            sub: s.totalPrev ? `${num(s.totalPrev)} last month` : '' })}
+          ${mini(s.basis === 'opens' ? 'Bubble opens' : 'Channel clicks', num(s.total),
+            { icon: 'sessions',
+              sub: s.basis === 'opens'
+                ? `${num(s.channelClicks)} channel clicks`
+                : 'bubble opens not tracked' })}
           ${mini('Month on month', s.totalChangePct === null ? '\u2014'
             : changeText(s.totalChangePct), { icon: 'views',
-            sub: `${num(s.channelClicks)} channel clicks` })}
+            sub: s.totalPrev ? `vs ${num(s.totalPrev)} last month` : '' })}
         </div>
         <div class="grid g-2">${shown.map(card).join('')}</div>
       </div>`;
@@ -5547,7 +5549,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.112.0';
+const CLIENT_BUILD = '3.112.1';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
