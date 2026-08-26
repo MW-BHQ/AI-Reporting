@@ -501,29 +501,50 @@
    * a finding, and hiding it would make the set look shorter than it is.
    */
   /**
-   * Flat and uniform (MW): no gradient, no accent rule, no muted variant for a
-   * zero. Shading was carrying meaning that the number already carries, and a
-   * tint that differs per card makes a set of scorecards look like a chart.
+   * Chat channel card: identity left, performance right (MW). Flat and uniform
+   * — no gradient, no accent rule, no muted variant, because shading was
+   * encoding what the number already says.
    */
-  .cbc{border:1px solid var(--line);border-radius:12px;padding:12px 16px 13px;
+  .cbc{display:flex;align-items:center;justify-content:space-between;gap:18px;
+    border:1px solid var(--line);border-radius:14px;padding:16px 22px;
     background:#fff;min-width:0;}
-  .cbc-body{display:flex;align-items:center;justify-content:space-between;gap:12px;}
-  .cbc-txt{min-width:0;}
-  .cbc-lab{font-size:13px;font-weight:700;color:var(--ink);line-height:1.25;
-    overflow-wrap:anywhere;margin-bottom:2px;}
-  .cbc-body .plogo{margin-right:0;vertical-align:0;}
-  .cbc-num{font-size:26px;font-weight:750;line-height:1.05;color:var(--ink);}
-  .cbc-unit{font-size:11px;font-weight:600;color:var(--faint);}
-  .cbc-foot{font-size:10px;margin-top:3px;}
+  .cbc-id{display:flex;align-items:center;gap:14px;min-width:0;}
+  .cbc-lab{font-size:15px;font-weight:700;color:var(--ink);line-height:1.25;
+    overflow-wrap:anywhere;}
+  .cbc-id .plogo{margin-right:0;vertical-align:0;}
+  .cbc-perf{text-align:right;flex:0 0 auto;}
+  .cbc-num{font-size:38px;font-weight:750;line-height:1;color:var(--ink);
+    letter-spacing:-.02em;white-space:nowrap;}
+  .cbc-unit{font-size:12px;font-weight:600;color:var(--faint);margin-left:7px;}
+  .cbc-foot{font-size:12px;margin-top:5px;white-space:nowrap;}
   .cbc-prev{color:var(--faint);}
   /* A zero reads as a zero; it does not also need to be greyed. */
-  .cb-ask{font-size:9.5px;color:var(--amber);font-weight:700;vertical-align:2px;}
+  @media(max-width:1080px){ .cbc-num{font-size:30px;} }
   /* Chat bubble scope tabs: hospital vs BHQ, same show-one-of-two mechanism. */
   @media screen{ .cb-page:not(.active){display:none;} }
   @media print{ .cb-page{display:block!important;} }
   @media print{ .clang-page{display:block!important;break-before:page;page-break-before:always;} }
   @media print{ .lang-page{display:block!important;break-before:page;page-break-before:always;} }
-  .lang-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+  .lang-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px;}
+  /**
+   * Section rhythm (MW: easier to skim and scan). Grids get a real gutter,
+   * consecutive blocks get space, and `.sep` is a hairline for where a block
+   * of cards ends and the next begins so the eye has something to stop on.
+   */
+  .grid{row-gap:16px;}
+  .grid + .grid{margin-top:20px;}
+  .sep{border:0;border-top:1px solid var(--line);margin:28px 0 22px;}
+  .cb-page .grid + .grid{margin-top:24px;}
+  /**
+   * Section rhythm (MW: easier to skim). Grids get a real gutter, cards get
+   * space between rows, and a hairline separates one block of cards from the
+   * next so the eye has something to stop on.
+   */
+  .grid{row-gap:16px;}
+  .card + .card, .grid + .grid{margin-top:18px;}
+  .sep{border:0;border-top:1px solid var(--line);margin:26px 0 22px;}
+  .slide .card-title{margin-bottom:12px;}
+  .cb-page .grid + .grid{margin-top:22px;}
   /**
    * Platform mark on a slide title. The monogram sits underneath and the real
    * logo covers it when the file exists, so both states occupy the same box and
@@ -2073,16 +2094,21 @@ function renderReport() {
        * the figure sit in the same card as the mark so each channel reads as
        * one object.
        */
+      /**
+       * Identity on the LEFT (mark + name), performance on the RIGHT (MW).
+       * The figure is the thing being scanned down the column, so it is set
+       * large and right-aligned; the name is what you read once.
+       */
       const card = (r) => `<div class="cbc">
-        <div class="cbc-body">
-          <div class="cbc-txt">
-            <div class="cbc-lab">${esc(r.label)}</div>
-            <div class="cbc-num">${num(r.clicks)} <span class="cbc-unit">clicks</span></div>
-            <div class="cbc-foot">${r.prev
-              ? `${changeText((r.clicks - r.prev) / r.prev)} <span class="cbc-prev">vs ${num(r.prev)}</span>`
-              : '<span class="dlt none">new this month</span>'}</div>
-          </div>
-          ${r.logo ? plogo(r.logo, 44) : ''}
+        <div class="cbc-id">
+          ${r.logo ? plogo(r.logo, 52) : ''}
+          <span class="cbc-lab">${esc(r.label)}</span>
+        </div>
+        <div class="cbc-perf">
+          <div class="cbc-num">${num(r.clicks)}<span class="cbc-unit">clicks</span></div>
+          <div class="cbc-foot">${r.prev
+            ? `${changeText((r.clicks - r.prev) / r.prev)} <span class="cbc-prev">vs ${num(r.prev)}</span>`
+            : '<span class="dlt none">new this month</span>'}</div>
         </div>
       </div>`;
       return `<div class="cb-page ${idx === 0 ? 'active' : ''}" data-cbpage="${esc(key)}">
@@ -2096,6 +2122,7 @@ function renderReport() {
             : changeText(s.totalChangePct), { icon: 'views',
             sub: s.totalPrev ? `vs ${num(s.totalPrev)} last month` : '' })}
         </div>
+        <hr class="sep">
         <div class="grid g-2">${shown.map(card).join('')}</div>
       </div>`;
     };
@@ -5549,7 +5576,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.113.0';
+const CLIENT_BUILD = '3.114.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.113.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.114.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -691,6 +691,39 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.114.0 — chat cards redesigned; marks 2x; THE TWO CLICK EVENTS DISAGREE.**
+
+**READ THIS BEFORE TRUSTING A CHAT CHANNEL NUMBER.** The GTM custom event and
+GA4 enhanced measurement report the same channels roughly **5x apart**:
+
+| | channels | total (BGH, Jul) |
+|---|---|---|
+| `click_chat_bubble` (GTM) | 10 | 503 |
+| `click` (enhanced measurement) | 8 | ~2,414 |
+
+They are not measuring the same thing. Enhanced measurement fires on every
+outbound anchor click and **structurally cannot see Webchat or WeChat**, which
+are not outbound links — that is why it only finds eight. The GTM event sees all
+ten under one consistent method. **The Looker deck's magnitudes match enhanced
+measurement**, so the old deck counts the inflated set.
+
+The GTM event is displayed. `altChannelClicks` carries the enhanced-measurement
+total on the payload so the gap stays measurable instead of being a matter of
+memory. **MW to decide which the deck should report** — it is a definition
+question, not a bug, and switching is one line.
+
+**Cards redesigned** (MW): identity left (mark at 52px + name), performance
+right (figure at 38px + MoM). Asserted structurally in `boot.js` — two siblings
+per card — so a restyle that collapses them fails the suite rather than just
+looking different.
+
+**Marks are 2x**: `.plogo` default 26px to 40px, assistant marks in the AI table
+16px to 26px, slide titles given a 44px min-height to sit them properly.
+
+**Section rhythm**: real grid gutters, space between consecutive blocks, and a
+`.sep` hairline between the headline scorecards and the channel cards.
+
 
 **v3.113.0 — Chat Bubble reads the GTM custom event; bubble opens now work.**
 

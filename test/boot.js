@@ -585,6 +585,20 @@ setTimeout(() => {
         // same container as the figure rather than floating beside it.
         const marks = pages[0].querySelectorAll(".plogo").length;
         if (marks < labels.length) return fail("chat bubble", `${marks} marks for ${labels.length} channels`);
+        /**
+         * Structure MW asked for: identity (mark + name) on the left, the
+         * figure on the right. Asserted as two siblings inside each card so a
+         * future restyle that collapses them back into one column fails here
+         * rather than looking merely different.
+         */
+        const cards = [...pages[0].querySelectorAll(".cbc")];
+        if (!cards.length) return fail("chat bubble", "no channel cards");
+        const split = cards.filter(c => c.querySelector(".cbc-id .plogo")
+                                     && c.querySelector(".cbc-id .cbc-lab")
+                                     && c.querySelector(".cbc-perf .cbc-num"));
+        if (split.length !== cards.length) {
+          return fail("chat bubble", `${split.length}/${cards.length} cards split identity/performance`);
+        }
         // Two per row (MW). Footer removed, so no note should remain.
         if (/Unrecognised click ids/.test(pages[0].textContent)) {
           return fail("chat bubble", "footer still rendering");

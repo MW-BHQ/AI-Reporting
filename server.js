@@ -2514,6 +2514,25 @@ async function buildReport(from, to) {
     };
     const now = tally(cur);
     const prev = tally(was);
+    /**
+     * THE TWO EVENTS DISAGREE, by roughly 5x on the same channels.
+     *
+     * BGH, July: the GTM event reports 503 channel clicks across 10 channels;
+     * enhanced measurement reported 2,414 across 8. The Looker deck's
+     * magnitudes match the enhanced-measurement figures, so that is what the
+     * old deck counts.
+     *
+     * Neither is provably right from here, and they are not measuring quite the
+     * same thing: enhanced measurement fires on every outbound anchor click and
+     * STRUCTURALLY CANNOT SEE Webchat or WeChat, which are not outbound links.
+     * The GTM event sees all ten and is one consistent method.
+     *
+     * The GTM event is displayed, and the alternative total is carried in the
+     * payload so the gap is measurable rather than a matter of memory.
+     */
+    const altTally = customOk ? tally(fromLink(data.chatBubble)) : null;
+    const altChannelClicks = altTally
+      ? Object.values(altTally.per.BHQ || {}).reduce((a, v) => a + v, 0) : null;
     const scopeRows = (scope) => {
       const cur = now.per[scope] || {};
       const was = prev.per[scope] || {};
@@ -2555,7 +2574,7 @@ async function buildReport(from, to) {
     };
     const byScope = { BHQ: scopeRows("BHQ") };
     for (const b of BRANDS) byScope[b.key] = scopeRows(b.key);
-    return { available: true, byScope, source,
+    return { available: true, byScope, source, altChannelClicks,
       // Which GA4 events these clicks actually arrived under, so a channel
       // reading zero can be told apart from a channel tracked under an event
       // nobody expected.
