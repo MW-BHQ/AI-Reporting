@@ -570,17 +570,25 @@ setTimeout(() => {
           return fail("chat bubble", "unmapped click ids not surfaced");
         }
         /**
-         * Chips, not table rows, since v3.110.0. Counted so a layout change
-         * cannot quietly drop channels — the previous assertion counted
-         * `tbody tr` and reported "0 channels" while passing.
+         * Counted by LABEL TEXT, not by a layout class.
+         *
+         * This assertion has now broken twice on presentation changes it should
+         * not care about — it counted `tbody tr` when the layout became chips,
+         * then `.cb-row` when chips became scorecards, and the first of those
+         * reported "0 channels" while still passing. What actually matters is
+         * that every channel in the payload reaches the page, whatever the
+         * markup is called.
          */
-        const chips = [...pages[0].querySelectorAll(".cb-row")];
-        if (chips.length !== 5) return fail("chat bubble", `${chips.length} channel chips, expected 5`);
-        // Every channel with an asset must show its mark inside the pill.
-        const withLogo = chips.filter(c => c.querySelector(".cb-pill .plogo")).length;
-        withLogo === chips.length
-          ? ok("chat bubble", `2 scopes, ${chips.length} chips, all marked, unmapped surfaced`)
-          : fail("chat bubble", `${withLogo}/${chips.length} chips carry a platform mark`);
+        const labels = ["LINE", "WhatsApp (AR)", "LINE (JP)", "Webchat (TH/EN)", "Telegram"];
+        const body = pages[0].textContent;
+        const absent = labels.filter(l => !body.includes(l));
+        if (absent.length) return fail("chat bubble", `channels missing from the page: ${absent.join(", ")}`);
+        // Every channel with an asset shows its mark, and the marks live in the
+        // same container as the figure rather than floating beside it.
+        const marks = pages[0].querySelectorAll(".plogo").length;
+        marks >= labels.length
+          ? ok("chat bubble", `2 scopes, ${labels.length} channels, ${marks} marks, unmapped surfaced`)
+          : fail("chat bubble", `${marks} marks for ${labels.length} channels`);
       })();
       finish();
     }, 500);

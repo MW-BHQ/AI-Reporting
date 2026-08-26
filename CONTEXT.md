@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.110.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.111.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -691,6 +691,36 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.111.0 — all 19 icons bundled; remote fallback removed; chat channels are scorecards.**
+
+**The last four assets are in**: `google.svg`, `google-ads.svg`, `meta.svg`,
+`tiktok.svg`. Every entry in `PLATFORM` now has a real file — 19 of 19.
+
+**The Wikimedia fallback is GONE**, and with it the runtime dependency on a
+third-party CDN for a deck that gets printed. `plogo()` is one `img` with a
+monogram underneath as last resort; the `data-alt` two-stage chain is deleted.
+No GA4 entry at all (MW).
+
+**Marks are bigger and no longer glossy** (MW: "make it big, dont be shine").
+Two things were doing that: an inner `background:#fff` with 2px padding, which
+framed every logo as a shiny sticker and shrank the art inside its own box, and
+the brand colour on the WRAPPER, which put transparent logos on an unrelated
+background. The colour now belongs to the monogram only, the image sits on
+transparent ground at full size, 26px.
+
+**Chat Bubble channels are SCORECARDS**, one per channel, matching `.mini`
+elsewhere: label and mark on top, the figure, MoM against last month beneath. The
+pill-plus-floating-number layout put each value outside the card it belonged to,
+which is what read as odd. Channels with no clicks stay visible but muted.
+
+**An assertion that broke twice on presentation, now written against meaning.**
+The chat-bubble check counted `tbody tr`, then `.cb-row`, and each layout change
+broke it — the first silently, reporting "0 channels" while passing. It asserts
+the channel LABELS reach the page and that marks are present, which is what
+actually matters and survives the next restyle. **A test coupled to a class name
+is testing the CSS, not the behaviour.**
+
 
 **v3.110.0 — real brand icons installed; Chat Bubble restyled to the deck.**
 

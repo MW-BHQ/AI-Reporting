@@ -495,28 +495,26 @@
      a Search page for a locale that has articles but no search data. */
   @media screen{ .clang-page:not(.active){display:none;} }
   /**
-   * Chat bubble channel chips, laid out after the reference deck: a rounded
-   * pill naming the channel with its mark on the right, and the count beside
-   * it. The pill sits on a tinted panel so ten of them read as a set.
+   * Chat bubble channel SCORECARDS. Same language as `.mini`: accent rule on
+   * top, label with its mark, the figure, then MoM against last month.
+   * A channel with no clicks is muted but still shown — "nobody used WeChat" is
+   * a finding, and hiding it would make the set look shorter than it is.
    */
-  .cb-grid{gap:10px 16px;}
-  .cb-row{display:flex;align-items:center;gap:10px;margin-bottom:9px;}
-  .cb-pill{
-    display:flex;align-items:center;justify-content:space-between;gap:8px;
-    flex:1 1 auto;min-width:0;background:#fff;border:1px solid var(--stroke);
-    border-radius:26px;padding:4px 5px 4px 15px;box-shadow:0 1px 2px rgba(20,20,60,.05);
-  }
-  .cb-name{font-size:12.5px;font-weight:650;color:var(--ink);white-space:nowrap;
-    overflow:hidden;text-overflow:ellipsis;}
-  .cb-logo{flex:0 0 auto;display:flex;}
-  .cb-logo .plogo{margin-right:0;border-radius:50%;}
+  .cbc{border:1px solid var(--line);border-radius:10px;padding:10px 12px 11px;
+    background:linear-gradient(180deg,rgba(108,92,231,.055),rgba(108,92,231,0));
+    border-top:2px solid var(--violet);min-width:0;}
+  .cbc-top{display:flex;align-items:center;justify-content:space-between;gap:8px;
+    margin-bottom:6px;min-height:30px;}
+  .cbc-lab{font-size:11.5px;font-weight:650;color:var(--ink-2);line-height:1.25;
+    overflow-wrap:anywhere;}
+  .cbc-top .plogo{margin-right:0;}
+  .cbc-num{font-size:24px;font-weight:750;line-height:1.05;color:var(--ink);}
+  .cbc-unit{font-size:11px;font-weight:600;color:var(--faint);}
+  .cbc-foot{font-size:10px;margin-top:3px;}
+  .cbc-prev{color:var(--faint);}
+  .cbc.is-zero{border-top-color:var(--line);background:none;}
+  .cbc.is-zero .cbc-num{color:var(--faint);font-weight:600;}
   .cb-ask{font-size:9.5px;color:var(--amber);font-weight:700;vertical-align:2px;}
-  .cb-val{display:flex;align-items:center;gap:7px;flex:0 0 132px;justify-content:flex-end;}
-  .cb-mom{font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);}
-  .cb-num{font-size:19px;font-weight:750;color:var(--ink);line-height:1.1;white-space:nowrap;}
-  .cb-clicks{font-size:10.5px;font-weight:600;color:var(--ink-2);}
-  .cb-delta{font-size:10px;line-height:1.2;}
-  @media(max-width:1080px){ .cb-val{flex-basis:auto;} }
   /* Chat bubble scope tabs: hospital vs BHQ, same show-one-of-two mechanism. */
   @media screen{ .cb-page:not(.active){display:none;} }
   @media print{ .cb-page{display:block!important;} }
@@ -528,12 +526,23 @@
    * logo covers it when the file exists, so both states occupy the same box and
    * the title never reflows depending on which assets are installed.
    */
+  /**
+   * The real asset sits on TRANSPARENT ground with no padding, plate or shadow
+   * (MW: "make it big, dont be shine"). The white inner plate and inset padding
+   * that were here made every mark look like a glossy sticker and shrank the
+   * art inside its own box.
+   *
+   * The coloured `--pc` background belongs to the MONOGRAM only, so it is
+   * applied to `b` rather than the wrapper — otherwise a transparent logo sits
+   * on an unrelated brand colour.
+   */
   .plogo{position:relative;display:inline-flex;align-items:center;justify-content:center;
-    width:22px;height:22px;border-radius:5px;margin-right:8px;vertical-align:-4px;
-    background:var(--pc);overflow:hidden;flex:0 0 auto;}
-  .plogo b{font-size:11.5px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.2px;}
-  .plogo img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;
-    background:#fff;padding:2px;box-sizing:border-box;}
+    width:26px;height:26px;margin-right:8px;vertical-align:-6px;
+    overflow:visible;flex:0 0 auto;}
+  .plogo b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:var(--pc);border-radius:6px;
+    font-size:11.5px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.2px;}
+  .plogo img{position:relative;z-index:1;width:100%;height:100%;object-fit:contain;}
   @media print{ .plogo{-webkit-print-color-adjust:exact;print-color-adjust:exact;} }
   /**
    * MINI SCORECARDS (the 2x5 grids). The plain stack of numbers read as a wall
@@ -1508,54 +1517,43 @@ function renderReport() {
    * Wikimedia thumbnails are requested at 240px: these render at 22px, so a
    * 3840px original would be several hundred KB per slide for nothing.
    */
-  const WIKI = 'https://upload.wikimedia.org/wikipedia';
+  /**
+   * PLATFORM MARKS. Every entry has a real asset in `public/brand/`, so there is
+   * no remote fallback: the Wikimedia URLs were removed in v3.111.0 once the
+   * files were bundled, and with them the runtime dependency on a third-party
+   * CDN for a printed deck.
+   *
+   * `mono` survives as the last resort if a file ever goes missing — it costs
+   * nothing and beats a broken-image box on a slide.
+   *
+   * No GA4 entry (MW): a GA4 logo on a GA4 slide labels the obvious.
+   */
   const PLATFORM = {
-    google:    { label: 'Google', mono: 'G', color: '#4285F4', file: 'google.svg',
-                 url: `${WIKI}/commons/thumb/c/c1/Google_%22G%22_logo.svg/240px-Google_%22G%22_logo.svg.png` },
-    google_ads:{ label: 'Google Ads', mono: 'Ad', color: '#3C8BD9', file: 'google-ads.svg',
-                 url: `${WIKI}/commons/thumb/c/c7/Google_Ads_logo.svg/240px-Google_Ads_logo.svg.png` },
-    gbp:       { label: 'Business Profile', mono: 'B', color: '#34A853', file: 'gbp.svg',
-                 url: `${WIKI}/fr/thumb/a/a4/Google-My-Business_logo.svg/240px-Google-My-Business_logo.svg.png` },
-    facebook:  { label: 'Facebook', mono: 'f', color: '#1877F2', file: 'facebook.svg',
-                 url: `${WIKI}/commons/thumb/b/b9/2023_Facebook_icon.svg/240px-2023_Facebook_icon.svg.png` },
-    meta:      { label: 'Meta', mono: 'M', color: '#0866FF', file: 'meta.svg',
-                 url: `${WIKI}/commons/thumb/0/05/Meta_Platforms_Inc._logo_%28cropped%29.svg/240px-Meta_Platforms_Inc._logo_%28cropped%29.svg.png` },
-    tiktok:    { label: 'TikTok', mono: 'T', color: '#111111', file: 'tiktok.svg',
-                 url: `${WIKI}/en/a/a9/TikTok_logo.svg` },
-    // No GA4 mark (MW): the Channels slide is about GA4 by definition, so a
-    // logo there labels the obvious.
+    google:    { label: 'Google', mono: 'G', color: '#4285F4', file: 'google.svg' },
+    google_ads:{ label: 'Google Ads', mono: 'Ad', color: '#3C8BD9', file: 'google-ads.svg' },
+    gbp:       { label: 'Business Profile', mono: 'B', color: '#34A853', file: 'gbp.svg' },
+    facebook:  { label: 'Facebook', mono: 'f', color: '#1877F2', file: 'facebook.svg' },
+    meta:      { label: 'Meta', mono: 'M', color: '#0866FF', file: 'meta.svg' },
+    tiktok:    { label: 'TikTok', mono: 'T', color: '#111111', file: 'tiktok.svg' },
     claude:    { label: 'Claude', mono: 'C', color: '#D97757', file: 'claude.svg' },
     copilot:   { label: 'Copilot', mono: 'Co', color: '#0A6ED1', file: 'copilot.svg' },
     telegram:  { label: 'Telegram', mono: 'Tg', color: '#26A5E4', file: 'telegram.svg' },
-    // Zalo's asset is a white mark, so the file carries its own blue plate;
-    // white-on-white would have rendered as nothing.
     zalo:      { label: 'ZALO', mono: 'Z', color: '#0068FF', file: 'zalo.svg' },
     wechat:    { label: 'WeChat', mono: 'We', color: '#07C160', file: 'wechat.svg' },
     webchat:   { label: 'Webchat', mono: 'Wc', color: '#5B6BF5', file: 'webchat.svg' },
-    // Not yet on a slide. Held here so the next block that needs one does not
-    // have to go hunting: YouTube and LINE are open items, and the assistant
-    // marks label rows in the AI table.
-    youtube:   { label: 'YouTube', mono: 'Y', color: '#FF0000', file: 'youtube.svg',
-                 url: `${WIKI}/commons/thumb/0/09/YouTube_full-color_icon_%282017%29.svg/240px-YouTube_full-color_icon_%282017%29.svg.png` },
-    instagram: { label: 'Instagram', mono: 'IG', color: '#C13584', file: 'instagram.svg',
-                 url: `${WIKI}/commons/9/95/Instagram_logo_2022.svg` },
-    line:      { label: 'LINE', mono: 'L', color: '#06C755', file: 'line.svg',
-                 url: `${WIKI}/commons/thumb/4/41/LINE_logo.svg/240px-LINE_logo.svg.png` },
-    messenger: { label: 'Messenger', mono: 'Me', color: '#00B2FF', file: 'messenger.svg',
-                 url: `${WIKI}/commons/thumb/6/6c/Facebook_Messenger_logo_2018.svg/240px-Facebook_Messenger_logo_2018.svg.png` },
-    whatsapp:  { label: 'WhatsApp', mono: 'W', color: '#25D366', file: 'whatsapp.svg',
-                 url: `${WIKI}/commons/thumb/6/6b/WhatsApp.svg/240px-WhatsApp.svg.png` },
-    chatgpt:   { label: 'ChatGPT', mono: 'C', color: '#10A37F', file: 'chatgpt.svg',
-                 url: `${WIKI}/commons/thumb/e/ef/ChatGPT-Logo.svg/240px-ChatGPT-Logo.svg.png` },
-    gemini:    { label: 'Gemini', mono: 'G', color: '#8E7CF3', file: 'gemini.svg',
-                 url: `${WIKI}/commons/thumb/1/1d/Google_Gemini_icon_2025.svg/240px-Google_Gemini_icon_2025.svg.png` },
+    youtube:   { label: 'YouTube', mono: 'Y', color: '#FF0000', file: 'youtube.svg' },
+    instagram: { label: 'Instagram', mono: 'IG', color: '#C13584', file: 'instagram.svg' },
+    line:      { label: 'LINE', mono: 'L', color: '#06C755', file: 'line.svg' },
+    messenger: { label: 'Messenger', mono: 'Me', color: '#00B2FF', file: 'messenger.svg' },
+    whatsapp:  { label: 'WhatsApp', mono: 'W', color: '#25D366', file: 'whatsapp.svg' },
+    chatgpt:   { label: 'ChatGPT', mono: 'C', color: '#10A37F', file: 'chatgpt.svg' },
+    gemini:    { label: 'Gemini', mono: 'G', color: '#8E7CF3', file: 'gemini.svg' },
   };
   const plogo = (id, size) => {
     const p = PLATFORM[id]; if (!p) return '';
     const sz = size ? ` style="--pc:${p.color};width:${size}px;height:${size}px"` : ` style="--pc:${p.color}"`;
     return `<span class="plogo"${sz} title="${esc(p.label)}"
-      ><img src="brand/${esc(p.file)}" alt="" loading="lazy" data-alt="${esc(p.url || '')}"
-        onerror="if(this.dataset.alt){this.src=this.dataset.alt;this.dataset.alt='';}else{this.remove();}"
+      ><img src="brand/${esc(p.file)}" alt="" loading="lazy" onerror="this.remove()"
       ><b>${esc(p.mono)}</b></span>`;
   };
   /** Assistant source -> platform mark, for the AI table rows. */
@@ -2069,27 +2067,22 @@ function renderReport() {
       if (!s) return '';
       const shown = s.rows.filter(r => r.clicks || r.prev);
       /**
-       * Laid out like the reference deck: a pill naming the channel with its
-       * mark, and the count beside it. Two columns, so ten channels read down
-       * rather than as one long list.
+       * One SCORECARD per channel (MW), in the same visual language as the mini
+       * cards elsewhere: label across the top with the mark, the count as the
+       * figure, MoM beneath. The previous pill-plus-floating-number layout put
+       * the value outside the card it belonged to, which is what read as odd.
        */
-      const chip = (r) => `<div class="cb-row">
-        <div class="cb-pill">
-          <span class="cb-name">${esc(r.label)}${r.assumed
+      const card = (r) => `<div class="cbc${r.clicks ? '' : ' is-zero'}">
+        <div class="cbc-top">
+          <span class="cbc-lab">${esc(r.label)}${r.assumed
             ? ' <span class="cb-ask" title="Label assumed \u2014 confirm which language this number serves">?</span>' : ''}</span>
-          <span class="cb-logo">${r.logo ? plogo(r.logo, 30) : ''}</span>
+          ${r.logo ? plogo(r.logo, 30) : ''}
         </div>
-        <div class="cb-val">
-          <div class="cb-mom">MoM</div>
-          <div>
-            <div class="cb-num">${num(r.clicks)} <span class="cb-clicks">Clicks</span></div>
-            <div class="cb-delta">${r.prev
-              ? changeText((r.clicks - r.prev) / r.prev)
-              : '<span class="dlt none">new</span>'}</div>
-          </div>
-        </div>
+        <div class="cbc-num">${num(r.clicks)} <span class="cbc-unit">clicks</span></div>
+        <div class="cbc-foot">${r.prev
+          ? `${changeText((r.clicks - r.prev) / r.prev)} <span class="cbc-prev">vs ${num(r.prev)}</span>`
+          : '<span class="dlt none">new this month</span>'}</div>
       </div>`;
-      const half = Math.ceil(shown.length / 2);
       return `<div class="cb-page ${idx === 0 ? 'active' : ''}" data-cbpage="${esc(key)}">
         <div class="grid g-3" style="margin-bottom:14px">
           ${mini('Chat clicks', num(s.total), { lead: true, icon: 'sessions',
@@ -2099,10 +2092,7 @@ function renderReport() {
           ${mini('Channels used', num(shown.filter(r => r.clicks).length),
             { icon: 'find_doctors', sub: `of ${num(s.rows.length)} tracked` })}
         </div>
-        <div class="grid g-2 cb-grid">
-          <div>${shown.slice(0, half).map(chip).join('')}</div>
-          <div>${shown.slice(half).map(chip).join('')}</div>
-        </div>
+        <div class="grid g-4">${shown.map(card).join('')}</div>
       </div>`;
     };
     const evNote = (CB.events || []).length
@@ -5569,7 +5559,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.110.0';
+const CLIENT_BUILD = '3.111.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
