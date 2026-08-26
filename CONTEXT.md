@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.115.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.116.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -691,6 +691,41 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.116.0 — rem type scale; 64px section marks (properly); desc-first sorting.**
+
+**A TAILWIND-SHAPED TYPE SCALE** in `:root`, all rem (MW): `--text-2xs` .6875rem
+through `--text-4xl` 2.25rem, plus `--space-sm|md|lg|xl|2xl`. **Base moved from
+14px to 1rem (16px)** — body copy was reading small because the base was below
+browser default. Report components take their sizes from the scale now.
+
+**New audit rule `type:scale`** so this cannot rot: a px `font-size` inside a
+Monthly Reports component fails the build. It is an **allowlist**, covering only
+the components actually migrated — the app chrome still carries ~80 px sizes
+that predate the scale, and converting those in one untested pass would be a
+large change to screens nobody asked about. Extend the list as areas move over.
+
+That rule needed two fixes before it was worth anything: it first flagged all 87
+app-chrome sizes, and then flagged ten legitimate print and responsive
+overrides, because it tested each LINE for `@media` when the overrides live
+INSIDE the block on lines that never mention it. It tracks brace depth now.
+
+**THE 64px SECTION MARK, THIRD ATTEMPT.** Two previous edits reported success
+and changed nothing — one anchor had drifted, one rule was never inserted. It is
+now asserted from the STYLESHEET in `boot.js`, which needed a module-level `SRC`
+alias: inside the render callback `html` is shadowed by the rendered report and
+`js` holds only the `<script>` block, so neither can see a CSS rule. Both of
+those traps had already produced a vacuous pass in this file.
+
+- **Sortable columns sort DESC first** (MW). Every sortable column is a metric
+  and the first question is which is biggest; ascending-first needed a second
+  click every time.
+- **4rem top and bottom padding on every section**, with a hairline between, so
+  blocks read as separate things.
+- **Chat Bubble moved to the very bottom** of the deck.
+- Perplexity icon added (20 assets); its mark now appears in the AI table, and
+  the Copilot mark finally got the 26px it was supposed to have two releases ago.
+
 
 **v3.115.0 — layout pass: 64px section marks, equal card heights, fixed chat order.**
 

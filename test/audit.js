@@ -218,5 +218,50 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
     : ok("charts:wired", `${targets.length} draw calls all have canvases`);
 }
 
+/**
+ * TYPE SCALE — font sizes come from the scale in `:root`, not from one-off px.
+ *
+ * MW asked for Tailwind-shaped rem steps precisely so a size is changed in one
+ * place. A `font-size:13px` dropped into a new block silently opts out of that
+ * and drifts from everything around it.
+ *
+ * Only the report's own component styles are checked; the app chrome, print
+ * block and responsive overrides predate the scale and are exempted by name
+ * rather than being quietly ignored.
+ */
+{
+  const styleBlock = html.slice(html.indexOf("<style>"), html.indexOf("</style>"));
+  /**
+   * ALLOWLIST, not a blocklist. The app chrome still carries 80-odd px sizes
+   * that predate the scale, and converting them wholesale in one pass would be
+   * a large untested change to screens nobody asked about. This guards the
+   * Monthly Reports components that HAVE been migrated, so they cannot drift
+   * back; extend the list as other areas move over.
+   */
+  const SCOPED = /^\s*\.(slide-title|note|stat|mini|cbc|cbc-\w+|card-title|cb-\w+|lang-tab|clang-tab)\b|^\s*table\{/;
+  /**
+   * @media blocks are skipped by tracking brace depth, not by testing the line
+   * for "@media" — the overrides live INSIDE the block, on lines that never
+   * mention it, so a per-line test reported ten offenders that were all
+   * legitimate print and responsive rules.
+   */
+  const offenders = [];
+  let mediaDepth = 0, inMedia = false;
+  for (const line of styleBlock.split("\n")) {
+    if (/@media/.test(line)) { inMedia = true; mediaDepth = 0; }
+    if (inMedia) {
+      mediaDepth += (line.match(/\{/g) || []).length - (line.match(/\}/g) || []).length;
+      if (mediaDepth <= 0) inMedia = false;
+      continue;
+    }
+    if (SCOPED.test(line) && /font-size:\s*[\d.]+px/.test(line)) {
+      offenders.push(line.trim().slice(0, 60));
+    }
+  }
+  offenders.length
+    ? fail("type:scale", `${offenders.length} px font-size outside the scale: ${offenders[0]}`)
+    : ok("type:scale", "report font sizes all come from the rem scale");
+}
+
 console.log(failures ? `\n${failures} audit check(s) failed` : "\nstatic audit clean");
 process.exit(failures ? 1 : 0);

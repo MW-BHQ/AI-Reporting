@@ -13,6 +13,14 @@ const { JSDOM } = require("jsdom");
 
 const file = path.join(__dirname, "..", "public", "index.html");
 const html = fs.readFileSync(file, "utf8");
+/**
+ * Module-level alias for the WHOLE source file, CSS included.
+ *
+ * Inside the render callback `html` is shadowed by the rendered report and `js`
+ * is only the <script> block, so neither can see a stylesheet rule. Both traps
+ * have already produced a vacuous pass in this file.
+ */
+const SRC = html;
 
 let failures = 0;
 
@@ -469,6 +477,14 @@ setTimeout(() => {
       })();
 
       (() => {
+        /**
+         * The 64px section mark has now failed to apply TWICE from edits that
+         * reported success — once because the anchor had drifted, once because
+         * the rule was never inserted. Asserted from the stylesheet so "it
+         * looked applied" is not the check.
+         */
+        const rule = /\.slide-title \.plogo\{width:4rem;height:4rem/.test(SRC);
+        if (!rule) return fail("platform marks", "section header mark is not 4rem/64px");
         const marks = [...(root ? root.querySelectorAll(".slide-title .plogo") : [])];
         /**
          * Each platform asserted BY NAME. A "6 or more" count passed when the

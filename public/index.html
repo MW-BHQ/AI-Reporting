@@ -17,6 +17,26 @@
      page degrades to a system font — cosmetic only, nothing breaks. */
 
   :root{
+    /**
+     * TYPE SCALE, Tailwind-shaped and in rem (MW). One place to change a size,
+     * and everything scales together if the base ever moves.
+     *
+     * Base was 14px, which is why body copy read small. It is 1rem (16px) now,
+     * Tailwind's `base`; the smaller steps carry the dense table and note text
+     * that genuinely needs to be smaller than body copy.
+     */
+    --text-2xs:.6875rem;  /* 11px  — dense table meta, axis labels        */
+    --text-xs:.75rem;     /* 12px  — notes, captions, card sub-lines      */
+    --text-sm:.875rem;    /* 14px  — table cells, secondary copy          */
+    --text-base:1rem;     /* 16px  — body copy                            */
+    --text-lg:1.125rem;   /* 18px  — card titles                          */
+    --text-xl:1.25rem;    /* 20px  — section headings                     */
+    --text-2xl:1.5rem;    /* 24px  — small figures                        */
+    --text-3xl:1.875rem;  /* 30px  — scorecard figures                    */
+    --text-4xl:2.25rem;   /* 36px  — headline figures                     */
+    /* Spacing steps, same idea. */
+    --space-sm:.5rem; --space-md:1rem; --space-lg:1.5rem;
+    --space-xl:2.5rem; --space-2xl:4rem;
     --bg:#EEF2FB;
     --bg-2:#E4EAF7;
     --glass:rgba(255,255,255,.72);
@@ -50,7 +70,9 @@
     color:var(--ink);
     font-family:'Poppins','Sarabun',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
     -webkit-font-smoothing:antialiased;
-    font-size:14px;
+    /* Base is 1rem (16px), Tailwind's `base`. Everything else steps off the
+       scale in :root rather than being a one-off px value. */
+    font-size:var(--text-base);
   }
   /* Thai and other scripts fall through Poppins to Sarabun, then system */
   .i18n{font-family:'Poppins','Sarabun',system-ui,'Noto Sans Thai','Noto Sans JP','Noto Sans Arabic','Noto Sans Myanmar','Noto Sans Khmer',sans-serif;}
@@ -168,10 +190,10 @@
   .g-2-1{grid-template-columns:1.6fr 1fr;}
   .mt{margin-top:14px;}
 
-  .stat .lab{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);display:flex;align-items:center;gap:6px;}
-  .stat .val{font-size:23px;font-weight:600;margin-top:7px;letter-spacing:-.02em;}
-  .stat .val.na{color:var(--faint);font-weight:500;font-size:19px;}
-  .stat .sub{font-size:11.5px;color:var(--muted);margin-top:3px;}
+  .stat .lab{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;color:var(--faint);display:flex;align-items:center;gap:6px;}
+  .stat .val{font-size:var(--text-3xl);font-weight:600;margin-top:7px;letter-spacing:-.02em;}
+  .stat .val.na{color:var(--faint);font-weight:500;font-size:var(--text-2xl);}
+  .stat .sub{font-size:var(--text-xs);color:var(--muted);margin-top:3px;}
   .chip{width:7px;height:7px;border-radius:50%;display:inline-block;}
 
   /* ---------------- funnel ---------------- */
@@ -196,7 +218,7 @@
   .legend div{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-2);}
 
   /* ---------------- tables ---------------- */
-  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  table{width:100%;border-collapse:collapse;font-size:var(--text-sm);}
   th{text-align:left;color:var(--muted);font-weight:500;font-size:11.5px;letter-spacing:0;padding:0 8px 9px 0;border-bottom:1px solid var(--line);white-space:nowrap;}
   /* Numeric columns need separation from each other, not just from the edge.
      With padding-left:0 two adjacent headers ran together as "ViewsRevenue"
@@ -405,7 +427,7 @@
     background:var(--violet-soft);border-radius:4px;z-index:0;}
   td.barcell{position:relative;}
   td.barcell b{position:relative;}
-  .stat .sub2{font-size:10.5px;color:var(--faint);margin-top:2px;}
+  .stat .sub2{font-size:var(--text-xs);color:var(--faint);margin-top:2px;}
   td.num.bad{color:#D9534F;font-weight:600;} td.num.good{color:#2E9E6F;font-weight:600;}
   .qec-head,.qec{display:inline-flex;align-items:center;}
   .qec-head b{width:38px;text-align:center;font-weight:600;color:var(--muted);}
@@ -454,7 +476,7 @@
   .state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:64px 20px;gap:9px;text-align:center;color:var(--muted);}
   .state .big{font-size:14px;font-weight:600;color:var(--ink-2);}
   .state.bad .big{color:var(--rose);}
-  .note{font-size:11.5px;color:var(--faint);margin-top:12px;padding-top:11px;border-top:1px solid var(--line);}
+  .note{font-size:var(--text-sm);color:var(--faint);margin-top:12px;padding-top:11px;border-top:1px solid var(--line);}
   .warnbox{background:#FFF8EC;border:1px solid #FBE3BE;color:#9A6712;border-radius:12px;padding:11px 14px;font-size:12px;margin-bottom:14px;}
   .chart-wrap{height:250px;}
   .hidden{display:none!important;}
@@ -476,16 +498,23 @@
      quiet section label; in print it becomes the slide title, so the deck
      tells a story by topic rather than being one long scroll. */
   .slide-title{
-    display:flex;align-items:center;justify-content:space-between;gap:12px;
-    font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
-    color:var(--violet);margin:52px 0 14px;
+    display:flex;align-items:center;justify-content:space-between;gap:var(--space-md);
+    min-height:4rem;
+    font-size:var(--text-base);font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--violet);margin:0 0 var(--space-lg);
   }
-  .slide + .slide{margin-top:22px;}
-  .slide-title:first-child{margin-top:4px;}
+  /**
+   * 4rem of breathing room top and bottom on every section (MW), so blocks read
+   * as separate things rather than one continuous scroll. Applied to the SLIDE
+   * rather than the title, because the title is not always the first child.
+   */
+  .slide{padding:var(--space-2xl) 0;}
+  .slide + .slide{margin-top:0;border-top:1px solid var(--line);}
+  .slide:first-child{padding-top:var(--space-md);}
   /* One logo per slide, so every printed page says which hospital it belongs
      to. print-head only renders once, at the top of the document. */
   /* Hospital wordmark at 150px wide (MW). */
-  .slide-logo{width:150px;height:auto;flex:none;opacity:.9;}
+  .slide-logo{width:9.375rem;height:auto;flex:none;opacity:.9;}
   @media print{ .slide-logo{width:150px;opacity:1;} }
   /**
    * Language pages: tabs on screen, one printed slide each. The deck needs a
@@ -522,14 +551,14 @@
   @media(max-width:1080px){ .cb-cards{padding-left:0;padding-right:0;} }
   @media print{ .cb-cards{padding-left:6rem;padding-right:6rem;} }
   .cbc-id{display:flex;align-items:center;gap:14px;min-width:0;}
-  .cbc-lab{font-size:15px;font-weight:700;color:var(--ink);line-height:1.25;
+  .cbc-lab{font-size:var(--text-lg);font-weight:700;color:var(--ink);line-height:1.25;
     overflow-wrap:anywhere;}
   .cbc-id .plogo{margin-right:0;vertical-align:0;}
   .cbc-perf{text-align:right;flex:0 0 auto;}
-  .cbc-num{font-size:38px;font-weight:750;line-height:1;color:var(--ink);
+  .cbc-num{font-size:var(--text-4xl);font-weight:750;line-height:1;color:var(--ink);
     letter-spacing:-.02em;white-space:nowrap;}
-  .cbc-unit{font-size:12px;font-weight:600;color:var(--faint);margin-left:7px;}
-  .cbc-foot{font-size:12px;margin-top:5px;white-space:nowrap;}
+  .cbc-unit{font-size:var(--text-xs);font-weight:600;color:var(--faint);margin-left:7px;}
+  .cbc-foot{font-size:var(--text-xs);margin-top:5px;white-space:nowrap;}
   .cbc-prev{color:var(--faint);}
   /* A zero reads as a zero; it does not also need to be greyed. */
   @media(max-width:1080px){ .cbc-num{font-size:30px;} }
@@ -552,7 +581,8 @@
   .grid > .card, .grid > .stat, .grid > .mini, .grid > .cbc{height:100%;}
   .grid + .grid{margin-top:20px;}
   .sep{border:0;border-top:1px solid var(--line);margin:28px 0 22px;}
-  .slide .card-title{margin-bottom:12px;}
+  .card-title{font-size:var(--text-lg);font-weight:700;}
+  .slide .card-title{margin-bottom:var(--space-md);}
   .cb-page .grid + .grid{margin-top:24px;}
   /**
    * Platform mark on a slide title. The monogram sits underneath and the real
@@ -564,8 +594,17 @@
    * no border-radius imposed on top of a logo that already has its own shape.
    * Filling a background behind these broke every transparent SVG.
    */
-  .plogo{display:inline-block;width:26px;height:26px;object-fit:contain;
-    margin-right:8px;vertical-align:-7px;flex:0 0 auto;}
+  /**
+   * Marks are the artwork and nothing else — no plate, no padding, no shadow.
+   * Sizes are rem so they track the type scale.
+   */
+  .plogo{display:inline-block;width:1.75rem;height:1.75rem;object-fit:contain;
+    margin-right:.5rem;vertical-align:-.45rem;flex:0 0 auto;}
+  /* Section header mark at 64px (MW). Highest-specificity wins over any inline
+     size, which is why the slide-title rule is written this way rather than
+     passing a size at every call site. */
+  .slide-title .plogo{width:4rem;height:4rem;margin-right:1rem;vertical-align:-1.25rem;}
+  .cb-wrap .slide-title .plogo{width:3rem;height:3rem;vertical-align:-.9rem;}
   @media print{ .plogo{-webkit-print-color-adjust:exact;print-color-adjust:exact;} }
   /**
    * MINI SCORECARDS (the 2x5 grids). The plain stack of numbers read as a wall
@@ -575,14 +614,14 @@
    */
   .mini{border:1px solid var(--line);border-radius:10px;padding:9px 11px 10px;
     background:#fff;}
-  .mini .lab{display:flex;align-items:center;gap:5px;font-size:9.5px;letter-spacing:.06em;
+  .mini .lab{display:flex;align-items:center;gap:5px;font-size:var(--text-2xs);letter-spacing:.06em;
     text-transform:uppercase;color:var(--faint);margin-bottom:3px;white-space:nowrap;
     overflow:hidden;text-overflow:ellipsis;}
   /* actIcon carries its own right margin; the flex gap already spaces it. */
   .mini .lab svg{margin-right:0;flex:0 0 auto;opacity:.85;}
-  .mini .val{font-size:23px;font-weight:750;line-height:1.05;color:var(--ink);}
+  .mini .val{font-size:var(--text-2xl);font-weight:750;line-height:1.05;color:var(--ink);}
 
-  .mini .sub2{font-size:9.5px;color:var(--faint);margin-top:2px;}
+  .mini .sub2{font-size:var(--text-2xs);color:var(--faint);margin-top:2px;}
 
   /**
    * Referrer blacklist switch. Both sets of numbers are in the DOM and CSS
@@ -597,7 +636,7 @@
   /* With no blacklist configured, the clean and full figures are identical. */
   .bl-wrap.bl-none .bl-off{display:none;}
   .lang-tab, .clang-tab{
-    padding:5px 12px;border-radius:20px;font-size:11.5px;font-weight:600;cursor:pointer;
+    padding:.4rem .9rem;border-radius:20px;font-size:var(--text-sm);font-weight:600;cursor:pointer;
     border:1px solid var(--stroke);background:#fff;color:var(--ink-2);
   }
   .lang-tab.active, .clang-tab.active{background:var(--violet);color:#fff;border-color:transparent;}
@@ -948,7 +987,12 @@ document.addEventListener('click', (e) => {
   const rows = [...tbody.rows].filter(r => !r.dataset.child && r.cells.length > idx);
   if (rows.length < 2) return;
 
-  const asc = th.dataset.sort !== 'asc';
+  /**
+   * DESC on the first click (MW). Every sortable column here is a metric, and
+   * the first question is always "which is biggest" — ascending first put the
+   * least interesting rows at the top and needed a second click every time.
+   */
+  const asc = th.dataset.sort === 'desc';
   [...th.parentNode.children].forEach(o => { delete o.dataset.sort; o.classList.remove('sorted'); });
   th.dataset.sort = asc ? 'asc' : 'desc';
   th.classList.add('sorted');
@@ -1567,6 +1611,7 @@ function renderReport() {
     whatsapp:  { label: 'WhatsApp', mono: 'W', color: '#25D366', file: 'whatsapp.svg' },
     chatgpt:   { label: 'ChatGPT', mono: 'C', color: '#10A37F', file: 'chatgpt.svg' },
     gemini:    { label: 'Gemini', mono: 'G', color: '#8E7CF3', file: 'gemini.svg' },
+    perplexity:{ label: 'Perplexity', mono: 'P', color: '#20808D', file: 'perplexity.svg' },
   };
   /**
    * Image only. NO coloured plate and NO monogram underneath.
@@ -1588,7 +1633,8 @@ function renderReport() {
     if (s.includes('chatgpt') || s.includes('openai')) return plogo('chatgpt', 16);
     if (s.includes('gemini') || s.includes('bard')) return plogo('gemini', 16);
     if (s.includes('claude') || s.includes('anthropic')) return plogo('claude', 16);
-    if (s.includes('copilot')) return plogo('copilot', 16);
+    if (s.includes('copilot')) return plogo('copilot', 26);
+    if (s.includes('perplexity')) return plogo('perplexity', 26);
     // No asset yet for Perplexity, DeepSeek, Grok, Mistral and the rest; they
     // render as plain text rather than a wrong logo.
     return '';
@@ -2601,8 +2647,8 @@ function renderReport() {
     ${slide('Shared Paid Media', paidBody.trim(), false, true, 'meta')}
     ${slide('TikTok', tkChannelBody, false, true, 'tiktok')}
     ${tkTopBody ? slide('TikTok \u00b7 Top performances', tkTopBody, false, true, 'tiktok') : ''}
-    ${chatBody ? slide(`Chat Bubble \u00b7 ${sel}`, chatBody) : ''}
-    ${contentBody}`;
+    ${contentBody}
+    ${chatBody ? slide(`Chat Bubble \u00b7 ${sel}`, chatBody) : ''}`;
 
   // Charts must be drawn after the markup is in the DOM.
   if (U && U.months.length && window.Chart) {
@@ -5582,7 +5628,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.115.0';
+const CLIENT_BUILD = '3.116.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
