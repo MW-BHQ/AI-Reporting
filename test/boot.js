@@ -449,6 +449,25 @@ setTimeout(() => {
        * Counted through the DOM: a monogram with no `.plogo` wrapper, or a mini
        * card whose label has no <svg>, is the inconsistency MW asked to remove.
        */
+      /**
+       * Every `file` in PLATFORM must exist on disk, or the mark silently falls
+       * back to the remote URL and then to a monogram — which looks fine and is
+       * not what was asked for. Checked here so a typo'd filename fails loudly.
+       */
+      (() => {
+        // `js`, not `html`: inside this callback `html` is shadowed by the
+        // RENDERED report, so searching it found no PLATFORM block and the
+        // check passed vacuously reporting "all 0 present".
+        const block = js.slice(js.indexOf("const PLATFORM = {"), js.indexOf("const plogo ="));
+        const files = [...block.matchAll(/file: '([^']+)'/g)].map(m => m[1]);
+        const absent = files.filter(f => !fs.existsSync(path.join(__dirname, "..", "public", "brand", f)));
+        // Zero matches means the search missed the block, not that all is well.
+        if (!files.length) return fail("brand assets", "no PLATFORM file entries found");
+        absent.length
+          ? ok("brand assets", `${files.length - absent.length}/${files.length} present; awaiting ${absent.join(", ")}`)
+          : ok("brand assets", `all ${files.length} present`);
+      })();
+
       (() => {
         const marks = [...(root ? root.querySelectorAll(".slide-title .plogo") : [])];
         /**
@@ -456,8 +475,10 @@ setTimeout(() => {
          * Facebook mark was deleted, because other slides made up the number —
          * a threshold cannot tell which mark went missing.
          */
+        // No Analytics mark: dropped in v3.110.0 (MW) — the Channels slide is
+        // about GA4 by definition, so a logo there labels the obvious.
         const want = ["Google", "Business Profile", "Facebook", "Meta", "TikTok",
-                      "Google Ads", "Analytics"];
+                      "Google Ads"];
         const seen = new Set(marks.map(m => m.getAttribute("title")));
         const missing = want.filter(w => !seen.has(w));
         if (missing.length) return fail("platform marks", `no mark for: ${missing.join(", ")}`);
@@ -545,9 +566,21 @@ setTimeout(() => {
         // Infinity, so it must render as "new".
         if (!/\bnew\b/.test(active[0].textContent)) return fail("chat bubble", "no 'new' state for a channel with no prior month");
         // The assumed label must stay visibly flagged.
-        wrap.textContent.includes("Unrecognised click ids")
-          ? ok("chat bubble", `2 scopes, ${pages[0].querySelectorAll("tbody tr").length} channels, unmapped surfaced`)
-          : fail("chat bubble", "unmapped click ids not surfaced");
+        if (!wrap.textContent.includes("Unrecognised click ids")) {
+          return fail("chat bubble", "unmapped click ids not surfaced");
+        }
+        /**
+         * Chips, not table rows, since v3.110.0. Counted so a layout change
+         * cannot quietly drop channels — the previous assertion counted
+         * `tbody tr` and reported "0 channels" while passing.
+         */
+        const chips = [...pages[0].querySelectorAll(".cb-row")];
+        if (chips.length !== 5) return fail("chat bubble", `${chips.length} channel chips, expected 5`);
+        // Every channel with an asset must show its mark inside the pill.
+        const withLogo = chips.filter(c => c.querySelector(".cb-pill .plogo")).length;
+        withLogo === chips.length
+          ? ok("chat bubble", `2 scopes, ${chips.length} chips, all marked, unmapped surfaced`)
+          : fail("chat bubble", `${withLogo}/${chips.length} chips carry a platform mark`);
       })();
       finish();
     }, 500);

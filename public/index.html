@@ -494,6 +494,29 @@
   /* Content tabs: own namespace, so switching a content language cannot blank
      a Search page for a locale that has articles but no search data. */
   @media screen{ .clang-page:not(.active){display:none;} }
+  /**
+   * Chat bubble channel chips, laid out after the reference deck: a rounded
+   * pill naming the channel with its mark on the right, and the count beside
+   * it. The pill sits on a tinted panel so ten of them read as a set.
+   */
+  .cb-grid{gap:10px 16px;}
+  .cb-row{display:flex;align-items:center;gap:10px;margin-bottom:9px;}
+  .cb-pill{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    flex:1 1 auto;min-width:0;background:#fff;border:1px solid var(--stroke);
+    border-radius:26px;padding:4px 5px 4px 15px;box-shadow:0 1px 2px rgba(20,20,60,.05);
+  }
+  .cb-name{font-size:12.5px;font-weight:650;color:var(--ink);white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;}
+  .cb-logo{flex:0 0 auto;display:flex;}
+  .cb-logo .plogo{margin-right:0;border-radius:50%;}
+  .cb-ask{font-size:9.5px;color:var(--amber);font-weight:700;vertical-align:2px;}
+  .cb-val{display:flex;align-items:center;gap:7px;flex:0 0 132px;justify-content:flex-end;}
+  .cb-mom{font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);}
+  .cb-num{font-size:19px;font-weight:750;color:var(--ink);line-height:1.1;white-space:nowrap;}
+  .cb-clicks{font-size:10.5px;font-weight:600;color:var(--ink-2);}
+  .cb-delta{font-size:10px;line-height:1.2;}
+  @media(max-width:1080px){ .cb-val{flex-basis:auto;} }
   /* Chat bubble scope tabs: hospital vs BHQ, same show-one-of-two mechanism. */
   @media screen{ .cb-page:not(.active){display:none;} }
   @media print{ .cb-page{display:block!important;} }
@@ -1499,8 +1522,16 @@ function renderReport() {
                  url: `${WIKI}/commons/thumb/0/05/Meta_Platforms_Inc._logo_%28cropped%29.svg/240px-Meta_Platforms_Inc._logo_%28cropped%29.svg.png` },
     tiktok:    { label: 'TikTok', mono: 'T', color: '#111111', file: 'tiktok.svg',
                  url: `${WIKI}/en/a/a9/TikTok_logo.svg` },
-    ga4:       { label: 'Analytics', mono: 'A', color: '#E8710A', file: 'ga4.svg',
-                 url: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSopdCEj9_HhQExvA062era1kwbfyXQWNIg3RMXffXWEA&s=10' },
+    // No GA4 mark (MW): the Channels slide is about GA4 by definition, so a
+    // logo there labels the obvious.
+    claude:    { label: 'Claude', mono: 'C', color: '#D97757', file: 'claude.svg' },
+    copilot:   { label: 'Copilot', mono: 'Co', color: '#0A6ED1', file: 'copilot.svg' },
+    telegram:  { label: 'Telegram', mono: 'Tg', color: '#26A5E4', file: 'telegram.svg' },
+    // Zalo's asset is a white mark, so the file carries its own blue plate;
+    // white-on-white would have rendered as nothing.
+    zalo:      { label: 'ZALO', mono: 'Z', color: '#0068FF', file: 'zalo.svg' },
+    wechat:    { label: 'WeChat', mono: 'We', color: '#07C160', file: 'wechat.svg' },
+    webchat:   { label: 'Webchat', mono: 'Wc', color: '#5B6BF5', file: 'webchat.svg' },
     // Not yet on a slide. Held here so the next block that needs one does not
     // have to go hunting: YouTube and LINE are open items, and the assistant
     // marks label rows in the AI table.
@@ -1532,6 +1563,10 @@ function renderReport() {
     const s = String(src || '').toLowerCase();
     if (s.includes('chatgpt') || s.includes('openai')) return plogo('chatgpt', 16);
     if (s.includes('gemini') || s.includes('bard')) return plogo('gemini', 16);
+    if (s.includes('claude') || s.includes('anthropic')) return plogo('claude', 16);
+    if (s.includes('copilot')) return plogo('copilot', 16);
+    // No asset yet for Perplexity, DeepSeek, Grok, Mistral and the rest; they
+    // render as plain text rather than a wrong logo.
     return '';
   };
   const slide = (title, body, first, allFour, platform) => body
@@ -2001,7 +2036,7 @@ function renderReport() {
     const page = (lc, label, pair, idx) => {
       const cell = cells[lc];
       return `<div class="clang-page ${lc===activeC?'active':''}" data-clangpage="${esc(lc)}-${idx}">
-        <div class="slide-title" style="margin-top:0"><span>${plogo('ga4')}Content \u00b7 ${esc(label)} \u00b7 ${esc(sel)}</span>${logoImg}</div>
+        <div class="slide-title" style="margin-top:0"><span>Content \u00b7 ${esc(label)} \u00b7 ${esc(sel)}</span>${logoImg}</div>
         <div class="grid g-2">${pair.map(id=>table(cell, id)).join('')}</div>
         <div class="note">Ranked by <b>page views of the page itself</b>, not by the sessions that started
         there \u2014 a landing-page metric would credit a doctor page with every other page in the visit.
@@ -2032,28 +2067,42 @@ function renderReport() {
     const scope = (key, label, idx) => {
       const s = (CB.byScope || {})[key];
       if (!s) return '';
-      const mx = Math.max(1, ...s.rows.map(r => r.clicks));
+      const shown = s.rows.filter(r => r.clicks || r.prev);
+      /**
+       * Laid out like the reference deck: a pill naming the channel with its
+       * mark, and the count beside it. Two columns, so ten channels read down
+       * rather than as one long list.
+       */
+      const chip = (r) => `<div class="cb-row">
+        <div class="cb-pill">
+          <span class="cb-name">${esc(r.label)}${r.assumed
+            ? ' <span class="cb-ask" title="Label assumed \u2014 confirm which language this number serves">?</span>' : ''}</span>
+          <span class="cb-logo">${r.logo ? plogo(r.logo, 30) : ''}</span>
+        </div>
+        <div class="cb-val">
+          <div class="cb-mom">MoM</div>
+          <div>
+            <div class="cb-num">${num(r.clicks)} <span class="cb-clicks">Clicks</span></div>
+            <div class="cb-delta">${r.prev
+              ? changeText((r.clicks - r.prev) / r.prev)
+              : '<span class="dlt none">new</span>'}</div>
+          </div>
+        </div>
+      </div>`;
+      const half = Math.ceil(shown.length / 2);
       return `<div class="cb-page ${idx === 0 ? 'active' : ''}" data-cbpage="${esc(key)}">
-        <div class="grid g-3" style="margin-bottom:12px">
+        <div class="grid g-3" style="margin-bottom:14px">
           ${mini('Chat clicks', num(s.total), { lead: true, icon: 'sessions',
             sub: s.totalPrev ? `${num(s.totalPrev)} last month` : '' })}
           ${mini('Month on month', s.totalChangePct === null ? '\u2014'
             : changeText(s.totalChangePct), { icon: 'views' })}
-          ${mini('Channels used', num(s.rows.filter(r => r.clicks).length),
+          ${mini('Channels used', num(shown.filter(r => r.clicks).length),
             { icon: 'find_doctors', sub: `of ${num(s.rows.length)} tracked` })}
         </div>
-        <table class="sortable"><thead><tr>
-          <th>Channel</th><th class="num">Clicks</th><th></th><th class="num">MoM</th>
-        </tr></thead><tbody>
-        ${s.rows.map(r => `<tr>
-          <td class="strong">${r.logo ? plogo(r.logo, 16) : ''}${esc(r.label)}${
-            r.assumed ? ' <span style="font-size:9px;color:var(--amber)" title="Label assumed \u2014 confirm with MW">?</span>' : ''}</td>
-          <td class="num strong">${num(r.clicks)}</td>
-          <td style="width:38%"><div style="height:7px;border-radius:4px;background:var(--violet);
-            width:${Math.max(2, Math.round((r.clicks / mx) * 100))}%"></div></td>
-          <td class="num">${r.prev ? changeText((r.clicks - r.prev) / r.prev) : '<span class="dlt none">new</span>'}</td>
-        </tr>`).join('')}
-        </tbody></table>
+        <div class="grid g-2 cb-grid">
+          <div>${shown.slice(0, half).map(chip).join('')}</div>
+          <div>${shown.slice(half).map(chip).join('')}</div>
+        </div>
       </div>`;
     };
     const evNote = (CB.events || []).length
@@ -2527,7 +2576,7 @@ function renderReport() {
     ${slide('Actions \u00b7 what we want them to do \u00b7 BHQ', actionsBody, false, true)}
     ${slide('Sessions by language \u00b7 BHQ', langMatrixBody, false, true)}
     ${slide(`Actions by language \u00b7 ${sel}`, actionsLangBody)}
-    ${slide('Channels \u00b7 where do they find us', channelsBody, false, true, 'ga4')}
+    ${slide('Channels \u00b7 where do they find us', channelsBody, false, true)}
     ${referralBody ? slide(`Referral \u00b7 Back Links \u00b7 ${sel}`, referralBody) : ''}
     ${searchPagesBody}
     ${gbpDetailBody}
@@ -5520,7 +5569,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.109.0';
+const CLIENT_BUILD = '3.110.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.109.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.110.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -691,6 +691,48 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.110.0 — real brand icons installed; Chat Bubble restyled to the deck.**
+
+**Fifteen icons bundled** in `public/brand/`, so marks no longer depend on
+fetching Wikimedia at runtime: gbp, facebook, messenger, whatsapp, telegram,
+line, zalo, wechat, webchat, instagram, youtube, chatgpt, gemini, claude,
+copilot. Total 196KB.
+
+**Still missing an asset:** `google.svg`, `google-ads.svg`, `meta.svg`,
+`tiktok.svg`. Those four fall back to the remote URL and then to a monogram.
+Also unassigned among the assistants: Perplexity, DeepSeek, Grok, Mistral, Poe,
+You.com, Phind, Genspark, Felo — they render as plain text rather than a wrong
+logo.
+
+**`google-map-icon.svg` was not used**: 4.3MB of base64 raster inside an SVG
+wrapper, for a mark that renders at 22px. `google-my-business-icon.svg` covers
+GBP.
+
+**Zalo's asset is a pure-white mark** and would have been invisible on white. A
+brand-blue rounded plate is baked into the file rather than special-cased in CSS.
+
+**No GA4 mark** (MW) — the Channels slide is about GA4 by definition.
+
+**Chat Bubble restyled after the reference deck**: a rounded pill naming the
+channel with its mark on the right, the count and MoM beside it, two columns.
+
+**A NEW AUDIT-STYLE CHECK, and the bug it immediately found.** `boot.js` now
+asserts every `file:` in `PLATFORM` exists on disk — otherwise a typo'd filename
+degrades to a monogram, which looks deliberate. First version searched `html`,
+but inside that callback **`html` is shadowed by the RENDERED report**, so it
+found no PLATFORM block and printed "all 0 present" — a vacuous pass. It reads
+`js` (the client source) now, and fails outright if the match count is zero,
+because zero matches means the search missed, not that everything is fine.
+
+Same lesson as v3.103.0 and v3.105.0: **a check that reports a count should be
+suspected when the count looks too tidy.** "0 present" and "all present" were
+indistinguishable in the pass message.
+
+The chat-bubble boot assertion had the same shape of problem: it counted
+`tbody tr` after the layout moved to chips, and reported "0 channels" while
+passing. It counts `.cb-row` and requires the expected number now.
+
 
 **v3.109.0 — Chat Bubble, with hospital / BHQ scope tabs.**
 
