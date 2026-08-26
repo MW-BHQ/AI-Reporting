@@ -151,13 +151,15 @@ expect_field "ct ranked by views"  "$REPORT" "d.content.byBrand.BGH.th.doctor.ro
 # views into it, changes this row.
 expect_field "ct ranks on views"   "$REPORT" "d.content.byBrand.BGH.th.doctor.rows[0].action===90?90:undefined"
 expect_field "ct action beats top" "$REPORT" "d.content.byBrand.BGH.th.doctor.rows[1].action>d.content.byBrand.BGH.th.doctor.rows[0].action?'ok':undefined"
-# A NEAR-TIE must not produce a "wrong column" warning: on package pages
-# Appointments edges the configured Add to cart by 10%, under the 20% margin.
-# A flat tie could not test this — it resolves to the configured event anyway,
-# because ties keep KEY_EVENTS order and add_to_cart sorts first.
-expect_field "ct no tie warning"   "$REPORT" "(d.content.types.find(t=>t.id==='package')||{}).suggestedAction===null?'ok':undefined"
+# The near-tie margin guard now has to be checked on a type that still shows a
+# mix: Package suppresses its own, so Center carries the case. Its configured
+# Contact us leads, so no warning either way — the guard itself is proven by the
+# negative control in the release notes rather than by this line.
+expect_field "ct center settled"   "$REPORT" "(d.content.types.find(t=>t.id==='center')||{}).suggestedAction===null?'ok':undefined"
 # Articles: find_doctors clearly beats the configured view_item, so it IS flagged.
-expect_field "ct article suggests" "$REPORT" "((d.content.types.find(t=>t.id==='article')||{}).suggestedAction||{}).id==='find_doctors'?'ok':undefined"
+# With Contact us configured and Contact us the top event on article pages, the
+# warning must now be SILENT — the swap has been made.
+expect_field "ct article settled"  "$REPORT" "(d.content.types.find(t=>t.id==='article')||{}).suggestedAction===null?'ok':undefined"
 expect_field "ct type split"       "$REPORT" "d.content.byBrand.BGH.th.package.rows.length>=1&&d.content.byBrand.BGH.th.center.rows.length>=1?'ok':undefined"
 # Locale comes from the path, so an English doctor page must not land in Thai.
 expect_field "ct locale split"     "$REPORT" "d.content.byBrand.BGH.en.doctor.rows[0].slug==='dr-valailuck-en'?'ok':undefined"
@@ -168,7 +170,12 @@ expect_field "ct category excluded" "$REPORT" "d.content.byBrand.BGH.th.package.
 expect_field "ct category untotalled" "$REPORT" "d.content.byBrand.BGH.th.package.views<5000?'ok':undefined"
 # All nine events are measured per type, which is what identifies a wrong column.
 expect_field "ct mix measured"     "$REPORT" "d.content.types.every(t=>Array.isArray(t.mix))?'ok':undefined"
-expect_field "ct article flagged"  "$REPORT" "(d.content.types.find(t=>t.id==='article')||{}).action==='view_item'?'ok':undefined"
+# Articles is Contact us now (MW, from live data: Contact us 22.6K vs View item 28).
+expect_field "ct article contact"  "$REPORT" "(d.content.types.find(t=>t.id==='article')||{}).action==='contact_us'?'ok':undefined"
+# Package suppresses the footer: on a package page view_item IS the page view,
+# so the mix would forever "suggest" restating the Views column beside it.
+expect_field "ct package no mix"   "$REPORT" "(d.content.types.find(t=>t.id==='package')||{}).mix.length===0?'ok':undefined"
+expect_field "ct package no sugg"  "$REPORT" "(d.content.types.find(t=>t.id==='package')||{}).suggestedAction===null?'ok':undefined"
 # GA4's own "AI Assistant" channel. pantip.com is NOT in the name list, so it
 # can only appear here via the channel — 0 means native detection is dead.
 # Counter populated only. This does NOT prove native detection works — with

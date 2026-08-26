@@ -268,11 +268,14 @@ function ga4Report(body) {
    * should this column be" logic could not be tested at all — worse, a tie made
    * an early version emit a false "wrong column" warning.
    *
-   * Articles are weighted so `find_doctors` clearly beats `view_item`, which is
-   * the real case MW reported: people read an article, then look for a doctor.
+   * Article weights follow the REAL proportions MW measured once the mix was on
+   * the card: Contact us 22.6K, Find doctors 3.2K, Appointments 972, View item
+   * 28. The fixture originally encoded a guess that Find doctors would lead —
+   * it did not, and a fixture built on a hypothesis quietly asserts the
+   * hypothesis. With the column now set to Contact us, no warning should fire.
    */
   const EVENT_WEIGHT = {
-    "/th/bangkok/content/bully-and-cyberbullying": { find_doctors: 14, view_item: 1, contact_us: 4, appointments: 2 },
+    "/th/bangkok/content/bully-and-cyberbullying": { contact_us: 22, find_doctors: 3, appointments: 1, view_item: 1 },
     "/th/bangkok/doctor/dr-valailuck": { appointments: 9, find_doctors: 3, contact_us: 2, view_item: 1 },
     // Fewer views than dr-valailuck but MORE appointments, so ranking by views
     // and reading the action column stay independently checkable.

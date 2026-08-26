@@ -135,11 +135,15 @@ function reportFixture() {
       types: [
         { id: "doctor", label: "Doctor", action: "appointments", actionLabel: "Appointments",
           mix: [{ id: "appointments", label: "Appointments", value: 52 }], suggestedAction: null },
+        // hideMix: the footer must NOT render for Package even though a mix is
+        // present in the payload — the client has to honour the flag.
         { id: "package", label: "Package", action: "add_to_cart", actionLabel: "Add to cart",
-          mix: [{ id: "add_to_cart", label: "Add to cart", value: 25 }], suggestedAction: null },
-        { id: "article", label: "Articles", action: "view_item", actionLabel: "View item",
+          hideMix: true, mix: [], suggestedAction: null },
+        // Articles is Contact us now, but keeps a suggestion so the
+        // wrong-column warning path stays exercised.
+        { id: "article", label: "Articles", action: "contact_us", actionLabel: "Contact us",
           mix: [{ id: "find_doctors", label: "Find doctors", value: 140 },
-                { id: "view_item", label: "View item", value: 8 }],
+                { id: "contact_us", label: "Contact us", value: 8 }],
           suggestedAction: { id: "find_doctors", label: "Find doctors", value: 140 } },
         { id: "center", label: "Center", action: "contact_us", actionLabel: "Contact us",
           mix: [{ id: "contact_us", label: "Contact us", value: 17 }], suggestedAction: null }],
@@ -461,8 +465,9 @@ setTimeout(() => {
         if (thai.length !== 2) return fail("content cards", `${thai.length} Thai content slides, expected 2`);
         // MW's pairing: Doctor+Package on the first slide, Articles+Center on
         // the second, each beside the one action it is judged on.
+        // Articles is Contact us as of v3.108.0, measured not guessed.
         const want = [["Doctor", "Appointments", "Package", "Add to cart"],
-                      ["Articles", "View item", "Center", "Contact us"]];
+                      ["Articles", "Contact us", "Center", "Contact us"]];
         for (let i = 0; i < 2; i++) {
           const heads = [...thai[i].querySelectorAll("thead th")].map(t => t.textContent.trim());
           for (const h of want[i]) {
@@ -491,6 +496,14 @@ setTimeout(() => {
          * most, the card must SAY so — silence is how `view_item` sat on
          * Articles unnoticed.
          */
+        // Package carries hideMix, so its footer must be absent even though the
+        // other cards have one.
+        const pkgCard = [...thai[0].querySelectorAll(".card")]
+          .find(c => (c.querySelector(".card-title") || {}).textContent.trim().startsWith("Package"));
+        if (!pkgCard) return fail("content cards", "Package card not found");
+        if (/What actually fires/i.test(pkgCard.textContent)) {
+          return fail("content cards", "Package footer rendered despite hideMix");
+        }
         const warned = thai[1].textContent.includes("but Find doctors fires more");
         warned
           ? ok("content cards", `2 slides x ${ctabs.length} languages, ranked, mismatch flagged`)

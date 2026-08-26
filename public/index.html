@@ -1967,7 +1967,9 @@ function renderReport() {
     const table = (cell, typeId) => {
       const t = TYPE[typeId] || { label: typeId, action: '', mix: [] };
       const rows = (cell[typeId] || {}).rows || [];
-      const mix = (t.mix || []).filter(e => e.value > 0);
+      // `hideMix` types show no footer at all (Package: view_item there is the
+      // page view itself, so the comparison says nothing).
+      const mix = t.hideMix ? [] : (t.mix || []).filter(e => e.value > 0);
       return `<div class="card">
         <div class="card-title">${t.label}
           <span style="font-weight:400;color:var(--faint);font-size:10.5px">
@@ -2464,7 +2466,6 @@ function renderReport() {
     ${slide(`Actions by language \u00b7 ${sel}`, actionsLangBody)}
     ${slide('Channels \u00b7 where do they find us', channelsBody, false, true, 'ga4')}
     ${referralBody ? slide(`Referral \u00b7 Back Links \u00b7 ${sel}`, referralBody) : ''}
-    ${contentBody}
     ${searchPagesBody}
     ${gbpDetailBody}
     ${slide('Google reviews', reviewBody, false, false, 'gbp')}
@@ -2474,7 +2475,8 @@ function renderReport() {
     ${slide(`Search Ads \u00b7 ${sel}`, searchAdsBody, false, false, 'google_ads')}
     ${slide('Shared Paid Media', paidBody.trim(), false, true, 'meta')}
     ${slide('TikTok', tkChannelBody, false, true, 'tiktok')}
-    ${tkTopBody ? slide('TikTok \u00b7 Top performances', tkTopBody, false, true, 'tiktok') : ''}`;
+    ${tkTopBody ? slide('TikTok \u00b7 Top performances', tkTopBody, false, true, 'tiktok') : ''}
+    ${contentBody}`;
 
   // Charts must be drawn after the markup is in the DOM.
   if (U && U.months.length && window.Chart) {
@@ -5446,7 +5448,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.107.0';
+const CLIENT_BUILD = '3.108.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

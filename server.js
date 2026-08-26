@@ -2333,8 +2333,20 @@ async function buildReport(from, to) {
    */
   const CONTENT_TYPES = [
     { id: "doctor",  segment: "doctor",        label: "Doctor",   action: "appointments" },
-    { id: "package", segment: "package",       label: "Package",  action: "add_to_cart" },
-    { id: "article", segment: "content",       label: "Articles", action: "view_item" },
+    /**
+     * `hideMix` suppresses the "what actually fires" footer (MW).
+     *
+     * On a package page `view_item` IS the page view — it fires on arrival, so
+     * it dwarfs everything and would permanently "suggest" replacing Add to
+     * cart with a restatement of the Views column already beside it. The
+     * comparison is meaningless here, so it is not shown rather than shown and
+     * explained away.
+     */
+    { id: "package", segment: "package",       label: "Package",  action: "add_to_cart", hideMix: true },
+    // Contact us, not view_item (MW, confirmed from live data: Contact us 22.6K
+    // against View item 28 on article pages). `view_item` is an ecommerce event
+    // that fires on package pages; on an article it was always going to be ~0.
+    { id: "article", segment: "content",       label: "Articles", action: "contact_us" },
     { id: "center",  segment: "center-clinic", label: "Center",   action: "contact_us" },
   ];
   /**
@@ -2466,17 +2478,19 @@ async function buildReport(from, to) {
      * happened to sort first. A warning that fires on noise gets ignored, and
      * then the real one (Articles) gets ignored with it.
      */
-    const types = CONTENT_TYPES.map(({ id, label, action }) => {
+    const types = CONTENT_TYPES.map(({ id, label, action, hideMix }) => {
       const mix = mixFor(id);
       const configured = mix.find((e) => e.id === action);
       const configuredValue = configured ? configured.value : 0;
       const top = mix.find((e) => e.value > 0) || null;
       const clearlyBetter = top && top.id !== action && top.value > configuredValue * 1.2;
-      return { id, label, action,
+      return { id, label, action, hideMix: !!hideMix,
         actionLabel: (KEY_EVENTS.find((e) => e.name === action) || {}).label || action,
         actionValue: configuredValue,
-        mix: mix.slice(0, 4),
-        suggestedAction: clearlyBetter ? top : null };
+        // Both suppressed together: a suggestion with no mix behind it would be
+        // an assertion the reader cannot check.
+        mix: hideMix ? [] : mix.slice(0, 4),
+        suggestedAction: (!hideMix && clearlyBetter) ? top : null };
     });
     return { available: true, byBrand, unmatchedViews: unmatched, excludedViews: excluded,
       excluded: CONTENT_EXCLUDE,

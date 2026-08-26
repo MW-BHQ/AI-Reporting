@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.107.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.108.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -691,6 +691,33 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.108.0 — Articles column is Contact us; Package footer suppressed; Content moved last.**
+
+**Articles -> `contact_us`, measured rather than guessed.** With the mix on the
+card, the live answer was unambiguous: **Contact us 22.6K, Find doctors 3.2K,
+Appointments 972, View item 28.** `view_item` is an ecommerce event that fires
+on package pages, so on an article it was always going to be ~0.
+
+**The measure-don't-guess loop paid for itself, and caught me twice.** My
+hypothesis had been `find_doctors` — plausible (read an article, look for a
+doctor) and wrong by 7x. Worse, the MOCK had been weighted to that hypothesis,
+so the fixture was quietly asserting my guess back at me. Article weights now
+follow the real proportions. **A fixture built on a hypothesis tests the
+hypothesis, not the code.**
+
+**Package: footer suppressed via `hideMix`** (MW). On a package page
+`view_item` IS the page view — it fires on arrival, so it dwarfs everything and
+would permanently "suggest" replacing Add to cart with a restatement of the
+Views column already sitting beside it. The mix and the suggestion are
+suppressed together: a suggestion with no mix behind it is an assertion the
+reader cannot check.
+
+**Content moved to the end of the deck**, after TikTok Top performances (MW).
+
+**Deploys now go straight to GitHub.** Full suite runs first; nothing is pushed
+red. Every release is still packaged as a zip for manual rollback (MW).
+
 
 **v3.107.0 — category pages excluded; content cards measure their own key event.**
 
