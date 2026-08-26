@@ -2390,11 +2390,11 @@ async function buildReport(from, to) {
    * asserted, and each is a one-line change.
    */
   const CHAT_CHANNELS = [
-    { id: "line",     url: "@bhqjp",        label: "LINE (\u65e5\u672c\u8a9e)", logo: "line" },
-    { id: "line",     url: null,            label: "LINE",                      logo: "line" },
-    { id: "whatsapp", url: "66641405673",   label: "WhatsApp (\u0627\u0644\u0639\u0631\u0628\u064a\u0629)", logo: "whatsapp" },
-    { id: "whatsapp", url: "wa.me/message", label: "WhatsApp",                  logo: "whatsapp" },
-    { id: "whatsapp", url: null,            label: "WhatsApp (other)",          logo: "whatsapp" },
+    { id: "line",     url: "@bhqjp",        label: "LINE (\u65e5\u672c\u8a9e)", logo: "line", order: 6 },
+    { id: "line",     url: null,            label: "LINE",                      logo: "line", order: 5 },
+    { id: "whatsapp", url: "66641405673",   label: "WhatsApp (\u0627\u0644\u0639\u0631\u0628\u064a\u0629)", logo: "whatsapp", order: 2 },
+    { id: "whatsapp", url: "wa.me/message", label: "WhatsApp",                  logo: "whatsapp", order: 10 },
+    { id: "whatsapp", url: null,            label: "WhatsApp (other)",          logo: "whatsapp", order: 11 },
     /**
      * MESSENGER IDS ARE SWAPPED relative to the first guess.
      *
@@ -2402,12 +2402,12 @@ async function buildReport(from, to) {
      * the LARGER. The first mapping had `facebook-messenger` as Burmese, which
      * put the larger count under the Burmese label. Corrected from the data.
      */
-    { id: "facebook-messenger", url: null,  label: "Messenger",                 logo: "messenger" },
-    { id: "messenger", url: null,           label: "Messenger (\u1019\u103c\u1014\u103a\u1019\u102c\u1018\u102c\u101e\u102c)", logo: "messenger" },
-    { id: "telegram", url: null,            label: "Telegram",                  logo: "telegram" },
-    { id: "zalo",     url: null,            label: "ZALO",                      logo: "zalo" },
-    { id: "wechat",   url: null,            label: "\u5fae\u4fe1 WeChat",       logo: "wechat" },
-    { id: "webchat",  url: null,            label: "Webchat (TH/EN)",           logo: "webchat" },
+    { id: "facebook-messenger", url: null,  label: "Messenger",                 logo: "messenger", order: 3 },
+    { id: "messenger", url: null,           label: "Messenger (\u1019\u103c\u1014\u103a\u1019\u102c\u1018\u102c\u101e\u102c)", logo: "messenger", order: 4 },
+    { id: "telegram", url: null,            label: "Telegram",                  logo: "telegram", order: 1 },
+    { id: "zalo",     url: null,            label: "ZALO",                      logo: "zalo", order: 7 },
+    { id: "wechat",   url: null,            label: "\u5fae\u4fe1 WeChat",       logo: "wechat", order: 8 },
+    { id: "webchat",  url: null,            label: "Webchat (TH/EN)",           logo: "webchat", order: 9 },
   ];
   const chatBubble = (() => {
     /**
@@ -2541,11 +2541,26 @@ async function buildReport(from, to) {
       const seen = [...new Set([...CHAT_CHANNELS.map((c) => c.label), ...Object.keys(cur)])];
       const rows = seen.map((label) => {
         const cfg = CHAT_CHANNELS.find((c) => c.label === label) || {};
-        return { label, logo: cfg.logo || null, assumed: !!cfg.assumed,
+        return { label, logo: cfg.logo || null, assumed: !!cfg.assumed, order: cfg.order,
           clicks: cur[label] || 0, prev: was[label] || 0,
           change: (cur[label] || 0) - (was[label] || 0) };
+      /**
+       * NOT RANKED BY CLICKS (MW). Rows come out in a FIXED `order` taken from
+       * the reference deck, interleaved so a two-column row-wise grid
+       * reproduces that layout and related channels sit side by side (LINE with
+       * LINE JP, Messenger with Messenger MM).
+       *
+       * The point is position stability: a channel sits in the same place every
+       * month, so this month's slide can be laid beside last month's. Ranking
+       * by clicks moves cards whenever two channels swap places, which is what
+       * makes a deck hard to skim.
+       *
+       * `order` is a separate field from the array order on purpose — the array
+       * order is what the URL-qualified matching rules depend on, and display
+       * must not be able to disturb it.
+       */
       }).filter((r) => r.clicks || r.prev)
-        .sort((a, b) => b.clicks - a.clicks);
+        .sort((a, b) => (a.order || 99) - (b.order || 99));
       /**
        * `total` is bubble OPENS (`chat-bubble-top-parent`), not the sum of
        * channel clicks. They are different acts and the sum would overstate:

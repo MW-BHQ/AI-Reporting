@@ -228,6 +228,10 @@ expect_field "cb no offscope leak" "$REPORT" "(d.chatBubble.byScope.BHQ.channelC
 # The GTM custom event is the source when it has data — it is the only one that
 # sees the bubble button, which is a div and fires no outbound link click.
 expect_field "cb source is gtm"    "$REPORT" "d.chatBubble.source==='click_chat_bubble'?'ok':undefined"
+# FIXED position, not ranked by clicks (MW): Telegram first, then Messenger,
+# then LINE down the left column, so a two-column grid reproduces the reference
+# deck and a channel sits in the same place every month.
+expect_field "cb fixed order"      "$REPORT" "($CBB[0].label==='Telegram'&&$CBB[2].label==='Messenger'&&$CBB[4].label==='LINE')?'ok':undefined"
 expect_field "cb events listed"    "$REPORT" "d.chatBubble.events.length>0?'ok':undefined"
 # BHQ is all four hospitals, so it cannot be smaller than one of them.
 expect_field "cb bhq superset"     "$REPORT" "d.chatBubble.byScope.BHQ.total>=d.chatBubble.byScope.BGH.total?'ok':undefined"

@@ -484,8 +484,9 @@
   .slide-title:first-child{margin-top:4px;}
   /* One logo per slide, so every printed page says which hospital it belongs
      to. print-head only renders once, at the top of the document. */
-  .slide-logo{height:26px;width:auto;flex:none;opacity:.9;}
-  @media print{ .slide-logo{height:30px;opacity:1;} }
+  /* Hospital wordmark at 150px wide (MW). */
+  .slide-logo{width:150px;height:auto;flex:none;opacity:.9;}
+  @media print{ .slide-logo{width:150px;opacity:1;} }
   /**
    * Language pages: tabs on screen, one printed slide each. The deck needs a
    * page per language; the browser does not want forty stacked sections.
@@ -505,9 +506,21 @@
    * — no gradient, no accent rule, no muted variant, because shading was
    * encoding what the number already says.
    */
+  /* Same surface and shadow as every other card on the report (MW). */
   .cbc{display:flex;align-items:center;justify-content:space-between;gap:18px;
-    border:1px solid var(--line);border-radius:14px;padding:16px 22px;
-    background:#fff;min-width:0;}
+    border:1px solid var(--stroke);border-radius:var(--r);padding:16px 22px;
+    background:var(--glass);box-shadow:var(--shadow);
+    backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);min-width:0;}
+  /**
+   * 10rem of side padding (MW) so the ten cards condense toward the centre
+   * instead of stretching the full 16:9 width, which left each card too wide to
+   * read as a unit. Collapsed on narrow screens and in print, where the width
+   * is not there to give away.
+   */
+  .cb-cards{padding-left:10rem;padding-right:10rem;}
+  @media(max-width:1400px){ .cb-cards{padding-left:4rem;padding-right:4rem;} }
+  @media(max-width:1080px){ .cb-cards{padding-left:0;padding-right:0;} }
+  @media print{ .cb-cards{padding-left:6rem;padding-right:6rem;} }
   .cbc-id{display:flex;align-items:center;gap:14px;min-width:0;}
   .cbc-lab{font-size:15px;font-weight:700;color:var(--ink);line-height:1.25;
     overflow-wrap:anywhere;}
@@ -528,23 +541,19 @@
   .lang-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px;}
   /**
    * Section rhythm (MW: easier to skim and scan). Grids get a real gutter,
-   * consecutive blocks get space, and `.sep` is a hairline for where a block
-   * of cards ends and the next begins so the eye has something to stop on.
+   * consecutive blocks get space, and `.sep` is a hairline where one block of
+   * cards ends and the next begins so the eye has something to stop on.
+   *
+   * `align-items:stretch` is the fix for the ragged first card MW spotted: a
+   * card with fewer lines than its neighbours was sizing to its own content, so
+   * the first card in a row stood at a different height from the rest.
    */
-  .grid{row-gap:16px;}
+  .grid{row-gap:16px;align-items:stretch;}
+  .grid > .card, .grid > .stat, .grid > .mini, .grid > .cbc{height:100%;}
   .grid + .grid{margin-top:20px;}
   .sep{border:0;border-top:1px solid var(--line);margin:28px 0 22px;}
-  .cb-page .grid + .grid{margin-top:24px;}
-  /**
-   * Section rhythm (MW: easier to skim). Grids get a real gutter, cards get
-   * space between rows, and a hairline separates one block of cards from the
-   * next so the eye has something to stop on.
-   */
-  .grid{row-gap:16px;}
-  .card + .card, .grid + .grid{margin-top:18px;}
-  .sep{border:0;border-top:1px solid var(--line);margin:26px 0 22px;}
   .slide .card-title{margin-bottom:12px;}
-  .cb-page .grid + .grid{margin-top:22px;}
+  .cb-page .grid + .grid{margin-top:24px;}
   /**
    * Platform mark on a slide title. The monogram sits underneath and the real
    * logo covers it when the file exists, so both states occupy the same box and
@@ -2101,7 +2110,7 @@ function renderReport() {
        */
       const card = (r) => `<div class="cbc">
         <div class="cbc-id">
-          ${r.logo ? plogo(r.logo, 52) : ''}
+          ${r.logo ? plogo(r.logo, 48) : ''}
           <span class="cbc-lab">${esc(r.label)}</span>
         </div>
         <div class="cbc-perf">
@@ -2113,17 +2122,14 @@ function renderReport() {
       </div>`;
       return `<div class="cb-page ${idx === 0 ? 'active' : ''}" data-cbpage="${esc(key)}">
         <div class="grid g-2" style="margin-bottom:14px">
-          ${mini(s.basis === 'opens' ? 'Bubble opens' : 'Channel clicks', num(s.total),
-            { icon: 'sessions',
-              sub: s.basis === 'opens'
-                ? `${num(s.channelClicks)} channel clicks`
-                : 'bubble opens not tracked' })}
-          ${mini('Month on month', s.totalChangePct === null ? '\u2014'
-            : changeText(s.totalChangePct), { icon: 'views',
-            sub: s.totalPrev ? `vs ${num(s.totalPrev)} last month` : '' })}
+          ${kpi(s.basis === 'opens' ? 'Bubble Clicks' : 'Channel clicks', num(s.total),
+            s.basis === 'opens' ? `${num(s.channelClicks)} channel clicks`
+                                : 'bubble clicks not tracked')}
+          ${kpi('MoM', s.totalChangePct === null ? '\u2014' : changeText(s.totalChangePct),
+            s.totalPrev ? `vs ${num(s.totalPrev)} last month` : '')}
         </div>
         <hr class="sep">
-        <div class="grid g-2">${shown.map(card).join('')}</div>
+        <div class="cb-cards"><div class="grid g-2">${shown.map(card).join('')}</div></div>
       </div>`;
     };
     return `
@@ -5576,7 +5582,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.114.0';
+const CLIENT_BUILD = '3.115.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

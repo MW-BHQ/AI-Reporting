@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.114.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.115.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -691,6 +691,40 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.115.0 — layout pass: 64px section marks, equal card heights, fixed chat order.**
+
+- **Section header marks 64px** (MW), chat bubble 48px, hospital wordmark 150px
+  wide, slide title given the height to hold them.
+- **THE RAGGED FIRST CARD** MW spotted across the whole report: a card with
+  fewer lines than its neighbours sized to its own content, so the first in a
+  row stood at a different height. `align-items:stretch` on `.grid` plus
+  `height:100%` on the card classes. It was never one card being wrong — it was
+  every row being free to be uneven.
+- **Chat channel cards are NOT ranked by clicks.** They come out in a fixed
+  `order` from the reference deck, interleaved so a two-column row-wise grid
+  reproduces that layout and related channels pair up (LINE with LINE JP,
+  Messenger with Messenger MM). The point is position stability: a channel sits
+  in the same place every month, so two months' slides can be laid side by side.
+  `order` is a SEPARATE field from the array order, because the array order is
+  what the URL-qualified matching rules depend on and display must not be able
+  to disturb it.
+- **Chat cards get the report's standard surface**: `var(--glass)`,
+  `var(--stroke)`, `var(--shadow)` rather than a bespoke flat white.
+- Intro cards use `kpi()`, the same as Referral. **"Bubble opens" → "Bubble
+  Clicks"; "Month on month" → "MoM"**, which was already the convention
+  everywhere else — the chat slide was the only outlier.
+- **10rem side padding** on the ten cards so they condense toward the centre;
+  reduced at 1400px, dropped at 1080px, 6rem in print.
+- Removed a duplicated CSS block (two copies of the section-rhythm rules) left
+  behind by an earlier edit.
+
+**Three edits silently did nothing before landing**, all caught by checking the
+output rather than the exit code: `order: cfg.order` was never added, so the sort
+was a no-op on undefined; a `sort` insertion missed because a comment had already
+changed the anchor; and a regex keyed on unicode labels matched 7 of 11 because
+the source holds `\u` escapes, not the characters.
+
 
 **v3.114.0 — chat cards redesigned; marks 2x; THE TWO CLICK EVENTS DISAGREE.**
 
