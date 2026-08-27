@@ -412,6 +412,19 @@ function ga4Report(body) {
       // that is NOT on the name list, so channel detection has to do the work.
       : d === "sessionDefaultChannelGroup" ? ["Organic Search", "Paid Social", "Paid Search", "Referral", "Cross-network", "AI Assistant", ...marker]
       : d === "itemName" ? ["Heart Screening Package", ...marker]
+      /**
+       * Page referrers, for "where they go next". The set deliberately includes:
+       *   - the target page itself, so the self-referral exclusion is exercised;
+       *   - a SIBLING (`/th/bangkok/page/a-other`) that CONTAINS the target path
+       *     without being it or beneath it, which the coarse server-side
+       *     CONTAINS filter lets through and the code must reject;
+       *   - an external referrer, which must not be treated as a previous page.
+       */
+      : d === "pageReferrer" ? [
+          "https://www.bangkokhospital.com/th/bangkok/page/a",
+          "https://www.bangkokhospital.com/th/bangkok/page/a-other",
+          "https://www.google.com/",
+        ]
       : d === "pageTitle" ? ["Heart Screening Package", "Annual Check-up", ...marker]
       : d === "pagePath" ? pages
       : pages;

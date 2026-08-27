@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.119.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.120.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -699,6 +699,41 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.120.0 — Pages tab: "Where they go next".**
+
+New block at the bottom of the Pages tab (MW): the pages visitors move to after
+the page being analysed. **+1 GA4 request** on that tab only.
+
+**GA4's Data API HAS NO NEXT-PAGE DIMENSION** — path exploration is Explore-only.
+The way round it is `pageReferrer`, which holds the URL whose link was clicked to
+reach a page and populates for INTERNAL navigation as well as external traffic.
+So the pages that follow this one are the pages whose referrer is this one.
+Verified as a real Data API dimension before use.
+
+**Three limits, all on the card, because a proxy reads like a certainty:**
+
+- **Shares are of ONWARD CLICKS, not of visitors.** Referrer data cannot show an
+  exit, so a page most people leave and a page most people continue from produce
+  identical percentages. The Views column carries the scale.
+- `pageReferrer` is the DOCUMENT referrer: the page whose link was clicked, not
+  necessarily the page viewed immediately before.
+- It does not update between views in a single-page app, and parallel tabs break
+  the chain.
+
+**Two exclusions, and the second is why the first was not enough.** The page's
+own path is dropped (a reload or self-link would otherwise top its own list).
+And the server-side filter is `CONTAINS`, which a SIBLING path and an external
+URL quoting this path both satisfy — those are rejected by an exact
+path-or-beneath check.
+
+**The rejected volume is now COUNTED** (`rejectedRefViews`), not silently
+skipped. Deleting the prefix guard changed no assertion: the fixture's
+cross-product meant a wrongly-accepted sibling inflated every destination
+equally, so shares still summed to 1 and the totals looked plausible. A guard
+whose only effect is subtraction needs its subtraction published, or it can be
+removed without anything noticing.
+
 
 **v3.119.0 — every channel card always shows; Contact us share.**
 

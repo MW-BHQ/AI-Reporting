@@ -6525,8 +6525,42 @@ async function buildPage(url, from, to) {
     from: f, to: t, dimensionFilter: keyEventFilter,
   });
 
+  /**
+   * WHERE THEY GO NEXT (MW).
+   *
+   * GA4's Data API has no "next page" dimension — path exploration is an
+   * Explore-only feature. `pageReferrer` is the way round it: it holds the URL
+   * whose link was clicked to reach the current page, and it populates for
+   * INTERNAL navigation as well as external traffic. So the pages that follow
+   * this one are the pages whose referrer IS this one.
+   *
+   * Verified as a real Data API dimension (`pageReferrer`, event parameter
+   * `page_referrer`) rather than assumed.
+   *
+   * Three limits, all stated on the card, because this is a proxy and reads
+   * like a certainty:
+   *   - It is the DOCUMENT REFERRER: the page whose link was clicked, not
+   *     necessarily the page viewed immediately before.
+   *   - A single-page app does not update it between views, and opening pages
+   *     in parallel tabs breaks the chain.
+   *   - Exits cannot appear at all. Nothing here says how many people left, so
+   *     these are shares of onward clicks, never of visitors.
+   */
+  const nextPageFilter = {
+    andGroup: { expressions: [
+      { filter: { fieldName: "pageReferrer",
+        stringFilter: { matchType: "CONTAINS", value: path, caseSensitive: false } } },
+    ] },
+  };
+  const nextPagesBy = (f, t) => ga4RunReport({
+    dimensions: ["pagePath", "pageReferrer"], metrics: ["screenPageViews"],
+    from: f, to: t, limit: 5000, orderBy: "screenPageViews",
+    dimensionFilter: nextPageFilter,
+  });
+
   const cw = comparisonWindows(from, to);
   const { data, errors } = await runJobs({
+    nextPages: nextPagesBy(from, to),
     dateS: sessionsBy(["date"], from, to),
     dateK: keyEventsBy(["date"], from, to),
     srcS: sessionsBy(["sessionManualSource", "sessionManualMedium"], from, to),
@@ -6659,9 +6693,47 @@ async function buildPage(url, from, to) {
     keyEventRate: rate(o.keyEvents, o.sessions) });
   const change = (a, b) => (b > 0 ? (a - b) / b : null);
 
+  /**
+   * Destinations, keyed by the page landed on. Two exclusions matter:
+   *   - the target page itself, which appears when someone reloads or clicks a
+   *     link back to the same page, and would otherwise top its own list;
+   *   - referrers that merely CONTAIN the path but are not it or beneath it,
+   *     since CONTAINS is a coarse server-side filter and a sibling path can
+   *     satisfy it.
+   */
+  const nextMap = new Map();
+  let onwardTotal = 0, selfViews = 0, rejectedRefViews = 0;
+  for (const r of (data.nextPages || [])) {
+    const ref = pagePath(r.pageReferrer);
+    if (!(ref === path || ref.startsWith(path + "/"))) {
+      /**
+       * Counted, not just skipped. `CONTAINS` is coarse: a sibling path and an
+       * external URL quoting this path both satisfy it. Dropping them silently
+       * meant the guard could be deleted with no assertion noticing — the
+       * rejected volume is the only observable proof it is doing work.
+       */
+      rejectedRefViews += n(r.screenPageViews);
+      continue;
+    }
+    const dest = pagePath(r.pagePath);
+    if (!dest) continue;
+    const v = n(r.screenPageViews);
+    if (dest === ref) { selfViews += v; continue; }
+    nextMap.set(dest, (nextMap.get(dest) || 0) + v);
+    onwardTotal += v;
+  }
+  const nextPages = [...nextMap.entries()]
+    .map(([p2, views]) => ({ path: p2, views,
+      share: onwardTotal ? views / onwardTotal : null }))
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 20);
+
   return {
     path, url,
     windows: cw,
+    nextPages: { rows: nextPages, onwardTotal, selfViews, rejectedRefViews,
+      available: data.nextPages !== null,
+      destinationCount: nextMap.size },
     totals: shape({ ...now,
       pages: variants.size,
       sources: sources.length,

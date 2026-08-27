@@ -288,6 +288,21 @@ expect_field "page path"        "$PAGE" "d.path==='/th/bangkok'?'ok':undefined"
 # response limit with "Data size is too big".
 expect_field "page yoy window"  "$PAGE" "d.windows&&d.windows.yoy&&d.windows.yoy.from?'ok':undefined"
 expect_field "page compare"     "$PAGE" "d.compare&&('yoy' in d.compare)&&('prev' in d.compare)?'ok':undefined"
+echo "--- pages: where they go next ---"
+NEXTP="/api/page?url=/th/bangkok/page/a&from=$FROM&to=$TO"
+expect_field "np available"       "$NEXTP" "d.nextPages.available===true?'ok':undefined"
+expect_field "np has rows"        "$NEXTP" "d.nextPages.rows.length>0?d.nextPages.rows.length:undefined"
+# The page itself appears as its own referrer on a reload or a self-link; it
+# must not top its own list of destinations.
+expect_field "np excludes self"   "$NEXTP" "(d.nextPages.rows.every(r=>r.path!=='/th/bangkok/page/a')&&d.nextPages.selfViews>0)?'ok':undefined"
+# CONTAINS is a coarse server-side filter, so `/th/bangkok/page/a-other` passes
+# it as a referrer without being the page or beneath it. Shares are computed on
+# the accepted set, so they cannot sum past 1.
+expect_field "np shares bounded"  "$NEXTP" "d.nextPages.rows.reduce((a,r)=>a+r.share,0)<=1.0000001?'ok':undefined"
+# The fixture includes a sibling referrer and an external one, both of which
+# satisfy CONTAINS without being this page. A rejected count of 0 means the
+# prefix guard is gone and unrelated referrers are being read as this page.
+expect_field "np rejects strays"  "$NEXTP" "d.nextPages.rejectedRefViews>0?'ok':undefined"
 expect_field "page url needed"  "/api/page?from=$FROM&to=$TO" "d.error?'rejected':undefined"
 GADS="/api/google-ads?from=$FROM&to=$TO"
 expect_field "gads accounts"    "$GADS" "d.accounts.length>0?'ok':undefined"

@@ -3937,7 +3937,46 @@ function renderPages() {
       </tbody></table>
       <div class="note">Everything beneath the path you entered. If one of these is not what you meant, paste it directly
       to narrow the analysis.</div>
-    </div>` : ''}`);
+    </div>` : ''}
+    ${(() => {
+      /**
+       * WHERE THEY GO NEXT — placed last (MW).
+       *
+       * Derived from `pageReferrer`, since GA4's Data API has no next-page
+       * dimension. Shares are of ONWARD CLICKS, not of visitors: an exit cannot
+       * appear in referrer data at all, so a page where most people leave and a
+       * page where most people continue produce the same percentages here. The
+       * note says so, because "62%" invites the wrong reading.
+       */
+      const NP = d.nextPages;
+      if (!NP || !NP.available) return '';
+      if (!NP.rows.length) return `<div class="card mt">
+        <div class="card-title">Where they go next</div>
+        <div class="note">No onward navigation recorded from this page in this range. Either nobody clicked
+        through, or the referrer was not passed \u2014 a single-page app does not update it between views.</div>
+      </div>`;
+      return `<div class="card mt">
+        <div class="card-title">Where they go next
+          <span style="font-weight:400;color:var(--faint);font-size:var(--text-xs)">
+            top ${Math.min(20, NP.rows.length)} of ${num(NP.destinationCount)} destinations</span></div>
+        <table class="sortable" data-heat="1" style="margin-top:1.5rem"><thead><tr>
+          <th>Next page</th><th class="num">Views</th><th class="num">Share of onward clicks</th>
+        </tr></thead><tbody>
+        ${NP.rows.map(r => `<tr>
+          <td class="strong i18n" title="${esc(r.path)}">${esc(r.path)}</td>
+          <td class="num">${num(r.views)}</td>
+          <td class="num">${r.share === null ? '\u2014' : (r.share * 100).toFixed(1) + '%'}</td>
+        </tr>`).join('')}
+        </tbody></table>
+        <div class="note"><b>Shares are of onward clicks, not of visitors.</b> Referrer data cannot show an
+        exit, so a page most people leave and a page most people continue from produce the same percentages
+        \u2014 read the Views column for scale. ${num(NP.onwardTotal)} onward views in range${
+          NP.selfViews ? `, plus ${num(NP.selfViews)} back to this page itself, excluded` : ''}.<br>
+        Built from GA4's <b>page referrer</b>, which records the page whose LINK WAS CLICKED \u2014 not
+        necessarily the page viewed immediately before. It does not update between views in a single-page
+        app, and parallel tabs break the chain.</div>
+      </div>`;
+    })()}`);
   wirePages();
   // The canvas only exists once the markup above is in the DOM, and only when
   // the range covers more than one day.
@@ -5640,7 +5679,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.119.0';
+const CLIENT_BUILD = '3.120.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
