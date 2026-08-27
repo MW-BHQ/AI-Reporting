@@ -189,13 +189,19 @@ function reportFixture() {
         completes: k === "BHQ" ? 2588 : 640,
         realtimeRev: 6655250, nonRealtimeRev: 3487367, revenue: 10142617,
         completionRate: k === "BHQ" ? 0.178 : 0.178,
-        rtMix: { total: 1367, distinct: 3, rows: [
-          { label: "International Medical Services", cases: 823, share: 0.602 },
-          { label: "Skin & Aesthetics Center", cases: 400, share: 0.293 },
-          { label: "N/S", cases: 144, share: 0.105 }] },
-        nrMix: { total: 1221, distinct: 2, rows: [
-          { label: "Skin & Aesthetics Center", cases: 700, share: 0.573 },
-          { label: "Dental Center", cases: 521, share: 0.427 }] },
+        /**
+         * Rows are the TOP FEW of many, so they sum to LESS than `total` — the
+         * real shape of this data (157 specialties in MW's deck, eight shown).
+         * A fixture whose rows summed exactly to the total closed the ring by
+         * itself, so the "Other" slice could be deleted with nothing failing.
+         */
+        rtMix: { total: 1367, distinct: 157, rows: [
+          { label: "International Medical Services", cases: 400, share: 0.293 },
+          { label: "Skin & Aesthetics Center", cases: 300, share: 0.219 },
+          { label: "N/S", cases: 183, share: 0.134 }] },
+        nrMix: { total: 1221, distinct: 121, rows: [
+          { label: "Skin & Aesthetics Center", cases: 300, share: 0.246 },
+          { label: "Dental Center", cases: 200, share: 0.164 }] },
       }])) },
     chatBubble: { available: true,
       events: [{ name: "click", clicks: 15600 }],
@@ -725,9 +731,27 @@ setTimeout(() => {
         const arcs = donuts.reduce((a, sv) => a + sv.querySelectorAll("circle").length, 0);
         if (arcs < 4) return fail("appointments", `${arcs} donut arcs, expected 4+`);
         // Blank sheet values must surface as N/S rather than an empty row.
-        pages[0].textContent.includes("N/S")
-          ? ok("appointments", `2 scopes, 2 donuts, ${arcs} arcs, N/S shown`)
-          : fail("appointments", "blank label not rendered as N/S");
+        if (!pages[0].textContent.includes("N/S")) {
+          return fail("appointments", "blank label not rendered as N/S");
+        }
+        /**
+         * THE RING MUST CLOSE. Rows are the top eight; the total counts every
+         * case, so without an "Other" slice the arcs sum to a fraction of the
+         * circle and the donut reads as broken. Checked by summing the actual
+         * dash lengths against the circumference.
+         */
+        const C = 2 * Math.PI * 54;
+        for (const sv of donuts) {
+          const drawn = [...sv.querySelectorAll("circle")].reduce((a, c) =>
+            a + parseFloat(String(c.getAttribute("stroke-dasharray") || "0").split(" ")[0]), 0);
+          if (drawn < C * 0.995) {
+            return fail("appointments", `donut ring only ${(drawn / C * 100).toFixed(0)}% drawn`);
+          }
+        }
+        // Footnote removed (MW).
+        /Initiates is GA4; everything else/.test(pages[0].textContent)
+          ? fail("appointments", "footnote still rendering")
+          : ok("appointments", `2 scopes, 2 closed donuts, ${arcs} arcs, N/S shown`);
       })();
       finish();
     }, 500);

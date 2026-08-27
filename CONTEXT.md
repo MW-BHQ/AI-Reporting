@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.122.1.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.122.2.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -699,6 +699,24 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.122.2 — appointments footnote removed; THE DONUT RING NOW CLOSES.**
+
+Footnote removed (MW).
+
+**The donuts were drawing about half a ring.** `rows` is the top eight but
+`mix.total` counts every case — 157 locations in MW's deck, eight shown — so the
+arcs summed to a fraction of the circle and the chart read as broken rather than
+as a whole. The remainder is now an explicit grey **"Other (N more)"** slice,
+which is also the honest label: real volume, just outside the top eight.
+
+**The fixture could not have caught it.** Its rows summed exactly to the total,
+so the ring closed from the rows alone and the Other slice was deletable with
+nothing failing. Rows now sum to LESS than the total, which is the real shape of
+the data. The assertion sums the actual `stroke-dasharray` lengths against the
+circumference rather than counting arcs — an arc count cannot tell a closed ring
+from a two-thirds one.
+
 
 **v3.122.1 — revenue gets its own figures.**
 

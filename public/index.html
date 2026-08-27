@@ -2243,12 +2243,25 @@ function renderReport() {
       const rows = (mix.rows || []).filter(r => r.cases > 0);
       if (!rows.length) return `<div><div class="card-title">${esc(title)}</div>
         <div class="note" style="margin-top:0">No cases in this range.</div></div>`;
+      /**
+       * The ring must CLOSE. `rows` is the top eight but `mix.total` counts
+       * every case, so the arcs summed to roughly half the circle and the donut
+       * read as a broken chart rather than a whole. The remainder is drawn as an
+       * explicit grey "Other" slice, which is also the honest label: it is real
+       * volume, just not in the top eight.
+       */
       const total = mix.total || rows.reduce((a, r) => a + r.cases, 0);
+      const shown = rows.reduce((a, r) => a + r.cases, 0);
+      const other = Math.max(0, total - shown);
+      const slices = other > 0
+        ? [...rows, { label: `Other (${num((mix.distinct || rows.length) - rows.length)} more)`,
+                      cases: other, share: total ? other / total : null, isOther: true }]
+        : rows;
       const R = 54, C = 2 * Math.PI * R;
       let off = 0;
-      const arcs = rows.map((r, i) => {
+      const arcs = slices.map((r, i) => {
         const len = (r.cases / total) * C;
-        const seg = `<circle cx="70" cy="70" r="${R}" fill="none" stroke="${RING[i % RING.length]}"
+        const seg = `<circle cx="70" cy="70" r="${R}" fill="none" stroke="${r.isOther ? '#D3D8E4' : RING[i % RING.length]}"
           stroke-width="26" stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}"
           stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 70 70)"></circle>`;
         off += len; return seg;
@@ -2261,9 +2274,9 @@ function renderReport() {
             <text x="70" y="84" text-anchor="middle" style="font-size:9px;fill:var(--faint)">cases</text>
           </svg>
           <table style="flex:1 1 220px;min-width:200px"><tbody>
-            ${rows.map((r, i) => `<tr>
+            ${slices.map((r, i) => `<tr>
               <td><span style="display:inline-block;width:9px;height:9px;border-radius:2px;
-                background:${RING[i % RING.length]};margin-right:7px"></span>${esc(r.label)}</td>
+                background:${r.isOther ? '#D3D8E4' : RING[i % RING.length]};margin-right:7px"></span>${esc(r.label)}</td>
               <td class="num strong">${num(r.cases)}</td>
               <td class="num" style="color:var(--faint)">${r.share === null ? '\u2014' : (r.share * 100).toFixed(1) + '%'}</td>
             </tr>`).join('')}
@@ -2293,13 +2306,6 @@ function renderReport() {
           ${donut(a.rtMix, 'Realtime \u00b7 appointment location')}
           ${donut(a.nrMix, 'Not realtime \u00b7 preferred specialty')}
         </div>
-        <div class="note"><b>Initiates is GA4; everything else is the appointments sheet.</b> Two systems
-        measuring two ends of one funnel \u2014 GA4 sees the form opened, the sheet sees the booking land \u2014
-        so the completion rate is a comparison, not a tracked journey.
-        Revenue is <b>monthly in the sheet</b>: a part-month range still carries that whole month${
-          AP.revMonths ? ` (${num(AP.revMonths)} month${AP.revMonths > 1 ? 's' : ''} counted)` : ''}.
-        Blank locations and specialties show as <b>${esc(AP.notSpecified)}</b>.${
-          AP.discarded ? ` ${num(AP.discarded)} row${AP.discarded > 1 ? 's' : ''} had no usable hospital and ${AP.discarded > 1 ? 'were' : 'was'} excluded.` : ''}</div>
       </div>`;
     };
     // Own wrapper class: two `.cb-wrap` blocks on one report made the chat
@@ -5778,7 +5784,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.122.1';
+const CLIENT_BUILD = '3.122.2';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
