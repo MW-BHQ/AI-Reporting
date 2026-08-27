@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.124.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.125.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -679,6 +679,32 @@ improves.
 
 ## 12. Requested but not built
 
+- **YOUTUBE — two cards (channel info; engagement + top videos).** BLOCKED on
+  field verification, not on design.
+
+  **The direct-API route that worked for GA4 and GSC does NOT work here.** Those
+  two allow a SERVICE ACCOUNT to be added as a user on the property. A YouTube
+  channel cannot: the YouTube Analytics API (views by day, watch time,
+  subscribers gained, shares by service) is OAuth-only and the grant must come
+  from the channel OWNER. Windsor's own connect screen says exactly that. The
+  Data API v3 with a plain key gives only public lifetime channel totals — no
+  per-day series, no watch time, no sharing service — so it cannot build these
+  cards.
+
+  **Windsor is therefore the right path**, and MW has connected it. But
+  `get_fields("youtube")` returns *"No youtube account for user
+  digitalbangkokhospitalcom"*, so the field list cannot be read and the field
+  names cannot be verified. Guessing them is the one thing §0 forbids, and the
+  failure mode would be a slide of silent zeros.
+
+  **To unblock:** confirm which Windsor team the YouTube account was connected
+  under. The MCP session sees team `digitalbangkokhospitalcom` with no YouTube
+  account, so either the connection landed on another team or it did not
+  complete. Once `get_fields` returns, both cards are a short build — the LS
+  slides map to: views, subscriptions, watch time, a views-vs-subscriptions
+  daily series, top countries, likes/comments/shares, sharing service, top
+  videos.
+
 - **APPLY THE REM TYPE SCALE TO EVERY TAB** (MW, backlogged v3.117.0). The scale
   lives in `:root` and Monthly Reports uses it; the app chrome and the other
   tabs still carry roughly 80 hard-coded px sizes. The `type:scale` audit rule
@@ -699,6 +725,33 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.125.0 — hospital logos; the YouTube blocker identified.**
+
+**Hospital logos on the Actions card** (MW supplied four URLs). Three-stage
+fallback like the platform marks: local `brand/hosp-<key>.svg`, then the
+bangkokhospital.com asset, then the text code. They could not be bundled — the
+build container gets **403 from static.bangkokhospital.com** — so the browser
+fetches them; drop the files in to make them local and print-safe. Scope pills
+stay text (MW).
+
+BGH's logo IS the BHQ mark. That is correct, not a mix-up, and it is why the two
+look identical on that tab.
+
+**YOUTUBE: the answer to "can you really not use the API" is no, and for a
+specific reason** — see §12. GA4 and GSC moved to direct APIs because a SERVICE
+ACCOUNT can be added as a user on those properties. A YouTube channel cannot:
+YouTube Analytics is OAuth-only and the grant must come from the channel owner,
+which is what Windsor's own connect screen states. Data API v3 with a key gives
+only public lifetime totals — no daily series, no watch time, no sharing
+service.
+
+So Windsor is right, but `get_fields("youtube")` reports no YouTube account on
+team `digitalbangkokhospitalcom`, so the field names cannot be verified and the
+cards are not built. **Two field-name guesses have already cost this project an
+hour each** (`unique_video_views`, `search_keyword_value`); a third would be a
+slide of silent zeros.
+
 
 **v3.124.0 — scope is always a pill; keyword rankings replace the placeholder.**
 

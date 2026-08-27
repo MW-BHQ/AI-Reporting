@@ -820,6 +820,27 @@ setTimeout(() => {
           ? ok("gbp ranks", `${bands.length} ranks banded, placeholder replaced`)
           : fail("gbp ranks", `headers ${heads.join(", ")}, ${bands.length} bands`);
       })();
+      /**
+       * Hospital logos on the Actions card, one per hospital, each with a text
+       * fallback in `alt` so a blocked asset still names the hospital.
+       */
+      (() => {
+        const card = [...root.querySelectorAll(".slide")]
+          .find(sl => /ACTIONS/i.test((sl.querySelector(".slide-title") || {}).textContent || ""));
+        if (!card) return fail("hospital logos", "Actions slide not found");
+        const logos = [...card.querySelectorAll(".hlogo img")];
+        const alts = logos.map(l => l.getAttribute("alt"));
+        const want = ["BGH", "BIH", "BHT", "WSH"];
+        const missing = want.filter(w => !alts.includes(w));
+        if (missing.length) return fail("hospital logos", `no logo for: ${missing.join(", ")}`);
+        // Local first, remote as the documented fallback.
+        const localFirst = logos.every(l => /^brand\/hosp-/.test(l.getAttribute("src") || ""));
+        const hasRemote = logos.every(l => /^https:\/\/static\.bangkokhospital\.com\//
+          .test(l.getAttribute("data-alt") || ""));
+        localFirst && hasRemote
+          ? ok("hospital logos", `${logos.length} logos, local-first with remote fallback`)
+          : fail("hospital logos", "logo src/fallback order is wrong");
+      })();
       finish();
     }, 500);
   }

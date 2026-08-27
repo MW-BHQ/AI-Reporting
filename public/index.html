@@ -634,6 +634,9 @@
    * Marks are the artwork and nothing else — no plate, no padding, no shadow.
    * Sizes are rem so they track the type scale.
    */
+  /* Hospital wordmarks scale to a set height; widths differ between the four. */
+  .hlogo{display:inline-flex;align-items:center;}
+  .hlogo img{height:var(--hh);width:auto;max-width:11rem;object-fit:contain;}
   .plogo{display:inline-block;width:1.75rem;height:1.75rem;object-fit:contain;
     margin-right:.5rem;vertical-align:-.45rem;flex:0 0 auto;}
   /* Section header mark at 64px (MW). Highest-specificity wins over any inline
@@ -1657,6 +1660,32 @@ function renderReport() {
    * logo with any transparency rendered on an unrelated brand colour. All 19
    * assets exist, so the fallback was buying nothing and costing correctness.
    */
+  /**
+   * HOSPITAL LOGOS (MW). Local file first, then the bangkokhospital.com asset,
+   * then the text code — the same three-stage fallback as the platform marks.
+   *
+   * These could NOT be bundled: the build container gets 403 from
+   * static.bangkokhospital.com, so the browser fetches them. Drop the files at
+   * `public/brand/hosp-<key>.svg` to make them local and print-safe.
+   *
+   * BGH uses the BHQ mark, which is why the two look the same on that tab — MW
+   * confirmed this is correct, not a mix-up.
+   */
+  const HOSPITAL = {
+    BGH: { file: 'hosp-bgh.svg', url: 'https://static.bangkokhospital.com/uploads/2025/05/BHQ-Logo.svg' },
+    BIH: { file: 'hosp-bih.svg', url: 'https://static.bangkokhospital.com/uploads/2024/03/bih-1.svg' },
+    BHT: { file: 'hosp-bht.svg', url: 'https://static.bangkokhospital.com/uploads/2024/04/BHTlogo.svg' },
+    WSH: { file: 'hosp-wsh.svg', url: 'https://static.bangkokhospital.com/uploads/2024/04/WSHlogo.svg' },
+  };
+  const hlogo = (key, h) => {
+    const p = HOSPITAL[key];
+    if (!p) return `<span class="all-four">${esc(key)}</span>`;
+    return `<span class="hlogo" style="--hh:${h || 34}px">
+      <img src="brand/${esc(p.file)}" alt="${esc(key)}" title="${esc(key)}" loading="lazy"
+        data-alt="${esc(p.url)}"
+        onerror="if(this.dataset.alt){this.src=this.dataset.alt;this.dataset.alt='';}else{this.replaceWith(document.createTextNode('${esc(key)}'));}">
+    </span>`;
+  };
   const plogo = (id, size) => {
     const p = PLATFORM[id]; if (!p) return '';
     const sz = size ? ` style="width:${size}px;height:${size}px"` : '';
@@ -1807,7 +1836,7 @@ function renderReport() {
       return `<div class="card" style="margin-bottom:10px">
         <div class="grid g-5 act-row" style="align-items:center">
           <div>
-            <div style="margin-bottom:4px"><span class="all-four">${esc(b.label)}</span></div>
+            <div style="margin-bottom:6px">${hlogo(b.key, 30)}</div>
             <div class="val">${num(b.sessions)}</div>
             <div class="sub2">sessions</div>
           </div>
@@ -5836,7 +5865,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.124.0';
+const CLIENT_BUILD = '3.125.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
