@@ -198,6 +198,24 @@ expect_field "rf ai by channel"    "$REPORT" "d.referral.byBrand[0].ai.rows.some
 # Per-assistant event columns need per-assistant counts.
 expect_field "rf ai per-row events" "$REPORT" "d.referral.byBrand[0].ai.rows.every(r=>r.events&&typeof r.events==='object')?'ok':undefined"
 
+echo "--- monthly report: GBP keyword rankings (SEO sheet) ---"
+GR="d.gbpRanks.byBrand.BGH"
+# Rank is AVERAGED across listings: "General hospital" is 1 at one listing and
+# 3 at another, so it must read 2 across 2 listings.
+expect_field "gr rank averaged"    "$REPORT" "($GR.rows.find(k=>k.keyword==='General hospital')||{}).rank===2?2:undefined"
+expect_field "gr locations count"  "$REPORT" "($GR.rows.find(k=>k.keyword==='General hospital')||{}).locations===2?2:undefined"
+# A June row must not count in a July range.
+expect_field "gr month filtered"   "$REPORT" "($GR.rows.every(k=>k.keyword!=='Private hospital')&&d.gbpRanks.outOfRange>0)?'ok':undefined"
+# Volume is the keyword's, not the listing's, so it is NOT summed: 12,100 twice
+# must stay 12,100.
+expect_field "gr volume not summed" "$REPORT" "($GR.rows.find(k=>k.keyword==='General hospital')||{}).volume===12100?12100:undefined"
+expect_field "gr bands"            "$REPORT" "($GR.top3===3&&$GR.top10===4)?'ok':undefined"
+# Best rank first.
+expect_field "gr sorted by rank"   "$REPORT" "$GR.rows[0].rank<=$GR.rows[$GR.rows.length-1].rank?'ok':undefined"
+# THE COLLISION GUARD: this sheet must not have replaced the Windsor GBP
+# search-keyword data, which used the same job name before v3.123.0.
+expect_field "gr not clobbering"   "$REPORT" "(d.gbpDetail||[]).some(g=>g.keywords&&(g.keywords.rows||[]).length>0)?'ok':undefined"
+
 echo "--- monthly report: appointments (GA4 + the appointments sheet) ---"
 AP="d.appointments.byScope"
 # BHQ is the four hospitals summed, on both counts and money.

@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.122.2.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.123.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -699,6 +699,50 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.123.0 — GBP keyword rankings from the SEO sheet; revenue and Actions styling.**
+
+**Open item 1 closed.** Third Google Sheet, `GBPKW_SHEET_ID`, one tab per
+hospital: locationName, keyword, `month_week`, address, rank, avg monthly
+searches, createdAt. New slide after the GBP listings.
+
+**It sits ALONGSIDE the GBP search-keyword card, never instead of it.** That card
+says what people typed to reach the listing; this one says where we place for
+keywords we chose to track. Both suites assert both cards are present.
+
+**A JOB-NAME COLLISION THAT WOULD HAVE SILENTLY BLANKED THE OTHER CARD.** The
+first version used `jobs.gbpKeywords`, which is ALREADY the Windsor GBP
+search-keyword pull — so the sheet replaced that card's data wholesale. Renamed
+`jobs.gbpRanks`, and smoke now asserts the Windsor keywords still populate. The
+irony is exact: the block written to sit beside that card almost deleted it.
+
+**Three aggregation decisions, each with a negative control:**
+
+- **Rank is AVERAGED across listings**, not summed — a keyword tracked at two
+  listings at ranks 1 and 3 reads 2 across 2 listings. Summing ranks is
+  meaningless, and the sheet's own decimals are already averages.
+- **Volume is NOT summed.** It is a property of the keyword, not the listing, so
+  12,100 seen at two listings stays 12,100. Adding it would multiply one number
+  by the listing count — the same per-row-counter trap as the Windsor connectors.
+- **`month_week` is a LABEL** (`2026-July`), so the range is converted to the set
+  of labels it covers rather than compared as dates. A June row must not count in
+  a July report.
+
+Keywords with no volume reported show a **dash, not a zero**, and the count of
+those is stated: a zero reads as "nobody searches this", which is not what an
+absent value means.
+
+Rank bands: green 1–3 (local pack), amber 4–10, red past ten.
+
+**Styling (MW).** Revenue cards get `.stat-money` — a left accent rule and a
+heavier figure, restrained rather than a filled card. The Actions card now
+borrows the scorecard typography from the SAME `.stat .lab` / `.stat .val` rules
+via `.act-row`, so the two cannot drift; its cells cannot BE `.stat` because five
+of them sit inside one card and would each gain a nested surface.
+
+**A parse failure caught immediately:** the new helper was called `money`, which
+is already a currency formatter further down the file.
+
 
 **v3.122.2 — appointments footnote removed; THE DONUT RING NOW CLOSES.**
 

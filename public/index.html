@@ -199,8 +199,17 @@
   .g-2-1{grid-template-columns:1.6fr 1fr;}
   .mt{margin-top:14px;}
 
-  .stat .lab{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;color:var(--faint);display:flex;align-items:center;gap:6px;}
-  .stat .val{font-size:var(--text-3xl);font-weight:600;margin-top:7px;letter-spacing:-.02em;}
+  .stat .lab, .act-row .lab{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;color:var(--faint);display:flex;align-items:center;gap:6px;}
+  .stat .val, .act-row .val{font-size:var(--text-3xl);font-weight:600;margin-top:7px;letter-spacing:-.02em;}
+  /**
+   * The Actions card puts five cells inside ONE card per hospital, so its cells
+   * cannot be `.stat` — that would give each a card surface nested inside the
+   * card. `.act-row` borrows the scorecard TYPOGRAPHY from the rules above
+   * without the surface, so the two can never drift apart.
+   */
+  .act-row .val{font-size:var(--text-2xl);}
+  .act-row .sub2{font-size:var(--text-xs);color:var(--faint);margin-top:2px;}
+  .act-row .hcode{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;}
   .stat .val.na{color:var(--faint);font-weight:500;font-size:var(--text-2xl);}
   .stat .sub{font-size:var(--text-xs);color:var(--muted);margin-top:3px;}
   .chip{width:7px;height:7px;border-radius:50%;display:inline-block;}
@@ -398,6 +407,13 @@
   .ra-hero .lab{color:var(--violet)!important;}
   .ra-hero .v{color:var(--violet);font-size:26px!important;}
   .stat.stat-hero{background:var(--violet-soft);border-color:#C9C1F7;}
+  /**
+   * Revenue row: a left accent rule and a slightly heavier figure, so the money
+   * reads as its own band without a second colour scheme (MW asked for "a
+   * little" standout, and a filled card would have shouted).
+   */
+  .stat.stat-money{border-left:3px solid var(--violet);}
+  .stat.stat-money .val{font-weight:750;color:var(--ink);}
   .stat.stat-hero .val{color:var(--violet);}
   .ra-row.has-kids{cursor:pointer;}
   .ra-row.has-kids:hover{background:var(--violet-soft);}
@@ -1690,6 +1706,13 @@ function renderReport() {
    * `lead` and `zero` are accepted and ignored (MW: no shading carrying
    * meaning), so call sites did not all need rewriting.
    */
+  /**
+   * A scorecard with the money accent. Same markup, one extra class.
+   * NOT called `money` — that name is already a currency formatter further down
+   * and the collision failed the parse immediately.
+   */
+  const kpiMoney = (lab, val, sub) => `<div class="stat stat-money"><div class="lab">${lab}</div>
+    <div class="val">${val}</div>${sub?`<div class="sub2">${sub}</div>`:''}</div>`;
   const mini = (lab, val, opts = {}) => {
     return `<div class="stat">
       <div class="lab">${opts.icon ? actIcon(opts.icon) : ''}${esc(lab)}</div>
@@ -1779,18 +1802,18 @@ function renderReport() {
     ${d.brands.map(b=>{
       const byId = Object.fromEntries((b.keyEventBreakdown||[]).map(k=>[k.id,k.value]));
       return `<div class="card" style="margin-bottom:10px">
-        <div class="grid g-5" style="align-items:center">
+        <div class="grid g-5 act-row" style="align-items:center">
           <div>
             <div class="hcode">${esc(b.label)}</div>
-            <div class="val" style="font-size:var(--text-2xl)">${num(b.sessions)}</div>
-            <div class="lab">sessions</div>
+            <div class="val">${num(b.sessions)}</div>
+            <div class="sub2">sessions</div>
           </div>
           ${ACTIONS.map(a=>{
             const v = byId[a.id]||0;
             const cr = b.sessions ? (v/b.sessions)*100 : null;
             return `<div>
               <div class="lab">${actIcon(a.id)}${esc(a.label)}</div>
-              <div class="val" style="font-size:var(--text-2xl)">${num(v)}</div>
+              <div class="val">${num(v)}</div>
               <div class="sub2">CR ${cr===null?'\u2014':cr.toFixed(1)+'%'}</div>
             </div>`;
           }).join('')}
@@ -2295,10 +2318,10 @@ function renderReport() {
           ${kpi('Not realtime', num(a.nonRealtime), 'cases')}
         </div>
         <div class="grid g-3" style="margin-bottom:14px">
-          ${kpi('Revenue', '฿' + num(Math.round(a.revenue)), 'realtime + not realtime')}
-          ${kpi('Realtime revenue', '฿' + num(Math.round(a.realtimeRev)),
+          ${kpiMoney('Revenue', '฿' + num(Math.round(a.revenue)), 'realtime + not realtime')}
+          ${kpiMoney('Realtime revenue', '฿' + num(Math.round(a.realtimeRev)),
             a.realtime ? '฿' + num(Math.round(a.realtimeRev / a.realtime)) + ' per case' : '')}
-          ${kpi('Not realtime revenue', '฿' + num(Math.round(a.nonRealtimeRev)),
+          ${kpiMoney('Not realtime revenue', '฿' + num(Math.round(a.nonRealtimeRev)),
             a.nonRealtime ? '฿' + num(Math.round(a.nonRealtimeRev / a.nonRealtime)) + ' per case' : '')}
         </div>
         <hr class="sep">
@@ -2680,6 +2703,50 @@ function renderReport() {
    */
   // Only the hospital whose tab is open \u2014 the other three have their own tabs.
   const GD = (d.gbpDetail || []).filter(x => x.key === sel && x.totals && x.totals.impressions);
+  /**
+   * GBP keyword RANKINGS, from MW's SEO-tool sheet. Its own card, placed after
+   * the GBP listings and BESIDE the search-keyword card, never replacing it:
+   * that one says what people typed to reach the listing, this one says where
+   * we place for the keywords we chose to track. A rank cannot answer the first
+   * question and a search term cannot answer the second.
+   */
+  const GR = d.gbpRanks || {};
+  const gbpRankBody = (!GR.unavailable && GR.byBrand && GR.byBrand[sel]) ? (() => {
+    const r = GR.byBrand[sel];
+    if (!r.rows.length) return `<div class="note">No tracked keywords for ${esc(sel)} in
+      ${esc((GR.months || []).join(', ') || 'this range')}.</div>`;
+    // Rank 1–3 is the local pack; 4–10 is page one. Anything past 10 is a miss.
+    const band = (v) => v <= 3 ? 'up' : (v <= 10 ? 'flat' : 'down');
+    return `
+    <div class="grid g-4" style="margin-bottom:14px">
+      ${kpi('Tracked keywords', num(r.keywords),
+        `${esc((GR.months || []).join(', '))}`)}
+      ${kpi('In the top 3', num(r.top3),
+        r.keywords ? `${((r.top3 / r.keywords) * 100).toFixed(0)}% of tracked` : '')}
+      ${kpi('In the top 10', num(r.top10),
+        r.keywords ? `${((r.top10 / r.keywords) * 100).toFixed(0)}% of tracked` : '')}
+      ${kpi('Average rank', r.avgRank === null ? '\u2014' : r.avgRank.toFixed(2),
+        'lower is better')}
+    </div>
+    <table class="sortable" data-heat="1"><thead><tr>
+      <th>Keyword</th><th class="num">Rank</th>
+      <th class="num">Avg monthly searches</th><th class="num">Listings</th>
+    </tr></thead><tbody>
+    ${r.rows.map(k => `<tr>
+      <td class="strong i18n">${esc(k.keyword)}</td>
+      <td class="num"><span class="dlt ${band(k.rank)}">${k.rank.toFixed(2)}</span></td>
+      <td class="num">${k.volume ? num(k.volume) : '<span class="dlt none">\u2014</span>'}</td>
+      <td class="num">${num(k.locations)}</td>
+    </tr>`).join('')}
+    </tbody></table>
+    <div class="note">Best rank first. Green is the local pack (1\u20133), amber page one
+    (4\u201310), red past ten. <b>Rank is averaged across listings</b> where a keyword is tracked for
+    more than one, which is what the sheet's own decimal ranks already represent.
+    Search volume is the keyword's, not the listing's, so it is not summed \u2014 and
+    ${num(r.keywords - r.withVolume)} of ${num(r.keywords)} tracked keywords have no volume reported by
+    the tool, shown as a dash rather than zero.</div>`;
+  })() : '';
+
   const gbpDetailBody = GD.map((g, gi) => `
     <div class="slide slide-break">
       <div class="slide-title"><span>${plogo('gbp')}Google Business Profile \u00b7 ${esc(g.label)}</span>${logoImg}</div>
@@ -2749,6 +2816,7 @@ function renderReport() {
     ${referralBody ? slide(`Referral \u00b7 Back Links \u00b7 ${sel}`, referralBody) : ''}
     ${searchPagesBody}
     ${gbpDetailBody}
+    ${gbpRankBody ? slide(`GBP keyword rankings \u00b7 ${sel}`, gbpRankBody, false, false, 'gbp') : ''}
     ${slide('Google reviews', reviewBody, false, false, 'gbp')}
     ${slide('Facebook', facebookBody, false, false, 'facebook')}
 
@@ -5784,7 +5852,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.122.2';
+const CLIENT_BUILD = '3.123.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

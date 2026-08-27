@@ -203,6 +203,21 @@ function reportFixture() {
           { label: "Skin & Aesthetics Center", cases: 300, share: 0.246 },
           { label: "Dental Center", cases: 200, share: 0.164 }] },
       }])) },
+    /**
+     * GBP keyword ranks. One keyword tracked at two listings, one with no
+     * volume reported, and one past rank 10, so the averaging, the dash and all
+     * three rank bands render.
+     */
+    gbpRanks: { months: ["2026-July"], outOfRange: 1,
+      byBrand: Object.fromEntries(KEYS.map((k) => [k, {
+        keywords: 5, top3: 3, top10: 4, withVolume: 4, avgRank: 6.25,
+        rows: [
+          { keyword: "Mental hospital", rank: 1.75, volume: 590, locations: 1 },
+          { keyword: "General hospital", rank: 2, volume: 12100, locations: 2 },
+          { keyword: "Heart hospital", rank: 2, volume: 0, locations: 1 },
+          { keyword: "Hospital near me", rank: 6, volume: 27100, locations: 1 },
+          { keyword: "Medical centre", rank: 19.5, volume: 3600, locations: 1 },
+        ] }])) },
     chatBubble: { available: true,
       events: [{ name: "click", clicks: 15600 }],
       unmapped: [{ key: "chat-bubble-channel-unknown https://example.com", clicks: 12 }],
@@ -752,6 +767,29 @@ setTimeout(() => {
         /Initiates is GA4; everything else/.test(pages[0].textContent)
           ? fail("appointments", "footnote still rendering")
           : ok("appointments", `2 scopes, 2 closed donuts, ${arcs} arcs, N/S shown`);
+      })();
+      /**
+       * GBP keyword ranks: its own card, ALONGSIDE the search-keyword card.
+       * Both must be present — the whole point of this block is that a rank and
+       * a search term answer different questions, so one replacing the other is
+       * a regression, not a simplification.
+       */
+      (() => {
+        const titles = [...root.querySelectorAll(".slide-title, .card-title")]
+          .map(t => t.textContent.trim());
+        const hasRanks = titles.some(t => /GBP KEYWORD RANKINGS|GBP keyword rankings/i.test(t));
+        if (!hasRanks) return fail("gbp ranks", "no keyword rankings card");
+        const hasSearchKw = titles.some(t => /Search keywords|What people searched/i.test(t))
+          || /search keyword/i.test(text);
+        if (!hasSearchKw) return fail("gbp ranks", "the search-keyword card is gone");
+        // A dash for unreported volume, not a zero.
+        const card = [...root.querySelectorAll(".slide")]
+          .find(sl => /GBP KEYWORD RANKINGS/i.test((sl.querySelector(".slide-title") || {}).textContent || ""));
+        if (!card) return fail("gbp ranks", "rankings slide not found");
+        const bands = card.querySelectorAll("td .dlt.up, td .dlt.flat, td .dlt.down");
+        bands.length >= 5
+          ? ok("gbp ranks", `${bands.length} ranks banded, search-keyword card intact`)
+          : fail("gbp ranks", `${bands.length} banded ranks, expected 5+`);
       })();
       finish();
     }, 500);

@@ -1871,6 +1871,16 @@ async function buildReport(from, to) {
    * the sheet is a separate system with its own permissions, and the other
    * fifteen slides do not depend on it.
    */
+  /**
+   * NAMED `gbpRanks`, not `gbpKeywords`: that job name is already taken by the
+   * Windsor GBP search-keywords pull, and reusing it silently replaced that
+   * card's data with this sheet. Two different questions, two different keys —
+   * this block exists precisely BECAUSE they are not interchangeable.
+   */
+  jobs.gbpRanks = buildGbpKeywords(from, to).catch((e) => {
+    logJson("WARN", "gbp_keywords_failed", { error: String(e.message || e) });
+    return null;
+  });
   jobs.appointments = buildAppointments(from, to).catch((e) => {
     logJson("WARN", "appointments_failed", { error: String(e.message || e) });
     return null;
@@ -3329,6 +3339,7 @@ async function buildReport(from, to) {
     content,
     chatBubble,
     appointments,
+    gbpRanks: data.gbpRanks || { unavailable: true },
     tiktok,
     social,
     languages,
@@ -4146,6 +4157,90 @@ const apptDay = (raw) => {
 };
 
 const NOT_SPECIFIED = "N/S";
+
+/**
+ * GBP KEYWORD RANKINGS — a third sheet, one tab per hospital (MW).
+ *
+ * Columns, from MW's screenshot: A locationName, B keyword, C month_week,
+ * D address, E rank, F avg monthly searches, G createdAt.
+ *
+ * This sits ALONGSIDE the GBP keyword card, not instead of it (CONTEXT open
+ * item 1): that card answers "what did people search to find the listing", this
+ * one answers "where do we rank for the keywords we care about". Different
+ * questions, and one cannot substitute for the other.
+ */
+const GBPKW_SHEET_ID = process.env.GBPKW_SHEET_ID || "1nUbrinZKLc1JIkK1O9B0NC-7T30YYbOJ7cTEmxFDL5M";
+
+/**
+ * `month_week` is a display label like `2026-July`, so the range has to be
+ * turned into the set of labels it covers rather than compared as dates.
+ */
+const MONTH_NAMES = ["January","February","March","April","May","June",
+  "July","August","September","October","November","December"];
+function monthWeekLabels(from, to) {
+  const out = new Set();
+  const [fy, fm] = from.split("-").map(Number);
+  const [ty, tm] = to.split("-").map(Number);
+  let y = fy, m = fm;
+  // Bounded: a range spanning more than two years is not a monthly report.
+  for (let i = 0; i < 36 && (y < ty || (y === ty && m <= tm)); i++) {
+    out.add(`${y}-${MONTH_NAMES[m - 1]}`);
+    if (++m > 12) { m = 1; y++; }
+  }
+  return out;
+}
+
+async function buildGbpKeywords(from, to) {
+  const tabs = BRAND_KEYS;
+  const ranges = tabs.map((t) => `'${t}'!A2:G`);
+  const res = await sheetBatchGet(GBPKW_SHEET_ID, ranges);
+  const want = monthWeekLabels(from, to);
+  const byBrand = {};
+  let outOfRange = 0;
+
+  tabs.forEach((brand, i) => {
+    const rows = (res[i] && res[i].values) || [];
+    /**
+     * A keyword can appear once per LOCATION within a tab, so rank is averaged
+     * across locations rather than summed — summing ranks would be meaningless
+     * and averaging is what the sheet's own decimal ranks already represent.
+     * Search volume is a property of the keyword, not the location, so the
+     * maximum is taken rather than a total (adding it would multiply one number
+     * by the location count).
+     */
+    const agg = new Map();
+    for (const r of rows) {
+      const kw = String(r[1] || "").trim(); if (!kw) continue;
+      const mw = String(r[2] || "").trim();
+      if (!want.has(mw)) { outOfRange++; continue; }
+      const rank = parseFloat(String(r[4] || "").replace(/,/g, ""));
+      if (!isFinite(rank)) continue;
+      const vol = n(String(r[5] || "").replace(/,/g, ""));
+      const e = agg.get(kw) || { keyword: kw, rankSum: 0, rankN: 0, volume: 0, locations: 0 };
+      e.rankSum += rank; e.rankN++; e.locations++;
+      e.volume = Math.max(e.volume, vol);
+      agg.set(kw, e);
+    }
+    const list = [...agg.values()].map((e) => ({
+      keyword: e.keyword,
+      rank: Math.round((e.rankSum / e.rankN) * 100) / 100,
+      volume: e.volume, locations: e.locations,
+    }));
+    byBrand[brand] = {
+      // Best rank first: the question is where we stand, and rank 1 is the top.
+      rows: list.sort((a, b) => a.rank - b.rank || b.volume - a.volume).slice(0, 20),
+      keywords: list.length,
+      top3: list.filter((k) => k.rank <= 3).length,
+      top10: list.filter((k) => k.rank <= 10).length,
+      // Volume is only meaningful where the tool actually reported it; a great
+      // many rows carry 0, and averaging those in would understate the rest.
+      withVolume: list.filter((k) => k.volume > 0).length,
+      avgRank: list.length
+        ? Math.round((list.reduce((a, k) => a + k.rank, 0) / list.length) * 100) / 100 : null,
+    };
+  });
+  return { byBrand, months: [...want], outOfRange };
+}
 
 async function buildAppointments(from, to) {
   const rows = await sheetBatchGet(APPT_SHEET_ID, [

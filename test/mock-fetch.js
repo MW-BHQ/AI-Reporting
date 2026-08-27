@@ -665,6 +665,31 @@ global.fetch = async (url, opts = {}) => {
      * Hospital" and must NOT fall to BGH. A fixture of clean labels would let
      * every one of those rules break silently.
      */
+    /**
+     * GBP keyword rankings: four tabs, one per hospital. The BGH tab carries
+     * the cases that matter — the SAME keyword twice for two locations (so the
+     * rank average and the location count are exercised), a row from ANOTHER
+     * month that must be excluded, a decimal rank, and a zero search volume
+     * that must not be averaged in.
+     */
+    if (u.includes("%27BGH%27") || u.includes("'BGH'")) {
+      const R = (rows) => ({ values: rows });
+      return jsonRes({ valueRanges: [
+        R([
+          ["Bangkok Hospital HQ", "General hospital",  "2026-July", "2 Soi Phetchaburi", "1",    "12100", "2026-06-08"],
+          ["Bangkok Hospital Annex", "General hospital","2026-July", "9 Soi Other",       "3",    "12100", "2026-06-08"],
+          ["Bangkok Hospital HQ", "Hospital near me",  "2026-July", "2 Soi Phetchaburi", "6",    "27100", "2026-06-08"],
+          ["Bangkok Hospital HQ", "Mental hospital",   "2026-July", "2 Soi Phetchaburi", "1.75", "590",   "2026-06-08"],
+          ["Bangkok Hospital HQ", "Heart hospital",    "2026-July", "2 Soi Phetchaburi", "2",    "0",     "2026-06-08"],
+          ["Bangkok Hospital HQ", "Medical centre",    "2026-July", "2 Soi Phetchaburi", "19.5", "3600",  "2026-06-08"],
+          // Different month: must NOT be counted in a July range.
+          ["Bangkok Hospital HQ", "Private hospital",  "2026-June", "2 Soi Phetchaburi", "5",    "0",     "2026-04-27"],
+        ]),
+        R([["Bangkok International", "Hospital near me", "2026-July", "addr", "8", "27100", "2026-06-08"]]),
+        R([["Bangkok Heart", "Heart hospital", "2026-July", "addr", "2", "480", "2026-06-08"]]),
+        R([["Bangkok Cancer", "Cancer treatment centre", "2026-July", "addr", "3", "0", "2026-06-08"]]),
+      ] });
+    }
     if (u.includes("Realtime")) {
       const R = (values) => ({ values: values.map((v) => [v]) });
       const rtLoc  = ["ศูนย์กุมารเวช", "Women's Health Center", "", "Heart Center", "Cancer Center", "Skin", "Dental", "Ortho"];
