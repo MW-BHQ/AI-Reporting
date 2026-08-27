@@ -833,13 +833,18 @@ setTimeout(() => {
         const want = ["BGH", "BIH", "BHT", "WSH"];
         const missing = want.filter(w => !alts.includes(w));
         if (missing.length) return fail("hospital logos", `no logo for: ${missing.join(", ")}`);
-        // Local first, remote as the documented fallback.
+        /**
+         * Local files now, and the SLIDE HEADER must use them too — there used
+         * to be a second remote `LOGOS` map fetching the same four over the
+         * network, so the same logo arrived two ways and only one was local.
+         */
         const localFirst = logos.every(l => /^brand\/hosp-/.test(l.getAttribute("src") || ""));
-        const hasRemote = logos.every(l => /^https:\/\/static\.bangkokhospital\.com\//
-          .test(l.getAttribute("data-alt") || ""));
-        localFirst && hasRemote
-          ? ok("hospital logos", `${logos.length} logos, local-first with remote fallback`)
-          : fail("hospital logos", "logo src/fallback order is wrong");
+        if (!localFirst) return fail("hospital logos", "a logo is not served from brand/");
+        const header = root.querySelector(".slide-title .slide-logo");
+        if (!header) return fail("hospital logos", "no slide header logo");
+        /^brand\/hosp-/.test(header.getAttribute("src") || "")
+          ? ok("hospital logos", `${logos.length} logos + header, all local`)
+          : fail("hospital logos", `header logo src is ${header.getAttribute("src")}`);
       })();
       finish();
     }, 500);

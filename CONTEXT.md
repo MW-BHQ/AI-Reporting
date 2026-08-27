@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.125.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.126.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -679,32 +679,35 @@ improves.
 
 ## 12. Requested but not built
 
-- **YOUTUBE — two cards (channel info; engagement + top videos).** BLOCKED on
-  field verification, not on design.
+- **YOUTUBE — two cards (channel info; engagement + top videos).** BLOCKED, and
+  the cause is now identified: **Windsor's own puller is issuing an invalid
+  YouTube Analytics query.**
 
-  **The direct-API route that worked for GA4 and GSC does NOT work here.** Those
-  two allow a SERVICE ACCOUNT to be added as a user on the property. A YouTube
-  channel cannot: the YouTube Analytics API (views by day, watch time,
-  subscribers gained, shares by service) is OAuth-only and the grant must come
-  from the channel OWNER. Windsor's own connect screen says exactly that. The
-  Data API v3 with a plain key gives only public lifetime channel totals — no
-  per-day series, no watch time, no sharing service — so it cannot build these
-  cards.
+  Their request combines `dimensions=day,video,creatorContentType` with a
+  `video==` filter and 24 metrics, including annotation, card, `redViews`,
+  `estimatedRedMinutesWatched` and `engagedViews`. Those metrics are not valid
+  alongside the `video` dimension in one report, so the API returns
+  `400 badRequest — "The query is not supported"`. The `filters=video==A,B`
+  comma form also looks malformed. **This is not MW's connection and not a
+  permissions problem** — a re-authorise will not fix a malformed query.
 
-  **Windsor is therefore the right path**, and MW has connected it. But
-  `get_fields("youtube")` returns *"No youtube account for user
-  digitalbangkokhospitalcom"*, so the field list cannot be read and the field
-  names cannot be verified. Guessing them is the one thing §0 forbids, and the
-  failure mode would be a slide of silent zeros.
+  `get_fields("youtube")` separately reports no YouTube account on team
+  `digitalbangkokhospitalcom`, while that same account is attempting pulls — so
+  the connector looks partially provisioned.
 
-  **To unblock:** confirm which Windsor team the YouTube account was connected
-  under. The MCP session sees team `digitalbangkokhospitalcom` with no YouTube
-  account, so either the connection landed on another team or it did not
-  complete. Once `get_fields` returns, both cards are a short build — the LS
-  slides map to: views, subscriptions, watch time, a views-vs-subscriptions
-  daily series, top countries, likes/comments/shares, sharing service, top
-  videos.
+  **Two ways forward, and they cover different things:**
 
+  | Route | Gives | Cannot give |
+  |---|---|---|
+  | YouTube **Data API v3** + API key | per-video views, likes, comments, titles, thumbnails | watch time, subscribers, shares, sharing service |
+  | YouTube **Analytics API** + owner OAuth | everything the LS deck shows | needs a refresh token from the channel owner; a service account cannot be granted it |
+
+  So Top Videos and the like/comment counts are buildable today without Windsor.
+  **Shares, sharing service, watch time and subscribers are not** — those need
+  either Windsor fixed or an OAuth refresh token stored for the channel owner.
+
+  A support ticket is drafted with the full error and the analysis; sending it
+  needs MW's approval in the Windsor tool.
 - **APPLY THE REM TYPE SCALE TO EVERY TAB** (MW, backlogged v3.117.0). The scale
   lives in `:root` and Monthly Reports uses it; the app chrome and the other
   tabs still carry roughly 80 hard-coded px sizes. The `type:scale` audit rule
@@ -725,6 +728,34 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.126.0 — real hospital logos, bundled, used everywhere.**
+
+MW supplied the four SVGs, so they are now **local files** at
+`public/brand/hosp-{bgh,bih,bht,wsh}.svg` — no network fetch, print-safe.
+
+**There were TWO hospital-logo sources.** A remote `LOGOS` map fed the slide
+header while `HOSPITAL` fed the Actions card, both pointing at the same four
+files over the network. One map now, and `boot.js` asserts the slide header
+logo is served from `brand/` — so a remote URL cannot creep back in.
+
+Aspect ratios differ a lot between the four (BGH is 977x324, BIH 188x32), so
+they are sized by HEIGHT with a max-width rather than a fixed box.
+
+**A SIXTH temporal dead zone**, caught by the boot test: `logoImg` read
+`HOSPITAL` which was declared ~80 lines below it, and the whole report rendered
+its error state. The count is now high enough to be a standing rule rather than
+an anecdote — **in this file, check where a helper is declared relative to where
+it is read, every time.**
+
+**YouTube diagnosed but still not built** — see §12. MW's error log shows
+Windsor's puller sending an unsupported YouTube Analytics query (day + video +
+creatorContentType with annotation, card and Red metrics in one report), so it
+is their bug, not MW's connection. Data API v3 could build Top Videos and the
+like/comment counts today; shares, sharing service, watch time and subscribers
+cannot come from anywhere except a fixed Windsor connector or an owner OAuth
+token.
+
 
 **v3.125.0 — hospital logos; the YouTube blocker identified.**
 

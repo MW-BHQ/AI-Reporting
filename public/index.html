@@ -1585,16 +1585,43 @@ function renderReport() {
    * deck still says which brand it describes. Hosted on the public CDN; if a
    * request fails the img is hidden rather than leaving a broken icon.
    */
-  const LOGOS = {
-    BHQ: 'https://static.bangkokhospital.com/uploads/2024/04/BGHlogo.svg',
-    BGH: 'https://static.bangkokhospital.com/uploads/2025/05/BHQ-Logo.svg',
-    BIH: 'https://static.bangkokhospital.com/uploads/2024/03/bih-1.svg',
-    BHT: 'https://static.bangkokhospital.com/uploads/2024/04/BHTlogo.svg',
-    WSH: 'https://static.bangkokhospital.com/uploads/2024/04/WSHlogo.svg',
+  /**
+   * HOSPITAL LOGOS (MW). Local file first, then the bangkokhospital.com asset,
+   * then the text code — the same three-stage fallback as the platform marks.
+   *
+   * These could NOT be bundled: the build container gets 403 from
+   * static.bangkokhospital.com, so the browser fetches them. Drop the files at
+   * `public/brand/hosp-<key>.svg` to make them local and print-safe.
+   *
+   * BGH uses the BHQ mark, which is why the two look the same on that tab — MW
+   * confirmed this is correct, not a mix-up.
+   */
+  const HOSPITAL = {
+    BGH: { file: 'hosp-bgh.svg', url: 'https://static.bangkokhospital.com/uploads/2025/05/BHQ-Logo.svg' },
+    BIH: { file: 'hosp-bih.svg', url: 'https://static.bangkokhospital.com/uploads/2024/03/bih-1.svg' },
+    BHT: { file: 'hosp-bht.svg', url: 'https://static.bangkokhospital.com/uploads/2024/04/BHTlogo.svg' },
+    WSH: { file: 'hosp-wsh.svg', url: 'https://static.bangkokhospital.com/uploads/2024/04/WSHlogo.svg' },
   };
-  const logoImg = LOGOS[sel]
-    ? `<img class="slide-logo" src="${LOGOS[sel]}" alt="${esc(sel)}" onerror="this.style.display='none'">`
-    : '';
+  const hlogo = (key, h) => {
+    const p = HOSPITAL[key];
+    if (!p) return `<span class="all-four">${esc(key)}</span>`;
+    return `<span class="hlogo" style="--hh:${h || 34}px">
+      <img src="brand/${esc(p.file)}" alt="${esc(key)}" title="${esc(key)}" loading="lazy"
+        data-alt="${esc(p.url)}"
+        onerror="if(this.dataset.alt){this.src=this.dataset.alt;this.dataset.alt='';}else{this.replaceWith(document.createTextNode('${esc(key)}'));}">
+    </span>`;
+  };
+  /**
+   * ONE hospital-logo source, used everywhere (MW). The slide header and the
+   * Actions card both read `HOSPITAL` below; there used to be a second, remote
+   * `LOGOS` map here fetching the same four files over the network, so the same
+   * logo arrived two different ways and only one of them was local.
+   *
+   * `BHQ` maps to BGH's file deliberately: BGH uses the BHQ mark.
+   */
+  const logoImg = `<img class="slide-logo" src="brand/${
+    (HOSPITAL[sel] || HOSPITAL.BGH).file}" alt="${esc(sel)}"
+    onerror="this.style.display='none'">`;
 
   /**
    * `allFour` marks a block that deliberately shows every hospital — a
@@ -1660,32 +1687,6 @@ function renderReport() {
    * logo with any transparency rendered on an unrelated brand colour. All 19
    * assets exist, so the fallback was buying nothing and costing correctness.
    */
-  /**
-   * HOSPITAL LOGOS (MW). Local file first, then the bangkokhospital.com asset,
-   * then the text code — the same three-stage fallback as the platform marks.
-   *
-   * These could NOT be bundled: the build container gets 403 from
-   * static.bangkokhospital.com, so the browser fetches them. Drop the files at
-   * `public/brand/hosp-<key>.svg` to make them local and print-safe.
-   *
-   * BGH uses the BHQ mark, which is why the two look the same on that tab — MW
-   * confirmed this is correct, not a mix-up.
-   */
-  const HOSPITAL = {
-    BGH: { file: 'hosp-bgh.svg', url: 'https://static.bangkokhospital.com/uploads/2025/05/BHQ-Logo.svg' },
-    BIH: { file: 'hosp-bih.svg', url: 'https://static.bangkokhospital.com/uploads/2024/03/bih-1.svg' },
-    BHT: { file: 'hosp-bht.svg', url: 'https://static.bangkokhospital.com/uploads/2024/04/BHTlogo.svg' },
-    WSH: { file: 'hosp-wsh.svg', url: 'https://static.bangkokhospital.com/uploads/2024/04/WSHlogo.svg' },
-  };
-  const hlogo = (key, h) => {
-    const p = HOSPITAL[key];
-    if (!p) return `<span class="all-four">${esc(key)}</span>`;
-    return `<span class="hlogo" style="--hh:${h || 34}px">
-      <img src="brand/${esc(p.file)}" alt="${esc(key)}" title="${esc(key)}" loading="lazy"
-        data-alt="${esc(p.url)}"
-        onerror="if(this.dataset.alt){this.src=this.dataset.alt;this.dataset.alt='';}else{this.replaceWith(document.createTextNode('${esc(key)}'));}">
-    </span>`;
-  };
   const plogo = (id, size) => {
     const p = PLATFORM[id]; if (!p) return '';
     const sz = size ? ` style="width:${size}px;height:${size}px"` : '';
@@ -5865,7 +5866,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.125.0';
+const CLIENT_BUILD = '3.126.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
