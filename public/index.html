@@ -2223,6 +2223,90 @@ function renderReport() {
     </div>`;
   })() : '';
 
+  /**
+   * APPOINTMENTS. Two scope tabs like Chat Bubble, and two donuts.
+   *
+   * Initiates is GA4; everything else is the appointments sheet. They are
+   * different systems measuring two ends of one funnel, which the card says
+   * plainly — a completion rate across two sources invites being read as a
+   * single tracked journey.
+   */
+  const AP = d.appointments || {};
+  const apptBody = AP.available ? (() => {
+    /**
+     * Donut drawn as SVG arcs rather than through the chart library: it is a
+     * static eight-slice ring that has to survive printing, and a canvas chart
+     * needs a live draw call after render.
+     */
+    const RING = ['#4B8DF8','#7C6BF5','#37B4A4','#E4B84B','#E36A7A','#8E7CF3','#5AA9E6','#B0B7C9'];
+    const donut = (mix, title) => {
+      const rows = (mix.rows || []).filter(r => r.cases > 0);
+      if (!rows.length) return `<div><div class="card-title">${esc(title)}</div>
+        <div class="note" style="margin-top:0">No cases in this range.</div></div>`;
+      const total = mix.total || rows.reduce((a, r) => a + r.cases, 0);
+      const R = 54, C = 2 * Math.PI * R;
+      let off = 0;
+      const arcs = rows.map((r, i) => {
+        const len = (r.cases / total) * C;
+        const seg = `<circle cx="70" cy="70" r="${R}" fill="none" stroke="${RING[i % RING.length]}"
+          stroke-width="26" stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}"
+          stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 70 70)"></circle>`;
+        off += len; return seg;
+      }).join('');
+      return `<div>
+        <div class="card-title">${esc(title)}</div>
+        <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
+          <svg viewBox="0 0 140 140" style="width:140px;height:140px;flex:0 0 auto">${arcs}
+            <text x="70" y="66" text-anchor="middle" style="font-size:19px;font-weight:700;fill:var(--ink)">${num(total)}</text>
+            <text x="70" y="84" text-anchor="middle" style="font-size:9px;fill:var(--faint)">cases</text>
+          </svg>
+          <table style="flex:1 1 220px;min-width:200px"><tbody>
+            ${rows.map((r, i) => `<tr>
+              <td><span style="display:inline-block;width:9px;height:9px;border-radius:2px;
+                background:${RING[i % RING.length]};margin-right:7px"></span>${esc(r.label)}</td>
+              <td class="num strong">${num(r.cases)}</td>
+              <td class="num" style="color:var(--faint)">${r.share === null ? '\u2014' : (r.share * 100).toFixed(1) + '%'}</td>
+            </tr>`).join('')}
+          </tbody></table>
+        </div>
+      </div>`;
+    };
+    const scope = (key, idx) => {
+      const a = AP.byScope[key]; if (!a) return '';
+      return `<div class="cb-page ${idx === 0 ? 'active' : ''}" data-appt="${esc(key)}">
+        <div class="grid g-4" style="margin-bottom:14px">
+          ${kpi('Initiates', num(a.initiates), 'GA4 appointments event')}
+          ${kpi('Completes', num(a.completes),
+            a.completionRate === null ? 'no initiates' : `${(a.completionRate * 100).toFixed(1)}% of initiates`)}
+          ${kpi('Realtime', num(a.realtime), '฿' + num(Math.round(a.realtimeRev)))}
+          ${kpi('Not realtime', num(a.nonRealtime), '฿' + num(Math.round(a.nonRealtimeRev)))}
+        </div>
+        <hr class="sep">
+        <div class="grid g-2">
+          ${donut(a.rtMix, 'Realtime \u00b7 appointment location')}
+          ${donut(a.nrMix, 'Not realtime \u00b7 preferred specialty')}
+        </div>
+        <div class="note"><b>Initiates is GA4; everything else is the appointments sheet.</b> Two systems
+        measuring two ends of one funnel \u2014 GA4 sees the form opened, the sheet sees the booking land \u2014
+        so the completion rate is a comparison, not a tracked journey.
+        Revenue is <b>monthly in the sheet</b>: a part-month range still carries that whole month${
+          AP.revMonths ? ` (${num(AP.revMonths)} month${AP.revMonths > 1 ? 's' : ''} counted)` : ''}.
+        Blank locations and specialties show as <b>${esc(AP.notSpecified)}</b>.${
+          AP.discarded ? ` ${num(AP.discarded)} row${AP.discarded > 1 ? 's' : ''} had no usable hospital and ${AP.discarded > 1 ? 'were' : 'was'} excluded.` : ''}</div>
+      </div>`;
+    };
+    // Own wrapper class: two `.cb-wrap` blocks on one report made the chat
+    // bubble's own assertions select this card instead.
+    return `<div class="appt-wrap">
+      <div class="lang-tabs no-print">
+        <button class="clang-tab active" data-appttab="${esc(sel)}">${esc(sel)}</button>
+        <button class="clang-tab" data-appttab="BHQ">BHQ \u00b7 all four</button>
+      </div>
+      ${scope(sel, 0)}
+      ${scope('BHQ', 1)}
+    </div>`;
+  })() : '';
+
   const G = d.gbp;
 
 
@@ -2645,6 +2729,7 @@ function renderReport() {
     ${slide('Sessions overview \u00b7 BHQ', usersBody, true, true)}
     ${slide('Who reaches us from outside Thailand', countryBody, false, true)}
     ${slide('Actions \u00b7 what we want them to do \u00b7 BHQ', actionsBody, false, true)}
+    ${apptBody ? slide(`Appointments \u00b7 ${sel}`, apptBody) : ''}
     ${slide('Sessions by language \u00b7 BHQ', langMatrixBody, false, true)}
     ${slide(`Actions by language \u00b7 ${sel}`, actionsLangBody)}
     ${slide('Channels \u00b7 where do they find us', channelsBody, false, true)}
@@ -2731,6 +2816,14 @@ function renderReport() {
       drawChart('repTkViews', TK.channel.daily, [{ key:'views', label:'Views', color:C.b }]);
     }
   }
+
+  document.querySelectorAll('[data-appttab]').forEach(el =>
+    el.addEventListener('click', () => {
+      const pick = el.dataset.appttab;
+      document.querySelectorAll('[data-appttab]').forEach(t => t.classList.toggle('active', t === el));
+      document.querySelectorAll('[data-appt]').forEach(pg =>
+        pg.classList.toggle('active', pg.dataset.appt === pick));
+    }));
 
   document.querySelectorAll('[data-cb]').forEach(el =>
     el.addEventListener('click', () => {
@@ -5678,7 +5771,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.121.0';
+const CLIENT_BUILD = '3.122.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

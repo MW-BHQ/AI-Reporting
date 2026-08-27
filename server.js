@@ -1862,6 +1862,19 @@ async function buildReport(from, to) {
     dimensionFilter: { filter: { fieldName: "linkId",
       stringFilter: { matchType: "PARTIAL_REGEXP", value: CHAT_ID_RE, caseSensitive: false } } },
   });
+  /**
+   * Appointments: the sheet side. `Initiates` comes from the GA4 `appointments`
+   * key event already in the per-brand `k_` pulls, so only the sheet is new —
+   * one batchGet, not a per-brand request.
+   *
+   * Wrapped so a Sheets failure degrades this one card rather than the report:
+   * the sheet is a separate system with its own permissions, and the other
+   * fifteen slides do not depend on it.
+   */
+  jobs.appointments = buildAppointments(from, to).catch((e) => {
+    logJson("WARN", "appointments_failed", { error: String(e.message || e) });
+    return null;
+  });
   jobs.chatCustom = chatCustomPull(from, to);
   jobs.chatCustomPrev = chatCustomPull(cwr.prev.from, cwr.prev.to);
   jobs.chatBubble = chatLinkPull(from, to);
@@ -2649,6 +2662,40 @@ async function buildReport(from, to) {
     };
   })();
 
+  /**
+   * APPOINTMENTS. Initiates is the GA4 `appointments` key event; everything
+   * else comes from the sheet. Both scopes are built so the card can show one
+   * hospital or all four.
+   *
+   * The completion rate is completes over INITIATES, two systems measuring two
+   * ends of the same funnel — GA4 sees the form open, the sheet sees the
+   * booking land. They can disagree for real reasons (a booking made twice, a
+   * form opened and abandoned), so the card names both sides.
+   */
+  const appointments = (() => {
+    const sheet = data.appointments;
+    if (!sheet) return { available: false };
+    const initiatesFor = (key) => {
+      let t = 0;
+      const keys = key === "BHQ" ? BRAND_KEYS : [key];
+      for (const k of keys) {
+        const ke = data[`k_${k}`];
+        for (const r of ((ke && ke.rows) || [])) if (r.eventName === "appointments") t += r.value;
+      }
+      return t;
+    };
+    const byScope = {};
+    for (const k of Object.keys(sheet.byScope)) {
+      const sc = sheet.byScope[k];
+      const initiates = initiatesFor(k);
+      byScope[k] = { ...sc, initiates,
+        completionRate: initiates ? sc.completes / initiates : null };
+    }
+    return { available: true, byScope,
+      discarded: sheet.discarded, revMonths: sheet.revMonths,
+      notSpecified: sheet.notSpecified };
+  })();
+
   const CONTENT_TYPES = [
     { id: "doctor",  segment: "doctor",        label: "Doctor",   action: "appointments" },
     /**
@@ -3281,6 +3328,7 @@ async function buildReport(from, to) {
     referral,
     content,
     chatBubble,
+    appointments,
     tiktok,
     social,
     languages,
@@ -4020,6 +4068,171 @@ const BENCH_BUCKET = process.env.BENCHMARK_BUCKET || process.env.ACCESS_BUCKET |
 // The normalised e-commerce sheet. Carries no customer PII — names, phones and
 // emails are replaced with irreversible keys before they ever reach it.
 const ECOM_SHEET_ID = process.env.ECOM_SHEET_ID || "";
+
+/**
+ * WEB APPOINTMENTS — a second Google Sheet, separate from the e-commerce one.
+ *
+ * Structure verified against MW's `Web_Appointment_2025.xlsx`, not guessed:
+ *
+ *   Realtime      col C  Appointment Location   (donut)
+ *                 col T  Hospitals              (attribution)
+ *                 col U  Date                   (the web booking timestamp)
+ *   Non Realtime  col B  วันที่ทำนัดบนเว็บ        (the web booking date)
+ *                 col P  Preferred Specialty    (donut)
+ *                 col S  Hospital               (attribution)
+ *   Total Amounts col A  Month, B–E Realtime revenue per hospital,
+ *                 F–I Non Realtime revenue per hospital
+ *
+ * Only the six needed columns are fetched, as separate ranges aligned by row
+ * index. The two detail tabs run to ~25,000 rows; pulling A:V of both would be
+ * roughly ten times the payload for data nothing reads.
+ */
+const APPT_SHEET_ID = process.env.APPT_SHEET_ID || "1Yt_4NknQdLQogZKwtZoG9dGAe99HlF0UuilebMxt95Q";
+
+/**
+ * Hospital attribution (MW).
+ *
+ * `BHQ` and `BHQ-EN` are LEGACY LABELS for BGH — 4,251 of 25,359 Realtime rows
+ * in the sample, so ~17% of the tab. Treating them as unattributable would
+ * understate BGH by a fifth; treating them as their own hospital would invent
+ * one.
+ *
+ * Rows whose Hospitals cell is literal HTML (`<span…>No tags</span>`, 23 rows)
+ * or empty are DISCARDED, per MW: they are scraper residue, not appointments
+ * with an unknown hospital, so they must not land in a fallback bucket where
+ * they would look like real volume.
+ */
+const APPT_HOSPITAL_RULES = [
+  { re: /\(BGH\)|^BHQ(-EN)?$|bangkok hospital(?!\s*\()/i, key: "BGH" },
+  { re: /\(BIH\)|international/i, key: "BIH" },
+  { re: /\(BHT\)|heart/i,         key: "BHT" },
+  { re: /\(WSH\)|cancer|wattanosoth/i, key: "WSH" },
+];
+const apptBrand = (raw) => {
+  const v = String(raw || "").trim();
+  if (!v || /<[a-z/]/i.test(v)) return null;      // HTML residue or blank
+  // Most specific first: "Bangkok International Hospital" also contains
+  // "Bangkok Hospital", so the BGH rule excludes a following "(".
+  for (const r of [APPT_HOSPITAL_RULES[1], APPT_HOSPITAL_RULES[2],
+                   APPT_HOSPITAL_RULES[3], APPT_HOSPITAL_RULES[0]]) {
+    if (r.re.test(v)) return r.key;
+  }
+  return null;
+};
+
+/**
+ * Sheet dates arrive as display strings, and the two tabs do not agree on
+ * format. Anything that is not a real date in range is skipped rather than
+ * coerced — a bad parse landing on the 1st of the month would silently move
+ * volume between reporting periods.
+ */
+const apptDay = (raw) => {
+  const v = String(raw || "").trim();
+  if (!v) return null;
+  let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(v);          // D/M/YYYY or M/D/YYYY
+  if (m) {
+    const a = +m[1], b = +m[2];
+    // Ambiguous below 13; the sheet is Thai-authored, so day-first.
+    const day = a, mon = b;
+    if (mon >= 1 && mon <= 12 && day >= 1 && day <= 31) {
+      return `${m[3]}-${String(mon).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+    return null;
+  }
+  const d = new Date(v);
+  return isNaN(d) ? null : d.toISOString().slice(0, 10);
+};
+
+const NOT_SPECIFIED = "N/S";
+
+async function buildAppointments(from, to) {
+  const rows = await sheetBatchGet(APPT_SHEET_ID, [
+    "Realtime!C2:C", "Realtime!T2:T", "Realtime!U2:U",
+    "'Non Realtime'!B2:B", "'Non Realtime'!P2:P", "'Non Realtime'!S2:S",
+    "Total Amounts!A1:I",
+  ]);
+  const col = (i) => (rows[i] && rows[i].values ? rows[i].values.map((r) => (r && r[0]) || "") : []);
+  const [rtLoc, rtHosp, rtDate, nrDate, nrSpec, nrHosp] = [0, 1, 2, 3, 4, 5].map(col);
+  const amounts = (rows[6] && rows[6].values) || [];
+
+  const blank = () => ({ realtime: 0, nonRealtime: 0, realtimeRev: 0, nonRealtimeRev: 0,
+    rtMix: new Map(), nrMix: new Map() });
+  const per = { BHQ: blank() };
+  for (const b of BRANDS) per[b.key] = blank();
+  let discarded = 0, outOfRange = 0;
+
+  const inRange = (d) => d && d >= from && d <= to;
+  const bump = (mix, label) => {
+    const k = String(label || "").trim() || NOT_SPECIFIED;
+    mix.set(k, (mix.get(k) || 0) + 1);
+  };
+
+  for (let i = 0; i < rtDate.length; i++) {
+    const day = apptDay(rtDate[i]);
+    if (!inRange(day)) { if (day) outOfRange++; continue; }
+    const bk = apptBrand(rtHosp[i]);
+    if (!bk) { discarded++; continue; }
+    per[bk].realtime++; bump(per[bk].rtMix, rtLoc[i]);
+    per.BHQ.realtime++; bump(per.BHQ.rtMix, rtLoc[i]);
+  }
+  for (let i = 0; i < nrDate.length; i++) {
+    const day = apptDay(nrDate[i]);
+    if (!inRange(day)) { if (day) outOfRange++; continue; }
+    const bk = apptBrand(nrHosp[i]);
+    if (!bk) { discarded++; continue; }
+    per[bk].nonRealtime++; bump(per[bk].nrMix, nrSpec[i]);
+    per.BHQ.nonRealtime++; bump(per.BHQ.nrMix, nrSpec[i]);
+  }
+
+  /**
+   * Revenue is MONTHLY, per hospital: B–E Realtime for BGH/BIH/BHT/WSH, F–I the
+   * same four Non Realtime. MW's spec said "col B" and "col F" because MW was
+   * describing the BGH page; mapping by brand is what makes the other three
+   * hospitals correct rather than all showing BGH's money.
+   *
+   * A month counts when it falls inside the range. The sheet has no finer
+   * grain, so a part-month range still gets that whole month — stated on the
+   * card, because revenue that does not move with the dates looks like a bug.
+   */
+  const order = ["BGH", "BIH", "BHT", "WSH"];
+  let revMonths = 0;
+  for (const r of amounts.slice(1)) {
+    const day = apptDay(r[0]);
+    if (!day) continue;
+    const ym = day.slice(0, 7);
+    if (ym < from.slice(0, 7) || ym > to.slice(0, 7)) continue;
+    revMonths++;
+    order.forEach((k, idx) => {
+      const rt = n(String(r[1 + idx] || "").replace(/,/g, ""));
+      const nr = n(String(r[5 + idx] || "").replace(/,/g, ""));
+      per[k].realtimeRev += rt; per[k].nonRealtimeRev += nr;
+      per.BHQ.realtimeRev += rt; per.BHQ.nonRealtimeRev += nr;
+    });
+  }
+
+  const topMix = (mix) => {
+    const total = [...mix.values()].reduce((a, v) => a + v, 0);
+    return { total,
+      rows: [...mix.entries()].map(([label, cases]) => ({ label, cases,
+        share: total ? cases / total : null }))
+        .sort((a, b) => b.cases - a.cases).slice(0, 8),
+      distinct: mix.size };
+  };
+  const byScope = {};
+  for (const k of Object.keys(per)) {
+    const p = per[k];
+    byScope[k] = { realtime: p.realtime, nonRealtime: p.nonRealtime,
+      completes: p.realtime + p.nonRealtime,
+      realtimeRev: p.realtimeRev, nonRealtimeRev: p.nonRealtimeRev,
+      revenue: p.realtimeRev + p.nonRealtimeRev,
+      rtMix: topMix(p.rtMix), nrMix: topMix(p.nrMix) };
+  }
+  return { byScope, discarded, outOfRange, revMonths,
+    notSpecified: NOT_SPECIFIED };
+}
+
 const ECOM_TAB = process.env.ECOM_TAB || "Orders";
 
 

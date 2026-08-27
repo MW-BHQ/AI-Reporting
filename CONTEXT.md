@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.121.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.122.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -679,34 +679,6 @@ improves.
 
 ## 12. Requested but not built
 
-- **APPOINTMENTS CARD** (MW, in progress v3.121.0). Structure fully verified
-  against the sample workbook `Web_Appointment_2025.xlsx`; **blocked only on the
-  live Google Sheet ID.** Viewer access is already granted to
-  `715584769614-compute@developer.gserviceaccount.com`.
-
-  Verified layout — do not re-derive:
-
-  | Figure | Source |
-  |---|---|
-  | Initiates | GA4 `appointments` key event |
-  | Realtime | tab `Realtime`, col **U** `Date` (datetime) |
-  | Non Realtime | tab `Non Realtime`, col **B** `วันที่ทำนัดบนเว็บ` |
-  | Completes | Realtime + Non Realtime counts |
-  | Realtime donut | tab `Realtime`, col **C** `Appointment Location` |
-  | Non Realtime donut | tab `Non Realtime`, col **P** `Preferred Specialty` |
-  | Revenue | tab `Total Amounts`, MONTHLY rows |
-
-  `Total Amounts` is **per hospital, not just BGH**: cols B–E are BGH/BIH/BHT/WSH
-  Realtime, F–I the same four Non Realtime. MW's spec named B and F because MW
-  was describing the BGH report; map by brand rather than hard-coding.
-
-  **Two data-quality facts found in the sample, both of which need a decision:**
-  1. `Realtime` col T `Hospitals` is inconsistent — 20,015 rows say
-     `Bangkok Hospital (BGH)`, but **4,251 say `BHQ` or `BHQ-EN`**, plus 23 rows
-     of literal HTML (`<span…>No tags</span>`) and 2 nulls. `BHQ`/`BHQ-EN` do not
-     name a hospital, so ~17% of rows cannot be attributed without a rule.
-  2. 466 `Appointment Location` values are blank → render as **N/S** (MW).
-
 - **APPLY THE REM TYPE SCALE TO EVERY TAB** (MW, backlogged v3.117.0). The scale
   lives in `:root` and Monthly Reports uses it; the app chrome and the other
   tabs still carry roughly 80 hard-coded px sizes. The `type:scale` audit rule
@@ -727,6 +699,50 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.122.0 — Appointments card: GA4 initiates against the appointments sheet.**
+
+New card after Actions, two scope tabs, two donuts. **+1 Sheets batchGet**, and
+Initiates is free (the GA4 `appointments` key event is already in the per-brand
+`k_` pulls).
+
+**Second Google Sheet**, `APPT_SHEET_ID`, separate from the e-commerce one.
+Only the six needed columns are fetched as aligned single-column ranges: the two
+detail tabs run to ~25,000 rows each and pulling `A:V` of both would be roughly
+ten times the payload for data nothing reads.
+
+**FOUR ATTRIBUTION RULES, all from MW, each with its own negative control:**
+
+1. **`BHQ` and `BHQ-EN` are legacy labels for BGH** — 4,251 of 25,359 rows in
+   the sample. Dropping them would have understated BGH by about a fifth.
+2. **Rows whose Hospitals cell is HTML, or blank, are DISCARDED**, not bucketed.
+   Scraper residue is not an appointment with an unknown hospital, and a
+   fallback bucket would show it as real volume.
+3. **"Bangkok International Hospital" contains "Bangkok Hospital"**, so the BGH
+   pattern excludes a following `(` and the specific hospitals are tested first.
+   Without that, BIH's bookings land in BGH.
+4. **Blank location or specialty renders as `N/S`.**
+
+**Revenue is monthly and PER HOSPITAL.** `Total Amounts` cols B–E are Realtime
+for BGH/BIH/BHT/WSH and F–I the same four Non Realtime. MW's spec named "col B"
+and "col F" because MW was describing the BGH page; hard-coding those would have
+shown BGH's money on all four hospitals. Because the sheet has no finer grain, a
+part-month range still carries that whole month — stated on the card, since
+revenue that does not move with the dates reads as a bug.
+
+**The card names its two sources.** Initiates is GA4 (form opened), completes is
+the sheet (booking landed). The completion rate spans two systems, so it is a
+comparison and not a tracked journey.
+
+**A fixture that could not fail, fixed.** The HTML guard could be deleted with
+nothing breaking, because the only junk row in the fixture was `No tags`, which
+no hospital rule matches anyway. The fixture now also contains markup WRAPPING a
+real hospital name — the case the guard actually exists for.
+
+**Sheets failure degrades this card only.** The pull is wrapped: the sheet is a
+separate system with its own permissions and the other seventeen slides do not
+depend on it.
+
 
 **v3.121.0 — "Back links"; Actions card decoloured.**
 

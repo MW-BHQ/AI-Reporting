@@ -654,6 +654,45 @@ global.fetch = async (url, opts = {}) => {
   }
 
   if (u.includes("sheets.googleapis.com")) {
+    /**
+     * Web appointments batchGet. Six aligned single-column ranges plus the
+     * monthly amounts, in the order the server asks for them.
+     *
+     * The Hospitals column deliberately carries every mess found in the real
+     * sheet: the legacy `BHQ` / `BHQ-EN` labels that must count as BGH, a
+     * literal HTML "No tags" cell and a blank that must both be DISCARDED, and
+     * "Bangkok International Hospital" which contains the substring "Bangkok
+     * Hospital" and must NOT fall to BGH. A fixture of clean labels would let
+     * every one of those rules break silently.
+     */
+    if (u.includes("Realtime")) {
+      const R = (values) => ({ values: values.map((v) => [v]) });
+      const rtLoc  = ["ศูนย์กุมารเวช", "Women's Health Center", "", "Heart Center", "Cancer Center", "Skin", "Dental", "Ortho"];
+      const rtHosp = ["Bangkok Hospital (BGH)", "BHQ-EN", "BHQ",
+                      "Bangkok Heart Hospital (BHT)", "Bangkok Cancer Hospital (WSH)",
+                      '<span aria-hidden="true">—</span><span class="screen-reader-text">No tags</span>', "",
+                      // Markup WRAPPING a real hospital name. This is the case
+                      // the HTML guard exists for: without it the row is read as
+                      // BGH, and with only "No tags" in the fixture the guard
+                      // could be deleted with nothing failing.
+                      '<span class="tag">Bangkok Hospital (BGH)</span>'];
+      const rtDate = ["2026-07-02", "2026-07-05", "2026-07-09",
+                      "2026-07-11", "2026-07-14", "2026-07-16", "2026-07-18", "2026-07-20"];
+      const nrDate = ["15/07/2026", "18/07/2026", "20/07/2026", "01/06/2026"];
+      const nrSpec = ["Skin & Aesthetics Center", "", "Dental Center", "Skin & Aesthetics Center"];
+      const nrHosp = ["Bangkok Hospital (BGH)", "Bangkok International Hospital (BIH)",
+                      "Bangkok Hospital (BGH)", "Bangkok Hospital (BGH)"];
+      return jsonRes({ valueRanges: [
+        R(rtLoc), R(rtHosp), R(rtDate),
+        R(nrDate), R(nrSpec), R(nrHosp),
+        { values: [
+          ["Month","BGH RT","BIH RT","BHT RT","WSH RT","BGH NR","BIH NR","BHT NR","WSH NR"],
+          ["2026-06-01", "111", "1", "2", "3", "222", "4", "5", "6"],
+          ["2026-07-01", "1000", "10", "20", "30", "2000", "40", "50", "60"],
+          ["2026-08-01", "999", "9", "9", "9", "999", "9", "9", "9"],
+        ] },
+      ] });
+    }
     // values.get on the e-commerce Orders tab (no `ranges` param, unlike the
     // batchGet the UTM Builder uses).
     if (u.includes("/values/") && !u.includes("ranges=")) {

@@ -198,6 +198,27 @@ expect_field "rf ai by channel"    "$REPORT" "d.referral.byBrand[0].ai.rows.some
 # Per-assistant event columns need per-assistant counts.
 expect_field "rf ai per-row events" "$REPORT" "d.referral.byBrand[0].ai.rows.every(r=>r.events&&typeof r.events==='object')?'ok':undefined"
 
+echo "--- monthly report: appointments (GA4 + the appointments sheet) ---"
+AP="d.appointments.byScope"
+# BHQ is the four hospitals summed, on both counts and money.
+expect_field "ap bhq is four"       "$REPORT" "($AP.BHQ.completes===($AP.BGH.completes+$AP.BIH.completes+$AP.BHT.completes+$AP.WSH.completes)&&$AP.BHQ.revenue===($AP.BGH.revenue+$AP.BIH.revenue+$AP.BHT.revenue+$AP.WSH.revenue))?'ok':undefined"
+# Legacy BHQ / BHQ-EN labels count as BGH (3 realtime rows in the fixture, one
+# each). Two of them are legacy, so a rule that dropped them gives 1.
+expect_field "ap legacy is bgh"     "$REPORT" "$AP.BGH.realtime===3?3:undefined"
+# The HTML "No tags" cell and the blank must be DISCARDED, not bucketed.
+expect_field "ap junk discarded"    "$REPORT" "d.appointments.discarded===3?3:undefined"
+# "Bangkok International Hospital" contains "Bangkok Hospital"; it must not
+# fall through to BGH.
+expect_field "ap bih not bgh"       "$REPORT" "$AP.BIH.nonRealtime===1?1:undefined"
+# Revenue is monthly and per hospital: only July counts, and BHT reads its own
+# column (20 + 50) rather than BGH's.
+expect_field "ap rev one month"     "$REPORT" "d.appointments.revMonths===1?1:undefined"
+expect_field "ap rev per hospital"  "$REPORT" "$AP.BHT.revenue===70?70:undefined"
+# Blank location/specialty becomes N/S in the donut.
+expect_field "ap blank is N/S"      "$REPORT" "$AP.BGH.rtMix.rows.some(r=>r.label==='N/S')?'ok':undefined"
+# Initiates comes from GA4, not the sheet, so it must differ from completes.
+expect_field "ap initiates ga4"     "$REPORT" "($AP.BGH.initiates>0&&$AP.BGH.initiates!==$AP.BGH.completes)?'ok':undefined"
+
 echo "--- monthly report: chat bubble channel disambiguation ---"
 CBB="d.chatBubble.byScope.BHQ.rows"
 # Three PAIRS share a click id and must not collapse. LINE th/jp and the two

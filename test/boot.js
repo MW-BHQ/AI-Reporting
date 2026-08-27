@@ -177,6 +177,26 @@ function reportFixture() {
      * Chat bubble: both scopes present, an `assumed` label, a brand-new channel
      * with no previous month, and an unmapped id.
      */
+    /**
+     * Appointments: BHQ plus the four, a donut slice with a blank label mapped
+     * to N/S, and discarded rows, so the caveat line renders too.
+     */
+    appointments: { available: true, discarded: 2, revMonths: 1, notSpecified: "N/S",
+      byScope: Object.fromEntries([...KEYS, "BHQ"].map((k) => [k, {
+        initiates: k === "BHQ" ? 14500 : 3600,
+        realtime: k === "BHQ" ? 1367 : 340,
+        nonRealtime: k === "BHQ" ? 1221 : 300,
+        completes: k === "BHQ" ? 2588 : 640,
+        realtimeRev: 6655250, nonRealtimeRev: 3487367, revenue: 10142617,
+        completionRate: k === "BHQ" ? 0.178 : 0.178,
+        rtMix: { total: 1367, distinct: 3, rows: [
+          { label: "International Medical Services", cases: 823, share: 0.602 },
+          { label: "Skin & Aesthetics Center", cases: 400, share: 0.293 },
+          { label: "N/S", cases: 144, share: 0.105 }] },
+        nrMix: { total: 1221, distinct: 2, rows: [
+          { label: "Skin & Aesthetics Center", cases: 700, share: 0.573 },
+          { label: "Dental Center", cases: 521, share: 0.427 }] },
+      }])) },
     chatBubble: { available: true,
       events: [{ name: "click", clicks: 15600 }],
       unmapped: [{ key: "chat-bubble-channel-unknown https://example.com", clicks: 12 }],
@@ -585,6 +605,8 @@ setTimeout(() => {
        * no previous month rather than a divide-by-zero percentage.
        */
       (() => {
+        // Scoped to the chat card specifically: the appointments card also uses
+        // `.cb-page`, and an unqualified `.cb-wrap` lookup picked that one.
         const wrap = root && root.querySelector(".cb-wrap");
         if (!wrap) return fail("chat bubble", "no chat bubble slide rendered");
         const pages = [...wrap.querySelectorAll(".cb-page")];
@@ -672,6 +694,31 @@ setTimeout(() => {
         bad.length
           ? fail("nav under header", `${bad.length}/${strips.length} tab strips sit above their header`)
           : ok("nav under header", `${strips.length} tab strips all below a header`);
+      })();
+      /**
+       * Appointments: both scopes present, the four headline figures, and two
+       * donuts whose arcs actually render. An SVG with no <circle> means the
+       * ring silently collapsed.
+       */
+      (() => {
+        const wrap = root && root.querySelector(".appt-wrap");
+        if (!wrap) return fail("appointments", "no appointments card rendered");
+        const pages = [...wrap.querySelectorAll("[data-appt]")];
+        if (pages.length !== 2) return fail("appointments", `${pages.length} scopes, expected 2`);
+        if (pages[0].dataset.appt === "BHQ") return fail("appointments", "opens on BHQ, not the hospital");
+        for (const label of ["Initiates", "Completes", "Realtime", "Not realtime"]) {
+          if (!pages[0].textContent.includes(label)) {
+            return fail("appointments", `no "${label}" figure`);
+          }
+        }
+        const donuts = [...pages[0].querySelectorAll("svg")];
+        if (donuts.length !== 2) return fail("appointments", `${donuts.length} donuts, expected 2`);
+        const arcs = donuts.reduce((a, sv) => a + sv.querySelectorAll("circle").length, 0);
+        if (arcs < 4) return fail("appointments", `${arcs} donut arcs, expected 4+`);
+        // Blank sheet values must surface as N/S rather than an empty row.
+        pages[0].textContent.includes("N/S")
+          ? ok("appointments", `2 scopes, 2 donuts, ${arcs} arcs, N/S shown`)
+          : fail("appointments", "blank label not rendered as N/S");
       })();
       finish();
     }, 500);
