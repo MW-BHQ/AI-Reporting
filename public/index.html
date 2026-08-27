@@ -407,13 +407,8 @@
   .ra-hero .lab{color:var(--violet)!important;}
   .ra-hero .v{color:var(--violet);font-size:26px!important;}
   .stat.stat-hero{background:var(--violet-soft);border-color:#C9C1F7;}
-  /**
-   * Revenue row: a left accent rule and a slightly heavier figure, so the money
-   * reads as its own band without a second colour scheme (MW asked for "a
-   * little" standout, and a filled card would have shouted).
-   */
-  .stat.stat-money{border-left:3px solid var(--violet);}
-  .stat.stat-money .val{font-weight:750;color:var(--ink);}
+  /* Revenue cards: no accent (MW). Kept as a class so the markup is stable. */
+  .stat.stat-money .val{font-weight:750;}
   .stat.stat-hero .val{color:var(--violet);}
   .ra-row.has-kids{cursor:pointer;}
   .ra-row.has-kids:hover{background:var(--violet-soft);}
@@ -1680,12 +1675,20 @@ function renderReport() {
     // render as plain text rather than a wrong logo.
     return '';
   };
-  const slide = (title, body, first, allFour, platform) => body
-    ? `<div class="slide ${first ? '' : 'slide-break'}"><div class="slide-title">
-         <span>${platform ? plogo(platform) : ''}${esc(title)}${allFour && !/BHQ/.test(title) ? ' <span class="all-four">BHQ</span>' : ''}</span>
+  /**
+   * SCOPE IS ALWAYS A PILL (MW). It used to arrive three ways — as `\u00b7 BGH`
+   * text in the title, as a bare `BHQ` word, and as the `all-four` badge — so
+   * the same idea looked different on different slides. The scope is now an
+   * argument and this is the only place that decides how it is drawn.
+   */
+  const slide = (title, body, first, scope, platform) => {
+    if (!body) return '';
+    const pill = scope ? ` <span class="all-four">${esc(scope === true ? 'BHQ' : scope)}</span>` : '';
+    return `<div class="slide ${first ? '' : 'slide-break'}"><div class="slide-title">
+         <span>${platform ? plogo(platform) : ''}${esc(title)}${pill}</span>
          ${logoImg}
-       </div>${body}</div>`
-    : '';
+       </div>${body}</div>`;
+  };
   const C = { a:'#6C5CE7', b:'#4B8DF8', c:'#2E9E6F', d:'#F2A93B', e:'#E8607A' };
   // Local numeric coercion: nulls must contribute 0 to a sum, not NaN.
   const n0 = (v) => (v === null || v === undefined || isNaN(Number(v))) ? 0 : Number(v);
@@ -1804,7 +1807,7 @@ function renderReport() {
       return `<div class="card" style="margin-bottom:10px">
         <div class="grid g-5 act-row" style="align-items:center">
           <div>
-            <div class="hcode">${esc(b.label)}</div>
+            <div style="margin-bottom:4px"><span class="all-four">${esc(b.label)}</span></div>
             <div class="val">${num(b.sessions)}</div>
             <div class="sub2">sessions</div>
           </div>
@@ -1940,7 +1943,7 @@ function renderReport() {
       const pv = Math.max(8, Math.round((x.visits/mx)*100));
       const pa = Math.max(6, Math.round((x.actionsTotal/mx)*100));
       return `<div class="lang-page ${x.key===activeLang?'active':''}" data-langpage="${esc(x.key)}">
-        <div class="slide-title" style="margin-top:0"><span>${plogo('google')}Search \u00b7 ${esc(x.label)} \u00b7 ${esc(sel)}</span>${logoImg}</div>
+        <div class="slide-title" style="margin-top:0"><span>${plogo('google')}Search \u00b7 ${esc(x.label)} <span class="all-four">${esc(sel)}</span></span>${logoImg}</div>
         ${langTabs}
         <div class="grid g-2">
           <div class="card">
@@ -2079,20 +2082,28 @@ function renderReport() {
       </div>
       ${(() => {
         /**
-         * All nine key events as columns. Removing Engagement, Actions per 100
-         * and GA4 channel (MW) freed the full width, and the scorecards above
-         * are the totals of these same nine, so the card reads consistently
-         * across and down. Order matches the scorecards.
+         * SIX columns, in MW's order. Better AI start and result are dropped
+         * from the TABLE: eleven columns overflowed the slide, and those two
+         * read zero for every assistant. They remain on the scorecards above,
+         * where a zero is a finding and costs no width.
          */
+        const AI_COLS = [
+          ['find_doctors', 'Find Doctor'],
+          ['appointments', 'Appointments'],
+          ['contact_us',   'Contact us'],
+          ['view_item',    'View Item'],
+          ['add_to_cart',  'Add To Cart'],
+          ['purchase',     'Purchase'],
+        ];
         return `
       <table class="sortable" data-heat="1" style="margin-top:2rem"><thead><tr>
         <th>Assistant</th><th class="num">${actIcon('sessions')}Sessions</th>
-        ${A.actions.map(a=>`<th class="num">${actIcon(a.id)}${esc(a.label)}</th>`).join('')}
+        ${AI_COLS.map(([id,lab])=>`<th class="num">${actIcon(id)}${esc(lab)}</th>`).join('')}
       </tr></thead><tbody>
       ${A.rows.map(r=>`<tr>
         <td class="strong i18n">${assistantLogo(r.source)}${esc(r.source)}</td>
         <td class="num">${num(r.sessions)}</td>
-        ${A.actions.map(a=>`<td class="num">${num((r.events||{})[a.id]||0)}</td>`).join('')}
+        ${AI_COLS.map(([id])=>`<td class="num">${num((r.events||{})[id]||0)}</td>`).join('')}
         </tr>`).join('')}
       </tbody></table>`;
       })()}
@@ -2158,7 +2169,7 @@ function renderReport() {
     const page = (lc, label, pair, idx) => {
       const cell = cells[lc];
       return `<div class="clang-page ${lc===activeC?'active':''}" data-clangpage="${esc(lc)}-${idx}">
-        <div class="slide-title" style="margin-top:0"><span>Content \u00b7 ${esc(label)} \u00b7 ${esc(sel)}</span>${logoImg}</div>
+        <div class="slide-title" style="margin-top:0"><span>Content \u00b7 ${esc(label)} <span class="all-four">${esc(sel)}</span></span>${logoImg}</div>
         ${tabs}
         <div class="grid g-2">${pair.map(id=>table(cell, id)).join('')}</div>
         
@@ -2704,52 +2715,16 @@ function renderReport() {
   // Only the hospital whose tab is open \u2014 the other three have their own tabs.
   const GD = (d.gbpDetail || []).filter(x => x.key === sel && x.totals && x.totals.impressions);
   /**
-   * GBP keyword RANKINGS, from MW's SEO-tool sheet. Its own card, placed after
-   * the GBP listings and BESIDE the search-keyword card, never replacing it:
-   * that one says what people typed to reach the listing, this one says where
-   * we place for the keywords we chose to track. A rank cannot answer the first
-   * question and a search term cannot answer the second.
+   * GBP keyword ranks, from MW's SEO-tool sheet. It REPLACES the GBP
+   * search-keyword table inside each listing card (MW) — that table was a
+   * placeholder, because Business Profile reports which phrases found a listing
+   * but never where it placed. No scorecards and no note (MW).
    */
   const GR = d.gbpRanks || {};
-  const gbpRankBody = (!GR.unavailable && GR.byBrand && GR.byBrand[sel]) ? (() => {
-    const r = GR.byBrand[sel];
-    if (!r.rows.length) return `<div class="note">No tracked keywords for ${esc(sel)} in
-      ${esc((GR.months || []).join(', ') || 'this range')}.</div>`;
-    // Rank 1–3 is the local pack; 4–10 is page one. Anything past 10 is a miss.
-    const band = (v) => v <= 3 ? 'up' : (v <= 10 ? 'flat' : 'down');
-    return `
-    <div class="grid g-4" style="margin-bottom:14px">
-      ${kpi('Tracked keywords', num(r.keywords),
-        `${esc((GR.months || []).join(', '))}`)}
-      ${kpi('In the top 3', num(r.top3),
-        r.keywords ? `${((r.top3 / r.keywords) * 100).toFixed(0)}% of tracked` : '')}
-      ${kpi('In the top 10', num(r.top10),
-        r.keywords ? `${((r.top10 / r.keywords) * 100).toFixed(0)}% of tracked` : '')}
-      ${kpi('Average rank', r.avgRank === null ? '\u2014' : r.avgRank.toFixed(2),
-        'lower is better')}
-    </div>
-    <table class="sortable" data-heat="1"><thead><tr>
-      <th>Keyword</th><th class="num">Rank</th>
-      <th class="num">Avg monthly searches</th><th class="num">Listings</th>
-    </tr></thead><tbody>
-    ${r.rows.map(k => `<tr>
-      <td class="strong i18n">${esc(k.keyword)}</td>
-      <td class="num"><span class="dlt ${band(k.rank)}">${k.rank.toFixed(2)}</span></td>
-      <td class="num">${k.volume ? num(k.volume) : '<span class="dlt none">\u2014</span>'}</td>
-      <td class="num">${num(k.locations)}</td>
-    </tr>`).join('')}
-    </tbody></table>
-    <div class="note">Best rank first. Green is the local pack (1\u20133), amber page one
-    (4\u201310), red past ten. <b>Rank is averaged across listings</b> where a keyword is tracked for
-    more than one, which is what the sheet's own decimal ranks already represent.
-    Search volume is the keyword's, not the listing's, so it is not summed \u2014 and
-    ${num(r.keywords - r.withVolume)} of ${num(r.keywords)} tracked keywords have no volume reported by
-    the tool, shown as a dash rather than zero.</div>`;
-  })() : '';
 
   const gbpDetailBody = GD.map((g, gi) => `
     <div class="slide slide-break">
-      <div class="slide-title"><span>${plogo('gbp')}Google Business Profile \u00b7 ${esc(g.label)}</span>${logoImg}</div>
+      <div class="slide-title"><span>${plogo('gbp')}Google Business Profile <span class="all-four">${esc(g.label)}</span></span>${logoImg}</div>
       <div class="grid g-4" style="margin-bottom:10px">
         ${[['Impressions', g.totals.impressions, g.mom.impressions],
            ['Call clicks', g.totals.calls, g.mom.calls],
@@ -2777,22 +2752,32 @@ function renderReport() {
           <div class="chart-wrap" style="height:170px"><canvas id="gbpClk${gi}"></canvas></div>
         </div>
         <div class="card">
-          <div class="card-title">Search keywords</div>
-          <table class="sortable" data-heat="2"><thead><tr><th>#</th><th>Keyword</th><th class="num">Search Vol</th></tr></thead><tbody>
-          ${(g.keywords.rows||[]).length ? g.keywords.rows.map((k,i)=>`<tr><td style="width:28px">${i+1}</td>
-            <td class="strong i18n">${esc(k.keyword)}</td>
-            <td class="num">${k.users > 0 ? num(k.users)
-              : (k.below ? `<span style="color:var(--faint)">&lt;${num(k.below)}</span>` : '\u2014')}</td></tr>`).join('')
-            : '<tr><td colspan="3" class="num">no non-brand keywords in range</td></tr>'}
-          </tbody></table>
-          <div class="note"><b>No ranking position:</b> Google Business Profile reports which phrases found
-          this listing, never where it placed \u2014 that needs a rank tracker, and would come from the same
-          sheet as the keyword table you are sending.<br>
-          <b>Brand and address searches are excluded</b> \u2014
-          ${num(g.keywords.brandCount||0)} phrases worth ${num(g.keywords.brandUsers||0)} searchers, people already
-          looking for this hospital by name. What is left is competitive ground: symptoms, treatments and
-          category terms someone used before choosing where to go.
-          Google withholds counts below a floor and returns a threshold instead, shown as <b>&lt;15</b>.</div>
+          <div class="card-title">Keyword rankings</div>
+          ${(() => {
+            /**
+             * REPLACES the GBP search-keyword table, which MW built as a
+             * placeholder precisely because Business Profile reports which
+             * phrases found a listing but never where it placed. This is the
+             * rank tracker's own sheet, so it answers the question the
+             * placeholder could not.
+             *
+             * Keyed by the LISTING's brand, so each GBP slide shows the ranks
+             * for its own hospital rather than the open tab's.
+             */
+            const r = (GR.byBrand || {})[g.key];
+            if (!r || !r.rows.length) return `<div class="note" style="margin-top:0">No tracked
+              keywords for ${esc(g.label)} in ${esc((GR.months || []).join(', ') || 'this range')}.</div>`;
+            const band = (v) => v <= 3 ? 'up' : (v <= 10 ? 'flat' : 'down');
+            return `<table class="sortable" data-heat="2"><thead><tr>
+              <th>Keyword</th><th class="num">Rank</th><th class="num">Search Vol</th>
+            </tr></thead><tbody>
+            ${r.rows.map(k => `<tr>
+              <td class="strong i18n">${esc(k.keyword)}</td>
+              <td class="num"><span class="dlt ${band(k.rank)}">${k.rank.toFixed(2)}</span></td>
+              <td class="num">${k.volume ? num(k.volume) : '<span class="dlt none">\u2014</span>'}</td>
+            </tr>`).join('')}
+            </tbody></table>`;
+          })()}
         </div>
       </div>
     </div>`).join('');
@@ -2806,26 +2791,25 @@ function renderReport() {
    */
   $('viewRoot').innerHTML = `
     <!-- ================= MW's sequence ================= -->
-    ${slide('Sessions overview \u00b7 BHQ', usersBody, true, true)}
+    ${slide('Sessions overview', usersBody, true, 'BHQ')}
     ${slide('Who reaches us from outside Thailand', countryBody, false, true)}
-    ${slide('Actions \u00b7 what we want them to do \u00b7 BHQ', actionsBody, false, true)}
-    ${apptBody ? slide(`Appointments \u00b7 ${sel}`, apptBody) : ''}
-    ${slide('Sessions by language \u00b7 BHQ', langMatrixBody, false, true)}
-    ${slide(`Actions by language \u00b7 ${sel}`, actionsLangBody)}
+    ${slide('Actions \u00b7 what we want them to do', actionsBody, false, 'BHQ')}
+    ${apptBody ? slide('Appointments', apptBody, false, sel) : ''}
+    ${slide('Sessions by language', langMatrixBody, false, 'BHQ')}
+    ${slide('Actions by language', actionsLangBody, false, sel)}
     ${slide('Channels \u00b7 where do they find us', channelsBody, false, true)}
-    ${referralBody ? slide(`Referral \u00b7 Back Links \u00b7 ${sel}`, referralBody) : ''}
+    ${referralBody ? slide('Referral \u00b7 Back Links', referralBody, false, sel) : ''}
     ${searchPagesBody}
     ${gbpDetailBody}
-    ${gbpRankBody ? slide(`GBP keyword rankings \u00b7 ${sel}`, gbpRankBody, false, false, 'gbp') : ''}
     ${slide('Google reviews', reviewBody, false, false, 'gbp')}
     ${slide('Facebook', facebookBody, false, false, 'facebook')}
 
     <!-- ===== not yet reviewed by MW: below the agreed sequence ===== -->
-    ${slide(`Search Ads \u00b7 ${sel}`, searchAdsBody, false, false, 'google_ads')}
+    ${slide('Search Ads', searchAdsBody, false, sel, 'google_ads')}
     ${slide('TikTok', tkChannelBody, false, true, 'tiktok')}
     ${tkTopBody ? slide('TikTok \u00b7 Top performances', tkTopBody, false, true, 'tiktok') : ''}
     ${contentBody}
-    ${chatBody ? slide(`Chat Bubble \u00b7 ${sel}`, chatBody) : ''}`;
+    ${chatBody ? slide('Chat Bubble', chatBody, false, sel) : ''}`;
 
   // Charts must be drawn after the markup is in the DOM.
   if (U && U.months.length && window.Chart) {
@@ -5852,7 +5836,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.123.0';
+const CLIENT_BUILD = '3.124.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

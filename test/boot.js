@@ -441,12 +441,21 @@ setTimeout(() => {
         const th = [...card.querySelectorAll("thead th")].map(t => t.textContent.trim());
         if (rows.length !== 2) return fail("ai card layout", `${rows.length} scorecard rows, expected 2`);
         if (cards !== 10) return fail("ai card layout", `${cards} scorecards, expected 10`);
-        if (th.length !== 11) return fail("ai card layout", `${th.length} columns, expected 11`);
+        /**
+         * Assistant + Sessions + MW's SIX columns, in MW's order. Eleven
+         * columns overflowed the slide; the two Better AI events stay on the
+         * scorecards above, where they cost no width.
+         */
+        const wantCols = ["Assistant", "Sessions", "Find Doctor", "Appointments",
+                          "Contact us", "View Item", "Add To Cart", "Purchase"];
+        if (th.join("|") !== wantCols.join("|")) {
+          return fail("ai card layout", `columns are ${th.join(", ")}`);
+        }
         // The three columns MW removed must be gone from THIS table.
         const banned = th.filter(h => /engagement|actions \/ 100|ga4 channel/i.test(h));
         banned.length
           ? fail("ai card layout", `removed column still present: ${banned.join(", ")}`)
-          : ok("ai card layout", "2\u00d75 scorecards, 11 columns, none removed");
+          : ok("ai card layout", `2\u00d75 scorecards, ${th.length} columns in MW order`);
       })();
       // The switch must exist, and the blacklisted row must be in the DOM
       // (hidden by CSS) rather than dropped — the toggle has to reveal it.
@@ -487,10 +496,31 @@ setTimeout(() => {
         ? fail(name, `fell through to "${needle}"`) : ok(name, "built from data");
       absent("search ads not fallback", "Google Ads is unavailable");
       absent("tiktok not fallback", "TikTok is unavailable");
-      // The title must follow the open tab, not read BHQ (MW, v3.100.0).
-      /Search Ads · BGH/.test(text)
-        ? ok("search ads titled BGH", "per hospital")
-        : fail("search ads titled BGH", "title is not per hospital");
+      /**
+       * Scope is a PILL now (v3.124.0), not `\u00b7 BGH` text, so this checks the
+       * pill next to the Search Ads title rather than a string in the heading.
+       */
+      (() => {
+        const t = [...root.querySelectorAll(".slide-title")]
+          .find(x => /Search Ads/.test(x.textContent));
+        if (!t) return fail("search ads scope pill", "no Search Ads slide");
+        const pill = t.querySelector(".all-four");
+        pill && pill.textContent.trim() === "BGH"
+          ? ok("search ads scope pill", "BGH pill")
+          : fail("search ads scope pill", `pill is ${pill ? pill.textContent.trim() : "missing"}`);
+      })();
+      /**
+       * EVERY scope indicator is a pill. A slide whose title still carries
+       * `\u00b7 BGH` or a bare BHQ word is the inconsistency MW asked to remove.
+       */
+      (() => {
+        const bad = [...root.querySelectorAll(".slide-title")]
+          .map(t => (t.querySelector("span") || {}).textContent || "")
+          .filter(txt => /·\s*(BGH|BIH|BHT|WSH|BHQ)\b/.test(txt.replace(/\s+/g, " ")));
+        bad.length
+          ? fail("scope pills only", `${bad.length} title(s) still use text scope: ${bad[0].trim()}`)
+          : ok("scope pills only", "no title carries a text scope");
+      })();
       // Nothing above the divider may claim the shared accounts are one
       // hospital's, and the retired slide must be gone.
       text.includes("Organic social")
@@ -769,27 +799,26 @@ setTimeout(() => {
           : ok("appointments", `2 scopes, 2 closed donuts, ${arcs} arcs, N/S shown`);
       })();
       /**
-       * GBP keyword ranks: its own card, ALONGSIDE the search-keyword card.
-       * Both must be present — the whole point of this block is that a rank and
-       * a search term answer different questions, so one replacing the other is
-       * a regression, not a simplification.
+       * GBP keyword ranks REPLACE the search-keyword table inside each listing
+       * card (MW) — the placeholder is gone on purpose, so this asserts the
+       * ranking table is there and the old one is NOT.
        */
       (() => {
-        const titles = [...root.querySelectorAll(".slide-title, .card-title")]
-          .map(t => t.textContent.trim());
-        const hasRanks = titles.some(t => /GBP KEYWORD RANKINGS|GBP keyword rankings/i.test(t));
-        if (!hasRanks) return fail("gbp ranks", "no keyword rankings card");
-        const hasSearchKw = titles.some(t => /Search keywords|What people searched/i.test(t))
-          || /search keyword/i.test(text);
-        if (!hasSearchKw) return fail("gbp ranks", "the search-keyword card is gone");
-        // A dash for unreported volume, not a zero.
-        const card = [...root.querySelectorAll(".slide")]
-          .find(sl => /GBP KEYWORD RANKINGS/i.test((sl.querySelector(".slide-title") || {}).textContent || ""));
-        if (!card) return fail("gbp ranks", "rankings slide not found");
-        const bands = card.querySelectorAll("td .dlt.up, td .dlt.flat, td .dlt.down");
-        bands.length >= 5
-          ? ok("gbp ranks", `${bands.length} ranks banded, search-keyword card intact`)
-          : fail("gbp ranks", `${bands.length} banded ranks, expected 5+`);
+        const cards = [...root.querySelectorAll(".card")];
+        const rank = cards.find(c =>
+          ((c.querySelector(".card-title") || {}).textContent || "").trim() === "Keyword rankings");
+        if (!rank) return fail("gbp ranks", "no Keyword rankings card");
+        const placeholder = cards.find(c =>
+          ((c.querySelector(".card-title") || {}).textContent || "").trim() === "Search keywords");
+        if (placeholder) return fail("gbp ranks", "the placeholder Search keywords table is still there");
+        if (/No ranking position/.test(rank.textContent)) {
+          return fail("gbp ranks", "placeholder note still rendering");
+        }
+        const bands = rank.querySelectorAll("td .dlt.up, td .dlt.flat, td .dlt.down");
+        const heads = [...rank.querySelectorAll("thead th")].map(t => t.textContent.trim());
+        heads.join("|") === "Keyword|Rank|Search Vol" && bands.length >= 5
+          ? ok("gbp ranks", `${bands.length} ranks banded, placeholder replaced`)
+          : fail("gbp ranks", `headers ${heads.join(", ")}, ${bands.length} bands`);
       })();
       finish();
     }, 500);

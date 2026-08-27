@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.123.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.124.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -699,6 +699,45 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.124.0 — scope is always a pill; keyword rankings replace the placeholder.**
+
+**SCOPE IS A PILL, EVERYWHERE (MW).** It used to arrive three ways — `\u00b7 BGH`
+text in a title, a bare `BHQ` word, and the `all-four` badge — so the same idea
+looked different slide to slide. `slide()` now takes a `scope` argument and is
+the only place that decides how it is drawn; the per-page Search, Content and
+GBP headings and the Actions card's hospital code all use the same pill. Asserted:
+no slide title may contain `\u00b7 BGH`-style text.
+
+**Keyword rankings REPLACE the GBP search-keyword table** (MW) — that table was
+always a placeholder, because Business Profile reports which phrases found a
+listing but never where it placed. Keyed by the LISTING's brand so each GBP slide
+shows its own hospital. No scorecards, no note. This reverses CONTEXT open item
+1's original "alongside, not instead of": MW's intent was a replacement once the
+rank data existed. The standalone rankings slide added in v3.123.0 is gone with
+it.
+
+**AI table: six columns in MW's order** — Find Doctor, Appointments, Contact us,
+View Item, Add To Cart, Purchase. Eleven overflowed the slide, and the two
+Better AI events read zero for every assistant; they stay on the scorecards
+above, where a zero is a finding and costs no width.
+
+**Revenue accent removed** (MW).
+
+**WINDSOR DISCONNECTION — CHECKED, and the answer is not uniform:**
+
+| Connector | Live `windsor()` calls | Safe to disconnect |
+|---|---|---|
+| `googleanalytics4` | **0** (the only match is a comment) | **YES** |
+| Search Console | **0** — never a Windsor connector here; GSC has always been the direct API | **YES** |
+| `google_my_business` | **11** | **NO** |
+
+GA4 moved to the Data API in v3.60.0 and GSC to the direct API for the same
+reason, so both Windsor connectors are dead weight and their slots can be
+reclaimed for YouTube or TikTok Ads. **GBP is still entirely Windsor** — eleven
+call sites across the report, the GBP tab and the reviews endpoint — so
+disconnecting it would empty every GBP slide.
+
 
 **v3.123.0 — GBP keyword rankings from the SEO sheet; revenue and Actions styling.**
 
