@@ -214,6 +214,9 @@ expect_field "ap bih not bgh"       "$REPORT" "$AP.BIH.nonRealtime===1?1:undefin
 # column (20 + 50) rather than BGH's.
 expect_field "ap rev one month"     "$REPORT" "d.appointments.revMonths===1?1:undefined"
 expect_field "ap rev per hospital"  "$REPORT" "$AP.BHT.revenue===70?70:undefined"
+# Revenue is reported in its own right and split both ways, so the card can show
+# it as figures rather than a sub-line under the case counts.
+expect_field "ap rev split"         "$REPORT" "($AP.BGH.revenue===($AP.BGH.realtimeRev+$AP.BGH.nonRealtimeRev)&&$AP.BGH.realtimeRev>0&&$AP.BGH.nonRealtimeRev>0)?'ok':undefined"
 # Blank location/specialty becomes N/S in the donut.
 expect_field "ap blank is N/S"      "$REPORT" "$AP.BGH.rtMix.rows.some(r=>r.label==='N/S')?'ok':undefined"
 # Initiates comes from GA4, not the sheet, so it must differ from completes.

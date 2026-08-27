@@ -2278,8 +2278,15 @@ function renderReport() {
           ${kpi('Initiates', num(a.initiates), 'GA4 appointments event')}
           ${kpi('Completes', num(a.completes),
             a.completionRate === null ? 'no initiates' : `${(a.completionRate * 100).toFixed(1)}% of initiates`)}
-          ${kpi('Realtime', num(a.realtime), '฿' + num(Math.round(a.realtimeRev)))}
-          ${kpi('Not realtime', num(a.nonRealtime), '฿' + num(Math.round(a.nonRealtimeRev)))}
+          ${kpi('Realtime', num(a.realtime), 'cases')}
+          ${kpi('Not realtime', num(a.nonRealtime), 'cases')}
+        </div>
+        <div class="grid g-3" style="margin-bottom:14px">
+          ${kpi('Revenue', '฿' + num(Math.round(a.revenue)), 'realtime + not realtime')}
+          ${kpi('Realtime revenue', '฿' + num(Math.round(a.realtimeRev)),
+            a.realtime ? '฿' + num(Math.round(a.realtimeRev / a.realtime)) + ' per case' : '')}
+          ${kpi('Not realtime revenue', '฿' + num(Math.round(a.nonRealtimeRev)),
+            a.nonRealtime ? '฿' + num(Math.round(a.nonRealtimeRev / a.nonRealtime)) + ' per case' : '')}
         </div>
         <hr class="sep">
         <div class="grid g-2">
@@ -5771,7 +5778,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.122.0';
+const CLIENT_BUILD = '3.122.1';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

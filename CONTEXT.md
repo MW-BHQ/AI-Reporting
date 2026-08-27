@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.122.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.122.1.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -699,6 +699,21 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.122.1 — revenue gets its own figures.**
+
+Revenue was tucked into the sub-line under the Realtime and Not realtime case
+counts, where it read as a footnote to a case count rather than a number in its
+own right (MW). It is now three scorecards — total, realtime, not realtime —
+with revenue per case beneath each split.
+
+**A textContent assertion that passed with the card deleted.** The check looked
+for "Revenue" anywhere in the card, and the FOOTNOTE says "Revenue is monthly in
+the sheet", so removing the scorecard changed nothing. It matches the scorecard
+`.lab` elements now. Same shape as the v3.118.0 icon check and the v3.116.0
+asset check: **a substring search over a whole block is not a test that the
+block contains a specific thing.**
+
 
 **v3.122.0 — Appointments card: GA4 initiates against the appointments sheet.**
 

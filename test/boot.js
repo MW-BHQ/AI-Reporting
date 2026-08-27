@@ -706,9 +706,18 @@ setTimeout(() => {
         const pages = [...wrap.querySelectorAll("[data-appt]")];
         if (pages.length !== 2) return fail("appointments", `${pages.length} scopes, expected 2`);
         if (pages[0].dataset.appt === "BHQ") return fail("appointments", "opens on BHQ, not the hospital");
-        for (const label of ["Initiates", "Completes", "Realtime", "Not realtime"]) {
-          if (!pages[0].textContent.includes(label)) {
-            return fail("appointments", `no "${label}" figure`);
+        /**
+         * Matched against the scorecard LABELS, not the page text.
+         *
+         * Revenue is a figure in its own right (MW), not a sub-line under the
+         * case counts. A textContent check passed even with the Revenue card
+         * deleted, because the footnote below it also says "Revenue".
+         */
+        const labels = [...pages[0].querySelectorAll(".stat .lab")].map(l => l.textContent.trim());
+        for (const want of ["Initiates", "Completes", "Realtime", "Not realtime",
+                            "Revenue", "Realtime revenue", "Not realtime revenue"]) {
+          if (!labels.includes(want)) {
+            return fail("appointments", `no "${want}" scorecard (have: ${labels.join(", ")})`);
           }
         }
         const donuts = [...pages[0].querySelectorAll("svg")];
