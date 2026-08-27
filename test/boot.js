@@ -359,7 +359,9 @@ setTimeout(() => {
       const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
       const present = (name, needle) => text.includes(needle)
         ? ok(name, "rendered") : fail(name, `"${needle}" missing from the report`);
-      present("search ads rendered", "the keywords we bid on");
+      // Footnotes removed from Search Ads in v3.117.0 (MW), so the needle is
+      // the keyword table's own heading rather than its note.
+      present("search ads rendered", "Search keywords");
       present("referral rendered", "Back links, and how good is the traffic");
       /**
        * Checked against THIS table's header row, not the page text: the label
@@ -623,6 +625,39 @@ setTimeout(() => {
         cols >= 2
           ? ok("chat bubble", `2 scopes, ${labels.length} channels, ${marks} marks, 2-up grid`)
           : fail("chat bubble", "channel cards are not in a 2-column grid");
+      })();
+      /**
+       * NAV UNDER THE HEADER, everywhere (MW). A tab strip that renders before
+       * the title puts the control ahead of the thing it controls. Checked by
+       * DOM position rather than by eye: for each tab strip, a `.slide-title`
+       * must precede it within the same parent.
+       */
+      (() => {
+        const strips = [...(root ? root.querySelectorAll(".lang-tabs") : [])];
+        if (!strips.length) return fail("nav under header", "no tab strips rendered");
+        /**
+         * Scoped to the strip's OWN section, then document order within it.
+         *
+         * Two wrong versions before this: checking only the immediate parent
+         * flagged the chat strip, which is nested a level deeper than its
+         * header; checking the whole page then passed even with a strip moved
+         * back above its header, because some earlier section's title still
+         * preceded it. The unit is the section.
+         */
+        const sectionOf = (el) =>
+          el.closest(".lang-page, .clang-page, .cb-page, .cb-wrap") || el.closest(".slide");
+        const bad = strips.filter((strip) => {
+          let scope = sectionOf(strip);
+          // A wrapper with no header of its own defers to the enclosing slide.
+          while (scope && !scope.querySelector(".slide-title")) scope = scope.parentElement
+            && scope.parentElement.closest(".slide");
+          if (!scope) return true;
+          return ![...scope.querySelectorAll(".slide-title")].some((t) =>
+            t.compareDocumentPosition(strip) & 4 /* strip FOLLOWS title */);
+        });
+        bad.length
+          ? fail("nav under header", `${bad.length}/${strips.length} tab strips sit above their header`)
+          : ok("nav under header", `${strips.length} tab strips all below a header`);
       })();
       finish();
     }, 500);

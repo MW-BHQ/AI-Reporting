@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.116.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.117.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -679,6 +679,14 @@ improves.
 
 ## 12. Requested but not built
 
+- **APPLY THE REM TYPE SCALE TO EVERY TAB** (MW, backlogged v3.117.0). The scale
+  lives in `:root` and Monthly Reports uses it; the app chrome and the other
+  tabs still carry roughly 80 hard-coded px sizes. The `type:scale` audit rule
+  is ALLOWLIST-scoped to the migrated components, so extending it is the
+  checklist: add a selector to `SCOPED`, run the audit, convert what it flags.
+  Do it per tab rather than in one pass — every one of those sizes is a
+  potential layout shift on a screen nobody is currently looking at.
+
 - **Audience-set performance ranking** — which audience works for which campaign
   type. Meta's adset dimension should support it.
 - **Short.io** — clicks per short link across LINE, Facebook and EDM; the only
@@ -691,6 +699,44 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.117.0 — the gradient seam; nav under the header; footnotes removed.**
+
+**THE REPEATING BACKGROUND SEAM MW SPOTTED.** `html,body{height:100%}` makes the
+background's positioning area exactly one viewport tall, so the two radial
+gradients were **tiled** down the page — a hard edge recurring at a fixed
+interval, which read as every block being cut in the wrong place. Fixed with
+`background-repeat:no-repeat` and `background-attachment:fixed`, so the wash is
+painted once and no block boundary can land on a seam. MW's instinct (fit the
+gradient to the section, not the screen) was the right diagnosis from the
+symptom.
+
+**Nav under the header, everywhere** (MW). The Search and Content tab strips
+rendered ABOVE their titles — the control before the thing it controls. Tabs now
+sit inside each language page, directly under that page's header. Repeating them
+per page is deliberate: one page is visible at a time, the handler targets every
+`.lang-tab` so duplicates stay in sync, and `no-print` keeps the deck clean.
+
+`nav under header` in `boot.js` asserts this, and **took three attempts**:
+parent-only flagged the chat strip (nested a level deeper than its header);
+whole-page then passed even with a strip moved back above its header, because
+some earlier section's title still preceded it. The unit is the SECTION.
+
+**Report scorecards get a surface.** `kpi()` emits a bare `.stat`, which has no
+card styling — 33 call sites elsewhere pass `stat card` to get one. Inside a
+slide the surface is applied by CSS, so every scorecard on the tab matches
+without touching other tabs or double-framing the existing `stat card` uses.
+That is why the Chat Bubble intro looked unlike everything around it.
+
+- **AI assistants (LLMs)** now uses the same plain card as its sibling
+  "Back links" block; the blue border is gone.
+- **Footnotes removed** from AI assistants, Facebook, Search Ads and Content
+  (MW). The "what actually fires" line on the content cards stays — it is a
+  finding, not a caveat.
+- **Rem scale rollout to the other tabs is in the backlog** (§12) with the
+  method written down, since `type:scale` is allowlist-scoped and extending the
+  list is the checklist.
+
 
 **v3.116.0 — rem type scale; 64px section marks (properly); desc-first sorting.**
 

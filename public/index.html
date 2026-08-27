@@ -67,6 +67,15 @@
       radial-gradient(1100px 700px at 88% -12%, #DCE6FF 0%, rgba(220,230,255,0) 60%),
       radial-gradient(900px 600px at -8% 8%, #E8E3FF 0%, rgba(232,227,255,0) 55%),
       var(--bg);
+    /**
+     * NO-REPEAT + FIXED. `html,body{height:100%}` makes the background's
+     * positioning area one viewport tall, so the two radial gradients were
+     * being TILED down the page — that is the hard edge MW saw recurring at the
+     * same interval past every block. Fixing them to the viewport paints the
+     * wash once, so no block boundary lands on a seam.
+     */
+    background-repeat:no-repeat;
+    background-attachment:fixed;
     color:var(--ink);
     font-family:'Poppins','Sarabun',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
     -webkit-font-smoothing:antialiased;
@@ -579,6 +588,16 @@
    */
   .grid{row-gap:16px;align-items:stretch;}
   .grid > .card, .grid > .stat, .grid > .mini, .grid > .cbc{height:100%;}
+  /**
+   * `kpi()` emits a bare `.stat`, which has no surface of its own — 33 call
+   * sites elsewhere pass `stat card` to get one. Inside a report slide the
+   * surface is applied here instead, so every scorecard on this tab matches
+   * without touching the other tabs or double-framing the `stat card` uses.
+   */
+  .slide .grid > .stat:not(.card){
+    background:var(--glass);border:1px solid var(--stroke);border-radius:var(--r);
+    box-shadow:var(--shadow);padding:18px 20px;
+  }
   .grid + .grid{margin-top:20px;}
   .sep{border:0;border-top:1px solid var(--line);margin:28px 0 22px;}
   .card-title{font-size:var(--text-lg);font-weight:700;}
@@ -1866,16 +1885,28 @@ function renderReport() {
   const SB = (d.searchByLanguage || {})[sel] || [];
   const activeLang = S.reportLang && SB.some(x => x.key === S.reportLang) ? S.reportLang : (SB[0] || {}).key;
   const searchPagesBody = SB.length ? `
-    <div style="height:46px"></div>
-    <div class="lang-tabs no-print">
-      ${SB.map(x=>`<button class="lang-tab ${x.key===activeLang?'active':''}" data-lang="${esc(x.key)}">${esc(x.label)}</button>`).join('')}
-    </div>
+    ${(() => {
+      /**
+       * Tabs live INSIDE each language page, directly under that page's header
+       * (MW: nav goes under the logo mark, everywhere). They were above the
+       * header, which put the control before the thing it controls.
+       *
+       * Repeating them per page is deliberate: only one page is visible at a
+       * time, the click handler targets every `.lang-tab` so duplicates stay in
+       * sync, and they carry `no-print` so the printed deck is unaffected.
+       */
+      return '';
+    })()}
     ${SB.map(x=>{
+      const langTabs = `<div class="lang-tabs no-print">
+        ${SB.map(t=>`<button class="lang-tab ${t.key===activeLang?'active':''}" data-lang="${esc(t.key)}">${esc(t.label)}</button>`).join('')}
+      </div>`;
       const mx = Math.max(x.impressions||1, 1);
       const pv = Math.max(8, Math.round((x.visits/mx)*100));
       const pa = Math.max(6, Math.round((x.actionsTotal/mx)*100));
       return `<div class="lang-page ${x.key===activeLang?'active':''}" data-langpage="${esc(x.key)}">
         <div class="slide-title" style="margin-top:0"><span>${plogo('google')}Search \u00b7 ${esc(x.label)} \u00b7 ${esc(sel)}</span>${logoImg}</div>
+        ${langTabs}
         <div class="grid g-2">
           <div class="card">
             ${[['TOFU','Impressions',x.impressions,100,'#4B8DF8','#fff'],
@@ -1998,7 +2029,7 @@ function renderReport() {
         events are tracked elsewhere and are near-zero from referral.
         A zero is a real answer, not missing data.</div>
       </div>
-    <div class="card mt" style="border-color:#4B8DF8">
+    <div class="card mt">
       <div class="card-title">AI assistants (LLMs)</div>
       ${A.rows.length ? `
       <div class="grid g-5" style="margin-bottom:8px">
@@ -2030,21 +2061,7 @@ function renderReport() {
         </tr>`).join('')}
       </tbody></table>`;
       })()}
-      <div class="note"><b>Small numbers, watched deliberately.</b> This is people arriving because an
-      assistant recommended us. All nine key events are on the cards above and again per assistant in the
-      table, so a zero is a real answer rather than missing data.<br>
-      <b>The scorecard percentage counts only assistants arriving through Referral</b>, so it is a share
-      of the same population it is divided by. The table is wider: it counts every assistant session
-      whichever channel GA4 filed it under, so its total will usually be the larger of the two.<br>
-      <b>GA4 now has an "AI Assistant" default channel</b> (added 13 May 2026), and that is the primary
-      signal here. Source name matching is kept alongside it, because assistant traffic still turns up
-      under Organic Search, Referral and Unassigned \u2014 Google has not published its recognised list.
-      In this range GA4's own channel accounted for <b>${num(A.nativeSessions)}</b> sessions and our name
-      list caught a further <b>${num(A.namedSessions)}</b>, which is the part that needs maintaining.<br>
-      Two limits. The native channel is <b>forward-only from 13 May 2026</b> and GA4 did not reclassify
-      history, so any comparison spanning that date is comparing two different definitions. And an
-      assistant that strips the referrer arrives as Direct and <b>cannot be counted at all</b>, so every
-      figure here is a floor.</div>`
+      `
       : `<div class="note"><b>No assistant traffic identified in this range.</b> That is a real answer, not
       a gap \u2014 but it is a floor: an assistant that strips the referrer arrives as Direct and cannot be
       told apart from any other direct visit.</div>`}
@@ -2107,10 +2124,9 @@ function renderReport() {
       const cell = cells[lc];
       return `<div class="clang-page ${lc===activeC?'active':''}" data-clangpage="${esc(lc)}-${idx}">
         <div class="slide-title" style="margin-top:0"><span>Content \u00b7 ${esc(label)} \u00b7 ${esc(sel)}</span>${logoImg}</div>
+        ${tabs}
         <div class="grid g-2">${pair.map(id=>table(cell, id)).join('')}</div>
-        <div class="note">Ranked by <b>page views of the page itself</b>, not by the sessions that started
-        there \u2014 a landing-page metric would credit a doctor page with every other page in the visit.
-        Each type carries the one action it is judged on. The full path is on hover.</div>
+        
       </div>`;
     };
 
@@ -2119,10 +2135,10 @@ function renderReport() {
         data-clang="${esc(l.key)}">${esc(l.label)}</button>`).join('')}
     </div>`;
 
+    // Tabs now render inside each page, under its header (MW), so the slide
+    // itself just holds the pages.
     return [['doctor','package'], ['article','center']].map((pair, idx) => `
       <div class="slide slide-break">
-        <div style="height:46px"></div>
-        ${idx===0 ? tabs : ''}
         ${langs.map(l=>page(l.key, l.label, pair, idx)).join('')}
       </div>`).join('');
   })();
@@ -2324,10 +2340,7 @@ function renderReport() {
           <td class="num">${dltPlain(a.mom)}</td></tr>`).join('')
           || '<tr><td colspan="3" class="num">no key events from Facebook in range</td></tr>'}
         </tbody></table>
-        <div class="note">One Facebook page serves all four hospitals, so these figures are identical on
-        every tab. Page impressions include Boost Post, which is why organic-only sits beside it \u2014 the paid
-        part is counted in the ad spend opposite. Visits and actions are sessions whose source is Facebook or
-        Instagram, summed across the four hospitals.</div>` : '<div class="note">page data unavailable</div>'}
+        ` : '<div class="note">page data unavailable</div>'}
       </div>
       <div class="card">
         <div class="card-title">Meta Ad <span class="all-four">BHQ</span></div>
@@ -2401,12 +2414,7 @@ function renderReport() {
             <td class="strong">${actIcon(a.id)}${esc(a.label)}</td>
             <td class="num strong">${num(a.value)}</td></tr>`).join('')}
         </tbody></table>
-        <div class="note">Bar widths are relative to impressions, so the narrowing is to scale.
-        <b>All nine key events are listed</b>, Better AI included \u2014 a zero is a finding, not a gap.
-        Visits and actions are sessions GA4 attributes to <b>Paid Search</b>, plus Performance Max and
-        Demand Gen where the source is Google.
-        <b>No MoM column:</b> the previous window is held for the four hospitals together, not per
-        hospital, so a month-back comparison here would cost four more requests. Say if it is wanted.</div>
+        
       </div>
       <div class="card">
         <div class="card-title">Search keywords \u00b7 what people typed</div>
@@ -2420,10 +2428,7 @@ function renderReport() {
           <td class="num">${t.ctr===null?'\u2014':(t.ctr*100).toFixed(1)+'%'}</td></tr>`).join('')
           : '<tr><td colspan="4" class="num">no search terms for this hospital in range</td></tr>'}
         </tbody></table>
-        <div class="note">These are the queries people actually typed, not the keywords we bid on \u2014 the two
-        diverge, and the query is what tells you what patients are looking for.
-        Impressions above are the sum of the terms Google reported; it withholds very low-volume terms,
-        so the funnel top is a floor rather than the account total.</div>
+        
       </div>
     </div>`;
   })() : '<div class="note">Google Ads is unavailable for this range.</div>';
@@ -5628,7 +5633,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.116.0';
+const CLIENT_BUILD = '3.117.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
