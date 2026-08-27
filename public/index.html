@@ -2063,7 +2063,7 @@ function renderReport() {
          * across and down. Order matches the scorecards.
          */
         return `
-      <table class="sortable" data-heat="1"><thead><tr>
+      <table class="sortable" data-heat="1" style="margin-top:2rem"><thead><tr>
         <th>Assistant</th><th class="num">${actIcon('sessions')}Sessions</th>
         ${A.actions.map(a=>`<th class="num">${actIcon(a.id)}${esc(a.label)}</th>`).join('')}
       </tr></thead><tbody>
@@ -2196,7 +2196,7 @@ function renderReport() {
         </div>
       </div>`;
       return `<div class="cb-page ${idx === 0 ? 'active' : ''}" data-cbpage="${esc(key)}">
-        <div class="grid g-3" style="margin-bottom:14px">
+        <div class="grid g-4" style="margin-bottom:14px">
           ${kpi(s.basis === 'opens' ? 'Bubble Clicks' : 'Channel clicks', num(s.total),
             s.basis === 'opens' ? `${num(s.channelClicks)} channel clicks`
                                 : 'bubble clicks not tracked')}
@@ -2205,6 +2205,9 @@ function renderReport() {
           ${kpi('BHQ share', s.bhqShare === null ? '100%' : (s.bhqShare * 100).toFixed(1) + '%',
             s.bhqShare === null ? 'all four hospitals'
               : `of ${num((CB.byScope.BHQ || {}).total || 0)} across all four`)}
+          ${kpi('Contact us share',
+            s.contactUsShare === null ? '\u2014' : (s.contactUsShare * 100).toFixed(1) + '%',
+            s.contactUs ? `of ${num(s.contactUs)} contact us events` : 'no contact us events')}
         </div>
         <hr class="sep">
         <div class="cb-cards"><div class="grid g-2">${shown.map(card).join('')}</div></div>
@@ -5637,7 +5640,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.118.0';
+const CLIENT_BUILD = '3.119.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

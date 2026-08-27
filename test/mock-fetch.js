@@ -341,8 +341,17 @@ function ga4Report(body) {
          * In-scope chat rows are exactly 100; the out-of-scope branch is 9,997.
          * A leak therefore makes the chat totals stop being multiples of 100.
          */
+        /**
+         * BIH (`bangkok-bone-brain`) gets NO Telegram clicks, in either window.
+         * That is the real case MW hit: a channel silent all month on a quieter
+         * hospital. Without it the fixture gave every brand every channel, so
+         * a filter that drops zero-click channels still produced ten cards and
+         * the "cards never disappear" guard tested nothing.
+         */
         : (m === "eventCount" && (dims.includes("linkId") || dims.includes("customEvent:Click_ID")))
-          ? (page === "/th/somewhere-else/page" ? "9997" : "100")
+          ? (String(page).indexOf("/bangkok-bone-brain/") >= 0
+                && String(vals.join(" ")).indexOf("telegram") >= 0 ? "0"
+             : page === "/th/somewhere-else/page" ? "9997" : "100")
         : (m === "eventCount" && weight !== undefined) ? String(weight * 10)
         : (m === "eventCount" && page && PAGE_ACTIONS[page] !== undefined) ? String(PAGE_ACTIONS[page])
         : "100" })),

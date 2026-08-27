@@ -233,6 +233,12 @@ expect_field "cb source is gtm"    "$REPORT" "d.chatBubble.source==='click_chat_
 # deck and a channel sits in the same place every month.
 # BHQ share: the four hospitals must account for exactly the BHQ total, or the
 # share is being measured against a different population than it is drawn from.
+# Every configured channel keeps its card even at zero both months — cards were
+# disappearing on the quieter hospitals, which breaks the fixed layout.
+expect_field "cb all cards always"  "$REPORT" "['BHQ','BGH','BIH','BHT','WSH'].every(k=>d.chatBubble.byScope[k].rows.length===10)?'ok':undefined"
+# Contact us denominator: BHQ must be exactly the four hospitals summed, or the
+# share compares a group numerator against a differently-scoped denominator.
+expect_field "cb contactus scope"   "$REPORT" "d.chatBubble.byScope.BHQ.contactUs===['BGH','BIH','BHT','WSH'].reduce((a,k)=>a+d.chatBubble.byScope[k].contactUs,0)?'ok':undefined"
 expect_field "cb share sums 100"   "$REPORT" "Math.abs(['BGH','BIH','BHT','WSH'].reduce((a,k)=>a+d.chatBubble.byScope[k].bhqShare,0)-1)<1e-9?'ok':undefined"
 expect_field "cb bhq no self share" "$REPORT" "d.chatBubble.byScope.BHQ.bhqShare===null?'ok':undefined"
 expect_field "cb fixed order"      "$REPORT" "($CBB[0].label==='Telegram'&&$CBB[2].label==='Messenger'&&$CBB[4].label==='LINE')?'ok':undefined"

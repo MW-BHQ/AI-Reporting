@@ -2559,7 +2559,17 @@ async function buildReport(from, to) {
        * order is what the URL-qualified matching rules depend on, and display
        * must not be able to disturb it.
        */
-      }).filter((r) => r.clicks || r.prev)
+      })
+        /**
+         * EVERY configured channel is kept, even at zero both months (MW: cards
+         * were missing on BIH and WSH). A card that disappears when a channel
+         * goes quiet breaks the fixed layout the order exists to provide, and
+         * "nobody used Messenger this month" is a finding, not an absence.
+         *
+         * The exception is `WhatsApp (other)` — a catch-all for a number we do
+         * not recognise, which is noise unless it actually fired.
+         */
+        .filter((r) => r.order <= 10 || r.clicks || r.prev)
         .sort((a, b) => (a.order || 99) - (b.order || 99));
       /**
        * `total` is bubble OPENS (`chat-bubble-top-parent`), not the sum of
@@ -2587,6 +2597,21 @@ async function buildReport(from, to) {
           return was ? (cur - was) / was : null;
         })() };
     };
+    /**
+     * Total `contact_us` key events per hospital, for the Contact Us share.
+     *
+     * Free: the per-brand `k_` pulls are already in hand. BHQ is the sum of the
+     * four, not a separate pull, so the share and its denominator describe the
+     * same population at both scopes.
+     */
+    const contactUs = { BHQ: 0 };
+    for (const b of BRANDS) {
+      const ke = data[`k_${b.key}`];
+      let t = 0;
+      for (const r of ((ke && ke.rows) || [])) if (r.eventName === "contact_us") t += r.value;
+      contactUs[b.key] = t;
+      contactUs.BHQ += t;
+    }
     const byScope = { BHQ: scopeRows("BHQ") };
     for (const b of BRANDS) byScope[b.key] = scopeRows(b.key);
     /**
@@ -2600,6 +2625,18 @@ async function buildReport(from, to) {
       const sc = byScope[k];
       sc.bhqShare = (k !== "BHQ" && byScope.BHQ.total)
         ? sc.total / byScope.BHQ.total : null;
+      /**
+       * Chat's share of all Contact us intent (MW). Numerator is bubble clicks,
+       * denominator every `contact_us` key event for the same scope.
+       *
+       * These are two different measurements of the same intent, not a subset
+       * and its whole, so the ratio can exceed 100% — a person who opens the
+       * bubble may never fire `contact_us`, and vice versa. The card names the
+       * denominator so the figure cannot be read as "share of a total that
+       * contains it".
+       */
+      sc.contactUs = contactUs[k] || 0;
+      sc.contactUsShare = sc.contactUs ? sc.total / sc.contactUs : null;
     }
     return { available: true, byScope, source, altChannelClicks,
       // Which GA4 events these clicks actually arrived under, so a channel

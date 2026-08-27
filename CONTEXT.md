@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.118.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.119.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -699,6 +699,38 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.119.0 — every channel card always shows; Contact us share.**
+
+**MISSING CARDS ON BIH AND WSH** (MW). `scopeRows` dropped any channel with zero
+clicks in BOTH windows, so a channel that went quiet lost its card — on the
+quieter hospitals that left nine cards, or eight, and broke the fixed layout the
+whole `order` field exists to provide. All ten configured channels are kept now.
+`WhatsApp (other)` stays conditional: it is a catch-all for an unrecognised
+number and is noise unless it fired.
+
+A zero is a finding. "Nobody used Messenger at BIH this month" is exactly the
+sort of thing a monthly deck should say out loud.
+
+**The fixture could not reproduce it.** Every brand had every channel, so a
+filter that drops zero-click channels still produced ten cards and the guard
+passed. BIH now gets **no Telegram clicks in either window**, which is the real
+shape of the bug; the negative control fails properly against it.
+
+**Contact us share card** (MW): bubble clicks against every `contact_us` key
+event at the same scope. Free — the per-brand `k_` pulls were already in hand,
+and BHQ is the four summed rather than a separate pull, so numerator and
+denominator are scoped alike (asserted).
+
+**It can exceed 100%, and that is not a bug.** These are two measurements of the
+same intent, not a subset and its whole: someone can open the bubble without
+firing `contact_us`, and fire `contact_us` without touching the bubble. The card
+names its denominator so the number cannot be read as a share of something that
+contains it.
+
+**2rem above the AI assistants table** — its header row was sitting hard against
+the scorecards and the two blocks read as one.
+
 
 **v3.118.0 — Shared Paid Media removed; one scorecard surface; BHQ share.**
 
