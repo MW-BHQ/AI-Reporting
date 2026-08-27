@@ -495,8 +495,12 @@ setTimeout(() => {
          */
         // No Analytics mark: dropped in v3.110.0 (MW) — the Channels slide is
         // about GA4 by definition, so a logo there labels the obvious.
-        const want = ["Google", "Business Profile", "Facebook", "Meta", "TikTok",
-                      "Google Ads"];
+        /**
+         * Meta moved off a slide title onto the Meta Ad CARD in v3.118.0, when
+         * Shared Paid Media was removed — so it is checked separately, below,
+         * rather than dropped from the list and forgotten.
+         */
+        const want = ["Google", "Business Profile", "Facebook", "TikTok", "Google Ads"];
         const seen = new Set(marks.map(m => m.getAttribute("title")));
         const missing = want.filter(w => !seen.has(w));
         if (missing.length) return fail("platform marks", `no mark for: ${missing.join(", ")}`);
@@ -505,12 +509,19 @@ setTimeout(() => {
         // as a solid box. Each mark must therefore point at a real asset.
         const bad = marks.filter(m => !/^brand\/[\w.-]+\.svg$/.test(m.getAttribute("src") || ""));
         if (bad.length) return fail("platform marks", `${bad.length} mark(s) with no brand asset src`);
-        const minis = [...(root ? root.querySelectorAll(".mini") : [])];
-        const withIcon = minis.filter(m => m.querySelector(".lab svg")).length;
-        // The Sessions card plus nine key events all carry an icon.
-        minis.length && withIcon === minis.length
-          ? ok("platform marks", `${want.length} platforms, ${minis.length} mini cards all iconed`)
-          : fail("platform marks", `${withIcon}/${minis.length} mini cards have a shared icon`);
+        if (!root.querySelector('.card-title img[title="Meta"]')) {
+          return fail("platform marks", "no Meta mark on the Meta Ad card");
+        }
+        /**
+         * `mini()` emits `.stat` since v3.118.0, so it shares the one report
+         * card surface. Iconed scorecards are therefore `.stat` with an svg in
+         * the label — the old `.mini` selector matched nothing and reported
+         * "0/0 ... all iconed", which passed.
+         */
+        const iconed = [...root.querySelectorAll(".slide .stat .lab svg")];
+        iconed.length >= 10
+          ? ok("platform marks", `${want.length} platforms + Meta card, ${iconed.length} iconed scorecards`)
+          : fail("platform marks", `only ${iconed.length} iconed scorecards, expected 10+`);
       })();
       /**
        * Content: two slides, four paired tables, MW's type-to-action pairing,
@@ -621,8 +632,10 @@ setTimeout(() => {
         if (/Unrecognised click ids/.test(pages[0].textContent)) {
           return fail("chat bubble", "footer still rendering");
         }
-        const cols = pages[0].querySelectorAll(".grid.g-2").length;
-        cols >= 2
+        // The intro row is g-3 since the BHQ-share card was added, so the
+        // channel grid is the one inside `.cb-cards` specifically.
+        const cols = pages[0].querySelectorAll(".cb-cards .grid.g-2").length;
+        cols >= 1
           ? ok("chat bubble", `2 scopes, ${labels.length} channels, ${marks} marks, 2-up grid`)
           : fail("chat bubble", "channel cards are not in a 2-column grid");
       })();

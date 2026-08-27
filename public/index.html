@@ -600,6 +600,12 @@
   }
   .grid + .grid{margin-top:20px;}
   .sep{border:0;border-top:1px solid var(--line);margin:28px 0 22px;}
+  /**
+   * Breathing room before a table that follows scorecards (MW). The header row
+   * was sitting hard against the cards above it, so the two blocks read as one.
+   */
+  .grid + table, .grid + .sortable{margin-top:var(--space-lg);}
+  .card > .grid + table{margin-top:var(--space-lg);}
   .card-title{font-size:var(--text-lg);font-weight:700;}
   .slide .card-title{margin-bottom:var(--space-md);}
   .cb-page .grid + .grid{margin-top:24px;}
@@ -1675,10 +1681,17 @@ function renderReport() {
    * the icons consistent between the cards and the table beneath them.
    * `lead` marks the headline card; a zero is styled down but stays legible.
    */
+  /**
+   * Mini scorecard. Emits the SAME `.stat` markup as `kpi()`, so it picks up the
+   * one card surface the report uses rather than carrying a second look of its
+   * own — that mismatch is what made the ten AI cards read as off-design.
+   * The only thing `mini` adds is an icon from the shared set on the label.
+   *
+   * `lead` and `zero` are accepted and ignored (MW: no shading carrying
+   * meaning), so call sites did not all need rewriting.
+   */
   const mini = (lab, val, opts = {}) => {
-    // `lead` and `zero` no longer change the styling (MW: no shading carrying
-    // meaning). Accepted and ignored so call sites need not all be rewritten.
-    return `<div class="mini">
+    return `<div class="stat">
       <div class="lab">${opts.icon ? actIcon(opts.icon) : ''}${esc(lab)}</div>
       <div class="val">${val}</div>
       ${opts.sub ? `<div class="sub2">${opts.sub}</div>` : ''}
@@ -2183,12 +2196,15 @@ function renderReport() {
         </div>
       </div>`;
       return `<div class="cb-page ${idx === 0 ? 'active' : ''}" data-cbpage="${esc(key)}">
-        <div class="grid g-2" style="margin-bottom:14px">
+        <div class="grid g-3" style="margin-bottom:14px">
           ${kpi(s.basis === 'opens' ? 'Bubble Clicks' : 'Channel clicks', num(s.total),
             s.basis === 'opens' ? `${num(s.channelClicks)} channel clicks`
                                 : 'bubble clicks not tracked')}
           ${kpi('MoM', s.totalChangePct === null ? '\u2014' : changeText(s.totalChangePct),
             s.totalPrev ? `vs ${num(s.totalPrev)} last month` : '')}
+          ${kpi('BHQ share', s.bhqShare === null ? '100%' : (s.bhqShare * 100).toFixed(1) + '%',
+            s.bhqShare === null ? 'all four hospitals'
+              : `of ${num((CB.byScope.BHQ || {}).total || 0)} across all four`)}
         </div>
         <hr class="sep">
         <div class="cb-cards"><div class="grid g-2">${shown.map(card).join('')}</div></div>
@@ -2306,6 +2322,21 @@ function renderReport() {
   const FB = d.facebook || {};
   const fbMine = (FB.byBrand || []).find(x => x.key === sel);
   const money = (v) => v === null || v === undefined ? '\u2014' : '\u0e3f' + num(Math.round(v * 100) / 100);
+  /**
+   * SHARED PAID MEDIA REMOVED (MW). The three shared scorecards are gone.
+   *
+   * The unmapped-accounts warning is NOT gone — it moved onto the Meta Ad card,
+   * where it belongs. It is the guard that stopped an agency's entire spend
+   * vanishing silently in v3.69.0, and deleting the slide it happened to live
+   * on would have taken it with it.
+   */
+  const unmappedCard = d.unmapped ? `<div class="card mt" style="border-color:#E4B84B">
+      <div class="card-title">Unmapped ad accounts \u2014 not counted anywhere</div>
+      <div class="note"><b>${esc(d.unmapped.accounts.join(', '))}</b> \u2014 ฿${num(Math.round(d.unmapped.spend))} spend,
+      ${num(d.unmapped.impressions)} impressions. Not in the brand registry, so excluded from every figure
+      above. Tell Claude which brand each belongs to.</div>
+    </div>` : '';
+
   const facebookBody = (FB.page || fbMine) ? `
     <div class="grid g-2">
       <div class="card">
@@ -2343,7 +2374,7 @@ function renderReport() {
         ` : '<div class="note">page data unavailable</div>'}
       </div>
       <div class="card">
-        <div class="card-title">Meta Ad <span class="all-four">BHQ</span></div>
+        <div class="card-title">${plogo('meta', 28)}Meta Ad <span class="all-four">BHQ</span></div>
         ${(FB.byBrand||[]).some(b=>b.spend) ? `
         <table class="sortable" data-heat="1"><thead><tr>
           <th>Hospital</th><th class="num">Total cost</th><th class="num">Reach</th>
@@ -2375,6 +2406,7 @@ function renderReport() {
         account exists, it simply ran nothing.</div>`
         : `<div class="note">No Meta ad spend in this range for any hospital.</div>`}
       </div>
+      ${unmappedCard}
     </div>` : '';
 
   /**
@@ -2606,33 +2638,6 @@ function renderReport() {
    * that used to sit here is superseded by the Meta Ad card, which lists all
    * four with the open hospital highlighted (MW, v3.99.2).
    */
-  const paidBody = `${d.shared && d.shared.meta ? (() => {
-    const sm = d.shared.meta;
-    const cpm = sm.impressions ? (sm.spend / sm.impressions) * 1000 : null;
-    const cpc = sm.clicks ? sm.spend / sm.clicks : null;
-    const ctr = sm.impressions ? sm.clicks / sm.impressions : null;
-    const card = (lab, val, sub) => `<div class="stat card">
-      <div class="lab">${esc(lab)}</div>
-      <div class="val">${val}</div>
-      <div class="sub2"><span style="font-size:10px;color:var(--faint)">${sub}</span></div>
-    </div>`;
-    return `
-    <div class="grid g-3" style="margin-bottom:10px">
-      ${card('Shared spend', '฿'+num(Math.round(sm.spend)), cpm===null?'\u2014':'฿'+cpm.toFixed(2)+' CPM')}
-      ${card('Impressions', num(sm.impressions), ctr===null?'\u2014':(ctr*100).toFixed(2)+'% CTR')}
-      ${card('Clicks', num(sm.clicks), cpc===null?'\u2014':'฿'+cpc.toFixed(2)+' per click')}
-    </div>
-    <div class="note"><b>${esc(sm.accounts.join(', '))}</b> \u2014 ${esc(d.shared.note)}
-    There is no allocation behind these figures because the platform reports none: splitting them across
-    the four hospitals would be an invention, so they are held apart instead.</div>`;
-  })() : '<div class="note">No shared ad spend in this range.</div>'}
-    ${d.unmapped ? `<div class="card mt" style="border-color:#E4B84B">
-      <div class="card-title">Unmapped ad accounts \u2014 not counted anywhere</div>
-      <div class="note"><b>${esc(d.unmapped.accounts.join(', '))}</b> \u2014 ฿${num(Math.round(d.unmapped.spend))} spend,
-      ${num(d.unmapped.impressions)} impressions. Not in the brand registry, so excluded from every figure
-      above. Tell Claude which brand each belongs to.</div>
-    </div>` : ''}`;
-
   $('viewRoot').innerHTML = `
     <!-- ================= MW's sequence ================= -->
     ${slide('Sessions overview \u00b7 BHQ', usersBody, true, true)}
@@ -2649,7 +2654,6 @@ function renderReport() {
 
     <!-- ===== not yet reviewed by MW: below the agreed sequence ===== -->
     ${slide(`Search Ads \u00b7 ${sel}`, searchAdsBody, false, false, 'google_ads')}
-    ${slide('Shared Paid Media', paidBody.trim(), false, true, 'meta')}
     ${slide('TikTok', tkChannelBody, false, true, 'tiktok')}
     ${tkTopBody ? slide('TikTok \u00b7 Top performances', tkTopBody, false, true, 'tiktok') : ''}
     ${contentBody}
@@ -5633,7 +5637,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.117.0';
+const CLIENT_BUILD = '3.118.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

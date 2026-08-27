@@ -231,6 +231,10 @@ expect_field "cb source is gtm"    "$REPORT" "d.chatBubble.source==='click_chat_
 # FIXED position, not ranked by clicks (MW): Telegram first, then Messenger,
 # then LINE down the left column, so a two-column grid reproduces the reference
 # deck and a channel sits in the same place every month.
+# BHQ share: the four hospitals must account for exactly the BHQ total, or the
+# share is being measured against a different population than it is drawn from.
+expect_field "cb share sums 100"   "$REPORT" "Math.abs(['BGH','BIH','BHT','WSH'].reduce((a,k)=>a+d.chatBubble.byScope[k].bhqShare,0)-1)<1e-9?'ok':undefined"
+expect_field "cb bhq no self share" "$REPORT" "d.chatBubble.byScope.BHQ.bhqShare===null?'ok':undefined"
 expect_field "cb fixed order"      "$REPORT" "($CBB[0].label==='Telegram'&&$CBB[2].label==='Messenger'&&$CBB[4].label==='LINE')?'ok':undefined"
 expect_field "cb events listed"    "$REPORT" "d.chatBubble.events.length>0?'ok':undefined"
 # BHQ is all four hospitals, so it cannot be smaller than one of them.

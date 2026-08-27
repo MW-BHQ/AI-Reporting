@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.117.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.118.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -699,6 +699,41 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.118.0 — Shared Paid Media removed; one scorecard surface; BHQ share.**
+
+**`mini()` now emits `.stat`**, the same markup `kpi()` produces, so there is
+ONE card surface on the tab instead of two that nearly match. That near-match is
+what made the ten AI scorecards read as off-design. Extra gap added before a
+table that follows scorecards — the header row was sitting hard against the
+cards above it and the two blocks read as one.
+
+**Shared Paid Media slide removed** (MW), and the **Meta mark moved onto the
+Meta Ad card**.
+
+**The unmapped-accounts warning was NOT removed with it.** It lived on that
+slide but belongs to ad accounts, and it is the guard that stopped an agency's
+entire spend vanishing silently in v3.69.0. It now renders under the Meta Ad
+card. Deleting a slide takes everything on it, including the parts that were
+never about that slide.
+
+Hoisting it produced a **fifth temporal dead zone** in this file — declared
+after the Facebook block that consumes it. Moved above. The pattern is now
+routine enough to state plainly: **in this file, check where a helper is
+declared relative to where it is read, every time.**
+
+**Chat Bubble: BHQ share card** (MW) — each hospital's clicks as a proportion of
+all four, measured on the SAME quantity as the headline so the ratio describes
+one population. BHQ's own card reads 100% rather than comparing itself to
+itself. Smoke asserts the four shares sum to exactly 1; a negative control
+measuring against `channelClicks` instead of `total` breaks it.
+
+**Two assertions had to be re-pointed, both of which would otherwise have passed
+while testing nothing**: the icon check searched `.mini`, which no longer exists,
+and reported "0/0 mini cards all iconed"; and the Meta mark moved from a slide
+title to a card title, so it is now checked on the card rather than dropped from
+the list.
+
 
 **v3.117.0 — the gradient seam; nav under the header; footnotes removed.**
 

@@ -2589,6 +2589,18 @@ async function buildReport(from, to) {
     };
     const byScope = { BHQ: scopeRows("BHQ") };
     for (const b of BRANDS) byScope[b.key] = scopeRows(b.key);
+    /**
+     * BHQ share (MW): this hospital's clicks as a proportion of all four.
+     *
+     * Measured on the SAME quantity the headline shows — bubble clicks against
+     * bubble clicks — so the ratio describes one population. BHQ's own share is
+     * 100% by definition and is not shown as a comparison.
+     */
+    for (const k of Object.keys(byScope)) {
+      const sc = byScope[k];
+      sc.bhqShare = (k !== "BHQ" && byScope.BHQ.total)
+        ? sc.total / byScope.BHQ.total : null;
+    }
     return { available: true, byScope, source, altChannelClicks,
       // Which GA4 events these clicks actually arrived under, so a channel
       // reading zero can be told apart from a channel tracked under an event
