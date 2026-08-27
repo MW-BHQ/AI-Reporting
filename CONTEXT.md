@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.120.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.121.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -679,6 +679,34 @@ improves.
 
 ## 12. Requested but not built
 
+- **APPOINTMENTS CARD** (MW, in progress v3.121.0). Structure fully verified
+  against the sample workbook `Web_Appointment_2025.xlsx`; **blocked only on the
+  live Google Sheet ID.** Viewer access is already granted to
+  `715584769614-compute@developer.gserviceaccount.com`.
+
+  Verified layout — do not re-derive:
+
+  | Figure | Source |
+  |---|---|
+  | Initiates | GA4 `appointments` key event |
+  | Realtime | tab `Realtime`, col **U** `Date` (datetime) |
+  | Non Realtime | tab `Non Realtime`, col **B** `วันที่ทำนัดบนเว็บ` |
+  | Completes | Realtime + Non Realtime counts |
+  | Realtime donut | tab `Realtime`, col **C** `Appointment Location` |
+  | Non Realtime donut | tab `Non Realtime`, col **P** `Preferred Specialty` |
+  | Revenue | tab `Total Amounts`, MONTHLY rows |
+
+  `Total Amounts` is **per hospital, not just BGH**: cols B–E are BGH/BIH/BHT/WSH
+  Realtime, F–I the same four Non Realtime. MW's spec named B and F because MW
+  was describing the BGH report; map by brand rather than hard-coding.
+
+  **Two data-quality facts found in the sample, both of which need a decision:**
+  1. `Realtime` col T `Hospitals` is inconsistent — 20,015 rows say
+     `Bangkok Hospital (BGH)`, but **4,251 say `BHQ` or `BHQ-EN`**, plus 23 rows
+     of literal HTML (`<span…>No tags</span>`) and 2 nulls. `BHQ`/`BHQ-EN` do not
+     name a hospital, so ~17% of rows cannot be attributed without a rule.
+  2. 466 `Appointment Location` values are blank → render as **N/S** (MW).
+
 - **APPLY THE REM TYPE SCALE TO EVERY TAB** (MW, backlogged v3.117.0). The scale
   lives in `:root` and Monthly Reports uses it; the app chrome and the other
   tabs still carry roughly 80 hard-coded px sizes. The `type:scale` audit rule
@@ -699,6 +727,18 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.121.0 — "Back links"; Actions card decoloured.**
+
+- Referral card retitled **Back links** (MW).
+- **Actions · what we want them to do**: footnote removed, and the violet
+  session figure and violet CR line replaced with the report's standard `.val`
+  and `.sub2`, so the card matches every other scorecard on the tab (MW).
+- **Appointments card is specified but NOT built** — see §12. The workbook
+  structure is fully verified; it is blocked on the live Sheet ID, and on a rule
+  for the 4,251 `Realtime` rows whose Hospitals column says `BHQ`/`BHQ-EN`
+  rather than naming a hospital.
+
 
 **v3.120.0 — Pages tab: "Where they go next".**
 

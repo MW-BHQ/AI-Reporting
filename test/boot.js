@@ -362,7 +362,8 @@ setTimeout(() => {
       // Footnotes removed from Search Ads in v3.117.0 (MW), so the needle is
       // the keyword table's own heading rather than its note.
       present("search ads rendered", "Search keywords");
-      present("referral rendered", "Back links, and how good is the traffic");
+      // Card retitled "Back links" in v3.121.0 (MW).
+      present("referral rendered", "Back links");
       /**
        * Checked against THIS table's header row, not the page text: the label
        * "Appointments" appears in several other Actions tables, so deleting a
@@ -372,7 +373,7 @@ setTimeout(() => {
         const want = ["Source", "Sessions", "Find Doctor", "Appointments",
                       "Contact us", "View Item", "Add to cart"];
         const tables = [...(root ? root.querySelectorAll(".card") : [])]
-          .filter(c => (c.textContent || "").includes("Back links, and how good"));
+          .filter(c => ((c.querySelector(".card-title") || {}).textContent || "").trim() === "Back links");
         const tbl = tables.length ? tables[0].querySelector("table") : null;
         if (!tbl) return fail("referral five columns", "back links table not found");
         const got = [...tbl.querySelectorAll("thead th")].map(th => th.textContent.trim());
