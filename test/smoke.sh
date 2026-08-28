@@ -475,6 +475,9 @@ SRV=$!
 sleep 2.5
 expect_field "yt bad token falls back" "$REPORT" "d.youtube.source==='apps-script-sheet'?'ok':undefined"
 expect_field "yt still has data"       "$REPORT" "d.youtube.totals.views===96941?96941:undefined"
+# The reason must reach the PAYLOAD, not just the logs — a wrong-account token
+# and an expired one are indistinguishable from an empty card otherwise.
+expect_field "yt names the cause"      "$REPORT" "/Testing|revoked/.test(d.youtube.apiError||'')?'ok':undefined"
 
 echo "--- degradation: one source failing must not 500 ---"
 kill $SRV 2>/dev/null; wait $SRV 2>/dev/null

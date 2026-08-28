@@ -1889,9 +1889,32 @@ async function buildReport(from, to) {
    * revoked the report degrades to the sheet rather than to nothing.
    */
   jobs.youtube = (ytApiConfigured()
-    ? buildYouTubeApi(from, to).catch((e) => {
-        logJson("WARN", "youtube_api_failed", { error: String(e.message || e) });
-        return buildYouTube(from, to).catch(() => null);
+    ? buildYouTubeApi(from, to).catch(async (e) => {
+        const msg = String(e.message || e);
+        logJson("WARN", "youtube_api_failed", { error: msg });
+        /**
+         * The reason travels ON THE PAYLOAD, not only into the logs.
+         *
+         * The three ways this fails need three different fixes and they are
+         * indistinguishable from an empty card: 403 means the token belongs to
+         * the wrong account (the personal channel, not the Brand Account);
+         * invalid_grant means the consent screen was left in Testing and the
+         * token has aged out after 7 days, or access was revoked; anything else
+         * is a query problem. Making someone read Cloud Run logs to tell those
+         * apart is how a wrong-account token sits there for a month.
+         */
+        const fallback = await buildYouTube(from, to).catch(() => null);
+        const diagnosis =
+          /\b403\b|Forbidden/i.test(msg)
+            ? "403 from YouTube: this refresh token is not authorised for channel "
+              + YT_CHANNEL_ID + ". It was almost certainly granted by the personal "
+              + "account rather than the Bangkok Hospital Brand Account \u2014 redo the "
+              + "consent and pick the brand account in the chooser."
+          : /invalid_grant/i.test(msg)
+            ? "Refresh token rejected. Either the OAuth consent screen is still in "
+              + "Testing (which expires tokens after 7 days) or access was revoked."
+          : msg;
+        return { ...(fallback || { available: false }), apiError: diagnosis };
       })
     : buildYouTube(from, to)
   ).catch((e) => {

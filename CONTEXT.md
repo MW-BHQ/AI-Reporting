@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.128.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.128.1.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -699,6 +699,27 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.128.1 — the YouTube API failure reason reaches the payload.**
+
+`youtube.apiError` now carries a DIAGNOSIS, not just a log line. The three
+failure modes need three different fixes and are otherwise indistinguishable
+from an empty card:
+
+- **403 / Forbidden** — the refresh token is not authorised for the channel.
+  Almost always means the consent was granted by the PERSONAL account instead of
+  the Bangkok Hospital Brand Account; redo consent and pick the brand account.
+- **invalid_grant** — the consent screen was left in **Testing** (7-day token
+  expiry) or access was revoked.
+- anything else — a query problem, passed through verbatim.
+
+The card still falls back to the Apps Script sheet, so the diagnosis appears
+alongside working data rather than instead of it.
+
+Written because a wrong-account token produces a plausible-looking card and can
+sit there for a month. Making someone read Cloud Run logs to tell these apart is
+how that happens.
+
 
 **v3.128.0 — YouTube direct from the API, no monthly human step.**
 
