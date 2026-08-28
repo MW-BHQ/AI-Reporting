@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.126.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.127.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -679,35 +679,6 @@ improves.
 
 ## 12. Requested but not built
 
-- **YOUTUBE — two cards (channel info; engagement + top videos).** BLOCKED, and
-  the cause is now identified: **Windsor's own puller is issuing an invalid
-  YouTube Analytics query.**
-
-  Their request combines `dimensions=day,video,creatorContentType` with a
-  `video==` filter and 24 metrics, including annotation, card, `redViews`,
-  `estimatedRedMinutesWatched` and `engagedViews`. Those metrics are not valid
-  alongside the `video` dimension in one report, so the API returns
-  `400 badRequest — "The query is not supported"`. The `filters=video==A,B`
-  comma form also looks malformed. **This is not MW's connection and not a
-  permissions problem** — a re-authorise will not fix a malformed query.
-
-  `get_fields("youtube")` separately reports no YouTube account on team
-  `digitalbangkokhospitalcom`, while that same account is attempting pulls — so
-  the connector looks partially provisioned.
-
-  **Two ways forward, and they cover different things:**
-
-  | Route | Gives | Cannot give |
-  |---|---|---|
-  | YouTube **Data API v3** + API key | per-video views, likes, comments, titles, thumbnails | watch time, subscribers, shares, sharing service |
-  | YouTube **Analytics API** + owner OAuth | everything the LS deck shows | needs a refresh token from the channel owner; a service account cannot be granted it |
-
-  So Top Videos and the like/comment counts are buildable today without Windsor.
-  **Shares, sharing service, watch time and subscribers are not** — those need
-  either Windsor fixed or an OAuth refresh token stored for the channel owner.
-
-  A support ticket is drafted with the full error and the analysis; sending it
-  needs MW's approval in the Windsor tool.
 - **APPLY THE REM TYPE SCALE TO EVERY TAB** (MW, backlogged v3.117.0). The scale
   lives in `:root` and Monthly Reports uses it; the app chrome and the other
   tabs still carry roughly 80 hard-coded px sizes. The `type:scale` audit rule
@@ -728,6 +699,43 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.127.0 — YouTube, via an Apps Script sheet. Two cards under Facebook.**
+
+**WHY NOT AN API, SETTLED.** Every direct route is closed:
+
+| Route | Why not |
+|---|---|
+| Service account | Google supports that flow for YouTube **Content Partners (CMS)** only, not channel owners |
+| OAuth "Internal" client | Needs Google Workspace; **bangkokhospital.com is not Workspace** |
+| OAuth External + Testing | **Refresh tokens expire after 7 DAYS** — useless unattended |
+| OAuth External + Production | `yt-analytics.readonly` is a sensitive scope: 2–6 week verification, privacy policy, demo video |
+| Windsor | Their puller sends an unsupported query (`day`+`video`+`creatorContentType` with annotation, card and Red metrics in one report) |
+
+**Apps Script sidesteps all of it**: it runs under MW's own account, so there is
+no OAuth app to verify and no token to rotate. `youtube-to-sheet.gs` (shipped
+separately) writes four tabs; the dashboard reads them with the service account
+it already uses for three other sheets. **+1 Sheets batchGet.**
+
+**TWO RULES THAT WOULD HAVE BEEN WRONG THE OBVIOUS WAY:**
+
+1. **Daily rows are filtered to the range; Sharing and Videos are NOT.** Those
+   two are stamped with the WINDOW they were pulled for, not a day, so the rule
+   is "the latest window starting at or before the report's end date". A plain
+   date filter returns nothing whenever a pull window straddles the month
+   boundary — the card would read empty on exactly the reports that matter.
+2. **The script re-pulls a 14-day trailing window, not just yesterday**, because
+   YouTube revises recent figures for days afterwards. A yesterday-only job
+   freezes the first and lowest number it ever saw. Rows are replaced by date,
+   so re-runs are idempotent.
+
+A video with no title falls back to its id rather than rendering an empty cell.
+
+**Setup note for the next person:** the first `backfill` fails with *"YouTube
+Analytics API has not been used in project 1084562832966"* — that is Apps
+Script's own hidden GCP project, not `ai-reporting-503911`. Enable YouTube
+Analytics API and YouTube Data API v3 in the project the error names.
+
 
 **v3.126.0 — real hospital logos, bundled, used everywhere.**
 

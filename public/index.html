@@ -2750,6 +2750,73 @@ function renderReport() {
    * placeholder, because Business Profile reports which phrases found a listing
    * but never where it placed. No scorecards and no note (MW).
    */
+  /**
+   * YOUTUBE, two cards under Facebook (MW). One channel serves all four
+   * hospitals, so this is BHQ-scoped — there is nothing to split per hospital.
+   */
+  const YT = d.youtube || {};
+  const ytBody = YT.available ? (() => {
+    const t = YT.totals;
+    const sh = YT.sharing || { rows: [] };
+    const vids = (YT.videos || {}).rows || [];
+    const mx = Math.max(1, ...sh.rows.map(r => r.shares));
+    const vmx = Math.max(1, ...vids.map(v => v.views));
+    return `
+    <div class="grid g-4" style="margin-bottom:14px">
+      ${kpi('Views', num(t.views), `${num(t.hoursWatched)} hours watched`)}
+      ${kpi('Likes', num(t.likes))}
+      ${kpi('Comments', num(t.comments))}
+      ${kpi('Shares', num(t.shares))}
+    </div>
+    <div class="grid g-2">
+      <div class="card">
+        <div class="card-title">Where are viewers sharing</div>
+        ${sh.rows.length ? `<table class="sortable"><thead><tr>
+          <th>Sharing service</th><th class="num">Shares</th><th></th><th class="num">Share</th>
+        </tr></thead><tbody>
+        ${sh.rows.map(r => `<tr>
+          <td class="strong">${esc(r.service)}</td>
+          <td class="num strong">${num(r.shares)}</td>
+          <td style="width:32%"><div style="height:7px;border-radius:4px;background:var(--violet);
+            width:${Math.max(3, Math.round((r.shares / mx) * 100))}%"></div></td>
+          <td class="num">${r.share === null ? '\u2014' : (r.share * 100).toFixed(1) + '%'}</td>
+        </tr>`).join('')}
+        </tbody></table>` : '<div class="note" style="margin-top:0">No shares recorded in this range.</div>'}
+      </div>
+      <div class="card">
+        <div class="card-title">Subscribers</div>
+        <div class="grid g-3">
+          ${kpi('Gained', num(t.subsGained))}
+          ${kpi('Lost', num(t.subsLost))}
+          ${kpi('Net', (t.subsNet >= 0 ? '+' : '') + num(t.subsNet))}
+        </div>
+        <div class="chart-wrap" style="height:190px;margin-top:14px"><canvas id="repYtViews"></canvas></div>
+      </div>
+    </div>`;
+  })() : '';
+
+  const ytTopBody = (YT.available && ((YT.videos || {}).rows || []).length) ? (() => {
+    const vids = YT.videos.rows;
+    const vmx = Math.max(1, ...vids.map(v => v.views));
+    return `<div class="card">
+      <div class="card-title">Top videos</div>
+      <table class="sortable" data-heat="1"><thead><tr>
+        <th>Video</th><th class="num">Views</th><th></th>
+        <th class="num">Hours</th><th class="num">Likes</th><th class="num">Comments</th>
+      </tr></thead><tbody>
+      ${vids.map(v => `<tr>
+        <td class="strong i18n" title="${esc(v.id)}">${esc(v.title || v.id)}</td>
+        <td class="num strong">${num(v.views)}</td>
+        <td style="width:22%"><div style="height:7px;border-radius:4px;background:var(--violet);
+          width:${Math.max(3, Math.round((v.views / vmx) * 100))}%"></div></td>
+        <td class="num">${num(Math.round(v.minutes / 60))}</td>
+        <td class="num">${num(v.likes)}</td>
+        <td class="num">${num(v.comments)}</td>
+      </tr>`).join('')}
+      </tbody></table>
+    </div>`;
+  })() : '';
+
   const GR = d.gbpRanks || {};
 
   const gbpDetailBody = GD.map((g, gi) => `
@@ -2833,6 +2900,8 @@ function renderReport() {
     ${gbpDetailBody}
     ${slide('Google reviews', reviewBody, false, false, 'gbp')}
     ${slide('Facebook', facebookBody, false, false, 'facebook')}
+    ${slide('YouTube', ytBody, false, 'BHQ', 'youtube')}
+    ${slide('YouTube \u00b7 Top videos', ytTopBody, false, 'BHQ', 'youtube')}
 
     <!-- ===== not yet reviewed by MW: below the agreed sequence ===== -->
     ${slide('Search Ads', searchAdsBody, false, sel, 'google_ads')}
@@ -2909,6 +2978,9 @@ function renderReport() {
     }
     if (TK.available && TK.channel.daily.length) {
       drawChart('repTkViews', TK.channel.daily, [{ key:'views', label:'Views', color:C.b }]);
+    }
+    if (YT.available && (YT.series || []).length > 1) {
+      drawChart('repYtViews', YT.series, [{ key:'views', label:'Views', color:C.b }]);
     }
   }
 
@@ -5866,7 +5938,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.126.0';
+const CLIENT_BUILD = '3.127.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

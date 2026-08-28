@@ -218,6 +218,20 @@ function reportFixture() {
           { keyword: "Hospital near me", rank: 6, volume: 27100, locations: 1 },
           { keyword: "Medical centre", rank: 19.5, volume: 3600, locations: 1 },
         ] }])) },
+    /** YouTube. A blank title must fall back to the video id. */
+    youtube: { available: true,
+      totals: { views: 96941, minutes: 300000, hoursWatched: 5000, likes: 59,
+        comments: 24, shares: 1372, subsGained: 100, subsLost: 13, subsNet: 87 },
+      series: [{ d: "2026-07-05", views: 40000 }, { d: "2026-07-18", views: 56941 }],
+      sharing: { window: "2026-07-01", total: 1247, rows: [
+        { service: "OTHER", shares: 671, share: 0.538 },
+        { service: "COPY_PASTE", shares: 329, share: 0.264 },
+        { service: "FACEBOOK_MESSENGER", shares: 201, share: 0.161 },
+        { service: "WHATS_APP", shares: 46, share: 0.037 }] },
+      videos: { window: "2026-07-01", rows: [
+        { id: "v1", title: "Bangkok Hospital - Health Destination", views: 244087,
+          minutes: 600000, likes: 900, comments: 40 },
+        { id: "v2", title: "", views: 224511, minutes: 500000, likes: 700, comments: 30 }] } },
     chatBubble: { available: true,
       events: [{ name: "click", clicks: 15600 }],
       unmapped: [{ key: "chat-bubble-channel-unknown https://example.com", clicks: 12 }],
@@ -845,6 +859,30 @@ setTimeout(() => {
         /^brand\/hosp-/.test(header.getAttribute("src") || "")
           ? ok("hospital logos", `${logos.length} logos + header, all local`)
           : fail("hospital logos", `header logo src is ${header.getAttribute("src")}`);
+      })();
+      /**
+       * YouTube: two slides under Facebook, the sharing table, and the blank
+       * title falling back to its video id.
+       */
+      (() => {
+        const titles = [...root.querySelectorAll(".slide-title")].map(t => t.textContent.trim());
+        if (!titles.some(t => /^YOUTUBE\b/i.test(t) || /YouTube/.test(t))) {
+          return fail("youtube", "no YouTube slide");
+        }
+        const top = [...root.querySelectorAll(".slide")]
+          .find(sl => /Top videos/i.test((sl.querySelector(".slide-title") || {}).textContent || ""));
+        if (!top) return fail("youtube", "no Top videos slide");
+        const yt = [...root.querySelectorAll(".slide")]
+          .find(sl => /^YOUTUBE$/i.test(((sl.querySelector(".slide-title span") || {}).textContent || "")
+            .replace(/BHQ/g, "").trim()));
+        const body = (yt || root).textContent;
+        for (const want of ["Where are viewers sharing", "COPY_PASTE", "Subscribers"]) {
+          if (!body.includes(want)) return fail("youtube", `missing "${want}"`);
+        }
+        // Blank title falls back to the id, rather than an empty cell.
+        /\bv2\b/.test(top.textContent)
+          ? ok("youtube", "2 slides, sharing table, blank title falls back to id")
+          : fail("youtube", "a video with no title rendered blank");
       })();
       finish();
     }, 500);

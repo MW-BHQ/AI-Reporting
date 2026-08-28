@@ -672,6 +672,37 @@ global.fetch = async (url, opts = {}) => {
      * month that must be excluded, a decimal rank, and a zero search volume
      * that must not be averaged in.
      */
+    /**
+     * YouTube sheet, as the Apps Script writes it. Deliberately includes:
+     *   - a day OUTSIDE the range (must not be summed);
+     *   - Sharing and Videos rows stamped with TWO different window starts, so
+     *     the "latest window at or before the end date" rule is exercised — a
+     *     naive date filter returns nothing when the window straddles a month;
+     *   - a video with a blank title, which must fall back to its id.
+     */
+    if (u.includes("Daily") && u.includes("Sharing")) {
+      const R = (rows) => ({ values: rows });
+      return jsonRes({ valueRanges: [
+        R([
+          ["2026-06-30", "999", "999", "60", "9", "9", "9", "9", "1"],
+          ["2026-07-05", "40000", "120000", "180", "30", "10", "600", "40", "5"],
+          ["2026-07-18", "56941", "180000", "190", "29", "14", "772", "60", "8"],
+        ]),
+        R([
+          ["2026-06-01", "OTHER", "111"],
+          ["2026-07-01", "OTHER", "671"],
+          ["2026-07-01", "COPY_PASTE", "329"],
+          ["2026-07-01", "FACEBOOK_MESSENGER", "201"],
+          ["2026-07-01", "WHATS_APP", "46"],
+        ]),
+        R([
+          ["2026-06-01", "old1", "Old video", "5", "5", "0", "0"],
+          ["2026-07-01", "v1", "Bangkok Hospital - Health Destination", "244087", "600000", "900", "40"],
+          ["2026-07-01", "v2", "", "224511", "500000", "700", "30"],
+          ["2026-07-01", "v3", "\u0e1b\u0e32\u0e0f\u0e34\u0e2b\u0e32\u0e23\u0e34\u0e22\u0e4c 8 \u0e40\u0e14\u0e37\u0e2d\u0e19", "119703", "300000", "500", "20"],
+        ]),
+      ] });
+    }
     if (u.includes("%27BGH%27") || u.includes("'BGH'")) {
       const R = (rows) => ({ values: rows });
       return jsonRes({ valueRanges: [

@@ -1877,6 +1877,15 @@ async function buildReport(from, to) {
    * card's data with this sheet. Two different questions, two different keys —
    * this block exists precisely BECAUSE they are not interchangeable.
    */
+  /**
+   * Wrapped like the other sheets: the YouTube tab may not exist yet (the Apps
+   * Script has to run once first), and one empty card must not take the report
+   * down with it.
+   */
+  jobs.youtube = buildYouTube(from, to).catch((e) => {
+    logJson("WARN", "youtube_sheet_failed", { error: String(e.message || e) });
+    return null;
+  });
   jobs.gbpRanks = buildGbpKeywords(from, to).catch((e) => {
     logJson("WARN", "gbp_keywords_failed", { error: String(e.message || e) });
     return null;
@@ -3340,6 +3349,7 @@ async function buildReport(from, to) {
     chatBubble,
     appointments,
     gbpRanks: data.gbpRanks || { unavailable: true },
+    youtube: data.youtube || { available: false },
     tiktok,
     social,
     languages,
@@ -4188,6 +4198,86 @@ function monthWeekLabels(from, to) {
     if (++m > 12) { m = 1; y++; }
   }
   return out;
+}
+
+/**
+ * YOUTUBE — read from the Sheet the Apps Script writes (see
+ * `youtube-to-sheet.gs`). Tabs and columns are known exactly because we wrote
+ * the producer, so nothing here is inferred from a screenshot.
+ *
+ * WHY A SHEET AND NOT AN API. bangkokhospital.com is not Workspace, so the
+ * OAuth routes are dead ends for an unattended job: an "Internal" client needs
+ * Workspace, and "External + Testing" expires refresh tokens after SEVEN DAYS.
+ * A service account cannot read a YouTube channel at all — Google supports that
+ * flow only for Content Partners (CMS accounts), not channel owners. Apps
+ * Script runs under MW's own account, so there is no OAuth app to verify and no
+ * token to rotate.
+ */
+const YT_SHEET_ID = process.env.YT_SHEET_ID || "1o0n44IioDyEvAlNt_Tf11SxD11mDpkzlfABbBSbJZus";
+
+async function buildYouTube(from, to) {
+  const res = await sheetBatchGet(YT_SHEET_ID, [
+    "Daily!A2:I", "Sharing!A2:C", "Videos!A2:G",
+  ]);
+  const vals = (i) => (res[i] && res[i].values) || [];
+  const daily = vals(0), sharing = vals(1), videos = vals(2);
+
+  const day = (v) => {
+    const d = apptDay(v);
+    return d && d >= from && d <= to ? d : null;
+  };
+  const tot = { views: 0, minutes: 0, likes: 0, comments: 0, shares: 0,
+    subsGained: 0, subsLost: 0 };
+  const series = [];
+  for (const r of daily) {
+    const d = day(r[0]); if (!d) continue;
+    const row = { d, views: n(r[1]), minutes: n(r[2]), likes: n(r[4]),
+      comments: n(r[5]), shares: n(r[6]) };
+    tot.views += row.views; tot.minutes += row.minutes;
+    tot.likes += row.likes; tot.comments += row.comments; tot.shares += row.shares;
+    tot.subsGained += n(r[7]); tot.subsLost += n(r[8]);
+    series.push(row);
+  }
+  series.sort((a, b) => a.d.localeCompare(b.d));
+
+  /**
+   * Sharing and Videos are stamped with the WINDOW they were pulled for, not a
+   * day, so the right rows are the latest window that starts at or before the
+   * report's end date. Filtering them like daily rows would return nothing
+   * whenever the pull window straddles the month boundary.
+   */
+  const latestWindow = (rows) => {
+    let best = null;
+    for (const r of rows) {
+      const d = apptDay(r[0]); if (!d || d > to) continue;
+      if (!best || d > best) best = d;
+    }
+    return best;
+  };
+  const shareWin = latestWindow(sharing);
+  const shareRows = sharing.filter((r) => apptDay(r[0]) === shareWin)
+    .map((r) => ({ service: String(r[1] || "").trim() || "OTHER", shares: n(r[2]) }))
+    .filter((r) => r.shares > 0)
+    .sort((a, b) => b.shares - a.shares);
+  const shareTotal = shareRows.reduce((a, r) => a + r.shares, 0);
+
+  const vidWin = latestWindow(videos);
+  const videoRows = videos.filter((r) => apptDay(r[0]) === vidWin)
+    .map((r) => ({ id: String(r[1] || ""), title: String(r[2] || "").trim(),
+      views: n(r[3]), minutes: n(r[4]), likes: n(r[5]), comments: n(r[6]) }))
+    .filter((r) => r.id)
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 10);
+
+  return {
+    available: series.length > 0 || shareRows.length > 0 || videoRows.length > 0,
+    totals: { ...tot, subsNet: tot.subsGained - tot.subsLost,
+      hoursWatched: Math.round(tot.minutes / 60) },
+    series,
+    sharing: { rows: shareRows.map((r) => ({ ...r,
+      share: shareTotal ? r.shares / shareTotal : null })), total: shareTotal, window: shareWin },
+    videos: { rows: videoRows, window: vidWin },
+  };
 }
 
 async function buildGbpKeywords(from, to) {

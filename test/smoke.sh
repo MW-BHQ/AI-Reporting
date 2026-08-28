@@ -198,6 +198,22 @@ expect_field "rf ai by channel"    "$REPORT" "d.referral.byBrand[0].ai.rows.some
 # Per-assistant event columns need per-assistant counts.
 expect_field "rf ai per-row events" "$REPORT" "d.referral.byBrand[0].ai.rows.every(r=>r.events&&typeof r.events==='object')?'ok':undefined"
 
+echo "--- monthly report: YouTube (Apps Script sheet) ---"
+YT="d.youtube"
+expect_field "yt available"        "$REPORT" "$YT.available===true?'ok':undefined"
+# A 30 June row is in the fixture and must NOT be summed into a July report.
+expect_field "yt range filtered"   "$REPORT" "$YT.totals.views===96941?96941:undefined"
+expect_field "yt engagement"       "$REPORT" "($YT.totals.likes===59&&$YT.totals.comments===24&&$YT.totals.shares===1372)?'ok':undefined"
+expect_field "yt subs net"         "$REPORT" "$YT.totals.subsNet===($YT.totals.subsGained-$YT.totals.subsLost)?'ok':undefined"
+# Sharing and Videos are stamped with the WINDOW they were pulled for, not a
+# day. The rule is "latest window at or before the end date" — a plain date
+# filter returns nothing when a window straddles the month boundary. The June
+# window must lose to the July one.
+expect_field "yt latest window"    "$REPORT" "($YT.sharing.window==='2026-07-01'&&$YT.videos.window==='2026-07-01')?'ok':undefined"
+expect_field "yt sharing total"    "$REPORT" "$YT.sharing.total===1247?1247:undefined"
+expect_field "yt old window gone"  "$REPORT" "$YT.videos.rows.every(v=>v.id!=='old1')?'ok':undefined"
+expect_field "yt shares bounded"   "$REPORT" "$YT.sharing.rows.reduce((a,r)=>a+r.share,0)<=1.0000001?'ok':undefined"
+
 echo "--- monthly report: GBP keyword rankings (SEO sheet) ---"
 GR="d.gbpRanks.byBrand.BGH"
 # Rank is AVERAGED across listings: "General hospital" is 1 at one listing and
