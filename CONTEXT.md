@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.135.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.136.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,42 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.136.0 — funnel/stages join the type scale (3 of 5 groups).**
+
+Migrated `.card h2`, `.stage-name`, `.stage-val`, `.stage-val.na`, `.seg-val`,
+`.stage.minor .seg-val`, `.stage-note`, `.stage.minor .stage-name`,
+`.stage.minor .stage-val`.
+
+**Added `--text-4xs: .5625rem` (9px) for ONE selector, and on purpose.**
+`.stage.minor .seg-val` is white `nowrap` text absolutely positioned INSIDE a
+narrow bar segment. It is the only size in this group where rounding UP could
+push text out of a thin minor segment — so the step was added rather than the
+design bent to a scale that stopped above it. That is now twice the scale has
+grown downward for real needs (10px for the rail in v3.134.0), which suggests the
+original scale was drawn for content areas and never for overlay or chrome type.
+
+**`.na` follows the established pattern: one step below its own normal value.**
+`.stat .val` is 3xl and `.stat .val.na` is 2xl, so `.stage-val` (base) puts its
+`.na` at sm — 13px → 14px. Everything else in the group rounds DOWN, which is the
+safe direction for absolutely-positioned and `nowrap` text.
+
+**THREE INLINE `font-size:10px` STAGE LABELS WERE ALSO MIGRATED, and they are the
+lesson.** They live in JS template literals, and `type:scale` only reads the
+`<style>` block — so they would have survived every group of this migration and
+still been hard-coded at the end of it, with the audit reporting full compliance.
+Worth checking for more inline sizes before declaring the migration done.
+
+Print `@media` keeps `.card h2` at 10.5px and `.note,.stage-note` at 9px in px
+deliberately: print is an absolute medium, and the audit skips `@media` by brace
+depth.
+
+Rule verified by reintroducing both `16px` on `.stage-val` and `9px` on
+`.stage.minor .seg-val` — both caught.
+
+**REMAINING:** Monthly Reports leftovers (`.mr-*`) → tables and pills
+(`th`, `tr.grp td`, `.pill`, `.legend`, `.af*`). Tables last: column widths
+respond to type size, so they are the group that can actually break a layout.
 
 **v3.135.0 — Chat Bubble footnote removed; header/controls join the type scale
 (2 of 5 groups).**
