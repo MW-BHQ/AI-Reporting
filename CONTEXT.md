@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.129.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.130.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -714,6 +714,71 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.130.0 — YouTube reads a YouTube Studio export. A human is the credential.**
+
+**THE SLIDE HAD BEEN REPORTING ZEROS FOR 400 DAYS AND NOBODY COULD SEE IT.**
+`whoAmI` in the Apps Script settled it: MW's account is `UCkQGIWRZIdmqNCbfulaoGHQ`
+("Digital Marketing", lifetime views 0). With `CHANNEL_ID` blank the job asked
+about THAT channel, got 398 days of zeros, wrote all 398 rows and logged
+`398 rows written` — a success message for an empty channel. Setting the real
+channel id turned the fake success into an honest `Forbidden`.
+
+**WHY A HUMAN EXPORT IS THE ANSWER AND NOT A WORKAROUND.** The channel is a
+Brand Account. Apps Script and the server both run as a FIXED identity and can
+only ever ask about the identity they are. A browser shows an account picker, so
+a person can BE the brand account for the length of one export. That is the only
+door that opens, and it is the same one Looker Studio used.
+
+**COLUMNS ARE READ BY NAME. THREE REAL EXPORTS, THREE COLUMN ORDERS.** The first
+had no `Shares` at all; the second had it at index 4; the third at index 7 with
+`Dislikes`, `Likes` and `Comments added` inserted before it. Position-based
+reading would have reported watch time as shares the first month someone added a
+metric. `col()` is exact-match-then-prefix, which is what separates `Likes`
+(1,482) from `Dislikes` (-1) sitting immediately before it, and still resolves
+`Comments added` and `Watch time (hours)`.
+
+**FOUR RULES THAT WOULD HAVE BEEN WRONG THE OBVIOUS WAY:**
+
+1. **Use Studio's own `Total` row, do not sum the body.** The table is TRUNCATED
+   to the top videos. Summing the fixture's rows gives 1,978 views against a
+   real channel total of 1,104,891.
+2. **A missing metric is `null`, never `0`.** `present` / `missing` travel on the
+   payload and the slide omits the card and NAMES the gap. Rendering an
+   un-exported metric as zero is the 400-day failure in miniature — "nobody
+   liked anything this month" instead of "nobody exported likes". Adding Likes
+   and Comments to the export makes two cards appear with NO code change.
+3. **Watch time units are verified, not assumed.** The header must say "hours"
+   or the metric is dropped. Studio can export either, they differ by 60x, and
+   the old code divided by 60 a second time — which would have shown a
+   15,304-hour month as 255.
+4. **The daily metric is ALLOWLISTED.** Studio writes whichever metric was on
+   the chart, and one real export arrived set to **Dislikes** — a negative series
+   on an executive slide, labelled correctly and useless. Unexpected metrics are
+   reported as a fixable process note instead of plotted. Coverage dates are read
+   regardless, so the freshness check never depends on which metric was chosen.
+
+**FRESHNESS IS ON THE SLIDE, because a pasted sheet cannot announce that nobody
+pasted this month.** `covered` is the date range found IN THE FILE and `stale` is
+true when it does not overlap the report period; the slide then says so in amber.
+This is the direct lesson of the 400 days: the failure mode of a manual source is
+silence, exactly like the automated one it replaced.
+
+**DROPPED:** the Sharing-service card (not in the export, and MW's call), and the
+Gained / Lost / Net subscriber split — Studio's `Subscribers` is already NET and
+the other two are not separable, so two of three numbers would have been invented.
+
+**Fixtures are now MW's real file**, headers, column order, `Dislikes` trap,
+truncated table and Dislikes-on-the-chart included. Every YouTube test before
+this passed against invented numbers, which is precisely why 400 days of zeros
+shipped: the tests proved the code could read a sheet, never that the sheet was
+true.
+
+**STILL OPEN.** `YT_SHEET_ID` points at the old Apps Script sheet and must be
+repointed at the permanent export sheet. Use ONE sheet that the team pastes over
+each month — a fresh export creates a new file and a new id, which breaks the
+dashboard silently. Share it with
+`715584769614-compute@developer.gserviceaccount.com` as Viewer.
 
 **v3.129.0 — the YouTube API path is removed, not disabled.**
 

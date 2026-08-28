@@ -2755,63 +2755,100 @@ function renderReport() {
    * hospitals, so this is BHQ-scoped — there is nothing to split per hospital.
    */
   const YT = d.youtube || {};
+  /**
+   * SCORECARDS ARE BUILT FROM WHAT THE EXPORT CARRIED (v3.130.0).
+   *
+   * A metric the exporter did not switch on is ABSENT, not zero. Rendering a
+   * missing column as `0` is what let a dead channel look like a quiet month
+   * for 400 days, so a metric with no data gets no card and the footnote names
+   * it instead. Adding Likes and Comments to the Studio export makes two more
+   * cards appear with no code change.
+   */
   const ytBody = YT.available ? (() => {
-    const t = YT.totals;
-    const sh = YT.sharing || { rows: [] };
-    const vids = (YT.videos || {}).rows || [];
-    const mx = Math.max(1, ...sh.rows.map(r => r.shares));
-    const vmx = Math.max(1, ...vids.map(v => v.views));
+    const t = YT.totals || {};
+    const has = (k) => (YT.present || []).includes(k) && t[k] !== null && t[k] !== undefined;
+    const cards = [];
+    if (has('views')) {
+      cards.push(kpi('Views', num(t.views),
+        has('hoursWatched') ? `${num(t.hoursWatched)} hours watched` : ''));
+    }
+    if (has('shares')) cards.push(kpi('Shares', num(t.shares)));
+    if (has('subsNet')) {
+      cards.push(kpi('Subscribers', (t.subsNet >= 0 ? '+' : '') + num(t.subsNet), 'net for the month'));
+    }
+    if (has('likes')) cards.push(kpi('Likes', num(t.likes)));
+    if (has('comments')) cards.push(kpi('Comments', num(t.comments)));
+
+    const sr = (YT.series || {}).rows || [];
+    const metric = (YT.series || {}).metric || null;
+    /**
+     * THE FRESHNESS LINE IS NOT DECORATION. A pasted sheet cannot announce that
+     * nobody pasted this month, so the range the file actually covers is stated
+     * on the slide. `stale` means the file does not overlap the report period at
+     * all, which is the one failure this source is prone to.
+     */
+    const cov = YT.covered;
+    const freshness = YT.stale
+      ? `<div class="card mt" style="border-color:#E4B84B">
+           <div class="card-title">YouTube data is out of date</div>
+           <div class="note" style="margin-top:0">The export in the sheet covers
+           ${cov ? `${esc(cov.from)} to ${esc(cov.to)}` : 'no dated rows'}, which does not
+           cover this report period. Numbers below are from that older export \u2014 re-export
+           from YouTube Studio for this month.</div>
+         </div>`
+      : '';
+    const gaps = (YT.missing || []).length
+      ? `Not in this export: ${esc((YT.missing || []).join(', '))}. Switch those metrics on in
+         YouTube Studio before exporting and they appear here automatically. `
+      : '';
+    /**
+     * A rejected daily metric is a PROCESS note, not an error. One real export
+     * had the chart on Dislikes; naming what to change is more useful than
+     * plotting a negative series or showing an unexplained empty card.
+     */
+    const rej = (YT.series || {}).rejected
+      ? `The export's daily chart was set to ${esc(YT.series.rejected)}, so no trend is shown \u2014
+         set it to Views in YouTube Studio before exporting.`
+      : '';
     return `
-    <div class="grid g-4" style="margin-bottom:14px">
-      ${kpi('Views', num(t.views), `${num(t.hoursWatched)} hours watched`)}
-      ${kpi('Likes', num(t.likes))}
-      ${kpi('Comments', num(t.comments))}
-      ${kpi('Shares', num(t.shares))}
-    </div>
-    <div class="grid g-2">
-      <div class="card">
-        <div class="card-title">Where are viewers sharing</div>
-        ${sh.rows.length ? `<table class="sortable"><thead><tr>
-          <th>Sharing service</th><th class="num">Shares</th><th></th><th class="num">Share</th>
-        </tr></thead><tbody>
-        ${sh.rows.map(r => `<tr>
-          <td class="strong">${esc(r.service)}</td>
-          <td class="num strong">${num(r.shares)}</td>
-          <td style="width:32%"><div style="height:7px;border-radius:4px;background:var(--violet);
-            width:${Math.max(3, Math.round((r.shares / mx) * 100))}%"></div></td>
-          <td class="num">${r.share === null ? '\u2014' : (r.share * 100).toFixed(1) + '%'}</td>
-        </tr>`).join('')}
-        </tbody></table>` : '<div class="note" style="margin-top:0">No shares recorded in this range.</div>'}
-      </div>
-      <div class="card">
-        <div class="card-title">Subscribers</div>
-        <div class="grid g-3">
-          ${kpi('Gained', num(t.subsGained))}
-          ${kpi('Lost', num(t.subsLost))}
-          ${kpi('Net', (t.subsNet >= 0 ? '+' : '') + num(t.subsNet))}
-        </div>
-        <div class="chart-wrap" style="height:190px;margin-top:14px"><canvas id="repYtViews"></canvas></div>
-      </div>
+    ${freshness}
+    <div class="grid g-4" style="margin-bottom:14px">${cards.join('')}</div>
+    <div class="card">
+      <div class="card-title">${metric ? esc(metric) + ' per day' : 'Daily'}</div>
+      ${sr.length > 1
+        ? '<div class="chart-wrap" style="height:200px"><canvas id="repYtViews"></canvas></div>'
+        : `<div class="note" style="margin-top:0">${rej || 'The export carried no daily breakdown.'}</div>`}
+      <div class="note">${cov ? `Covers ${esc(cov.from)} to ${esc(cov.to)}. ` : ''}${gaps}${rej}</div>
     </div>`;
   })() : '';
 
+  /**
+   * TOP VIDEOS: columns follow the export too. `minutes` is gone — Studio gives
+   * hours, and the old code divided by 60 a second time, which would have
+   * reported a 15,000-hour month as 255.
+   */
   const ytTopBody = (YT.available && ((YT.videos || {}).rows || []).length) ? (() => {
     const vids = YT.videos.rows;
-    const vmx = Math.max(1, ...vids.map(v => v.views));
+    const has = (k) => (YT.present || []).includes(k);
+    const vmx = Math.max(1, ...vids.map(v => v.views || 0));
+    const cols = [
+      ['hoursWatched', 'Hours', (v) => num(v.hours)],
+      ['shares', 'Shares', (v) => num(v.shares)],
+      ['likes', 'Likes', (v) => num(v.likes)],
+      ['comments', 'Comments', (v) => num(v.comments)],
+    ].filter(([k]) => has(k));
     return `<div class="card">
       <div class="card-title">Top videos</div>
       <table class="sortable" data-heat="1"><thead><tr>
         <th>Video</th><th class="num">Views</th><th></th>
-        <th class="num">Hours</th><th class="num">Likes</th><th class="num">Comments</th>
+        ${cols.map(([, label]) => `<th class="num">${esc(label)}</th>`).join('')}
       </tr></thead><tbody>
       ${vids.map(v => `<tr>
         <td class="strong i18n" title="${esc(v.id)}">${esc(v.title || v.id)}</td>
         <td class="num strong">${num(v.views)}</td>
         <td style="width:22%"><div style="height:7px;border-radius:4px;background:var(--violet);
-          width:${Math.max(3, Math.round((v.views / vmx) * 100))}%"></div></td>
-        <td class="num">${num(Math.round(v.minutes / 60))}</td>
-        <td class="num">${num(v.likes)}</td>
-        <td class="num">${num(v.comments)}</td>
+          width:${Math.max(3, Math.round(((v.views || 0) / vmx) * 100))}%"></div></td>
+        ${cols.map(([, , fn]) => `<td class="num">${fn(v)}</td>`).join('')}
       </tr>`).join('')}
       </tbody></table>
     </div>`;
@@ -2979,8 +3016,13 @@ function renderReport() {
     if (TK.available && TK.channel.daily.length) {
       drawChart('repTkViews', TK.channel.daily, [{ key:'views', label:'Views', color:C.b }]);
     }
-    if (YT.available && (YT.series || []).length > 1) {
-      drawChart('repYtViews', YT.series, [{ key:'views', label:'Views', color:C.b }]);
+    /**
+     * The series metric is whatever the exporter had on the chart, so the label
+     * comes from the file rather than being hard-coded to 'Views'.
+     */
+    if (YT.available && (((YT.series || {}).rows) || []).length > 1) {
+      drawChart('repYtViews', YT.series.rows,
+        [{ key:'v', label: YT.series.metric || 'Daily', color:C.b }]);
     }
   }
 
@@ -5938,7 +5980,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.129.0';
+const CLIENT_BUILD = '3.130.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

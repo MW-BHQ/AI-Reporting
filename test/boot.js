@@ -222,19 +222,26 @@ function reportFixture() {
      * YouTube, from the Apps Script sheet — the only path since v3.129.0.
      * A blank title must fall back to the video id.
      */
-    youtube: { available: true,
-      totals: { views: 96941, minutes: 300000, hoursWatched: 5000, likes: 59,
-        comments: 24, shares: 1372, subsGained: 100, subsLost: 13, subsNet: 87 },
-      series: [{ d: "2026-07-05", views: 40000 }, { d: "2026-07-18", views: 56941 }],
-      sharing: { window: "2026-07-01", total: 1247, rows: [
-        { service: "OTHER", shares: 671, share: 0.538 },
-        { service: "COPY_PASTE", shares: 329, share: 0.264 },
-        { service: "FACEBOOK_MESSENGER", shares: 201, share: 0.161 },
-        { service: "WHATS_APP", shares: 46, share: 0.037 }] },
-      videos: { window: "2026-07-01", rows: [
+    /**
+     * YouTube, from the Studio export (v3.130.0). Deliberately MISSING likes
+     * and comments, because that is the state of MW's real export — the slide
+     * must omit those cards rather than render zeros, and the footnote must
+     * name them. Also deliberately STALE: `covered` ends before the report
+     * period, so the freshness warning has to render.
+     */
+    youtube: { available: true, source: "studio-export",
+      totals: { views: 1104891, hoursWatched: 15304, shares: 1372,
+        subsNet: 356, likes: null, comments: null },
+      present: ["views", "hoursWatched", "shares", "subsNet"],
+      missing: ["likes", "comments"],
+      covered: { from: "2026-06-01", to: "2026-06-30" }, stale: true,
+      series: { metric: "Shares", rows: [
+        { d: "2026-06-01", v: 37 }, { d: "2026-06-02", v: 40 }] },
+      videos: { rows: [
         { id: "v1", title: "Bangkok Hospital - Health Destination", views: 244087,
-          minutes: 600000, likes: 900, comments: 40 },
-        { id: "v2", title: "", views: 224511, minutes: 500000, likes: 700, comments: 30 }] } },
+          hours: 10000, shares: 268, likes: null, comments: null },
+        { id: "v2", title: "", views: 224511, hours: 8000, shares: 93,
+          likes: null, comments: null }] } },
     chatBubble: { available: true,
       events: [{ name: "click", clicks: 15600 }],
       unmapped: [{ key: "chat-bubble-channel-unknown https://example.com", clicks: 12 }],
@@ -879,21 +886,39 @@ setTimeout(() => {
           .find(sl => /^YOUTUBE$/i.test(((sl.querySelector(".slide-title span") || {}).textContent || "")
             .replace(/BHQ/g, "").trim()));
         const body = (yt || root).textContent;
-        for (const want of ["Where are viewers sharing", "COPY_PASTE", "Subscribers"]) {
+        for (const want of ["Views", "Shares", "Subscribers"]) {
           if (!body.includes(want)) return fail("youtube", `missing "${want}"`);
         }
         if (!/\bv2\b/.test(top.textContent)) {
           return fail("youtube", "a video with no title rendered blank");
         }
         /**
+         * A MISSING METRIC MUST NOT RENDER AS A CARD (v3.130.0). The fixture
+         * omits likes and comments, which is the state of the real export. This
+         * is the 400-days-of-zeros failure in miniature: a metric nobody
+         * exported showing as `0` reads as "nobody liked anything this month".
+         */
+        if (/\bLikes\b/.test(body) && !/Not in this export/.test(body)) {
+          return fail("youtube", "a Likes card rendered for a metric not in the export");
+        }
+        if (!/Not in this export/.test(body) || !/likes/.test(body)) {
+          return fail("youtube", "missing metrics are not named on the slide");
+        }
+        /**
+         * The freshness warning. A pasted sheet cannot announce that nobody
+         * pasted this month, so a file whose coverage misses the report period
+         * has to say so ON THE SLIDE.
+         */
+        if (!/out of date/i.test(body)) {
+          return fail("youtube", "a stale export did not raise the freshness warning");
+        }
+        /**
          * The amber `apiError` card is GONE (v3.129.0) along with the API path
-         * it reported on. Asserted as an absence so it cannot creep back with a
-         * copy-paste: there is no OAuth client left for it to describe, and a
-         * card naming a fix nobody can perform is worse than no card.
+         * it reported on. Asserted as an absence so it cannot creep back.
          */
         /not connected/i.test(body)
           ? fail("youtube", "the removed apiError card is rendering again")
-          : ok("youtube", "2 slides, sharing table, id fallback, no API card");
+          : ok("youtube", "2 slides, absent metrics omitted + named, stale warned, id fallback");
       })();
       finish();
     }, 500);

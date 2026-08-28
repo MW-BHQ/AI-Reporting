@@ -682,33 +682,51 @@ global.fetch = async (url, opts = {}) => {
      * that must not be averaged in.
      */
     /**
-     * YouTube sheet, as the Apps Script writes it. Deliberately includes:
-     *   - a day OUTSIDE the range (must not be summed);
-     *   - Sharing and Videos rows stamped with TWO different window starts, so
-     *     the "latest window at or before the end date" rule is exercised — a
-     *     naive date filter returns nothing when the window straddles a month;
-     *   - a video with a blank title, which must fall back to its id.
+     * YouTube: a YouTube Studio export, modelled on MW's REAL July 2026 file
+     * rather than on numbers we invented. The real export is what caught the
+     * two traps below, and a tidy fixture would have hidden both.
+     *
+     *   - COLUMN ORDER IS STUDIO'S, NOT OURS. `Shares` sits at index 7, BEFORE
+     *     `Views` at 8. Three real exports from the same channel came back with
+     *     three different column orders, so anything reading by position must
+     *     fail here rather than in production.
+     *   - `Dislikes` SITS IMMEDIATELY BEFORE `Likes`, and the comments column is
+     *     named `Comments added`. That pair is the whole reason the header match
+     *     is exact-first-then-prefix: a bare prefix match on "likes" is fine,
+     *     but a loose `includes` would read Dislikes (-1) as Likes (1482).
+     *   - THE DAILY TAB IS ON `Dislikes`, which is a real export MW produced.
+     *     A negative series must be REJECTED for the trend chart and named as a
+     *     process note, not plotted.
+     *   - `Total` IS STUDIO'S OWN ROW and must be used rather than summing the
+     *     body, because the table is truncated to the top videos. Its views
+     *     (1,104,891) are deliberately far larger than the body rows sum, so a
+     *     summing implementation reports a visibly wrong total.
+     *   - A video with a BLANK TITLE must fall back to its id.
+     *   - The daily tab carries ONE metric, named in its header, plus a row
+     *     dated OUTSIDE the month that must still be read (coverage is computed
+     *     from the file, not filtered to the report range).
      */
-    if (u.includes("Daily") && u.includes("Sharing")) {
+    if (u.includes("Table%20data") || u.includes("Table data")) {
       const R = (rows) => ({ values: rows });
       return jsonRes({ valueRanges: [
         R([
-          ["2026-06-30", "999", "999", "60", "9", "9", "9", "9", "1"],
-          ["2026-07-05", "40000", "120000", "180", "30", "10", "600", "40", "5"],
-          ["2026-07-18", "56941", "180000", "190", "29", "14", "772", "60", "8"],
+          ["Content", "Video title", "Video publish time", "Duration", "Dislikes",
+           "Likes", "Comments added", "Shares", "Views", "Watch time (hours)",
+           "Subscribers", "Estimated revenue (THB)", "Average view duration",
+           "Thumbnail impressions", "Thumbnail click-through rate (%)"],
+          ["Total", "", "", "", "-1", "1482", "24", "1372", "1104891", "15303.9761",
+           "356", "0", "0:01:08", "803964", "4.66"],
+          ["o9BarpK2djY", "\u0e42\u0e23\u0e04\u0e15\u0e48\u0e2d\u0e21", "Jun 2, 2022", "773",
+           "1", "4", "0", "2", "198", "21.2538", "1", "", "0:06:26", "1526", "6.23"],
+          ["3meNRTjyrRQ", "", "Mar 13, 2015", "96",
+           "1", "8", "0", "93", "1780", "30.6314", "8", "", "0:01:01", "12673", "8.36"],
         ]),
         R([
-          ["2026-06-01", "OTHER", "111"],
-          ["2026-07-01", "OTHER", "671"],
-          ["2026-07-01", "COPY_PASTE", "329"],
-          ["2026-07-01", "FACEBOOK_MESSENGER", "201"],
-          ["2026-07-01", "WHATS_APP", "46"],
-        ]),
-        R([
-          ["2026-06-01", "old1", "Old video", "5", "5", "0", "0"],
-          ["2026-07-01", "v1", "Bangkok Hospital - Health Destination", "244087", "600000", "900", "40"],
-          ["2026-07-01", "v2", "", "224511", "500000", "700", "30"],
-          ["2026-07-01", "v3", "\u0e1b\u0e32\u0e0f\u0e34\u0e2b\u0e32\u0e23\u0e34\u0e22\u0e4c 8 \u0e40\u0e14\u0e37\u0e2d\u0e19", "119703", "300000", "500", "20"],
+          ["Date", "Dislikes"],
+          ["2026-06-30", "-1"],
+          ["2026-07-01", "-3"],
+          ["2026-07-02", "-2"],
+          ["2026-07-31", "0"],
         ]),
       ] });
     }

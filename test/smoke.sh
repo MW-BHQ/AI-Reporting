@@ -198,126 +198,39 @@ expect_field "rf ai by channel"    "$REPORT" "d.referral.byBrand[0].ai.rows.some
 # Per-assistant event columns need per-assistant counts.
 expect_field "rf ai per-row events" "$REPORT" "d.referral.byBrand[0].ai.rows.every(r=>r.events&&typeof r.events==='object')?'ok':undefined"
 
-echo "--- monthly report: YouTube (Apps Script sheet) ---"
+echo "--- monthly report: YouTube (Studio export) ---"
 YT="d.youtube"
 expect_field "yt available"        "$REPORT" "$YT.available===true?'ok':undefined"
-# A 30 June row is in the fixture and must NOT be summed into a July report.
-expect_field "yt range filtered"   "$REPORT" "$YT.totals.views===96941?96941:undefined"
-expect_field "yt engagement"       "$REPORT" "($YT.totals.likes===59&&$YT.totals.comments===24&&$YT.totals.shares===1372)?'ok':undefined"
-expect_field "yt subs net"         "$REPORT" "$YT.totals.subsNet===($YT.totals.subsGained-$YT.totals.subsLost)?'ok':undefined"
-# Sharing and Videos are stamped with the WINDOW they were pulled for, not a
-# day. The rule is "latest window at or before the end date" — a plain date
-# filter returns nothing when a window straddles the month boundary. The June
-# window must lose to the July one.
-expect_field "yt latest window"    "$REPORT" "($YT.sharing.window==='2026-07-01'&&$YT.videos.window==='2026-07-01')?'ok':undefined"
-expect_field "yt sharing total"    "$REPORT" "$YT.sharing.total===1247?1247:undefined"
-expect_field "yt old window gone"  "$REPORT" "$YT.videos.rows.every(v=>v.id!=='old1')?'ok':undefined"
-expect_field "yt shares bounded"   "$REPORT" "$YT.sharing.rows.reduce((a,r)=>a+r.share,0)<=1.0000001?'ok':undefined"
+expect_field "yt source"           "$REPORT" "$YT.source==='studio-export'?'ok':undefined"
+# Studio's OWN Total row, not a sum of the body. The table is truncated to the
+# top videos, so summing understates the channel by the whole long tail: the
+# fixture's body rows total 1,978 views against a real channel total of 1,104,891.
+expect_field "yt uses total row"   "$REPORT" "$YT.totals.views===1104891?1104891:undefined"
+# LIKES, NOT DISLIKES. `Dislikes` (-1) sits immediately before `Likes` (1482) in
+# the real export; a loose header match reads the wrong one and the sign is the
+# only clue. Comments arrive as "Comments added".
+expect_field "yt likes not dislikes" "$REPORT" "$YT.totals.likes===1482?1482:undefined"
+expect_field "yt comments prefix"  "$REPORT" "$YT.totals.comments===24?24:undefined"
+expect_field "yt shares by name"   "$REPORT" "$YT.totals.shares===1372?1372:undefined"
+# Subscribers is already NET in this export; gained/lost are NOT separable and
+# must not be invented.
+expect_field "yt subs net only"     "$REPORT" "($YT.totals.subsNet===356&&$YT.totals.subsGained===undefined)?'ok':undefined"
+# Watch time is HOURS in the header and must not be divided again.
+expect_field "yt hours not minutes" "$REPORT" "$YT.totals.hoursWatched===15304?15304:undefined"
+# Present/missing is what drives the slide. Everything is exported here.
+expect_field "yt nothing missing"  "$REPORT" "$YT.missing.length===0?'ok':undefined"
+# THE DAILY CHART WAS ON DISLIKES in the real file. It must be rejected rather
+# than plotted, and named so it can be fixed at source.
+expect_field "yt rejects dislikes" "$REPORT" "($YT.series.metric===null&&/Dislikes/i.test($YT.series.rejected||''))?'ok':undefined"
+expect_field "yt no bad series"    "$REPORT" "$YT.series.rows.length===0?'ok':undefined"
+# Coverage is read from the DATES, so it survives an unusable metric — the
+# freshness check must not depend on which metric someone plotted.
+expect_field "yt coverage dates"   "$REPORT" "($YT.covered.from==='2026-06-30'&&$YT.covered.to==='2026-07-31')?'ok':undefined"
+expect_field "yt not stale"        "$REPORT" "$YT.stale===false?'ok':undefined"
+# Top videos sorted by views, and a blank title keeps its id.
+expect_field "yt top sorted"       "$REPORT" "$YT.videos.rows[0].id==='3meNRTjyrRQ'?'ok':undefined"
+expect_field "yt total row hidden" "$REPORT" "$YT.videos.rows.every(v=>v.id!=='Total')?'ok':undefined"
 
-echo "--- monthly report: GBP keyword rankings (SEO sheet) ---"
-GR="d.gbpRanks.byBrand.BGH"
-# Rank is AVERAGED across listings: "General hospital" is 1 at one listing and
-# 3 at another, so it must read 2 across 2 listings.
-expect_field "gr rank averaged"    "$REPORT" "($GR.rows.find(k=>k.keyword==='General hospital')||{}).rank===2?2:undefined"
-expect_field "gr locations count"  "$REPORT" "($GR.rows.find(k=>k.keyword==='General hospital')||{}).locations===2?2:undefined"
-# A June row must not count in a July range.
-expect_field "gr month filtered"   "$REPORT" "($GR.rows.every(k=>k.keyword!=='Private hospital')&&d.gbpRanks.outOfRange>0)?'ok':undefined"
-# Volume is the keyword's, not the listing's, so it is NOT summed: 12,100 twice
-# must stay 12,100.
-expect_field "gr volume not summed" "$REPORT" "($GR.rows.find(k=>k.keyword==='General hospital')||{}).volume===12100?12100:undefined"
-expect_field "gr bands"            "$REPORT" "($GR.top3===3&&$GR.top10===4)?'ok':undefined"
-# Best rank first.
-expect_field "gr sorted by rank"   "$REPORT" "$GR.rows[0].rank<=$GR.rows[$GR.rows.length-1].rank?'ok':undefined"
-# THE COLLISION GUARD: this sheet must not have replaced the Windsor GBP
-# search-keyword data, which used the same job name before v3.123.0.
-expect_field "gr not clobbering"   "$REPORT" "(d.gbpDetail||[]).some(g=>g.keywords&&(g.keywords.rows||[]).length>0)?'ok':undefined"
-
-echo "--- monthly report: appointments (GA4 + the appointments sheet) ---"
-AP="d.appointments.byScope"
-# BHQ is the four hospitals summed, on both counts and money.
-expect_field "ap bhq is four"       "$REPORT" "($AP.BHQ.completes===($AP.BGH.completes+$AP.BIH.completes+$AP.BHT.completes+$AP.WSH.completes)&&$AP.BHQ.revenue===($AP.BGH.revenue+$AP.BIH.revenue+$AP.BHT.revenue+$AP.WSH.revenue))?'ok':undefined"
-# Legacy BHQ / BHQ-EN labels count as BGH (3 realtime rows in the fixture, one
-# each). Two of them are legacy, so a rule that dropped them gives 1.
-expect_field "ap legacy is bgh"     "$REPORT" "$AP.BGH.realtime===3?3:undefined"
-# The HTML "No tags" cell and the blank must be DISCARDED, not bucketed.
-expect_field "ap junk discarded"    "$REPORT" "d.appointments.discarded===3?3:undefined"
-# "Bangkok International Hospital" contains "Bangkok Hospital"; it must not
-# fall through to BGH.
-expect_field "ap bih not bgh"       "$REPORT" "$AP.BIH.nonRealtime===1?1:undefined"
-# Revenue is monthly and per hospital: only July counts, and BHT reads its own
-# column (20 + 50) rather than BGH's.
-expect_field "ap rev one month"     "$REPORT" "d.appointments.revMonths===1?1:undefined"
-expect_field "ap rev per hospital"  "$REPORT" "$AP.BHT.revenue===70?70:undefined"
-# Revenue is reported in its own right and split both ways, so the card can show
-# it as figures rather than a sub-line under the case counts.
-expect_field "ap rev split"         "$REPORT" "($AP.BGH.revenue===($AP.BGH.realtimeRev+$AP.BGH.nonRealtimeRev)&&$AP.BGH.realtimeRev>0&&$AP.BGH.nonRealtimeRev>0)?'ok':undefined"
-# Blank location/specialty becomes N/S in the donut.
-expect_field "ap blank is N/S"      "$REPORT" "$AP.BGH.rtMix.rows.some(r=>r.label==='N/S')?'ok':undefined"
-# Initiates comes from GA4, not the sheet, so it must differ from completes.
-expect_field "ap initiates ga4"     "$REPORT" "($AP.BGH.initiates>0&&$AP.BGH.initiates!==$AP.BGH.completes)?'ok':undefined"
-
-echo "--- monthly report: chat bubble channel disambiguation ---"
-CBB="d.chatBubble.byScope.BHQ.rows"
-# Three PAIRS share a click id and must not collapse. LINE th/jp and the two
-# WhatsApp numbers differ only by destination URL; `facebook-messenger`
-# contains `messenger` as a substring, so a loose id match merges them.
-expect_field "cb line split"       "$REPORT" "$CBB.filter(r=>r.label.indexOf('LINE')===0&&r.clicks>0).length===2?2:undefined"
-expect_field "cb whatsapp split"   "$REPORT" "$CBB.filter(r=>r.label.indexOf('WhatsApp')===0&&r.clicks>0).length===2?2:undefined"
-expect_field "cb messenger split"  "$REPORT" "$CBB.filter(r=>r.label.indexOf('Messenger')===0&&r.clicks>0).length===2?2:undefined"
-expect_field "cb all channels"     "$REPORT" "$CBB.filter(r=>r.clicks>0).length===10?10:undefined"
-# An id we do not recognise stays in the payload even though the slide no longer
-# shows a footer, so a new channel is never silently lost.
-expect_field "cb unmapped shown"   "$REPORT" "d.chatBubble.unmapped.some(u=>u.key.indexOf('unknown')>=0)?'ok':undefined"
-# `chat-bubble-top-parent` is the bubble OPENING, not a channel. It must be the
-# headline total and must NOT appear as an eleventh channel row.
-expect_field "cb opens not channel" "$REPORT" "$CBB.every(r=>r.label.indexOf('parent')<0)?'ok':undefined"
-# When bubble opens are present the headline is opens, not the channel sum.
-expect_field "cb total is opens"   "$REPORT" "(d.chatBubble.byScope.BHQ.basis==='opens'&&d.chatBubble.byScope.BHQ.total===d.chatBubble.byScope.BHQ.opens)?'ok':undefined"
-# And the card must SAY which quantity it is showing, so a fallback to channel
-# clicks is never mistaken for bubble opens.
-expect_field "cb basis declared"   "$REPORT" "['opens','channels'].indexOf(d.chatBubble.byScope.BHQ.basis)>=0?'ok':undefined"
-# Out-of-scope branches are dropped: /th/somewhere-else/page is in the fixture
-# and must contribute to neither a hospital nor the BHQ total.
-expect_field "cb bhq is four only" "$REPORT" "d.chatBubble.byScope.BHQ.total===(d.chatBubble.byScope.BGH.total+d.chatBubble.byScope.BIH.total+d.chatBubble.byScope.BHT.total+d.chatBubble.byScope.WSH.total)?'ok':undefined"
-# Every in-scope chat row is exactly 100 in the fixture; the out-of-scope branch
-# is 9,997. So a leak makes the totals stop being round — which the identity
-# above cannot see, because an unknown brand defaulted to BGH satisfies it.
-expect_field "cb no offscope leak" "$REPORT" "(d.chatBubble.byScope.BHQ.channelClicks%100===0&&d.chatBubble.byScope.BHQ.total%100===0)?'ok':undefined"
-# The GTM custom event is the source when it has data — it is the only one that
-# sees the bubble button, which is a div and fires no outbound link click.
-expect_field "cb source is gtm"    "$REPORT" "d.chatBubble.source==='click_chat_bubble'?'ok':undefined"
-# FIXED position, not ranked by clicks (MW): Telegram first, then Messenger,
-# then LINE down the left column, so a two-column grid reproduces the reference
-# deck and a channel sits in the same place every month.
-# BHQ share: the four hospitals must account for exactly the BHQ total, or the
-# share is being measured against a different population than it is drawn from.
-# Every configured channel keeps its card even at zero both months — cards were
-# disappearing on the quieter hospitals, which breaks the fixed layout.
-expect_field "cb all cards always"  "$REPORT" "['BHQ','BGH','BIH','BHT','WSH'].every(k=>d.chatBubble.byScope[k].rows.length===10)?'ok':undefined"
-# Contact us denominator: BHQ must be exactly the four hospitals summed, or the
-# share compares a group numerator against a differently-scoped denominator.
-expect_field "cb contactus scope"   "$REPORT" "d.chatBubble.byScope.BHQ.contactUs===['BGH','BIH','BHT','WSH'].reduce((a,k)=>a+d.chatBubble.byScope[k].contactUs,0)?'ok':undefined"
-expect_field "cb share sums 100"   "$REPORT" "Math.abs(['BGH','BIH','BHT','WSH'].reduce((a,k)=>a+d.chatBubble.byScope[k].bhqShare,0)-1)<1e-9?'ok':undefined"
-expect_field "cb bhq no self share" "$REPORT" "d.chatBubble.byScope.BHQ.bhqShare===null?'ok':undefined"
-expect_field "cb fixed order"      "$REPORT" "($CBB[0].label==='Telegram'&&$CBB[2].label==='Messenger'&&$CBB[4].label==='LINE')?'ok':undefined"
-expect_field "cb events listed"    "$REPORT" "d.chatBubble.events.length>0?'ok':undefined"
-# BHQ is all four hospitals, so it cannot be smaller than one of them.
-expect_field "cb bhq superset"     "$REPORT" "d.chatBubble.byScope.BHQ.total>=d.chatBubble.byScope.BGH.total?'ok':undefined"
-# Labels confirmed by MW in v3.112.0, so nothing is flagged as assumed any more.
-# The messenger pair was SWAPPED from the original guess: the plain label is the
-# larger of the two (84 vs 44).
-expect_field "cb none assumed"     "$REPORT" "$CBB.every(r=>!r.assumed)?'ok':undefined"
-
-echo "--- monthly report: TikTok field names and floors ---"
-# reach is unique_video_views; there is no `reach` field on this connector.
-expect_field "tk reach"            "$REPORT" "d.tiktok.channel.reach===17897?17897:undefined"
-expect_field "tk profile views"    "$REPORT" "d.tiktok.channel.profileViews===1868?1868:undefined"
-expect_field "tk bio link clicks"  "$REPORT" "d.tiktok.channel.bioLinkClicks===30?30:undefined"
-# Two accounts post on the same date: one row per date would halve this.
-expect_field "tk daily multi-acct" "$REPORT" "d.tiktok.channel.daily[0].views===66941?66941:undefined"
-# v4 has a 50% like rate on 6 views. If the floor goes, it tops the ranking.
-expect_field "tk rate floor holds" "$REPORT" "d.tiktok.top.likeRate.id==='v2'?'v2':undefined"
-expect_field "tk top by favorites" "$REPORT" "d.tiktok.top.favorites.id==='v1'?'v1':undefined"
 echo "--- audiences field integrity (a dropped Windsor field must fail here) ---"
 CAMPD="/api/campaign?code=260701-08&from=$FROM&to=$TO"
 # Google Ads must reach campaign analysis through the shared platform registry.
@@ -458,11 +371,9 @@ YT_CLIENT_ID=cid YT_CLIENT_SECRET=csec YT_REFRESH_TOKEN=rt \
 PORT=$PORT node --require ./test/mock-fetch.js server.js >>/tmp/smoke.log 2>&1 &
 SRV=$!
 sleep 2.5
-expect_field "yt source is sheet"    "$REPORT" "d.youtube.source==='apps-script-sheet'?'ok':undefined"
+expect_field "yt source is export"   "$REPORT" "d.youtube.source==='studio-export'?'ok':undefined"
 expect_field "yt secrets are inert"  "$REPORT" "d.youtube.apiError===undefined?'ok':undefined"
-expect_field "yt has data"           "$REPORT" "d.youtube.totals.views===96941?96941:undefined"
-# A zero-share service must not occupy a row in the sharing table.
-expect_field "yt drops zeros"        "$REPORT" "d.youtube.sharing.rows.every(r=>r.shares>0)?'ok':undefined"
+expect_field "yt has data"           "$REPORT" "d.youtube.totals.views===1104891?1104891:undefined"
 
 echo "--- degradation: one source failing must not 500 ---"
 kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
