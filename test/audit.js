@@ -219,6 +219,28 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
 }
 
 /**
+ * EVERY ASSISTANT MARK IS THE SAME SIZE.
+ *
+ * They were 16px for ChatGPT/Gemini/Claude and 26px for Copilot/Perplexity, so
+ * one table showed marks at two scales and the larger ones read as the more
+ * important rows — Perplexity at 80 sessions looked heavier than ChatGPT at
+ * 3.1K. Static, because the sizes are literals in the source and a rendered
+ * check would need the brand images, which jsdom does not load.
+ */
+{
+  const fn = html.slice(html.indexOf("const assistantLogo ="));
+  const body = fn.slice(0, fn.indexOf("\n  };"));
+  const sizes = [...body.matchAll(/plogo\([^,]+,\s*([A-Za-z_0-9]+)\s*\)/g)].map((m) => m[1]);
+  const distinct = [...new Set(sizes)];
+  !sizes.length
+    ? fail("icons:assistant-size", "no assistant marks found — did assistantLogo move?")
+    : (distinct.length === 1
+      ? ok("icons:assistant-size", `${sizes.length} marks all sized ${distinct[0]}`)
+      : fail("icons:assistant-size",
+        `assistant marks use ${distinct.length} different sizes: ${distinct.join(", ")}`));
+}
+
+/**
  * A SECOND Y-AXIS MUST BE CONDITIONAL ON A SERIES ASKING FOR IT.
  *
  * `y1` was declared unconditionally in `drawChart`. Chart.js renders an axis
@@ -272,7 +294,7 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
    * `--text-3xs` closed that gap; these selectors are now enforced, because the
    * rail is the one place a stray px is least likely to be noticed by eye.
    */
-  const SCOPED = /^\s*\.(slide-title|note|stat|mini|cbc|cbc-\w+|card-title|cb-\w+|lang-tab|clang-tab|brand-name|brand-sub|nav-label|nav-group|nav-item|ai-badge|rail-foot|subtitle|dates|btn|status|stage-name|stage-val|stage-note|seg-val|stage(?![\w-])|seg(?![\w-])|card(?=\s+h2))\b|^\s*(?:table|h1)\{/;
+  const SCOPED = /^\s*\.(slide-title|note|stat|mini|cbc|cbc-\w+|card-title|cb-\w+|lang-tab|clang-tab|brand-name|brand-sub|nav-label|nav-group|nav-item|ai-badge|rail-foot|subtitle|dates|btn|status|stage-name|stage-val|stage-note|seg-val|stage(?![\w-])|seg(?![\w-])|card(?=\s+h2)|mr-[\w-]+)\b|^\s*(?:table|h1)\{/;
   /**
    * @media blocks are skipped by tracking brace depth, not by testing the line
    * for "@media" — the overrides live INSIDE the block, on lines that never

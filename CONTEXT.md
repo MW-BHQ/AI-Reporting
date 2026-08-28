@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.136.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.137.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,41 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.137.0 — assistant marks are one size; `.mr-*` joins the type scale (4 of 5).**
+
+**ASSISTANT ICONS (MW spotted it).** The AI table sized marks two ways —
+16px for ChatGPT, Gemini and Claude, 26px for Copilot and Perplexity — so the
+larger marks read as the more important rows: Perplexity at 80 sessions looked
+heavier than ChatGPT at 3.1K. The per-caller `size` argument is what allowed the
+drift, so `ASSISTANT_MARK_PX = 18` decides it once and callers no longer pass a
+size. **If an asset looks small at 18px, recrop the asset** — that file has
+whitespace baked into its canvas. Scaling one mark up is what caused this.
+
+New audit rule `icons:assistant-size` fails when `assistantLogo` uses more than
+one size; verified by putting `26` back on Copilot.
+
+**`.mr-*` MIGRATED**, 11 selectors. Two ties broke DOWN: `.mr-title` 27px sits
+exactly between 24 and 30, and `.mr-sub` 17px between 16 and 18 — both sit on one
+masthead line with a scope pill on a fixed 13.333in print canvas, so the wrap
+risk decides it. Only `.mr-kpi-v` moves up (23px → 24px); everything else is
+exact or smaller. `.mr-yoy-l` at 9px landed exactly on the `--text-4xs` step added
+in v3.136.0.
+
+**A CORRECTION TO THE SCOPE OF THIS MIGRATION.** The "81 selectors" figure came
+from scanning the `<style>` block only. The real remaining count is **165: 61 in
+`<style>` and 104 INLINE in JS template literals** — and `type:scale` cannot see
+inline styles at all. So finishing the last CSS group would leave the audit
+reporting full compliance over 104 hard-coded sizes.
+
+This is the same shape as the 400 days of zeros: a green check measuring the
+wrong thing. Before this migration can be called done, `type:scale` needs to read
+inline `style="..."` attributes too — and that is a bigger job than the group it
+was scoped inside, because inline sizes carry no selector to allowlist.
+
+**REMAINING:** tables and pills in `<style>` (`th`, `tr.grp td`, `.pill`,
+`.legend`, `.af*`) → then the inline sweep, which needs its own decision from MW
+about whether the audit should cover inline styles.
 
 **v3.136.0 — funnel/stages join the type scale (3 of 5 groups).**
 

@@ -320,9 +320,9 @@
   .mr{background:var(--card,#FBFCFE);border:1px solid var(--line);border-radius:16px;padding:26px 28px;}
   .mr-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
     padding-bottom:14px;margin-bottom:20px;border-bottom:1px solid var(--line);}
-  .mr-title{font-size:27px;font-weight:600;color:var(--ink);letter-spacing:-.025em;}
-  .mr-sub{font-size:17px;font-weight:400;color:var(--violet);}
-  .mr-scope{margin-left:auto;font-size:11px;color:var(--faint);}
+  .mr-title{font-size:var(--text-2xl);font-weight:600;color:var(--ink);letter-spacing:-.025em;}
+  .mr-sub{font-size:var(--text-base);font-weight:400;color:var(--violet);}
+  .mr-scope{margin-left:auto;font-size:var(--text-2xs);color:var(--faint);}
   .mr-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;}
   /* Cards, not table cells divided by rules — the KPI row is the first thing
      read and the vertical hairlines in the original made it feel like a ledger. */
@@ -331,30 +331,30 @@
   .mr-kpi:nth-child(2){border-top-color:#4B8DF8;}
   .mr-kpi:nth-child(3){border-top-color:#2FA8A0;}
   .mr-kpi:nth-child(4){border-top-color:#F2A93B;}
-  .mr-kpi-t{font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;
+  .mr-kpi-t{font-size:var(--text-3xs);font-weight:600;letter-spacing:.07em;text-transform:uppercase;
     color:var(--muted);margin-bottom:9px;}
   .mr-kpi-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
-  .mr-kpi-v{font-size:23px;font-weight:600;color:var(--ink);letter-spacing:-.02em;
+  .mr-kpi-v{font-size:var(--text-2xl);font-weight:600;color:var(--ink);letter-spacing:-.02em;
     font-variant-numeric:tabular-nums;}
-  .mr-kpi-yoy{text-align:right;font-size:11.5px;white-space:nowrap;}
-  .mr-yoy-l{font-size:9px;color:var(--faint);letter-spacing:.08em;text-transform:uppercase;}
+  .mr-kpi-yoy{text-align:right;font-size:var(--text-2xs);white-space:nowrap;}
+  .mr-yoy-l{font-size:var(--text-4xs);color:var(--faint);letter-spacing:.08em;text-transform:uppercase;}
   .mr-up{color:#2E9E6F;font-weight:600;} .mr-down{color:#D9534F;font-weight:600;}
   .mr-flat{color:var(--faint);}
-  .mr-kpi-p{font-size:10.5px;color:var(--faint);margin-top:7px;}
+  .mr-kpi-p{font-size:var(--text-3xs);color:var(--faint);margin-top:7px;}
   .mr-tag{display:inline-block;background:var(--violet-soft);color:var(--violet);border-radius:20px;
     padding:1px 8px;margin-left:6px;font-size:9.5px;font-weight:500;white-space:nowrap;}
   .mr-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
   /* Quiet card titles in the house style, instead of the dark filled tabs — those
      read as five competing headlines on one page. */
   .mr-panel{background:var(--glass-2);border:1px solid var(--line);border-radius:13px;padding:16px 16px 12px;}
-  .mr-panel-t{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;
+  .mr-panel-t{font-size:var(--text-2xs);font-weight:600;letter-spacing:.07em;text-transform:uppercase;
     color:var(--muted);margin-bottom:12px;}
-  .mr-legend{display:flex;gap:16px;justify-content:center;font-size:10.5px;color:var(--muted);margin-top:6px;}
+  .mr-legend{display:flex;gap:16px;justify-content:center;font-size:var(--text-3xs);color:var(--muted);margin-top:6px;}
   .mr-legend i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:6px;
     vertical-align:-1px;}
   .mr-legend i.ghost{background:#E7E3FB;border:1px solid #CFC8F5;}
   .mr-donut{display:flex;align-items:center;gap:20px;flex-wrap:wrap;justify-content:center;}
-  .mr-donut-key{font-size:11.5px;color:var(--ink-2);min-width:150px;}
+  .mr-donut-key{font-size:var(--text-2xs);color:var(--ink-2);min-width:150px;}
   .mr-donut-key div{display:flex;align-items:center;gap:8px;margin-bottom:6px;white-space:nowrap;}
   .mr-donut-key i{width:10px;height:10px;border-radius:3px;flex:none;}
   .mr-donut-key b{margin-left:auto;padding-left:14px;color:var(--ink);font-variant-numeric:tabular-nums;}
@@ -1695,16 +1695,31 @@ function renderReport() {
     return `<img class="plogo"${sz} src="brand/${esc(p.file)}" alt="${esc(p.label)}"
       title="${esc(p.label)}" loading="lazy" onerror="this.remove()">`;
   };
-  /** Assistant source -> platform mark, for the AI table rows. */
+  /**
+   * Assistant source -> platform mark, for the AI table rows.
+   *
+   * ONE SIZE FOR EVERY MARK (MW). These were 16px for ChatGPT, Gemini and
+   * Claude but 26px for Copilot and Perplexity, so a ten-row table showed marks
+   * at two different scales and the big ones read as more important than the
+   * rows above them — Perplexity at 80 sessions looked heavier than ChatGPT at
+   * 3.1K. The per-caller size argument is what allowed the drift, so the size is
+   * decided here and callers no longer pass one.
+   *
+   * If an asset looks small at 18px it is because that file has whitespace
+   * baked into its canvas; the fix is to recrop the asset, NOT to scale one mark
+   * up and reintroduce the inconsistency.
+   */
+  const ASSISTANT_MARK_PX = 18;
   const assistantLogo = (src) => {
     const s = String(src || '').toLowerCase();
-    if (s.includes('chatgpt') || s.includes('openai')) return plogo('chatgpt', 16);
-    if (s.includes('gemini') || s.includes('bard')) return plogo('gemini', 16);
-    if (s.includes('claude') || s.includes('anthropic')) return plogo('claude', 16);
-    if (s.includes('copilot')) return plogo('copilot', 26);
-    if (s.includes('perplexity')) return plogo('perplexity', 26);
-    // No asset yet for Perplexity, DeepSeek, Grok, Mistral and the rest; they
-    // render as plain text rather than a wrong logo.
+    const z = ASSISTANT_MARK_PX;
+    if (s.includes('chatgpt') || s.includes('openai')) return plogo('chatgpt', z);
+    if (s.includes('gemini') || s.includes('bard')) return plogo('gemini', z);
+    if (s.includes('claude') || s.includes('anthropic')) return plogo('claude', z);
+    if (s.includes('copilot')) return plogo('copilot', z);
+    if (s.includes('perplexity')) return plogo('perplexity', z);
+    // No asset yet for DeepSeek, Grok, Mistral and the rest; they render as
+    // plain text rather than a wrong logo. (Perplexity has one since v3.12x.)
     return '';
   };
   /**
@@ -6047,7 +6062,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.136.0';
+const CLIENT_BUILD = '3.137.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
