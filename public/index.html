@@ -1112,6 +1112,21 @@ function num(v, opts = {}) {
   return String(Math.round(v));
 }
 const isNA = (v) => v === null || v === undefined;
+/**
+ * Numeric coercion where a null must contribute 0 to a SUM rather than NaN.
+ *
+ * MODULE SCOPE, and it matters. This was declared as a local `const` inside
+ * `renderReport` while its only 15 callers are in `renderOverview` — so that
+ * function's "where impressions come from" section threw
+ * `ReferenceError: n0 is not defined` every time it ran. It survived because
+ * Overview waited for a click and `boot.js` never clicked, so the code path was
+ * never executed by the suite; making Overview auto-load exercised it on the
+ * first run and it failed immediately.
+ *
+ * Distinct from `num()`, which FORMATS and renders null as an em dash. This one
+ * is for arithmetic: use `num()` to display a missing value, `n0()` to add one.
+ */
+const n0 = (v) => (v === null || v === undefined || isNaN(Number(v))) ? 0 : Number(v);
 
 const CHANNEL_COLORS = ['#7C6BF5','#4B8DF8','#35C3B4','#F2A93B','#F2708F','#3BC97F','#9B8CEF','#6ECBE0','#E8A0C4','#A8B4D4'];
 const colorFor = (i) => CHANNEL_COLORS[i % CHANNEL_COLORS.length];
@@ -1253,7 +1268,31 @@ async function loadOverview(refresh = false) {
   if (!refresh && S.overviewKey === key && S.overview) return S.overview;
   setStatus('busy', 'pulling GA4, Meta, Search Console, GMB…');
   const url = `/api/overview?from=${$('from').value}&to=${$('to').value}${refresh ? '&refresh=1' : ''}`;
-  const res = await fetch(url);
+  /**
+   * A CLIENT-SIDE DEADLINE, because this tab now loads itself.
+   *
+   * `fetch` has no default timeout. While Overview waited for a click, a hung
+   * request just meant a stuck button. Now that it fires on arrival, a hung
+   * request would leave "Pulling GA4, Meta…" on screen forever with no Retry
+   * button to press — the auto-load turns a stall into a dead end, so the
+   * deadline goes in with it.
+   *
+   * 120s is above any healthy pull (the heaviest observed is well under a
+   * minute) and below Cloud Run's request timeout, so this fires on a genuine
+   * stall rather than on a slow-but-working day.
+   */
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 120000);
+  let res;
+  try {
+    res = await fetch(url, { signal: ctl.signal });
+  } catch (err) {
+    throw new Error(err.name === 'AbortError'
+      ? 'The pull took longer than 2 minutes and was stopped. One of the six sources is likely stalling — retrying often succeeds.'
+      : `Network error: ${err.message || err}`);
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,200)}`);
   S.overview = await res.json(); S.overviewKey = key;
   setStatus('ok', S.overview.cached ? `cached ${S.overview.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
@@ -1737,8 +1776,6 @@ function renderReport() {
        </div>${body}</div>`;
   };
   const C = { a:'#6C5CE7', b:'#4B8DF8', c:'#2E9E6F', d:'#F2A93B', e:'#E8607A' };
-  // Local numeric coercion: nulls must contribute 0 to a sum, not NaN.
-  const n0 = (v) => (v === null || v === undefined || isNaN(Number(v))) ? 0 : Number(v);
   const kpi = (lab, val, sub) => `<div class="stat"><div class="lab">${lab}</div>
     <div class="val">${val}</div>${sub?`<div class="sub2">${sub}</div>`:''}</div>`;
   /**
@@ -3148,12 +3185,79 @@ function renderReport() {
 }
 
 // ============================================================ OVERVIEW
+/**
+ * OVERVIEW AUTO-LOADS FOR LAST MONTH (MW, v3.138.0).
+ *
+ * The comment above `VIEW_LOADERS` has said "Overview is the one exception,
+ * because that is where the dashboard opens" since that guard was written — but
+ * this function still showed "Ready to pull" and waited for a click. The stated
+ * intent and the code disagreed, and the code won.
+ *
+ * The range is already last month: `setLastMonth()` runs at boot and the `LM`
+ * preset ships with `class="active"`.
+ *
+ * THE GUARD IS THE POINT, NOT THE AUTO-LOAD. `render()` runs on far more than
+ * arrival — scope changes, hashchange, every load settling. With `S.overview`
+ * still null after a failure, a bare `if (!d) load()` refires on EVERY
+ * subsequent render, so one failed pull becomes a stream of them against GA4,
+ * Meta, Search Console and GBP at once. So:
+ *   - `overviewLoading` makes the request at-most-once-in-flight;
+ *   - `overviewError` STOPS the cycle and waits for a person to press Retry.
+ * An auto-loading tab that retries itself on error is a worse failure than one
+ * that never loaded, because nothing on screen says it is happening.
+ *
+ * `renderReport` has the same bare pattern and the same latent loop; left alone
+ * here deliberately rather than changed as a drive-by, but it should get this
+ * treatment. Recorded in CONTEXT.
+ */
 function renderOverview() {
   const d = S.overview;
   if (!d) {
-    $('viewRoot').innerHTML = `<div class="card"><div class="state">
-      <div class="big">Ready to pull</div>
-      <div style="max-width:400px;font-size:12.5px;">Pick a range and press <b>Load</b>. Sources: GA4 (Group), Meta Ads, Search Console, Google Business Profile, FB &amp; TikTok organic.</div>
+    if (S.overviewError) {
+      $('viewRoot').innerHTML = errorState(S.overviewError) +
+        `<div class="card"><div class="state">
+           <div style="max-width:460px;font-size:12.5px;color:var(--muted);">Overview pulls GA4,
+           Meta Ads, Search Console, Google Business Profile and FB &amp; TikTok organic in one
+           request, so a single slow source can fail the whole pull. Retrying often succeeds.</div>
+           <button class="btn btn-primary" data-load="overview" style="margin-top:4px;">Retry</button>
+         </div></div>`;
+      return;
+    }
+    if (!S.overviewLoading) {
+      S.overviewLoading = true;
+      loadOverview()
+        .catch((err) => { S.overviewError = err.message || String(err); })
+        .finally(() => { S.overviewLoading = false; render(); });
+    }
+    $('viewRoot').innerHTML = loadingState('Pulling GA4, Meta, Search Console, GMB\u2026');
+    return;
+  }
+
+  /**
+   * THE PAYLOAD SHAPE IS CHECKED BEFORE IT IS READ.
+   *
+   * `runJobs` uses `Promise.allSettled` and nulls a source that fails, so a
+   * degraded pull returns 200 with sections missing. This function then read
+   * `d.totals.impressions` directly and threw
+   * `TypeError: Cannot read properties of undefined` — a WHITE SCREEN on a
+   * response the server considered a success. That is a strong candidate for the
+   * intermittent "overview failed to load" MW reported, and it is a failure that
+   * looks like nothing at all: no error state, no status, just an empty tab.
+   *
+   * Named sections rather than optional-chaining everywhere: if the funnel or the
+   * totals are gone there is no overview to show, and saying so beats a page of
+   * em dashes that reads as a genuinely quiet month.
+   */
+  const missing = [];
+  if (!d.totals) missing.push('totals');
+  if (!Array.isArray(d.funnel)) missing.push('the channel funnel');
+  if (missing.length) {
+    $('viewRoot').innerHTML = `<div class="card"><div class="state bad">
+      <div class="big">This pull came back incomplete</div>
+      <div style="max-width:480px;font-size:12.5px;">The server answered but
+      ${esc(missing.join(' and '))} ${missing.length > 1 ? 'are' : 'is'} missing, so the
+      overview cannot be drawn. This usually means a source timed out mid-pull.</div>
+      <button class="btn btn-primary" data-load="overview" style="margin-top:4px;">Retry</button>
     </div></div>`;
     return;
   }
@@ -4153,6 +4257,13 @@ const CH_COLORS = Object.values(CHANNEL_CI);
  * exception, because that is where the dashboard opens.
  */
 const VIEW_LOADERS = {
+  /**
+   * Overview is here for its Retry button and its busy/error bookkeeping, not to
+   * make arrival fire a request — `renderOverview` already auto-loads. Without
+   * an entry, the generic `[data-load]` handler silently does nothing, which is
+   * how a Retry button that looks fine ends up doing nothing at all.
+   */
+  overview:      { load: () => loadOverview(true),  err: 'overviewError',  busy: 'overviewLoading',  what: 'the overview' },
   audiences:     { load: () => loadAudiences(),     err: 'audiencesError', busy: 'audiencesLoading', what: 'Meta ad sets' },
   ecom:          { load: () => loadEcom(),          err: 'ecomError',      busy: 'ecomLoading',      what: 'the Orders sheet' },
   ecomcentre:    { load: () => loadEcomCentres(),   err: 'ecomcError',     busy: 'ecomcLoading',     what: 'sales by center' },
@@ -4183,6 +4294,9 @@ document.addEventListener('click', (e) => {
   if (!btn) return;
   const cfg = VIEW_LOADERS[btn.dataset.load];
   if (!cfg || S[cfg.busy]) return;
+  // Clearing the previous error FIRST. Otherwise a retry renders the old error
+  // state again on its way through `render()`, and the button appears dead.
+  S[cfg.err] = null;
   S[cfg.busy] = true;
   render();
   cfg.load().catch(err => { S[cfg.err] = err.message || String(err); })
@@ -6062,7 +6176,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.137.0';
+const CLIENT_BUILD = '3.138.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

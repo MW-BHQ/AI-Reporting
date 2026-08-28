@@ -409,6 +409,37 @@ setTimeout(() => {
     : fail("scope hidden on overview", "scope switch is visible where it does nothing");
 
   /**
+   * A PARTIAL OVERVIEW PAYLOAD MUST NOT WHITE-SCREEN (v3.138.0).
+   *
+   * The stub answers `/api/overview` with the generic identity object, which is
+   * exactly the shape of a degraded pull: 200 OK, sections missing. Before the
+   * guard, `renderOverview` read `d.totals.impressions` and threw a TypeError,
+   * leaving an EMPTY tab with no error state and no status — a failure that looks
+   * like nothing at all.
+   *
+   * Only reachable because Overview auto-loads now. While it waited for a click,
+   * `boot.js` never clicked, so this whole function was unexercised by the suite —
+   * which is how 15 calls to an out-of-scope `n0` survived in it.
+   *
+   * NOT a substitute for a real overview fixture: this asserts the DEGRADED
+   * branch. The normal render path, including the impressions-by-source section
+   * where `n0` was broken, is still untested. See CONTEXT.
+   */
+  (() => {
+    const root = d.getElementById("viewRoot");
+    if (!root) return fail("overview degrades", "no #viewRoot after boot");
+    const t = root.textContent;
+    if (/came back incomplete/i.test(t)) {
+      return root.querySelector('[data-load="overview"]')
+        ? ok("overview degrades", "partial payload states what is missing, offers retry")
+        : fail("overview degrades", "incomplete-pull state has no retry button");
+    }
+    return /Something went wrong|Pulling/i.test(t)
+      ? ok("overview degrades", "partial payload handled without throwing")
+      : fail("overview degrades", `partial payload rendered nothing usable: "${t.slice(0, 80)}"`);
+  })();
+
+  /**
    * Render the heaviest view for real. Overview with no data exercises almost
    * none of the template; the report renderer is where the removals and
    * refactors land, and a dead identifier there only throws once data arrives.

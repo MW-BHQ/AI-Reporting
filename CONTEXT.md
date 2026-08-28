@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.137.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.138.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,60 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.138.0 — Overview auto-loads for last month, and doing so exposed TWO real
+bugs that had shipped for months.**
+
+MW asked for auto-load "similar to Monthly report" and reported that Overview
+"sometimes fails to load". Both turned out to be the same story.
+
+**BUG 1: `n0` WAS DECLARED IN THE WRONG FUNCTION.** It was a local `const`
+inside `renderReport`, while its **only 15 callers are in `renderOverview`** — so
+that function's impressions-by-source section threw
+`ReferenceError: n0 is not defined` every time it ran. Moved to module scope
+beside `num()`. (`num()` FORMATS and shows null as an em dash; `n0()` is for
+arithmetic. Use `num()` to display a missing value, `n0()` to add one.)
+
+**BUG 2: A DEGRADED PULL WHITE-SCREENED THE TAB.** `runJobs` uses
+`Promise.allSettled` and nulls a failed source, so a partial pull returns **200
+with sections missing**. `renderOverview` read `d.totals.impressions` directly
+and threw `TypeError` — an EMPTY tab, no error state, no status line. That is the
+best candidate for MW's intermittent failure, and it is the worst kind: a success
+response rendering nothing, with the cause invisible. Shape is now checked before
+it is read, and a partial payload names what is missing and offers Retry.
+
+**WHY NEITHER WAS CAUGHT: `boot.js` NEVER EXECUTED `renderOverview`.** Overview
+waited for a click and the suite never clicked, so the entire function was
+unexercised — the comment above `VIEW_LOADERS` had claimed since it was written
+that "Overview is the one exception, because that is where the dashboard opens",
+but the code showed "Ready to pull". The stated intent and the code disagreed,
+and the code won for months.
+
+**THE AUTO-LOAD GUARD IS THE REAL WORK, not the auto-load.** `render()` runs on
+far more than arrival — scope changes, hashchange, every load settling. With
+`S.overview` still null after a failure, a bare `if (!d) load()` refires on
+EVERY later render, so one failed pull becomes a stream of them against six
+sources at once. `overviewLoading` keeps it at-most-one-in-flight;
+`overviewError` STOPS the cycle and waits for a person. The `[data-load]` handler
+now clears the stored error first, or a retry re-renders the old error on its way
+through and the button looks dead.
+
+**A 120s CLIENT DEADLINE went in with it.** `fetch` has no default timeout. While
+the tab waited for a click, a hung request meant a stuck button; auto-loading
+turns the same stall into a permanent "Pulling…" with no Retry to press. Above
+any healthy pull, below Cloud Run's timeout.
+
+**STILL OUTSTANDING, and it is the important one:** `boot.js` now asserts only the
+DEGRADED overview branch. **The normal render path — including the very section
+where `n0` was broken — is still untested**, because the fetch stub answers
+`/api/overview` with the generic identity object. Overview needs a real fixture
+(`funnel`, `totals`, `impressionsBySource`, `offsiteActions`) the way the monthly
+report has one. Two bugs surfaced the moment that function ran once; nobody
+should assume it holds no more.
+
+**`renderReport` HAS THE SAME BARE PATTERN** and the same latent retry loop. Left
+alone deliberately rather than changed as a drive-by, but it should get the same
+guard.
 
 **v3.137.0 — assistant marks are one size; `.mr-*` joins the type scale (4 of 5).**
 
