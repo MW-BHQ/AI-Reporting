@@ -218,8 +218,13 @@ function reportFixture() {
           { keyword: "Hospital near me", rank: 6, volume: 27100, locations: 1 },
           { keyword: "Medical centre", rank: 19.5, volume: 3600, locations: 1 },
         ] }])) },
-    /** YouTube. A blank title must fall back to the video id. */
+    /**
+     * YouTube. A blank title must fall back to the video id, and `apiError`
+     * rides alongside working sheet data — the real state when the OAuth token
+     * is wrong: the card still shows numbers, plus a diagnosis.
+     */
     youtube: { available: true,
+      apiError: "403 from YouTube: this refresh token is not authorised for channel UCxxx.",
       totals: { views: 96941, minutes: 300000, hoursWatched: 5000, likes: 59,
         comments: 24, shares: 1372, subsGained: 100, subsLost: 13, subsNet: 87 },
       series: [{ d: "2026-07-05", views: 40000 }, { d: "2026-07-18", views: 56941 }],
@@ -879,10 +884,18 @@ setTimeout(() => {
         for (const want of ["Where are viewers sharing", "COPY_PASTE", "Subscribers"]) {
           if (!body.includes(want)) return fail("youtube", `missing "${want}"`);
         }
-        // Blank title falls back to the id, rather than an empty cell.
-        /\bv2\b/.test(top.textContent)
-          ? ok("youtube", "2 slides, sharing table, blank title falls back to id")
-          : fail("youtube", "a video with no title rendered blank");
+        if (!/\bv2\b/.test(top.textContent)) {
+          return fail("youtube", "a video with no title rendered blank");
+        }
+        /**
+         * An API failure must be visible ON THE SLIDE. Hunting for `apiError`
+         * inside a 400KB JSON payload is not a way to discover that a token is
+         * pointed at the wrong channel. The fixture carries both fallback data
+         * and a diagnosis, which is exactly the real failure state.
+         */
+        /403 from YouTube/.test(body) && /not connected/i.test(body)
+          ? ok("youtube", "2 slides, sharing table, id fallback, API error surfaced")
+          : fail("youtube", "apiError is not rendered on the slide");
       })();
       finish();
     }, 500);

@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.128.1.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.128.2.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -699,6 +699,17 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.128.2 — the YouTube API error is shown on the slide.**
+
+`apiError` was on the payload but not on screen, which meant finding it required
+Ctrl+F in a 400KB JSON response. It now renders as an amber card on the YouTube
+slide, next to the fallback numbers, and disappears when the API path succeeds.
+
+The point of the diagnosis is that the two likely causes need OPPOSITE fixes —
+wrong account vs consent screen left in Testing — and both look like a quiet
+month. A diagnosis nobody can find is not a diagnosis.
+
 
 **v3.128.1 — the YouTube API failure reason reaches the payload.**
 
