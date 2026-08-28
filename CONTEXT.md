@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.127.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.128.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -699,6 +699,59 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.128.0 — YouTube direct from the API, no monthly human step.**
+
+**WHY EVERY OTHER ROUTE FAILED, and what actually works.** The Bangkok Hospital
+channel is a **Brand Account**. Apps Script and service accounts run as a FIXED
+identity, so they can only ever ask about the personal channel — which is why
+`channel==MINE` returned 400 days of zeros and the explicit channel id returned
+`Forbidden`. MW's role is delegated Manager and the primary owner is
+unreachable, so promotion is not available either.
+
+**An OAuth consent screen shows an IDENTITY PICKER**, and Google documents:
+
+> A Brand Account may authorize scopes requested by your project's OAuth clients
+> if a specified test user manages the Brand Account.
+
+MW manages it, so MW can grant it — **without the owner**. That is the same
+mechanism Looker Studio uses, which is exactly why Looker could always see the
+data while everything we built could not.
+
+**Setup, once (CONTEXT for whoever does it):**
+
+1. Enable YouTube Analytics API + YouTube Data API v3.
+2. OAuth consent screen: External, add MW as a test user, then **PUBLISH it
+   ("In production")**. This is not optional: an External app left in **Testing
+   has its refresh tokens killed after SEVEN DAYS**. Published, they persist.
+   Verification is not required for internal use — the "unverified" warning is
+   clicked through once.
+3. OAuth client (Web application). Consent with `yt-analytics.readonly` and
+   `youtube.readonly`, and **in the account chooser pick "Bangkok Hospital"**,
+   not the personal account. That single choice is the whole trick.
+4. Set `YT_CLIENT_ID`, `YT_CLIENT_SECRET`, `YT_REFRESH_TOKEN`, `YT_CHANNEL_ID`
+   (defaults to `UCS2S3J9FRJMDl5MvldMXc2Q`).
+
+**THREE NARROW REPORTS, not one wide one.** `day`, `sharingService` and `video`
+are separate calls. Windsor's connector failed precisely here — it asked for
+`day` + `video` + `creatorContentType` with 24 metrics including annotation,
+card and Red metrics in a single call and got `400 The query is not supported`.
+
+**The Apps Script sheet stays as the fallback.** If the secrets are absent the
+sheet is used; if the refresh token is ever revoked or expires, the report
+**degrades to the sheet rather than to an empty card**, and smoke asserts that
+with a deliberately bad token. `source` on the payload says which path served
+the data.
+
+`invalid_grant` is reported with its two real causes named — consent screen
+still in Testing, or access revoked — because those need different fixes.
+
+A video with no title falls back to its id. Zero-share services are dropped
+rather than occupying a row.
+
+**Both paths are now covered by smoke**; before this the sheet path was tested
+and the API path was not.
+
 
 **v3.127.0 — YouTube, via an Apps Script sheet. Two cards under Facebook.**
 

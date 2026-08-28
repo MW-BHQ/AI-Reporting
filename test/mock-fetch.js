@@ -653,6 +653,50 @@ global.fetch = async (url, opts = {}) => {
     return jsonRes({ data: windsorRows(connector, qp(u, "fields")) });
   }
 
+  /**
+   * YouTube OAuth token exchange. Returns a short-lived token so the caching
+   * path is exercised; a `bad-refresh` token returns invalid_grant so the
+   * dead-token branch can be tested too.
+   */
+  if (u.includes("oauth2.googleapis.com/token")) {
+    if (String(opts.body || "").includes("refresh_token=bad-refresh")) {
+      return jsonRes({ error: "invalid_grant" }, 400);
+    }
+    return jsonRes({ access_token: "yt-access-token", expires_in: 3600 });
+  }
+  /**
+   * YouTube Analytics. One branch per report, keyed on the dimension, because
+   * the whole point of this design is that each report is a SEPARATE narrow
+   * query — Windsor's connector failed by combining them.
+   */
+  if (u.includes("youtubeanalytics.googleapis.com")) {
+    const q = new URL(u).searchParams;
+    if (!/^Bearer /.test(String((opts.headers || {}).Authorization || ""))) {
+      return jsonRes({ error: { message: "missing bearer" } }, 401);
+    }
+    const dim = q.get("dimensions");
+    if (dim === "day") {
+      return jsonRes({ rows: [
+        ["2026-07-05", 40000, 120000, 30, 10, 600, 40, 5],
+        ["2026-07-18", 56941, 180000, 29, 14, 772, 60, 8],
+      ] });
+    }
+    if (dim === "sharingService") {
+      return jsonRes({ rows: [["OTHER", 671], ["COPY_PASTE", 329],
+        ["FACEBOOK_MESSENGER", 201], ["WHATS_APP", 46], ["EMAIL", 0]] });
+    }
+    if (dim === "video") {
+      return jsonRes({ rows: [
+        ["vid1", 244087, 600000, 900, 40],
+        ["vid2", 224511, 500000, 700, 30],
+      ] });
+    }
+    return jsonRes({ error: { message: "The query is not supported." } }, 400);
+  }
+  // Video titles. `vid2` is deliberately absent, so the id fallback is used.
+  if (u.includes("youtube.googleapis.com/youtube/v3/videos")) {
+    return jsonRes({ items: [{ id: "vid1", snippet: { title: "Bangkok Hospital - Health Destination" } }] });
+  }
   if (u.includes("sheets.googleapis.com")) {
     /**
      * Web appointments batchGet. Six aligned single-column ranges plus the
