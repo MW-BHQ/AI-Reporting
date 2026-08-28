@@ -264,7 +264,15 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
    * Monthly Reports components that HAVE been migrated, so they cannot drift
    * back; extend the list as other areas move over.
    */
-  const SCOPED = /^\s*\.(slide-title|note|stat|mini|cbc|cbc-\w+|card-title|cb-\w+|lang-tab|clang-tab)\b|^\s*table\{/;
+  /**
+   * APP CHROME joined the scale in v3.134.0 — brand, nav, rail footer, AI badge.
+   *
+   * It was left out originally because the scale stopped at 11px and the rail
+   * genuinely uses 10px micro-labels, so there was nothing to migrate TO. Adding
+   * `--text-3xs` closed that gap; these selectors are now enforced, because the
+   * rail is the one place a stray px is least likely to be noticed by eye.
+   */
+  const SCOPED = /^\s*\.(slide-title|note|stat|mini|cbc|cbc-\w+|card-title|cb-\w+|lang-tab|clang-tab|brand-name|brand-sub|nav-label|nav-group|nav-item|ai-badge|rail-foot)\b|^\s*table\{/;
   /**
    * @media blocks are skipped by tracking brace depth, not by testing the line
    * for "@media" — the overrides live INSIDE the block, on lines that never

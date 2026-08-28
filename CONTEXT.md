@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.133.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.134.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,38 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.134.0 — app chrome joins the rem type scale (1 of 5 groups).**
+
+Deliberately ONE group, not all 81 selectors. Each hard-coded size is a possible
+layout shift, and if the header moves 2px after a single 81-change release there
+is no way to know which change did it.
+
+**WHY THE CHROME WAS NEVER MIGRATED: the scale had no bottom step.** The rail
+genuinely uses 10px micro-labels and the scale stopped at 11px, so there was
+nothing to migrate TO — the previous pass quietly skipped it rather than round
+every label up. Added `--text-3xs: .625rem` (10px), and the eight selectors went
+over cleanly.
+
+Migrated: `.brand-name`, `.brand-sub`, `.nav-label`, `.nav-group`, `.nav-item`,
+`.ai-badge`, `.rail-foot .k`, `.rail-foot .v`.
+
+**Snapping moves five sizes by half a pixel** — brand-name, brand-sub and
+nav-group down; nav-item and ai-badge up. Inside the fixed-width rail the choice
+was to prefer rounding DOWN, since the failure mode there is a wrapped label. The
+tight case is "Topic Explorer" plus the AI badge: ~130px of content in ~152px of
+space, so ~22px of headroom against a change worth ~4px.
+
+`type:scale` now enforces these selectors. Verified by reintroducing
+`font-size:10px` on `.nav-label` and confirming the rule fails — the rail is the
+one place a stray px is least likely to be caught by eye, so the rule needed to
+be known to bite rather than assumed to.
+
+**REMAINING GROUPS, in the order agreed with MW** (tables last, they are the ones
+that can actually break a layout): header/controls (`h1`, `.subtitle`,
+`.seg button`, `.dates input`, `.btn`, `.status`) → funnel/stages (`.stage-*`,
+`.seg-val`, `.card h2`) → Monthly Reports leftovers (`.mr-*`) → tables and pills
+(`th`, `tr.grp td`, `.pill`, `.legend`, `.af*`).
 
 **v3.133.0 — Chat Bubble click source RESOLVED (MW): the ten-channel figure.**
 

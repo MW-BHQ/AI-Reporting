@@ -25,6 +25,7 @@
      * Tailwind's `base`; the smaller steps carry the dense table and note text
      * that genuinely needs to be smaller than body copy.
      */
+    --text-3xs:.625rem;   /* 10px  — rail micro-labels, nav badges         */
     --text-2xs:.6875rem;  /* 11px  — dense table meta, axis labels        */
     --text-xs:.75rem;     /* 12px  — notes, captions, card sub-lines      */
     --text-sm:.875rem;    /* 14px  — table cells, secondary copy          */
@@ -103,24 +104,24 @@
   .brand{display:flex;flex-direction:column;gap:12px;padding:2px 8px 0;}
   .brand-logo{width:150px;height:auto;display:block;}
   .brand-app{padding-top:11px;border-top:1px solid var(--line);}
-  .brand-name{font-weight:600;font-size:14.5px;line-height:1.15;}
-  .brand-sub{font-size:10.5px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;}
+  .brand-name{font-weight:600;font-size:var(--text-sm);line-height:1.15;}
+  .brand-sub{font-size:var(--text-3xs);color:var(--muted);letter-spacing:.04em;text-transform:uppercase;}
 
   /* The nav scrolls on short screens; brand and footer stay put. Without
      min-height:0 a flex child refuses to shrink and the list is clipped
      instead of scrolling. */
   .nav{display:flex;flex-direction:column;gap:4px;flex:none;}
-  .nav-label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:0 10px 6px;}
+  .nav-label{font-size:var(--text-3xs);letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:0 10px 6px;}
   .nav-sep{height:1px;background:var(--line);margin:7px 10px;}
   /* "Meta Ads" is a heading, not a destination — no data-view, so the click
      handler ignores it. */
-  .nav-group{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);
+  .nav-group{font-size:var(--text-3xs);letter-spacing:.08em;text-transform:uppercase;color:var(--faint);
     padding:8px 10px 3px;font-weight:600;}
   .nav-item.sub{margin-left:12px;}
   .nav-item{
     display:flex;align-items:center;gap:11px;
     padding:10px 12px;border-radius:var(--r-sm);cursor:pointer;
-    color:var(--ink-2);font-size:13.5px;font-weight:500;
+    color:var(--ink-2);font-size:var(--text-sm);font-weight:500;
     border:1px solid transparent;transition:.16s;
   }
   .nav-item:hover{background:var(--glass-2);color:var(--ink);}
@@ -136,14 +137,14 @@
   .ai-badge{
     margin-left:auto;flex:none;
     padding:1px 6px;border-radius:20px;
-    font-size:9.5px;font-weight:700;letter-spacing:.04em;
+    font-size:var(--text-3xs);font-weight:700;letter-spacing:.04em;
     background:var(--violet-soft);color:var(--violet);
   }
   .nav-item.active .ai-badge{background:var(--violet);color:#fff;}
 
   .rail-foot{flex:none;margin-top:18px;padding:12px;border-radius:var(--r-sm);background:var(--glass-2);border:1px solid var(--line);}
-  .rail-foot .k{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);}
-  .rail-foot .v{font-size:12px;color:var(--ink-2);margin-top:3px;}
+  .rail-foot .k{font-size:var(--text-3xs);text-transform:uppercase;letter-spacing:.08em;color:var(--faint);}
+  .rail-foot .v{font-size:var(--text-xs);color:var(--ink-2);margin-top:3px;}
 
   /* ---------------- main ---------------- */
   .main{flex:1;min-width:0;padding:26px 30px 60px;}
@@ -6075,7 +6076,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.133.0';
+const CLIENT_BUILD = '3.134.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
