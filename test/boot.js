@@ -223,25 +223,40 @@ function reportFixture() {
      * A blank title must fall back to the video id.
      */
     /**
-     * YouTube, from the Studio export (v3.130.0). Deliberately MISSING likes
-     * and comments, because that is the state of MW's real export — the slide
-     * must omit those cards rather than render zeros, and the footnote must
-     * name them. Also deliberately STALE: `covered` ends before the report
-     * period, so the freshness warning has to render.
+     * YouTube, from the two-tab Studio export sheet (v3.131.0). Uses MW's REAL
+     * July 2026 figures against real June and July-2025 baselines, so the MoM
+     * and YoY signs on the slide are checkable by hand: views ROSE 238% YoY and
+     * FELL 10% MoM, and likes fell on both — a fixture where every arrow points
+     * the same way proves nothing about which arrow is drawn.
+     *
+     * Deliberately MISSING `comments`, which is the state of an export where
+     * that metric was not switched on: no card, and the gap named in the note.
+     * Also deliberately 4 days short of the month, so the 500-row-cap warning
+     * has to render.
      */
     youtube: { available: true, source: "studio-export",
-      totals: { views: 1104891, hoursWatched: 15304, shares: 1372,
-        subsNet: 356, likes: null, comments: null },
-      present: ["views", "hoursWatched", "shares", "subsNet"],
-      missing: ["likes", "comments"],
-      covered: { from: "2026-06-01", to: "2026-06-30" }, stale: true,
-      series: { metric: "Shares", rows: [
-        { d: "2026-06-01", v: 37 }, { d: "2026-06-02", v: 40 }] },
+      totals: { days: 27, views: 1104891, hoursWatched: 15304, likes: 1482,
+        comments: null, shares: 1372, subsNet: 356 },
+      prev: { days: 30, views: 1226936, hoursWatched: 14341, likes: 2514,
+        comments: null, shares: 1371, subsNet: 329 },
+      yoy: { days: 31, views: 326677, hoursWatched: 5295, likes: 2391,
+        comments: null, shares: 1286, subsNet: 472 },
+      mom: { views: -0.0995, hoursWatched: 0.0671, likes: -0.4104,
+        comments: null, shares: 0.0007, subsNet: 0.0821 },
+      yoyChange: { views: 2.3823, hoursWatched: 1.8903, likes: -0.3802,
+        comments: null, shares: 0.0668, subsNet: -0.2458 },
+      present: ["views", "likes", "shares", "subsNet", "hoursWatched"],
+      missing: ["comments"],
+      covered: { from: "2025-01-01", to: "2026-07-31" }, stale: false,
+      expectedDays: 31, foundDays: 27, dayGaps: 4,
+      videosMonth: "2026-07",
+      series: { metric: "Views", rows: [
+        { d: "2026-07-01", v: 33000 }, { d: "2026-07-02", v: 35500 }] },
       videos: { rows: [
         { id: "v1", title: "Bangkok Hospital - Health Destination", views: 244087,
-          hours: 10000, shares: 268, likes: null, comments: null },
-        { id: "v2", title: "", views: 224511, hours: 8000, shares: 93,
-          likes: null, comments: null }] } },
+          hours: 495, shares: 2, likes: 1, comments: null },
+        { id: "v2", title: "", views: 224511, hours: 4939, shares: 1,
+          likes: 0, comments: null }] } },
     chatBubble: { available: true,
       events: [{ name: "click", clicks: 15600 }],
       unmapped: [{ key: "chat-bubble-channel-unknown https://example.com", clicks: 12 }],
@@ -886,7 +901,7 @@ setTimeout(() => {
           .find(sl => /^YOUTUBE$/i.test(((sl.querySelector(".slide-title span") || {}).textContent || "")
             .replace(/BHQ/g, "").trim()));
         const body = (yt || root).textContent;
-        for (const want of ["Views", "Shares", "Subscribers"]) {
+        for (const want of ["Views", "Shares", "Subscribers", "MoM", "YoY"]) {
           if (!body.includes(want)) return fail("youtube", `missing "${want}"`);
         }
         if (!/\bv2\b/.test(top.textContent)) {
@@ -898,19 +913,33 @@ setTimeout(() => {
          * is the 400-days-of-zeros failure in miniature: a metric nobody
          * exported showing as `0` reads as "nobody liked anything this month".
          */
-        if (/\bLikes\b/.test(body) && !/Not in this export/.test(body)) {
-          return fail("youtube", "a Likes card rendered for a metric not in the export");
+        if (/\bComments\b/.test(body) && !/Not in this export/.test(body)) {
+          return fail("youtube", "a Comments card rendered for a metric not in the export");
         }
-        if (!/Not in this export/.test(body) || !/likes/.test(body)) {
-          return fail("youtube", "missing metrics are not named on the slide");
+        if (!/Not in this export/.test(body) || !/comments/.test(body)) {
+          return fail("youtube", "the missing metric is not named on the slide");
         }
         /**
          * The freshness warning. A pasted sheet cannot announce that nobody
          * pasted this month, so a file whose coverage misses the report period
          * has to say so ON THE SLIDE.
          */
-        if (!/out of date/i.test(body)) {
-          return fail("youtube", "a stale export did not raise the freshness warning");
+        /**
+         * THE 500-ROW CAP WARNING. `dayGaps` means the export was pasted but
+         * came back short, which is a different fault from nobody pasting at
+         * all — and both otherwise read as a soft month.
+         */
+        if (!/days are missing/i.test(body)) {
+          return fail("youtube", "a short export did not raise the day-gap warning");
+        }
+        /**
+         * MoM AND YoY MUST NOT BOTH BE POSITIVE HERE. Views fell 10% MoM and
+         * rose 238% YoY on the real July figures, so a renderer that pointed
+         * every arrow one way, or crossed the two windows, would pass a
+         * same-sign fixture and fail this one.
+         */
+        if (!/\bup\b/.test((yt || root).innerHTML) || !/\bdown\b/.test((yt || root).innerHTML)) {
+          return fail("youtube", "MoM and YoY did not render opposite directions");
         }
         /**
          * The amber `apiError` card is GONE (v3.129.0) along with the API path
@@ -918,7 +947,7 @@ setTimeout(() => {
          */
         /not connected/i.test(body)
           ? fail("youtube", "the removed apiError card is rendering again")
-          : ok("youtube", "2 slides, absent metrics omitted + named, stale warned, id fallback");
+          : ok("youtube", "2 slides, MoM+YoY opposite signs, day-gap warned, absent metric named");
       })();
       finish();
     }, 500);

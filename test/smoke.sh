@@ -198,38 +198,38 @@ expect_field "rf ai by channel"    "$REPORT" "d.referral.byBrand[0].ai.rows.some
 # Per-assistant event columns need per-assistant counts.
 expect_field "rf ai per-row events" "$REPORT" "d.referral.byBrand[0].ai.rows.every(r=>r.events&&typeof r.events==='object')?'ok':undefined"
 
-echo "--- monthly report: YouTube (Studio export) ---"
+echo "--- monthly report: YouTube (Studio export, Daily + Videos) ---"
 YT="d.youtube"
 expect_field "yt available"        "$REPORT" "$YT.available===true?'ok':undefined"
 expect_field "yt source"           "$REPORT" "$YT.source==='studio-export'?'ok':undefined"
-# Studio's OWN Total row, not a sum of the body. The table is truncated to the
-# top videos, so summing understates the channel by the whole long tail: the
-# fixture's body rows total 1,978 views against a real channel total of 1,104,891.
-expect_field "yt uses total row"   "$REPORT" "$YT.totals.views===1104891?1104891:undefined"
-# LIKES, NOT DISLIKES. `Dislikes` (-1) sits immediately before `Likes` (1482) in
-# the real export; a loose header match reads the wrong one and the sign is the
-# only clue. Comments arrive as "Comments added".
-expect_field "yt likes not dislikes" "$REPORT" "$YT.totals.likes===1482?1482:undefined"
-expect_field "yt comments prefix"  "$REPORT" "$YT.totals.comments===24?24:undefined"
-expect_field "yt shares by name"   "$REPORT" "$YT.totals.shares===1372?1372:undefined"
-# Subscribers is already NET in this export; gained/lost are NOT separable and
-# must not be invented.
-expect_field "yt subs net only"     "$REPORT" "($YT.totals.subsNet===356&&$YT.totals.subsGained===undefined)?'ok':undefined"
+# Report window is 3 fixture days: 100+200+700.
+expect_field "yt window sum"       "$REPORT" "$YT.totals.views===1000?1000:undefined"
+# LIKES, NOT DISLIKES. `Dislikes` sits immediately before `Likes` in the real
+# export; 1+2+7=10 for likes against 3+2+1=6 for dislikes, so a wrong match is
+# not merely close. `Comments added` must resolve via the prefix rule.
+expect_field "yt likes not dislikes" "$REPORT" "$YT.totals.likes===10?10:undefined"
+expect_field "yt comments prefix"  "$REPORT" "$YT.totals.comments===3?3:undefined"
+# A Total row has no parseable date and must never be summed with its own days.
+expect_field "yt total row dropped" "$REPORT" "$YT.totals.shares===15?15:undefined"
 # Watch time is HOURS in the header and must not be divided again.
-expect_field "yt hours not minutes" "$REPORT" "$YT.totals.hoursWatched===15304?15304:undefined"
-# Present/missing is what drives the slide. Everything is exported here.
-expect_field "yt nothing missing"  "$REPORT" "$YT.missing.length===0?'ok':undefined"
-# THE DAILY CHART WAS ON DISLIKES in the real file. It must be rejected rather
-# than plotted, and named so it can be fixed at source.
-expect_field "yt rejects dislikes" "$REPORT" "($YT.series.metric===null&&/Dislikes/i.test($YT.series.rejected||''))?'ok':undefined"
-expect_field "yt no bad series"    "$REPORT" "$YT.series.rows.length===0?'ok':undefined"
-# Coverage is read from the DATES, so it survives an unusable metric — the
-# freshness check must not depend on which metric someone plotted.
-expect_field "yt coverage dates"   "$REPORT" "($YT.covered.from==='2026-06-30'&&$YT.covered.to==='2026-07-31')?'ok':undefined"
+expect_field "yt hours not minutes" "$REPORT" "$YT.totals.hoursWatched===100?100:undefined"
+# MoM and YoY are the point of the Daily tab. prev=500 views, yoy=250.
+expect_field "yt mom views"        "$REPORT" "Math.abs($YT.mom.views-1)<1e-9?'ok':undefined"
+expect_field "yt yoy views"        "$REPORT" "Math.abs($YT.yoyChange.views-3)<1e-9?'ok':undefined"
+# 2026-05-20 is outside all three windows and must count in none of them.
+expect_field "yt out of window"    "$REPORT" "($YT.prev.views===500&&$YT.yoy.views===250)?'ok':undefined"
+# THE 500-ROW CAP GUARD. 3 of 31 days present, so 28 are missing and the slide
+# must be able to say so — a short export otherwise reads as a soft month.
+expect_field "yt day gaps"         "$REPORT" "($YT.expectedDays===31&&$YT.foundDays===3&&$YT.dayGaps===28)?'ok':undefined"
+# Coverage is read from the file, not from the report range.
+expect_field "yt coverage"         "$REPORT" "($YT.covered.from==='2025-07-05'&&$YT.covered.to==='2026-07-31')?'ok':undefined"
 expect_field "yt not stale"        "$REPORT" "$YT.stale===false?'ok':undefined"
-# Top videos sorted by views, and a blank title keeps its id.
-expect_field "yt top sorted"       "$REPORT" "$YT.videos.rows[0].id==='3meNRTjyrRQ'?'ok':undefined"
-expect_field "yt total row hidden" "$REPORT" "$YT.videos.rows.every(v=>v.id!=='Total')?'ok':undefined"
+# Videos are matched on the hand-added Month column, written by Studio as a DATE.
+# The June row has the highest views in the fixture, so a missing month filter
+# puts it top of a July report.
+expect_field "yt videos month"     "$REPORT" "$YT.videos.rows.every(v=>v.id!=='junevid')?'ok':undefined"
+expect_field "yt videos sorted"    "$REPORT" "$YT.videos.rows[0].id==='v1'?'ok':undefined"
+expect_field "yt video blank title" "$REPORT" "($YT.videos.rows.find(v=>v.id==='v2')||{}).title===''?'ok':undefined"
 
 echo "--- audiences field integrity (a dropped Windsor field must fail here) ---"
 CAMPD="/api/campaign?code=260701-08&from=$FROM&to=$TO"
@@ -373,7 +373,7 @@ SRV=$!
 sleep 2.5
 expect_field "yt source is export"   "$REPORT" "d.youtube.source==='studio-export'?'ok':undefined"
 expect_field "yt secrets are inert"  "$REPORT" "d.youtube.apiError===undefined?'ok':undefined"
-expect_field "yt has data"           "$REPORT" "d.youtube.totals.views===1104891?1104891:undefined"
+expect_field "yt has data"           "$REPORT" "d.youtube.totals.views===1000?1000:undefined"
 
 echo "--- degradation: one source failing must not 500 ---"
 kill $SRV 2>/dev/null; wait $SRV 2>/dev/null

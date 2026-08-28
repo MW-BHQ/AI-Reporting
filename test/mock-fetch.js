@@ -682,51 +682,51 @@ global.fetch = async (url, opts = {}) => {
      * that must not be averaged in.
      */
     /**
-     * YouTube: a YouTube Studio export, modelled on MW's REAL July 2026 file
-     * rather than on numbers we invented. The real export is what caught the
-     * two traps below, and a tidy fixture would have hidden both.
+     * YouTube: the two-tab sheet MW maintains — Studio's DATE view in `Daily`
+     * and its CONTENT view in `Videos`. Headers and column order are copied from
+     * the real file; the values are small and distinctive so the three windows
+     * can be told apart by eye.
      *
-     *   - COLUMN ORDER IS STUDIO'S, NOT OURS. `Shares` sits at index 7, BEFORE
-     *     `Views` at 8. Three real exports from the same channel came back with
-     *     three different column orders, so anything reading by position must
-     *     fail here rather than in production.
-     *   - `Dislikes` SITS IMMEDIATELY BEFORE `Likes`, and the comments column is
-     *     named `Comments added`. That pair is the whole reason the header match
-     *     is exact-first-then-prefix: a bare prefix match on "likes" is fine,
-     *     but a loose `includes` would read Dislikes (-1) as Likes (1482).
-     *   - THE DAILY TAB IS ON `Dislikes`, which is a real export MW produced.
-     *     A negative series must be REJECTED for the trend chart and named as a
-     *     process note, not plotted.
-     *   - `Total` IS STUDIO'S OWN ROW and must be used rather than summing the
-     *     body, because the table is truncated to the top videos. Its views
-     *     (1,104,891) are deliberately far larger than the body rows sum, so a
-     *     summing implementation reports a visibly wrong total.
-     *   - A video with a BLANK TITLE must fall back to its id.
-     *   - The daily tab carries ONE metric, named in its header, plus a row
-     *     dated OUTSIDE the month that must still be read (coverage is computed
-     *     from the file, not filtered to the report range).
+     * SIX TRAPS, every one of them from something a real export actually did:
+     *   - `Dislikes` sits IMMEDIATELY BEFORE `Likes`, and comments are named
+     *     `Comments added`. A loose `includes` match reads Dislikes as Likes.
+     *   - Column order is Studio's, not ours: Subscribers first, Views seventh.
+     *   - A `Total` row with no parseable date must DROP OUT rather than be
+     *     summed alongside the days it totals.
+     *   - A row OUTSIDE all three windows (2026-05-20) must count in none.
+     *   - The report window holds only 3 of 31 days, so `dayGaps` must be 28 —
+     *     this is Studio's 500-row cap, which drops the quietest days silently.
+     *   - `Videos` carries TWO months and the June rows must not appear in a
+     *     July report; the `Month` cell is a DATE, as Studio writes it.
+     *
+     * Window arithmetic follows comparisonWindows(2026-07-01, 2026-07-31):
+     * 31 days, prev = 2026-05-31..2026-06-30, yoy = 2025-07-01..2025-07-31.
      */
-    if (u.includes("Table%20data") || u.includes("Table data")) {
+    if (u.includes("Daily") && u.includes("Videos")) {
       const R = (rows) => ({ values: rows });
       return jsonRes({ valueRanges: [
         R([
-          ["Content", "Video title", "Video publish time", "Duration", "Dislikes",
-           "Likes", "Comments added", "Shares", "Views", "Watch time (hours)",
-           "Subscribers", "Estimated revenue (THB)", "Average view duration",
-           "Thumbnail impressions", "Thumbnail click-through rate (%)"],
-          ["Total", "", "", "", "-1", "1482", "24", "1372", "1104891", "15303.9761",
-           "356", "0", "0:01:08", "803964", "4.66"],
-          ["o9BarpK2djY", "\u0e42\u0e23\u0e04\u0e15\u0e48\u0e2d\u0e21", "Jun 2, 2022", "773",
-           "1", "4", "0", "2", "198", "21.2538", "1", "", "0:06:26", "1526", "6.23"],
-          ["3meNRTjyrRQ", "", "Mar 13, 2015", "96",
-           "1", "8", "0", "93", "1780", "30.6314", "8", "", "0:01:01", "12673", "8.36"],
+          ["Date", "Subscribers", "Likes", "Dislikes", "Shares", "Comments added",
+           "Views", "Watch time (hours)", "Average view duration"],
+          ["Total", "999", "999", "999", "999", "999", "999", "999", "0:01:31"],
+          ["2026-05-20", "9", "9", "9", "9", "9", "9", "9", "0:00:09"],
+          ["2025-07-05", "1", "5", "4", "3", "2", "250", "25", "0:01:00"],
+          ["2026-06-15", "2", "20", "8", "10", "1", "500", "50", "0:01:10"],
+          ["2026-07-01", "1", "1", "3", "5", "0", "100", "10", "0:00:40"],
+          ["2026-07-02", "1", "2", "2", "5", "0", "200", "20", "0:00:41"],
+          ["2026-07-31", "1", "7", "1", "5", "3", "700", "70", "0:00:42"],
         ]),
         R([
-          ["Date", "Dislikes"],
-          ["2026-06-30", "-1"],
-          ["2026-07-01", "-3"],
-          ["2026-07-02", "-2"],
-          ["2026-07-31", "0"],
+          ["Month", "Content", "Video title", "Video publish time", "Duration",
+           "Dislikes", "Likes", "Comments added", "Shares", "Views",
+           "Watch time (hours)", "Subscribers", "Estimated revenue (THB)",
+           "Average view duration", "Thumbnail impressions", "Thumbnail click-through rate (%)"],
+          ["2026-06-01", "junevid", "A June video", "Jan 1, 2026", "60",
+           "0", "9", "1", "4", "999999", "900", "3", "", "0:01:00", "500", "3.0"],
+          ["2026-07-01", "v1", "Bangkok Hospital - Health Destination", "Mar 2, 2026", "310",
+           "0", "1", "0", "2", "244087", "495", "0", "", "0:00:07", "507", "3.35"],
+          ["2026-07-01", "v2", "", "Apr 3, 2026", "161",
+           "0", "0", "0", "1", "224511", "4939", "0", "", "0:02:02", "265", "1.13"],
         ]),
       ] });
     }

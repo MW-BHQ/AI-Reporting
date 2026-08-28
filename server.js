@@ -4230,164 +4230,183 @@ const YT_SHEET_ID = process.env.YT_SHEET_ID || "1o0n44IioDyEvAlNt_Tf11SxD11mDpkz
 
 
 /**
- * YOUTUBE, from a YouTube Studio export pasted into a Sheet (v3.130.0).
+ * YOUTUBE, from two YouTube Studio exports pasted into one Sheet (v3.131.0).
  *
- * WHY THIS SHAPE. The Apps Script and the OAuth API both failed for the same
- * reason: the channel is a BRAND ACCOUNT, and neither an unattended script nor
- * a server can BE that identity. A human in a browser can — the account picker
- * in Studio is the only door that opens. So a person exports and pastes, and
- * this reads what Studio actually writes rather than a shape of our choosing.
+ * WHY A HUMAN IS THE CREDENTIAL. The channel is a Brand Account. Apps Script
+ * and the server both run as a FIXED identity and can only ask about the
+ * identity they are — which is why the old job returned 398 days of zeros while
+ * reporting success. A browser shows an account picker, so a person can BE the
+ * brand account for the length of one export. It is the only door that opens.
  *
- * COLUMNS ARE READ BY NAME, NEVER BY POSITION. Two real exports from the same
- * channel came back with DIFFERENT column orders — the first had no `Shares`
- * at all, the second had it in position 5. Position-based reading would have
- * silently reported watch time as shares the first month a metric was added.
- * `col()` resolves a header name to an index; a metric that is absent is
- * reported as absent rather than read as zero.
+ * TWO TABS, TWO STUDIO VIEWS:
+ *   `Daily`  — Studio's DATE view: one row per day with every metric. This is
+ *              what makes MoM and YoY possible, and it is why the Content view
+ *              alone was not enough.
+ *   `Videos` — Studio's CONTENT view for one month, with a `Month` column added
+ *              by hand. Content exports carry NO date of their own, so without
+ *              that column June's report would happily show July's videos.
  *
- * WHICH METRICS ARRIVE IS THE EXPORTER'S CHOICE, not ours. Studio only writes
- * the metrics that are switched on when the button is pressed, so `present` and
- * `missing` travel on the payload and the slide renders what exists. Adding
- * Likes and Comments to the export makes two more cards appear with NO code
- * change; that is the point of doing it this way.
+ * COLUMNS ARE READ BY NAME. Four real exports came back with four different
+ * column orders as metrics were switched on and off. `col()` is
+ * exact-match-then-prefix, which is what separates `Likes` from `Dislikes`
+ * sitting immediately before it, and still resolves `Comments added` and
+ * `Watch time (hours)`.
  *
- * ZERO IS NOT THE SAME AS ABSENT. A metric that is missing from the export
- * must never render as `0` — a real zero is a finding and a missing column is
- * a process problem, and the previous design conflated them for 400 days.
+ * STUDIO TRUNCATES EVERY TABLE TO 500 ROWS and keeps the TOP 500 by the sorted
+ * metric — the last row literally reads "Showing top 500 results". A 577-day
+ * range therefore loses its 76 quietest days with no error, so `dayGaps` counts
+ * the days actually present against the days the window should contain and the
+ * slide says so. This is the only way a too-wide export announces itself.
  */
 async function buildYouTube(from, to) {
-  const res = await sheetBatchGet(YT_SHEET_ID, [
-    "'Table data'!A1:Z", "'Totals'!A1:B",
-  ]);
+  const res = await sheetBatchGet(YT_SHEET_ID, ["'Daily'!A1:Z", "'Videos'!A1:Z"]);
   const vals = (i) => (res[i] && res[i].values) || [];
-  const table = vals(0), totals = vals(1);
-  if (!table.length) return { available: false, source: "studio-export" };
+  const daily = vals(0), vids = vals(1);
+  if (!daily.length) return { available: false, source: "studio-export" };
 
-  /**
-   * Header lookup, trimmed and case-insensitive. Studio's names carry units
-   * ("Watch time (hours)"), so a prefix match is used rather than equality —
-   * but anchored at the start, so "Views" cannot match "Thumbnail impressions"
-   * and "Watch time (hours)" survives a rename to "Watch time (minutes)"
-   * being noticed by the unit check below rather than read as hours.
-   */
-  const head = (table[0] || []).map((h) => String(h || "").trim().toLowerCase());
-  const col = (name) => {
+  const headOf = (rows) => (rows[0] || []).map((h) => String(h || "").trim().toLowerCase());
+  const colOf = (head) => (name) => {
     const want = name.toLowerCase();
     const exact = head.indexOf(want);
     if (exact >= 0) return exact;
     const pfx = head.findIndex((h) => h.startsWith(want));
     return pfx >= 0 ? pfx : -1;
   };
-  const cViews = col("views"), cHours = col("watch time");
-  const cShares = col("shares"), cSubs = col("subscribers");
-  const cLikes = col("likes"), cComments = col("comments");
-  const cId = col("content"), cTitle = col("video title");
 
+  const dHead = headOf(daily), dCol = colOf(dHead);
+  const cDate = dCol("date");
+  const M = {
+    views: dCol("views"),
+    likes: dCol("likes"),
+    comments: dCol("comments"),
+    shares: dCol("shares"),
+    subsNet: dCol("subscribers"),
+    hoursWatched: dCol("watch time"),
+  };
   /**
-   * WATCH TIME UNITS ARE VERIFIED, not assumed. Studio can export this column
-   * as hours or minutes depending on the view, and the two differ by 60x — a
-   * silent unit swap would put an extra zero on an executive slide. If the
-   * header does not say "hours", the metric is dropped rather than guessed.
+   * WATCH TIME UNITS ARE VERIFIED, not assumed. Studio exports this column as
+   * hours or minutes depending on the view and they differ by 60x, which is an
+   * extra zero on an executive slide. If the header does not say "hours" the
+   * metric is dropped rather than guessed.
    */
-  const hoursAreHours = cHours >= 0 && head[cHours].includes("hour");
-
-  const num = (r, c) => (c >= 0 ? n(r[c]) : 0);
-  /**
-   * The Total row is Studio's own, not ours to recompute. Using it rather than
-   * summing the rows matters because the table is TRUNCATED to the top videos
-   * — summing would understate the channel by whatever the long tail holds.
-   */
-  const totalRow = table.slice(1).find((r) => String(r[cId] || "").trim().toLowerCase() === "total");
-  const body = table.slice(1).filter((r) => r !== totalRow && String(r[cId] || "").trim());
-  const src = totalRow || null;
+  if (M.hoursWatched >= 0 && !dHead[M.hoursWatched].includes("hour")) M.hoursWatched = -1;
 
   const present = [], missing = [];
-  const mark = (key, ok) => { (ok ? present : missing).push(key); return ok; };
-  const hasViews = mark("views", cViews >= 0);
-  const hasHours = mark("hoursWatched", hoursAreHours);
-  const hasShares = mark("shares", cShares >= 0);
-  const hasSubs = mark("subsNet", cSubs >= 0);
-  const hasLikes = mark("likes", cLikes >= 0);
-  const hasComments = mark("comments", cComments >= 0);
+  for (const k of Object.keys(M)) (M[k] >= 0 ? present : missing).push(k);
 
-  const totalsOut = {
-    views: hasViews && src ? num(src, cViews) : null,
-    hoursWatched: hasHours && src ? Math.round(num(src, cHours)) : null,
-    shares: hasShares && src ? num(src, cShares) : null,
-    /**
-     * Studio's "Subscribers" is already NET. Gained and lost are not separable
-     * from this export, so they are not reported — the old slide's three-up
-     * Gained / Lost / Net card cannot be rebuilt from this source and claiming
-     * otherwise would mean inventing two of the three numbers.
-     */
-    subsNet: hasSubs && src ? num(src, cSubs) : null,
-    likes: hasLikes && src ? num(src, cLikes) : null,
-    comments: hasComments && src ? num(src, cComments) : null,
+  /**
+   * Rows are indexed by date so the three windows are three lookups rather than
+   * three passes. A `Total` row, if someone leaves one in, has no parseable date
+   * and drops out here — it must never be summed alongside the days it totals.
+   */
+  const byDate = new Map();
+  for (const r of daily.slice(1)) {
+    const d = apptDay(r[cDate]);
+    if (d) byDate.set(d, r);
+  }
+  const allDates = [...byDate.keys()].sort();
+
+  const cw = comparisonWindows(from, to);
+  const sumWindow = (a, b) => {
+    const out = { days: 0 };
+    for (const k of Object.keys(M)) out[k] = M[k] >= 0 ? 0 : null;
+    for (const [d, r] of byDate) {
+      if (d < a || d > b) continue;
+      out.days += 1;
+      for (const k of Object.keys(M)) if (M[k] >= 0) out[k] += n(r[M[k]]);
+    }
+    if (out.hoursWatched !== null) out.hoursWatched = Math.round(out.hoursWatched);
+    return out;
+  };
+  const cur = sumWindow(from, to);
+  const prev = sumWindow(cw.prev.from, cw.prev.to);
+  const yoy = sumWindow(cw.yoy.from, cw.yoy.to);
+
+  /**
+   * CHANGE IS null WHEN THE BASELINE IS ABSENT, not zero and not 100%.
+   *
+   * A month with no rows in the sheet is "we have not got that data", which is
+   * a different statement from "it was zero and has grown infinitely". Reporting
+   * the second as the first is how a partially-backfilled sheet produces a
+   * slide full of triumphant growth.
+   */
+  const pctOf = (a, b, hasBase) => (hasBase && b ? (a - b) / b : null);
+  const deltas = (base, baseDays) => {
+    const out = {};
+    for (const k of Object.keys(M)) {
+      out[k] = (M[k] >= 0 && baseDays) ? pctOf(cur[k], base[k], true) : null;
+    }
+    return out;
   };
 
   /**
-   * DAILY SERIES: whatever single metric the exporter had on the chart. Studio
-   * writes one metric to the Totals tab, and which one is not our choice, so
-   * the metric NAME is carried and the chart is labelled from it. A series
-   * labelled from a guess is worse than a series labelled from the file.
+   * DAY-COUNT GUARD. Studio's 500-row cap silently drops the quietest days, so
+   * a window that should hold 31 days and holds 28 is under-reported by three
+   * days nobody asked about. Counted, not trusted.
    */
-  const sHead = (totals[0] || []).map((h) => String(h || "").trim());
-  const rawMetric = sHead.length > 1 ? sHead[1] : null;
-  /**
-   * THE DAILY METRIC IS ALLOWLISTED, because "whatever was on the chart" is not
-   * always presentable. A real export arrived with the chart set to DISLIKES —
-   * a negative series, on an executive slide, labelled correctly and still
-   * useless. An unexpected metric is reported as a fixable process note rather
-   * than plotted; the number is not wrong, it is the wrong number to show.
-   */
-  const SERIES_OK = ["views", "watch time", "shares", "likes", "subscribers"];
-  const metricOk = !!rawMetric
-    && SERIES_OK.some((m) => rawMetric.toLowerCase().startsWith(m));
-  const seriesMetric = metricOk ? rawMetric : null;
-  const seriesRejected = metricOk ? null : rawMetric;
-  const seriesRows = totals.slice(1)
-    .map((r) => ({ d: apptDay(r[0]), v: n(r[1]) }))
-    .filter((r) => r.d)
-    .sort((a, b) => a.d.localeCompare(b.d));
+  const expected = cw.days;
+  const dayGaps = Math.max(0, expected - cur.days);
 
   /**
-   * THE WINDOW COMES FROM THE FILE, not from the report's date range.
-   *
-   * This is the freshness guard, and it is the whole lesson of the 400 days of
-   * zeros: a pasted sheet has no way to announce that nobody pasted this month,
-   * so the slide states the range it actually found and whether that range
-   * covers the report period. A stale sheet now looks stale instead of looking
-   * like a quiet month.
+   * COVERAGE COMES FROM THE FILE, not from the report's date range. A pasted
+   * sheet has no way to announce that nobody pasted this month; the slide states
+   * the range it actually found and whether that range reaches the report period.
    */
-  const covered = seriesRows.length
-    ? { from: seriesRows[0].d, to: seriesRows[seriesRows.length - 1].d } : null;
-  // Coverage is read from the dates even when the METRIC is unusable — the
-  // freshness check must not depend on which metric someone happened to plot.
+  const covered = allDates.length
+    ? { from: allDates[0], to: allDates[allDates.length - 1] } : null;
   const stale = !covered || covered.to < from || covered.from > to;
 
-  const videos = body
+  const series = [...byDate.entries()]
+    .filter(([d]) => d >= from && d <= to)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([d, r]) => ({ d, v: M.views >= 0 ? n(r[M.views]) : 0 }));
+
+  /**
+   * TOP VIDEOS for the report month only, matched on the hand-added `Month`
+   * column. Studio may write it as a date (2026-07-01) or someone may type
+   * "2026-07", so both are reduced to a YYYY-MM key — a routine that only works
+   * when the person formats the cell correctly is not a routine.
+   */
+  const monthKey = String(from).slice(0, 7);
+  const vHead = headOf(vids), vCol = colOf(vHead);
+  const vMonth = vCol("month"), vId = vCol("content"), vTitle = vCol("video title");
+  const VM = { views: vCol("views"), hoursWatched: vCol("watch time"),
+    shares: vCol("shares"), likes: vCol("likes"), comments: vCol("comments") };
+  if (VM.hoursWatched >= 0 && !vHead[VM.hoursWatched].includes("hour")) VM.hoursWatched = -1;
+  const mKey = (v) => {
+    const s = String(v == null ? "" : v).trim();
+    const d = apptDay(s);
+    return d ? d.slice(0, 7) : (/^\d{4}-\d{2}/.test(s) ? s.slice(0, 7) : null);
+  };
+  const videoRows = vids.slice(1)
+    .filter((r) => vId >= 0 && String(r[vId] || "").trim()
+      && String(r[vId]).trim().toLowerCase() !== "total"
+      && (vMonth < 0 || mKey(r[vMonth]) === monthKey))
     .map((r) => ({
-      id: String(r[cId] || "").trim(),
-      title: String(cTitle >= 0 ? (r[cTitle] || "") : "").trim(),
-      views: hasViews ? num(r, cViews) : null,
-      hours: hasHours ? Math.round(num(r, cHours)) : null,
-      shares: hasShares ? num(r, cShares) : null,
-      likes: hasLikes ? num(r, cLikes) : null,
-      comments: hasComments ? num(r, cComments) : null,
+      id: String(r[vId]).trim(),
+      title: String(vTitle >= 0 ? (r[vTitle] || "") : "").trim(),
+      views: VM.views >= 0 ? n(r[VM.views]) : null,
+      hours: VM.hoursWatched >= 0 ? Math.round(n(r[VM.hoursWatched])) : null,
+      shares: VM.shares >= 0 ? n(r[VM.shares]) : null,
+      likes: VM.likes >= 0 ? n(r[VM.likes]) : null,
+      comments: VM.comments >= 0 ? n(r[VM.comments]) : null,
     }))
-    .filter((v) => v.id)
     .sort((a, b) => (b.views || 0) - (a.views || 0))
     .slice(0, 10);
 
   return {
     source: "studio-export",
-    available: !!(src || videos.length),
-    totals: totalsOut,
+    available: cur.days > 0 || videoRows.length > 0,
+    totals: cur,
+    prev, yoy,
+    mom: deltas(prev, prev.days),
+    yoyChange: deltas(yoy, yoy.days),
     present, missing,
     covered, stale,
-    series: { metric: seriesMetric, rejected: seriesRejected,
-      rows: metricOk ? seriesRows : [] },
-    videos: { rows: videos },
+    expectedDays: expected, foundDays: cur.days, dayGaps,
+    videosMonth: monthKey,
+    series: { metric: M.views >= 0 ? "Views" : null, rows: series },
+    videos: { rows: videoRows },
   };
 }
 

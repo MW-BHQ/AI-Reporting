@@ -2756,69 +2756,91 @@ function renderReport() {
    */
   const YT = d.youtube || {};
   /**
-   * SCORECARDS ARE BUILT FROM WHAT THE EXPORT CARRIED (v3.130.0).
+   * SCORECARDS CARRY MoM AND YoY (v3.131.0), which is what the `Daily` tab of
+   * date-view rows bought us — the Content view could only ever give one total.
    *
-   * A metric the exporter did not switch on is ABSENT, not zero. Rendering a
-   * missing column as `0` is what let a dead channel look like a quiet month
-   * for 400 days, so a metric with no data gets no card and the footnote names
-   * it instead. Adding Likes and Comments to the Studio export makes two more
-   * cards appear with no code change.
+   * A metric the exporter did not switch on is ABSENT, not zero: no card, and
+   * the footnote names it. Rendering an un-exported metric as `0` is the
+   * 400-days-of-zeros failure in miniature — "nobody liked anything this month"
+   * instead of "nobody exported likes".
    */
   const ytBody = YT.available ? (() => {
     const t = YT.totals || {};
     const has = (k) => (YT.present || []).includes(k) && t[k] !== null && t[k] !== undefined;
+    const mom = YT.mom || {}, yy = YT.yoyChange || {};
+    /**
+     * Both comparisons on one card, each labelled. A single uncoloured
+     * percentage on a hospital deck is unreadable without knowing what it is
+     * measured against, so the tooltips name the window.
+     */
+    const cmp = (k) => `<div class="note" style="margin-top:6px">
+      ${dlt(mom[k], 'MoM \u2014 same length of window, one month back')} MoM
+      &nbsp;&nbsp;${dlt(yy[k], 'YoY \u2014 the same dates one year earlier')} YoY</div>`;
+    /**
+     * Built on the same `stat` markup `kpi()` emits rather than a private set of
+     * class names, so it inherits the rem type scale and cannot drift from every
+     * other scorecard on the deck.
+     */
+    const card = (label, key, value, sub) => `<div class="stat">
+      <div class="lab">${esc(label)}</div>
+      <div class="val">${value}</div>
+      ${sub ? `<div class="sub2">${sub}</div>` : ''}
+      ${cmp(key)}</div>`;
+
     const cards = [];
     if (has('views')) {
-      cards.push(kpi('Views', num(t.views),
+      cards.push(card('Views', 'views', num(t.views),
         has('hoursWatched') ? `${num(t.hoursWatched)} hours watched` : ''));
     }
-    if (has('shares')) cards.push(kpi('Shares', num(t.shares)));
+    if (has('hoursWatched')) cards.push(card('Watch hours', 'hoursWatched', num(t.hoursWatched)));
+    if (has('likes')) cards.push(card('Likes', 'likes', num(t.likes)));
+    if (has('comments')) cards.push(card('Comments', 'comments', num(t.comments)));
+    if (has('shares')) cards.push(card('Shares', 'shares', num(t.shares)));
     if (has('subsNet')) {
-      cards.push(kpi('Subscribers', (t.subsNet >= 0 ? '+' : '') + num(t.subsNet), 'net for the month'));
+      cards.push(card('Subscribers', 'subsNet',
+        (t.subsNet >= 0 ? '+' : '') + num(t.subsNet), 'net for the period'));
     }
-    if (has('likes')) cards.push(kpi('Likes', num(t.likes)));
-    if (has('comments')) cards.push(kpi('Comments', num(t.comments)));
 
     const sr = (YT.series || {}).rows || [];
-    const metric = (YT.series || {}).metric || null;
-    /**
-     * THE FRESHNESS LINE IS NOT DECORATION. A pasted sheet cannot announce that
-     * nobody pasted this month, so the range the file actually covers is stated
-     * on the slide. `stale` means the file does not overlap the report period at
-     * all, which is the one failure this source is prone to.
-     */
     const cov = YT.covered;
-    const freshness = YT.stale
+    /**
+     * TWO DIFFERENT WARNINGS, because they need two different fixes.
+     *
+     * `stale` means nobody pasted a recent export at all. `dayGaps` means the
+     * export WAS pasted but came back short — almost always because the range
+     * spanned more than Studio's 500-row cap, which drops the quietest days
+     * without erroring. Both otherwise read as a soft month.
+     */
+    const warn = YT.stale
       ? `<div class="card mt" style="border-color:#E4B84B">
            <div class="card-title">YouTube data is out of date</div>
-           <div class="note" style="margin-top:0">The export in the sheet covers
-           ${cov ? `${esc(cov.from)} to ${esc(cov.to)}` : 'no dated rows'}, which does not
-           cover this report period. Numbers below are from that older export \u2014 re-export
-           from YouTube Studio for this month.</div>
+           <div class="note" style="margin-top:0">The sheet covers
+           ${cov ? `${esc(cov.from)} to ${esc(cov.to)}` : 'no dated rows'}, which does not reach
+           this report period. Re-export the Date view from YouTube Studio into the
+           <b>Daily</b> tab.</div>
          </div>`
-      : '';
+      : (YT.dayGaps > 0
+        ? `<div class="card mt" style="border-color:#E4B84B">
+             <div class="card-title">${num(YT.dayGaps)} of ${num(YT.expectedDays)} days are missing</div>
+             <div class="note" style="margin-top:0">Every figure below is short by those days.
+             YouTube Studio truncates a table at 500 rows and keeps the busiest, so a range
+             longer than about 16 months loses its quietest days. Export one calendar year at
+             a time into the <b>Daily</b> tab.</div>
+           </div>`
+        : '');
     const gaps = (YT.missing || []).length
       ? `Not in this export: ${esc((YT.missing || []).join(', '))}. Switch those metrics on in
-         YouTube Studio before exporting and they appear here automatically. `
-      : '';
-    /**
-     * A rejected daily metric is a PROCESS note, not an error. One real export
-     * had the chart on Dislikes; naming what to change is more useful than
-     * plotting a negative series or showing an unexplained empty card.
-     */
-    const rej = (YT.series || {}).rejected
-      ? `The export's daily chart was set to ${esc(YT.series.rejected)}, so no trend is shown \u2014
-         set it to Views in YouTube Studio before exporting.`
+         YouTube Studio and they appear here automatically. `
       : '';
     return `
-    ${freshness}
-    <div class="grid g-4" style="margin-bottom:14px">${cards.join('')}</div>
+    ${warn}
+    <div class="grid g-3" style="margin-bottom:14px">${cards.join('')}</div>
     <div class="card">
-      <div class="card-title">${metric ? esc(metric) + ' per day' : 'Daily'}</div>
+      <div class="card-title">Views per day</div>
       ${sr.length > 1
         ? '<div class="chart-wrap" style="height:200px"><canvas id="repYtViews"></canvas></div>'
-        : `<div class="note" style="margin-top:0">${rej || 'The export carried no daily breakdown.'}</div>`}
-      <div class="note">${cov ? `Covers ${esc(cov.from)} to ${esc(cov.to)}. ` : ''}${gaps}${rej}</div>
+        : '<div class="note" style="margin-top:0">No daily rows in this period.</div>'}
+      <div class="note">${cov ? `Sheet covers ${esc(cov.from)} to ${esc(cov.to)}. ` : ''}${gaps}</div>
     </div>`;
   })() : '';
 
@@ -3022,7 +3044,7 @@ function renderReport() {
      */
     if (YT.available && (((YT.series || {}).rows) || []).length > 1) {
       drawChart('repYtViews', YT.series.rows,
-        [{ key:'v', label: YT.series.metric || 'Daily', color:C.b }]);
+        [{ key:'v', label:'Views', color:C.b }]);
     }
   }
 
@@ -5980,7 +6002,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.130.0';
+const CLIENT_BUILD = '3.131.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.130.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.131.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -714,6 +714,67 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.131.0 — YouTube gets MoM and YoY, from two tabs a human maintains.**
+
+`YT_SHEET_ID` is now `18dIkhWSyqcSVyVf9D07R-9R6Hkih4mpZ4c__WZbhyWs`, shared read
+with the compute service account. **Two tabs, two different Studio views**, and
+the distinction is the whole reason this works:
+
+| Tab | Studio view | Range | Monthly job |
+|---|---|---|---|
+| `Daily` | **DATE** view — one row per day, every metric | 2025-01-01 onward | replace the current-year rows |
+| `Videos` | **CONTENT** view — one row per video | the report month | append below the last month |
+
+**WHY THE DATE VIEW WAS THE BREAKTHROUGH.** The Content view gives one total per
+export, so MoM and YoY would have needed a stored history. The Date view gives
+every metric per DAY, so all three windows are slices of one tab and
+`comparisonWindows()` is reused — YouTube's MoM now means exactly what it means
+on every other slide.
+
+**STUDIO TRUNCATES EVERY TABLE TO 500 ROWS AND KEEPS THE BUSIEST.** The last row
+reads *"Showing top 500 results"*. A 577-day export therefore lost its 76
+quietest days with no error and no warning — caught only because the row count
+was checked against the date span. Hence `expectedDays` / `foundDays` /
+`dayGaps` on the payload and an amber card on the slide. **Export one calendar
+year at a time.** This is the same silent-shortfall shape as the 400 days of
+zeros, arriving through the manual route instead of the automated one.
+
+**THE `Month` COLUMN IN `Videos` IS HAND-ADDED AND LOAD-BEARING.** Content
+exports carry no date of their own, so without it a June report shows July's
+videos and says nothing. Accepted as a Studio date (`2026-07-01`) or as typed
+text (`2026-07`) — a routine that only works when someone formats a cell right
+is not a routine.
+
+**FOUR RULES THAT WOULD HAVE BEEN WRONG THE OBVIOUS WAY:**
+
+1. **Columns by NAME, never position.** Five real exports, five column orders as
+   metrics were switched on and off. `col()` is exact-then-prefix, which is what
+   separates `Likes` from `Dislikes` sitting immediately before it, and still
+   resolves `Comments added` and `Watch time (hours)`.
+2. **A `Total` row must drop out, not be summed.** It has no parseable date, so
+   date-indexing removes it — but only because that was designed for. Summing a
+   total alongside the days it totals doubles the month.
+3. **Change is `null` when the baseline is absent**, not zero and not +100%. A
+   partially backfilled sheet would otherwise produce a slide of triumphant
+   growth against months that simply are not there yet.
+4. **Watch-time units are verified**, not assumed. The header must say "hours"
+   or the metric is dropped; the two forms differ by 60x.
+
+**THE `Daily` TAB CROSS-CHECKS THE `Videos` TAB, and that is worth keeping.**
+July 2026 reads 1,104,891 views from 31 date rows and 1,101,530 from 500 video
+rows — two independent exports agreeing within 0.3%, the gap being the tail
+beyond the 500-row cap. Any future month where those two diverge sharply means
+one of the exports was mis-scoped.
+
+**DROPPED:** the Sharing-service card (not in either export, MW's call) and the
+Gained / Lost / Net subscriber split — Studio's `Subscribers` is already NET, so
+two of the three numbers would have been invented.
+
+**Fixtures use MW's REAL figures with DELIBERATELY OPPOSING SIGNS**: views fell
+10% MoM and rose 238% YoY, and likes fell on both. `boot.js` asserts both an
+`up` and a `down` render, because a fixture where every arrow points the same way
+cannot catch a renderer that crosses the two windows or hard-codes a direction.
 
 **v3.130.0 — YouTube reads a YouTube Studio export. A human is the credential.**
 
