@@ -257,7 +257,13 @@ function reportFixture() {
           hours: 495, shares: 2, likes: 1, comments: null },
         { id: "v2", title: "", views: 224511, hours: 4939, shares: 1,
           likes: 0, comments: null }] } },
-    chatBubble: { available: true,
+    /**
+     * `altChannelClicks` is GA4 enhanced measurement's figure for the same
+     * period — deliberately ~5x the GTM one, as in the real data. The slide has
+     * to explain the gap, because the Looker deck shows the larger number and
+     * the first executive to compare decks will assume the smaller one is broken.
+     */
+    chatBubble: { available: true, altChannelClicks: 2414,
       events: [{ name: "click", clicks: 15600 }],
       unmapped: [{ key: "chat-bubble-channel-unknown https://example.com", clicks: 12 }],
       byScope: Object.fromEntries([...KEYS, "BHQ"].map((k) => [k, {
@@ -748,9 +754,27 @@ setTimeout(() => {
         // The intro row is g-3 since the BHQ-share card was added, so the
         // channel grid is the one inside `.cb-cards` specifically.
         const cols = pages[0].querySelectorAll(".cb-cards .grid.g-2").length;
-        cols >= 1
-          ? ok("chat bubble", `2 scopes, ${labels.length} channels, ${marks} marks, 2-up grid`)
-          : fail("chat bubble", "channel cards are not in a 2-column grid");
+        if (cols < 1) return fail("chat bubble", "channel cards are not in a 2-column grid");
+        /**
+         * THE SOURCE NOTE MUST NAME THE LOOKER FIGURE (MW chose the ten-channel
+         * number, v3.133.0). The dashboard reports ~5x LESS than the deck the
+         * executives already have, so the slide has to say why unprompted —
+         * otherwise the obvious conclusion is that the smaller number is broken.
+         */
+        /**
+         * Whitespace-collapsed before matching. The note wraps across source
+         * lines, so `textContent` carries newlines mid-phrase and a naive regex
+         * fails on rendered-and-correct markup — a test that breaks on
+         * reformatting teaches people to reformat around the test.
+         */
+        const p0 = pages[0].textContent.replace(/\s+/g, " ");
+        if (!/ten channels/i.test(p0)) {
+          return fail("chat bubble", "the click-source note is missing");
+        }
+        if (!/2,414/.test(p0) || !/outbound link/i.test(p0)) {
+          return fail("chat bubble", "the note does not explain the gap with the Looker figure");
+        }
+        ok("chat bubble", `2 scopes, ${labels.length} channels, ${marks} marks, source gap explained`);
       })();
       /**
        * NAV UNDER THE HEADER, everywhere (MW). A tab strip that renders before

@@ -2274,8 +2274,38 @@ function renderReport() {
         </div>
         <hr class="sep">
         <div class="cb-cards"><div class="grid g-2">${shown.map(card).join('')}</div></div>
+        ${idx === 0 ? sourceNote : ''}
       </div>`;
     };
+    /**
+     * WHY THIS NUMBER IS ~5x SMALLER THAN THE LOOKER DECK (MW's decision).
+     *
+     * Two events measure these clicks and they do not measure the same thing.
+     * The dashboard uses the GTM custom event `click_chat_bubble`, which fires
+     * on the bubble's own buttons and therefore sees all ten channels. The
+     * Looker deck used GA4 ENHANCED MEASUREMENT's `click`, which fires on every
+     * outbound <a> on the page — so it counts links that are not chat at all,
+     * and cannot see Webchat or WeChat because those are not links. That is why
+     * it reports both a bigger number AND fewer channels.
+     *
+     * MW chose the ten-channel figure. The note is on the slide rather than in
+     * this comment because the first executive to compare the two decks will
+     * ask, and "the dashboard is lower" invites the wrong conclusion about which
+     * one is broken.
+     */
+    /**
+     * The Looker figure is written out IN FULL rather than through `num()`.
+     * Everything else on the deck is abbreviated for scanning, but this one
+     * number exists to be matched against a specific figure on another report,
+     * and "2.4K" cannot be matched against "2,414".
+     */
+    const alt = CB.altChannelClicks;
+    const sourceNote = `<div class="note" style="margin-top:12px">
+      Channel clicks come from the chat bubble's own click event, so all ten
+      channels are counted.${(alt && alt > 0) ? ` The Looker deck reported
+      ${alt.toLocaleString('en-US')} for the same period because it counted every
+      outbound link on the page, not only chat, and could not see Webchat or
+      WeChat.` : ''}</div>`;
     return `
     <div class="cb-wrap">
       <div class="lang-tabs no-print">
@@ -6045,7 +6075,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.132.0';
+const CLIENT_BUILD = '3.133.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

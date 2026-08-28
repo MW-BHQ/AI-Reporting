@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.132.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.133.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -660,6 +660,9 @@ filled (521 inferred by Claude and marked `GUESSED by Claude` in
 81% excluding BIH which no package name can reveal). **SKU still needs the
 e-com team**, and only 2025–2026 packages matter.
 
+**Chat Bubble click source.** ~~Unresolved~~ — RESOLVED 28 Aug 2026 (v3.133.0).
+MW chose the GTM ten-channel figure; the slide explains the gap with Looker.
+
 **Short links.** `bkhos.co/…` hides its destination, so ads using them cannot be
 classified in ROAS. A ฿15.6k Surgery campaign is affected. The short-link
 mapping would fix it.
@@ -714,6 +717,32 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.133.0 — Chat Bubble click source RESOLVED (MW): the ten-channel figure.**
+
+MW: "there's 10 channels — so I'd choose 10 channels report, of course." That is
+what the dashboard already showed, so **no number changed**. What was missing was
+the explanation, and that was the actual risk.
+
+**The two events do not measure the same thing.** GTM's `click_chat_bubble` fires
+on the bubble's own buttons and sees all ten channels. GA4 **enhanced
+measurement**'s `click` fires on every outbound `<a>` on the page, so it counts
+links that are not chat AND cannot see Webchat or WeChat, which are not links.
+That is why it reports a BIGGER number and FEWER channels at once — the two
+symptoms have one cause, and either alone looks like the opposite fault.
+
+The slide now carries a note naming the Looker figure, written out in full
+(`2,414`, not `num()`'s `2.4K`) because it exists to be matched against a
+specific number on a report the executives already have. Without it, "the
+dashboard is lower than Looker" invites the conclusion that the dashboard is
+broken.
+
+**Test lesson worth keeping:** the first assertion failed on rendered, correct
+markup because the note wraps across source lines and `textContent` carries a
+newline mid-phrase. Boot assertions against prose now collapse whitespace first —
+a test that breaks on reformatting teaches people to reformat around the test.
+
+This closes the discrepancy open since v3.114.0.
 
 **v3.132.0 — the phantom right-hand axis is gone (MW spotted it on YouTube).**
 
