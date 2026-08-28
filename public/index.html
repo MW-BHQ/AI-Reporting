@@ -5974,7 +5974,22 @@ function drawChart(canvasId, rows, series) {
         scales: {
           x: { ticks:{ color:'#A7B0C7', font:{family:'Poppins',size:10}, maxRotation:0, autoSkip:true, maxTicksLimit:8 }, grid:{ color:'rgba(90,110,160,.09)' } },
           y: { position:'left', ticks:{ color:'#A7B0C7', font:{size:10} }, grid:{ color:'rgba(90,110,160,.09)' } },
-          y1:{ position:'right', ticks:{ color:'#A7B0C7', font:{size:10} }, grid:{ display:false } },
+          /**
+           * THE RIGHT-HAND AXIS ONLY EXISTS WHEN A SERIES ASKS FOR IT.
+           *
+           * `y1` used to be declared unconditionally. With no dataset assigned
+           * to it, Chart.js still renders the axis and, having no data to scale
+           * against, labels it 0.0 to 1.0 — so every single-series chart on the
+           * deck carried an empty second scale that reads as missing data. Four
+           * of the eleven charts were affected.
+           *
+           * Declared only when a series names it, which also means a typo in
+           * `axis` now collapses that series onto the left axis where it is
+           * visibly wrong, rather than onto a phantom scale where it is not.
+           */
+          ...(series.some((s) => s.axis === 'y1')
+            ? { y1: { position:'right', ticks:{ color:'#A7B0C7', font:{size:10} }, grid:{ display:false } } }
+            : {}),
         },
       },
     });
@@ -6030,7 +6045,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.131.1';
+const CLIENT_BUILD = '3.132.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.131.1.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.132.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -714,6 +714,27 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.132.0 — the phantom right-hand axis is gone (MW spotted it on YouTube).**
+
+`drawChart` declared `y1` unconditionally. Chart.js renders an axis with no
+dataset assigned to it and, having nothing to scale against, labels it **0.0 to
+1.0** — so every single-series chart carried an empty right-hand scale that
+reads to an executive as missing data. **Four of the eleven charts** were
+affected, not just YouTube.
+
+It shipped for weeks because nothing throws: no error, no console warning, and
+the chart itself is correct. Only the axis is a lie.
+
+`y1` is now spread in only when a series names it. A useful side effect: a typo
+in `axis` collapses that series onto the LEFT axis where it is visibly wrong,
+instead of onto a phantom scale where it is not.
+
+**New audit rule `charts:no-phantom-axis`**, and it is static on purpose —
+Chart.js is unavailable under jsdom, so `drawChart` takes its catch branch in
+`boot.js` and any rendered-axis assertion would pass regardless of the config.
+Verified against an unguarded sample so the rule is known to bite rather than
+assumed to.
 
 **v3.131.1 — watch hours in a unit a person can picture (MW).**
 

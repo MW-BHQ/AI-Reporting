@@ -219,6 +219,32 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
 }
 
 /**
+ * A SECOND Y-AXIS MUST BE CONDITIONAL ON A SERIES ASKING FOR IT.
+ *
+ * `y1` was declared unconditionally in `drawChart`. Chart.js renders an axis
+ * with no dataset assigned to it and, having nothing to scale against, labels it
+ * 0.0 to 1.0 — so four of the eleven charts carried an empty right-hand scale
+ * that reads to an executive as missing data. It shipped for weeks because
+ * nothing throws and the chart is otherwise correct.
+ *
+ * Static rather than a boot check: Chart.js is not available under jsdom, so
+ * `drawChart` takes its catch branch there and a rendered-axis assertion would
+ * pass whatever the config said.
+ */
+{
+  const dc = html.slice(html.indexOf("function drawChart("));
+  const body = dc.slice(0, dc.indexOf("\n}"));
+  const declaresY1 = /\by1\s*:/.test(body);
+  const guarded = /series\s*\.some\(\s*\(?\s*s\s*\)?\s*=>\s*s\.axis\s*===\s*'y1'\s*\)/.test(body);
+  !declaresY1
+    ? ok("charts:no-phantom-axis", "drawChart declares no second axis")
+    : (guarded
+      ? ok("charts:no-phantom-axis", "y1 is declared only when a series requests it")
+      : fail("charts:no-phantom-axis",
+        "drawChart declares y1 unconditionally — single-series charts will render an empty 0-1 axis"));
+}
+
+/**
  * TYPE SCALE — font sizes come from the scale in `:root`, not from one-off px.
  *
  * MW asked for Tailwind-shaped rem steps precisely so a size is changed in one
