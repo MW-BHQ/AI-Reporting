@@ -65,16 +65,22 @@ function overviewFixture() {
     impressionsBySource: { meta: 4120000, gads: 2210000, gsc: 1880000,
       tiktok: 431000, fbPage: 168000, gmb: 32200, youtube: 1104891,
       adClicks: 38110, searchClicks: 12892, fbEngagements: 9044, ttEngagements: 14100 },
-    offsiteActions: { gbpCalls: 1811, gbpDirections: 2440, gbpWebsiteClicks: 3902,
-      gadsCalls: 640, metaMessages: 1290 },
+    /**
+     * Deliberately NOT in volume order, and `gbpCalls` is null — so the sort
+     * has something to do and a null has somewhere wrong to land. A fixture
+     * already sorted correctly cannot tell a working sort from no sort at all.
+     */
+    offsiteActions: { gbpCalls: null, gbpDirections: 2440, gbpWebsiteClicks: 3902,
+      gadsCalls: 640, metaMessages: 9100, total: 12180 },
     paid: { spend: 1840220, impressions: 6330000, clicks: 38110, cpc: null,
       byPlatform: { meta: 1120400, gads: 719820 } },
     reachOnly: [
-      { channel: "Facebook Page", note: "organic reach", sub: "27 branches" },
-      { channel: "TikTok",        note: "video views" },
+      // Smallest first on purpose: the sort must reverse this.
+      { channel: "Facebook Page", note: "organic reach", sub: "27 branches", impressions: 168000 },
+      { channel: "TikTok",        note: "video views", impressions: 431000 },
       // Carries the scope caveat: Overview is branch-scoped, this channel is not.
       { channel: "YouTube", note: "video views — one corporate channel, so NOT branch-scoped like the rest of this view",
-        sub: "31 days in the export · 15,304 hours watched" },
+        sub: "31 days in the export · 15,304 hours watched", impressions: 1104891 },
     ],
     ecommerce: { productViews: 88120, addToCarts: 4410, purchases: 512,
       revenue: 3120400, aov: 6094, cartRate: 0.05, purchaseRate: 0.116 },
@@ -541,7 +547,33 @@ setTimeout(() => {
     if (/฿0(?![.\d])/.test(text)) {
       return fail("overview renders", "a null paid metric rendered as ฿0");
     }
-    ok("overview renders", `${Math.round(html.length / 1024)}kb, nulls held as em dashes`);
+    /**
+     * SORTED BY VOLUME (MW, v3.141.0). The fixture lists both the reach rows and
+     * the off-site actions smallest-first, so an unsorted render fails here.
+     * Checked by POSITION in the text, which is what the reader actually scans.
+     */
+    /**
+     * SCOPED TO THE CARD. A first attempt searched the whole page and failed on
+     * correct output: "YouTube" and "TikTok" also appear in the TOFU note far
+     * above, so `indexOf` found those instead of the table rows.
+     */
+    const cardAt = text.indexOf("Off-site reach");
+    if (cardAt < 0) return fail("overview renders", "the off-site card is missing");
+    const card = text.slice(cardAt);
+    const order = (labels) => labels.map((l) => card.indexOf(l));
+    const reach = order(["YouTube", "TikTok", "Facebook Page"]);
+    if (reach.some((p) => p < 0) || reach.some((p, i) => i && p < reach[i - 1])) {
+      return fail("overview renders", "off-site reach is not sorted by volume");
+    }
+    const acts = order(["New Meta conversations", "Direction requests"]);
+    if (acts.some((p) => p < 0) || acts[1] < acts[0]) {
+      return fail("overview renders", "off-site actions are not sorted by volume");
+    }
+    // gbpCalls is null in the fixture and must be dropped, not shown as 0.
+    if (card.includes("Calls from profile")) {
+      return fail("overview renders", "a null off-site action rendered as a row");
+    }
+    ok("overview renders", `${Math.round(html.length / 1024)}kb, sorted, nulls held`);
   }, 0);
 
   /**

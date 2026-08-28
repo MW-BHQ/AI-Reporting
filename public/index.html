@@ -235,11 +235,11 @@
   .stage.minor .stage-val{font-size:var(--text-xs);font-weight:500;color:var(--muted);}
   .stage.minor .bar{height:16px;border-radius:6px;background:rgba(140,155,190,.10);}
   .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px;padding-top:13px;border-top:1px solid var(--line);}
-  .legend div{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-2);}
+  .legend div{display:flex;align-items:center;gap:6px;font-size:var(--text-2xs);color:var(--ink-2);}
 
   /* ---------------- tables ---------------- */
   table{width:100%;border-collapse:collapse;font-size:var(--text-sm);}
-  th{text-align:left;color:var(--muted);font-weight:500;font-size:11.5px;letter-spacing:0;padding:0 8px 9px 0;border-bottom:1px solid var(--line);white-space:nowrap;}
+  th{text-align:left;color:var(--muted);font-weight:500;font-size:var(--text-2xs);letter-spacing:0;padding:0 8px 9px 0;border-bottom:1px solid var(--line);white-space:nowrap;}
   /* Numeric columns need separation from each other, not just from the edge.
      With padding-left:0 two adjacent headers ran together as "ViewsRevenue"
      whenever the first column was wide (long Thai item names). */
@@ -253,22 +253,22 @@
   tr:last-child td{border-bottom:none;}
   tr.grp td{
     background:rgba(124,107,245,.05);color:var(--muted);
-    font-size:10px;text-transform:uppercase;letter-spacing:.09em;font-weight:600;
+    font-size:var(--text-3xs);text-transform:uppercase;letter-spacing:.09em;font-weight:600;
     padding:8px 0 8px 10px;border-bottom:1px solid var(--line);
   }
   tr.tot td{font-weight:600;color:var(--ink);border-top:2px solid var(--line);background:rgba(140,155,190,.05);}
   td.dim{color:var(--faint);opacity:.5;}
-  .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:500;background:var(--violet-soft);color:var(--violet);}
+  .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:var(--text-3xs);font-weight:500;background:var(--violet-soft);color:var(--violet);}
   .pill.warn{background:#FFF1E6;color:#D97B1F;}
   .pill.grey{background:rgba(140,155,190,.14);color:var(--muted);}
   .ihint{display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;margin-left:4px;
-    border-radius:50%;background:rgba(140,155,190,.2);color:var(--muted);font-size:9px;font-style:italic;
+    border-radius:50%;background:rgba(140,155,190,.2);color:var(--muted);font-size:var(--text-4xs);font-style:italic;
     font-weight:700;cursor:pointer;vertical-align:middle;}
   .ihint:hover{background:var(--violet);color:#fff;}
   /* Q/E/C: header letters and the dot cells share one fixed column width, so
      each dot sits directly under its letter. */
   .legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;}
-  .legend .lg{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);}
+  .legend .lg{display:inline-flex;align-items:center;gap:5px;font-size:var(--text-2xs);color:var(--muted);}
   .legend .lg i{width:9px;height:9px;border-radius:2.5px;display:inline-block;}
   /* E-commerce tables carry long Thai package names next to short numbers, so
      they need more column separation than the dense ad tables elsewhere. */
@@ -290,12 +290,12 @@
   .xtab td.cell{border-radius:5px;}
   .affinity{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;}
   .afcard{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--glass-2);}
-  .afhead{display:flex;align-items:center;gap:2px;font-size:12.5px;margin-bottom:8px;}
-  .afrow{display:flex;align-items:baseline;gap:7px;font-size:11.5px;margin-bottom:4px;}
+  .afhead{display:flex;align-items:center;gap:2px;font-size:var(--text-xs);margin-bottom:8px;}
+  .afrow{display:flex;align-items:baseline;gap:7px;font-size:var(--text-2xs);margin-bottom:4px;}
   .afname{flex:1;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .afidx{font-weight:600;color:var(--muted);} .afidx.hot{color:var(--violet);}
-  .afshare{color:var(--faint);font-size:10.5px;}
-  .afpkg{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:10.5px;
+  .afshare{color:var(--faint);font-size:var(--text-3xs);}
+  .afpkg{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:var(--text-3xs);
     color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   /* Every sortable header carries a faint chevron so it reads as clickable;
      the active one turns violet and points. Previously the marker appeared only
@@ -304,7 +304,7 @@
   table.sortable thead th.sorted{color:var(--violet);}
   table.sortable td.heat{border-radius:4px;}
   table.sortable thead th:hover{color:var(--ink-2);}
-  table.sortable thead th::after{content:'↕';margin-left:5px;font-size:9px;
+  table.sortable thead th::after{content:'↕';margin-left:5px;font-size:var(--text-4xs);
     color:var(--faint);opacity:.55;font-weight:400;}
   table.sortable thead th:hover::after{opacity:1;}
   table.sortable thead th.sorted::after{color:var(--violet);opacity:1;font-weight:700;}
@@ -488,10 +488,10 @@
   .search input.text:focus{outline:none;border-color:var(--violet);}
   .hint{font-size:11.5px;color:var(--muted);margin:0 0 14px;}
   .tags{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px;}
-  .tag{background:var(--glass);border:1px solid var(--line);color:var(--ink-2);border-radius:20px;padding:6px 13px;font-size:12px;cursor:pointer;font-family:inherit;transition:.15s;}
+  .tag{background:var(--glass);border:1px solid var(--line);color:var(--ink-2);border-radius:20px;padding:6px 13px;font-size:var(--text-xs);cursor:pointer;font-family:inherit;transition:.15s;}
   .tag:hover{border-color:var(--violet);color:var(--violet);}
-  .qtag{display:inline-block;background:#fff;border:1px solid var(--line);border-radius:8px;padding:5px 10px;margin:0 6px 6px 0;font-size:12px;}
-  .gap-tag{display:inline-block;border:1px dashed var(--rose);color:var(--rose);border-radius:8px;padding:5px 10px;margin:0 6px 6px 0;font-size:12px;background:#FFF7F9;}
+  .qtag{display:inline-block;background:#fff;border:1px solid var(--line);border-radius:8px;padding:5px 10px;margin:0 6px 6px 0;font-size:var(--text-xs);}
+  .gap-tag{display:inline-block;border:1px dashed var(--rose);color:var(--rose);border-radius:8px;padding:5px 10px;margin:0 6px 6px 0;font-size:var(--text-xs);background:#FFF7F9;}
   .cluster{background:var(--glass-2);border:1px solid var(--line);border-radius:14px;padding:15px;margin-bottom:12px;}
   .cluster h3{margin:0 0 10px;font-size:13px;color:var(--violet);font-weight:600;}
 
@@ -683,13 +683,13 @@
   .lang-tab.active, .clang-tab.active{background:var(--violet);color:#fff;border-color:transparent;}
   @media print{ .lang-tabs{display:none;} }
   .all-four{
-    font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:none;
+    font-size:var(--text-2xs);font-weight:800;letter-spacing:.04em;text-transform:none;
     background:rgba(0,45,115,.08);color:#002D73;padding:2px 9px;border-radius:20px;
   }
   /* Hospital codes read as identifiers, not body text — they are how a reader
      locates themselves in a 25-slide deck. */
-  .hcode{font-size:14px;font-weight:800;color:#002D73;letter-spacing:.02em;}
-  .hcode-sm{font-size:12.5px;font-weight:800;color:#002D73;}
+  .hcode{font-size:var(--text-sm);font-weight:800;color:#002D73;letter-spacing:.02em;}
+  .hcode-sm{font-size:var(--text-xs);font-weight:800;color:#002D73;}
   .slide-title:first-child{margin-top:0;}
   @media print{
     .slide-title{font-size:13px;color:#1B2340;margin:0 0 10px;
@@ -3457,19 +3457,31 @@ function renderOverview() {
       <div class="card">
         <h2>Off-site reach &amp; action</h2>
         <table><tbody>
-        ${(d.reachOnly||[]).map(r=>`<tr><td class="strong">${esc(r.channel)}<div style="font-size:10.5px;color:var(--faint)">${esc(r.note)}${r.sub?' · '+esc(r.sub):''}</div></td>
-          <td class="num" style="font-size:15px;font-weight:600;color:${isNA(r.impressions)?'var(--faint)':'var(--ink)'}">${num(r.impressions)}</td></tr>`).join('')}
+        ${[...(d.reachOnly||[])].sort((a,b)=>(isNA(b.impressions)?-1:n0(b.impressions))-(isNA(a.impressions)?-1:n0(a.impressions))).map(r=>`<tr><td class="strong">${esc(r.channel)}<div style="font-size:var(--text-3xs);color:var(--faint)">${esc(r.note)}${r.sub?' · '+esc(r.sub):''}</div></td>
+          <td class="num" style="font-size:var(--text-sm);font-weight:600;color:${isNA(r.impressions)?'var(--faint)':'var(--ink)'}">${num(r.impressions)}</td></tr>`).join('')}
         </tbody></table>
         ${(() => {
           const o = d.offsiteActions; if (!o || o.total === null) return '';
-          const row = (lab, v, sub) => v === null ? '' : `<tr><td class="strong">${lab}${sub?`<div style="font-size:10.5px;color:var(--faint)">${sub}</div>`:''}</td><td class="num" style="font-size:15px;font-weight:600">${num(v)}</td></tr>`;
+          const row = (lab, v, sub) => v === null ? '' : `<tr><td class="strong">${lab}${sub?`<div style="font-size:var(--text-3xs);color:var(--faint)">${sub}</div>`:''}</td><td class="num" style="font-size:var(--text-sm);font-weight:600">${num(v)}</td></tr>`;
+          /**
+           * SORTED BY VOLUME (MW). Both this list and the reach list above were
+           * in the order they happened to be written, so the biggest number
+           * could sit at the bottom and the reader had to scan for it.
+           *
+           * A null is NOT zero and must not sort as one — it means the source
+           * was unavailable, so it sinks below a real 0 rather than mixing in
+           * with small numbers. `row()` already drops nulls entirely.
+           */
+          const acts = [
+            ['Calls from profile', o.gbpCalls, null],
+            ['Direction requests', o.gbpDirections, null],
+            ...(o.gbpBookings ? [['Bookings from profile', o.gbpBookings, 'via Reserve with Google']] : []),
+            ['New Meta conversations', o.metaMessages, 'ad-attributed only'],
+          ].sort((a,b)=>(isNA(b[1])?-1:n0(b[1]))-(isNA(a[1])?-1:n0(a[1])));
           return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
             <div class="card-title" style="margin-bottom:6px">Action without site visits</div>
             <table><tbody>
-              ${row('Calls from profile', o.gbpCalls)}
-              ${row('Direction requests', o.gbpDirections)}
-              ${o.gbpBookings ? row('Bookings from profile', o.gbpBookings, 'via Reserve with Google') : ''}
-              ${row('New Meta conversations', o.metaMessages, 'ad-attributed only')}
+              ${acts.map(([lab,v,sub])=>row(lab,v,sub)).join('')}
             </tbody></table>
           </div>`;
         })()}
@@ -6241,7 +6253,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.140.0';
+const CLIENT_BUILD = '3.141.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.140.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.141.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,37 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.141.0 — Off-site reach & action sorted by volume (MW); tables and pills
+join the type scale (5 of 5 CSS groups).**
+
+**SORTED BY VOLUME.** Both the reach rows and the "action without site visits"
+rows were in the order they happened to be written, so the biggest number could
+sit at the bottom. A NULL is not zero and does not sort as one — it means the
+source was unavailable, so it sinks below a real 0; `row()` drops nulls entirely
+rather than showing them as rows.
+
+The fixture now lists both sets SMALLEST-FIRST with one null, so an unsorted
+render fails. Verified by removing the sort.
+
+**A TEST MISTAKE WORTH RECORDING:** the first order check searched the whole page
+and failed on correct output, because "YouTube" and "TikTok" also appear in the
+TOFU note far above the card. Position checks must be scoped to the block being
+asserted.
+
+**TABLES AND PILLS MIGRATED**, 17 selectors: `th`, `tr.grp td`,
+`table.sortable thead th::after`, `.legend div`, `.legend .lg`, `.ihint`,
+`.afhead`, `.afrow`, `.afshare`, `.afpkg`, `.pill`, `.all-four`, `.tag`,
+`.qtag`, `.gap-tag`, `.hcode`, `.hcode-sm`. **Every one is exact or DOWN** —
+column widths respond to type size, and shrinking cannot cause a wrap.
+
+**THE MIGRATION IS NOT DONE, and the audit will now claim it is.** 44 hard-coded
+sizes remain: roughly 27 in `<style>` (`.u-*` users tab, `.ra-*`, `.stalebar`,
+`#tip`, `.search`, `.state .big`, `.warnbox`, `.acct-tab`, `.pg-input`,
+`.cluster h3`, `.qec-cell`, `.dlt`, plus print `@media` which is deliberate) and
+the rest INLINE in JS template literals, which `type:scale` cannot see at all.
+Naming this again because a green `type:scale` now covers five migrated groups
+and says nothing about those.
 
 **v3.140.0 — YouTube joins Overview as AWARENESS (MW).**
 
