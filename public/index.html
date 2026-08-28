@@ -2755,21 +2755,7 @@ function renderReport() {
    * hospitals, so this is BHQ-scoped — there is nothing to split per hospital.
    */
   const YT = d.youtube || {};
-  /**
-   * An API failure is shown ON THE SLIDE, not buried in the payload.
-   *
-   * The two likely causes need opposite fixes and both otherwise look like a
-   * quiet month. Hunting for `apiError` in a 400KB JSON response is not a
-   * reasonable way to find that out, so it is rendered where the numbers are.
-   * It disappears the moment the API path succeeds.
-   */
-  const ytAlert = YT.apiError
-    ? `<div class="card mt" style="border-color:#E4B84B">
-         <div class="card-title">YouTube API not connected \u2014 showing sheet data</div>
-         <div class="note" style="margin-top:0">${esc(YT.apiError)}</div>
-       </div>`
-    : '';
-  const ytBody = (YT.available || YT.apiError) ? (() => {
+  const ytBody = YT.available ? (() => {
     const t = YT.totals;
     const sh = YT.sharing || { rows: [] };
     const vids = (YT.videos || {}).rows || [];
@@ -2806,8 +2792,7 @@ function renderReport() {
         </div>
         <div class="chart-wrap" style="height:190px;margin-top:14px"><canvas id="repYtViews"></canvas></div>
       </div>
-    </div>
-    ${ytAlert}`;
+    </div>`;
   })() : '';
 
   const ytTopBody = (YT.available && ((YT.videos || {}).rows || []).length) ? (() => {
@@ -5953,7 +5938,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.128.2';
+const CLIENT_BUILD = '3.129.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

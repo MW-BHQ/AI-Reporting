@@ -447,37 +447,22 @@ expect_field "no false CPAS"    "$AUD" "d.audiences.every(a=>!a.isCpas||a.purcha
 check "topic"      POST "/api/topic" "{\"topic\":\"gallbladder\",\"from\":\"$FROM\",\"to\":\"$TO\"}"
 check "user upsert" POST "/api/users" '{"email":"x@bkh.test","tabs":["overview"]}'
 
-echo "--- youtube: the DIRECT API path (OAuth refresh token) ---"
-# The run above exercised the Apps Script SHEET fallback. This restarts with the
-# OAuth secrets present so the API path is covered too — the two are different
-# code paths producing the same payload shape, and only one of them was tested
-# before this block existed.
+echo "--- youtube: sheet only, the API path is GONE (v3.129.0) ---"
+# Asserted as an ABSENCE. The OAuth path was removed, so the secrets being set
+# must no longer change anything: a leftover YT_CLIENT_ID in Cloud Run cannot
+# revive a code path that is not there, and `apiError` must never reappear on
+# the payload. Tested with the secrets deliberately present.
 kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
 WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ADMIN_EMAILS=admin@bkh.test \
 YT_CLIENT_ID=cid YT_CLIENT_SECRET=csec YT_REFRESH_TOKEN=rt \
 PORT=$PORT node --require ./test/mock-fetch.js server.js >>/tmp/smoke.log 2>&1 &
 SRV=$!
 sleep 2.5
-expect_field "yt api is source"    "$REPORT" "d.youtube.source==='youtube-api'?'ok':undefined"
-expect_field "yt api totals"       "$REPORT" "(d.youtube.totals.views===96941&&d.youtube.totals.shares===1372)?'ok':undefined"
+expect_field "yt source is sheet"    "$REPORT" "d.youtube.source==='apps-script-sheet'?'ok':undefined"
+expect_field "yt secrets are inert"  "$REPORT" "d.youtube.apiError===undefined?'ok':undefined"
+expect_field "yt has data"           "$REPORT" "d.youtube.totals.views===96941?96941:undefined"
 # A zero-share service must not occupy a row in the sharing table.
-expect_field "yt api drops zeros"  "$REPORT" "d.youtube.sharing.rows.every(r=>r.shares>0)?'ok':undefined"
-# vid2 has no title in the Data API stub; the id must stand in for it.
-expect_field "yt api title fallback" "$REPORT" "(d.youtube.videos.rows.find(v=>v.id==='vid2')||{}).title===''?'ok':undefined"
-
-# A DEAD refresh token must fall back to the sheet, not empty the card. This is
-# the case that happens for real if the consent screen is left in Testing.
-kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
-WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ADMIN_EMAILS=admin@bkh.test \
-YT_CLIENT_ID=cid YT_CLIENT_SECRET=csec YT_REFRESH_TOKEN=bad-refresh \
-PORT=$PORT node --require ./test/mock-fetch.js server.js >>/tmp/smoke.log 2>&1 &
-SRV=$!
-sleep 2.5
-expect_field "yt bad token falls back" "$REPORT" "d.youtube.source==='apps-script-sheet'?'ok':undefined"
-expect_field "yt still has data"       "$REPORT" "d.youtube.totals.views===96941?96941:undefined"
-# The reason must reach the PAYLOAD, not just the logs — a wrong-account token
-# and an expired one are indistinguishable from an empty card otherwise.
-expect_field "yt names the cause"      "$REPORT" "/Testing|revoked/.test(d.youtube.apiError||'')?'ok':undefined"
+expect_field "yt drops zeros"        "$REPORT" "d.youtube.sharing.rows.every(r=>r.shares>0)?'ok':undefined"
 
 echo "--- degradation: one source failing must not 500 ---"
 kill $SRV 2>/dev/null; wait $SRV 2>/dev/null

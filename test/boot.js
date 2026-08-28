@@ -219,12 +219,10 @@ function reportFixture() {
           { keyword: "Medical centre", rank: 19.5, volume: 3600, locations: 1 },
         ] }])) },
     /**
-     * YouTube. A blank title must fall back to the video id, and `apiError`
-     * rides alongside working sheet data — the real state when the OAuth token
-     * is wrong: the card still shows numbers, plus a diagnosis.
+     * YouTube, from the Apps Script sheet — the only path since v3.129.0.
+     * A blank title must fall back to the video id.
      */
     youtube: { available: true,
-      apiError: "403 from YouTube: this refresh token is not authorised for channel UCxxx.",
       totals: { views: 96941, minutes: 300000, hoursWatched: 5000, likes: 59,
         comments: 24, shares: 1372, subsGained: 100, subsLost: 13, subsNet: 87 },
       series: [{ d: "2026-07-05", views: 40000 }, { d: "2026-07-18", views: 56941 }],
@@ -888,14 +886,14 @@ setTimeout(() => {
           return fail("youtube", "a video with no title rendered blank");
         }
         /**
-         * An API failure must be visible ON THE SLIDE. Hunting for `apiError`
-         * inside a 400KB JSON payload is not a way to discover that a token is
-         * pointed at the wrong channel. The fixture carries both fallback data
-         * and a diagnosis, which is exactly the real failure state.
+         * The amber `apiError` card is GONE (v3.129.0) along with the API path
+         * it reported on. Asserted as an absence so it cannot creep back with a
+         * copy-paste: there is no OAuth client left for it to describe, and a
+         * card naming a fix nobody can perform is worse than no card.
          */
-        /403 from YouTube/.test(body) && /not connected/i.test(body)
-          ? ok("youtube", "2 slides, sharing table, id fallback, API error surfaced")
-          : fail("youtube", "apiError is not rendered on the slide");
+        /not connected/i.test(body)
+          ? fail("youtube", "the removed apiError card is rendering again")
+          : ok("youtube", "2 slides, sharing table, id fallback, no API card");
       })();
       finish();
     }, 500);

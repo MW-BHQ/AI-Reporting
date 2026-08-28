@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.128.2.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.129.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -679,6 +679,21 @@ improves.
 
 ## 12. Requested but not built
 
+- **YOUTUBE ANALYTICS DIRECT FROM THE API — DEAD END, do not retry (v3.129.0).**
+  Every route is closed and the code has been removed rather than left dormant:
+  a **service account** cannot read a channel (Google supports that flow for
+  Content Partners only); an **"Internal" OAuth client** needs Workspace and
+  `bangkokhospital.com` is not Workspace; **External + Testing** kills refresh
+  tokens after 7 days; **External + Production** was tried in v3.128.0 on the
+  documented theory that a Brand Account may authorise a project's client if a
+  test user manages it — MW does manage it, the consent was granted, and the
+  calls still failed. **Windsor's own connector** sends an unsupported query
+  (`day` + `video` + `creatorContentType` with annotation, card and Red metrics
+  in one report) and returns `400 The query is not supported`.
+  The Apps Script sheet is the answer, because it runs as a human rather than as
+  an app. Reopening this needs NEW information — a channel ownership change, or
+  a fixed Windsor connector — not another attempt at consent.
+
 - **APPLY THE REM TYPE SCALE TO EVERY TAB** (MW, backlogged v3.117.0). The scale
   lives in `:root` and Monthly Reports uses it; the app chrome and the other
   tabs still carry roughly 80 hard-coded px sizes. The `type:scale` audit rule
@@ -699,6 +714,51 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.129.0 — the YouTube API path is removed, not disabled.**
+
+MW: "remove the whole idea from our code — since we are not using API approach
+anymore." Deleting the OAuth client without deleting the code leaves a path that
+looks available and is not, which is the same silent-failure shape this file
+keeps warning about.
+
+**GONE:** `ytApiConfigured`, `ytAccessToken`, `ytReport`, `ytTitles`,
+`buildYouTubeApi`, the `YT_CLIENT_ID` / `YT_CLIENT_SECRET` / `YT_REFRESH_TOKEN` /
+`YT_CHANNEL_ID` constants, the `apiError` diagnosis, the amber card in
+`index.html`, and the mock-fetch stubs for the OAuth token exchange, the
+Analytics reports and the Data API title lookup.
+
+**KEPT:** `buildYouTube` and `YT_SHEET_ID`. The Apps Script sheet is now the
+only path, and it is not a fallback any more — it is the source.
+
+**WHY THE API COULD NEVER WORK, settled for good.** The channel is a **Brand
+Account**. v3.128.0 reasoned that an OAuth consent screen shows an identity
+picker, so MW-as-manager could grant it without the owner. That reasoning was
+sound and the grant still failed — see §12. **Do not rebuild this on the theory
+that the consent was simply done wrong.**
+
+**TWO ASSERTIONS ARE NOW ABSENCES**, which is the point. `boot.js` fails if a
+card matching `/not connected/i` renders again; `smoke.sh` boots WITH
+`YT_CLIENT_ID`/`SECRET`/`REFRESH_TOKEN` deliberately set and asserts
+`source === 'apps-script-sheet'` and `apiError === undefined`. A leftover secret
+in Cloud Run cannot revive a path that is not there, and a copy-paste cannot
+bring the amber box back without failing the suite.
+
+**THE REAL YOUTUBE RISK MOVED TO THE SHEET, and it is unverified.** In the repo
+copy of `youtube-to-sheet.gs`, **`CHANNEL_ID` is blank** (line 82), which means
+the job queries `channel==MINE` — the personal channel, not the hospital's. The
+script's own comment says that returns **a full run of zeros without erroring**,
+and it writes a warning into the Meta tab's `notes` when it detects it. Whether
+the live script has `CHANNEL_ID` set is NOT KNOWN from here. If the YouTube
+slide ever reads implausibly low, check the sheet's Meta tab before touching any
+code — the fault will not be in `server.js`.
+
+**The Apps Script is a SEPARATE credential from the one that was revoked.** It
+authorises as MW's own Google account under Apps Script's own hidden GCP project
+`1084562832966`, not `ai-reporting-503911`. Revoking the OAuth client and the
+token grant did not touch it and did not require a CSV import; the daily trigger
+still runs. Worth stating because the two were easy to conflate — both are "the
+YouTube API", by two different doors.
 
 **v3.128.2 — the YouTube API error is shown on the slide.**
 

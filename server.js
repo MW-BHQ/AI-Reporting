@@ -1883,41 +1883,19 @@ async function buildReport(from, to) {
    * down with it.
    */
   /**
-   * API first, sheet second. The API is live data and needs no monthly human
-   * step; the Apps Script sheet stays as the fallback so the cards keep working
-   * while the OAuth secrets are being set up, and if the refresh token is ever
-   * revoked the report degrades to the sheet rather than to nothing.
+   * SHEET ONLY. The direct YouTube Analytics path was removed in v3.129.0.
+   *
+   * It could never work: the channel is a BRAND ACCOUNT, and the grant has to
+   * come from an identity that manages it. The OAuth client, its refresh token
+   * and the `apiError` card are gone, along with the amber box that reported a
+   * failure nobody could fix from here. The Apps Script sheet is the only path,
+   * and it authorises as MW's own account rather than as an OAuth app.
+   *
+   * If YouTube numbers look wrong, the fault is in the SHEET, not here — check
+   * the Meta tab's `notes` for the wrong-channel warning (`CHANNEL_ID` unset
+   * queries `channel==MINE`, which returns a full run of zeros without erroring).
    */
-  jobs.youtube = (ytApiConfigured()
-    ? buildYouTubeApi(from, to).catch(async (e) => {
-        const msg = String(e.message || e);
-        logJson("WARN", "youtube_api_failed", { error: msg });
-        /**
-         * The reason travels ON THE PAYLOAD, not only into the logs.
-         *
-         * The three ways this fails need three different fixes and they are
-         * indistinguishable from an empty card: 403 means the token belongs to
-         * the wrong account (the personal channel, not the Brand Account);
-         * invalid_grant means the consent screen was left in Testing and the
-         * token has aged out after 7 days, or access was revoked; anything else
-         * is a query problem. Making someone read Cloud Run logs to tell those
-         * apart is how a wrong-account token sits there for a month.
-         */
-        const fallback = await buildYouTube(from, to).catch(() => null);
-        const diagnosis =
-          /\b403\b|Forbidden/i.test(msg)
-            ? "403 from YouTube: this refresh token is not authorised for channel "
-              + YT_CHANNEL_ID + ". It was almost certainly granted by the personal "
-              + "account rather than the Bangkok Hospital Brand Account \u2014 redo the "
-              + "consent and pick the brand account in the chooser."
-          : /invalid_grant/i.test(msg)
-            ? "Refresh token rejected. Either the OAuth consent screen is still in "
-              + "Testing (which expires tokens after 7 days) or access was revoked."
-          : msg;
-        return { ...(fallback || { available: false }), apiError: diagnosis };
-      })
-    : buildYouTube(from, to)
-  ).catch((e) => {
+  jobs.youtube = buildYouTube(from, to).catch((e) => {
     logJson("WARN", "youtube_failed", { error: String(e.message || e) });
     return null;
   });
@@ -4250,161 +4228,6 @@ function monthWeekLabels(from, to) {
  */
 const YT_SHEET_ID = process.env.YT_SHEET_ID || "1o0n44IioDyEvAlNt_Tf11SxD11mDpkzlfABbBSbJZus";
 
-/**
- * YOUTUBE ANALYTICS, DIRECT — the automated path (MW: manual is a last resort).
- *
- * WHY THIS WORKS WHERE EVERYTHING ELSE FAILED. The Bangkok Hospital channel is a
- * BRAND ACCOUNT. Apps Script and service accounts always run as a fixed
- * identity, so they can only ever ask about the personal channel — which is why
- * `channel==MINE` returned 400 days of zeros and the explicit channel id
- * returned Forbidden. An OAuth consent screen, by contrast, shows an IDENTITY
- * PICKER, and Google documents that "a Brand Account may authorize scopes
- * requested by your project's OAuth clients if a specified test user manages the
- * Brand Account". MW manages it, so MW can grant it. That is the same mechanism
- * Looker Studio uses, which is why Looker could always see the data.
- *
- * SETUP (once, no channel owner required):
- *   1. GCP -> APIs -> enable "YouTube Analytics API" and "YouTube Data API v3".
- *   2. OAuth consent screen: External. Add MW as a test user.
- *      Then PUBLISH IT ("In production"). This matters: an External app left in
- *      Testing has its refresh tokens killed after SEVEN DAYS. Published,
- *      they persist. Verification is not required for internal use — the
- *      "unverified app" warning is clicked through once, at consent.
- *   3. Create an OAuth client (type: Web application), redirect
- *      https://developers.google.com/oauthplayground for the one-off consent.
- *   4. Consent with scopes:
- *        https://www.googleapis.com/auth/yt-analytics.readonly
- *        https://www.googleapis.com/auth/youtube.readonly
- *      IN THE ACCOUNT CHOOSER, PICK "Bangkok Hospital", not the personal
- *      account. This single choice is the whole trick.
- *   5. Set YT_CLIENT_ID, YT_CLIENT_SECRET, YT_REFRESH_TOKEN, YT_CHANNEL_ID.
- *
- * If the secrets are absent this whole path is skipped and the Apps Script
- * sheet is used instead, so nothing breaks while setup is pending.
- */
-const YT_CLIENT_ID = process.env.YT_CLIENT_ID || "";
-const YT_CLIENT_SECRET = process.env.YT_CLIENT_SECRET || "";
-const YT_REFRESH_TOKEN = process.env.YT_REFRESH_TOKEN || "";
-const YT_CHANNEL_ID = process.env.YT_CHANNEL_ID || "UCS2S3J9FRJMDl5MvldMXc2Q";
-const ytApiConfigured = () => !!(YT_CLIENT_ID && YT_CLIENT_SECRET && YT_REFRESH_TOKEN);
-
-let ytToken = { value: null, expires: 0 };
-
-/**
- * Access token from the refresh token, cached until shortly before expiry.
- *
- * The 60-second safety margin exists because a token that expires mid-report
- * fails the second of three queries, which looks like a partial data outage
- * rather than an auth problem.
- */
-async function ytAccessToken() {
-  const now = Date.now();
-  if (ytToken.value && now < ytToken.expires) return ytToken.value;
-  const body = new URLSearchParams({
-    client_id: YT_CLIENT_ID, client_secret: YT_CLIENT_SECRET,
-    refresh_token: YT_REFRESH_TOKEN, grant_type: "refresh_token",
-  });
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: body.toString(),
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok || !json.access_token) {
-    /**
-     * `invalid_grant` here means the refresh token is dead, and it is worth
-     * naming the two causes because they need different fixes: the consent
-     * screen was left in Testing (7-day expiry), or someone revoked the app.
-     */
-    const hint = json.error === "invalid_grant"
-      ? " (refresh token rejected: consent screen may still be in Testing, which expires tokens after 7 days, or access was revoked)"
-      : "";
-    throw new Error(`youtube token exchange failed: ${json.error || res.status}${hint}`);
-  }
-  ytToken = { value: json.access_token,
-    expires: now + Math.max(60, (n(json.expires_in) || 3600) - 60) * 1000 };
-  return ytToken.value;
-}
-
-/**
- * One YouTube Analytics report.
- *
- * Deliberately narrow: ONE dimension set and only the metrics that report
- * supports. Windsor's connector failed on this exact point — it asked for
- * `day` + `video` + `creatorContentType` with 24 metrics including annotation,
- * card and Red metrics in a single call, which is not a supported combination,
- * and got `400 The query is not supported`.
- */
-async function ytReport({ from, to, metrics, dimensions, sort, maxResults }) {
-  const token = await ytAccessToken();
-  const qs = new URLSearchParams({
-    ids: `channel==${YT_CHANNEL_ID}`,
-    startDate: from, endDate: to, metrics, dimensions,
-  });
-  if (sort) qs.set("sort", sort);
-  if (maxResults) qs.set("maxResults", String(maxResults));
-  const url = `https://youtubeanalytics.googleapis.com/v2/reports?${qs.toString()}`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = (json.error && json.error.message) || res.status;
-    throw new Error(`youtube analytics ${dimensions}: ${msg}`);
-  }
-  return json.rows || [];
-}
-
-/** Video titles from the Data API; Analytics returns ids only. */
-async function ytTitles(ids) {
-  const out = {};
-  const clean = ids.filter(Boolean);
-  if (!clean.length) return out;
-  const token = await ytAccessToken();
-  for (let i = 0; i < clean.length; i += 50) {
-    const qs = new URLSearchParams({ part: "snippet", id: clean.slice(i, i + 50).join(",") });
-    const res = await fetch(`https://youtube.googleapis.com/youtube/v3/videos?${qs}`,
-      { headers: { Authorization: `Bearer ${token}` } });
-    const json = await res.json().catch(() => ({}));
-    // A missing title must not lose the row's numbers.
-    for (const v of (json.items || [])) out[v.id] = (v.snippet && v.snippet.title) || "";
-  }
-  return out;
-}
-
-async function buildYouTubeApi(from, to) {
-  const daily = await ytReport({ from, to, dimensions: "day",
-    metrics: "views,estimatedMinutesWatched,likes,comments,shares,subscribersGained,subscribersLost",
-    sort: "day" });
-  const sharing = await ytReport({ from, to, dimensions: "sharingService",
-    metrics: "shares", sort: "-shares" });
-  const vids = await ytReport({ from, to, dimensions: "video",
-    metrics: "views,estimatedMinutesWatched,likes,comments", sort: "-views", maxResults: 10 });
-  const titles = await ytTitles(vids.map((r) => r[0]));
-
-  const tot = { views: 0, minutes: 0, likes: 0, comments: 0, shares: 0, subsGained: 0, subsLost: 0 };
-  const series = daily.map((r) => {
-    const row = { d: String(r[0]), views: n(r[1]), minutes: n(r[2]),
-      likes: n(r[3]), comments: n(r[4]), shares: n(r[5]) };
-    tot.views += row.views; tot.minutes += row.minutes; tot.likes += row.likes;
-    tot.comments += row.comments; tot.shares += row.shares;
-    tot.subsGained += n(r[6]); tot.subsLost += n(r[7]);
-    return row;
-  });
-  const shareRows = sharing.map((r) => ({ service: String(r[0] || "OTHER"), shares: n(r[1]) }))
-    .filter((r) => r.shares > 0);
-  const shareTotal = shareRows.reduce((a, r) => a + r.shares, 0);
-
-  return {
-    available: series.length > 0 || shareRows.length > 0 || vids.length > 0,
-    source: "youtube-api",
-    totals: { ...tot, subsNet: tot.subsGained - tot.subsLost,
-      hoursWatched: Math.round(tot.minutes / 60) },
-    series,
-    sharing: { rows: shareRows.map((r) => ({ ...r,
-      share: shareTotal ? r.shares / shareTotal : null })), total: shareTotal, window: from },
-    videos: { window: from, rows: vids.map((r) => ({ id: String(r[0]),
-      title: titles[r[0]] || "", views: n(r[1]), minutes: n(r[2]),
-      likes: n(r[3]), comments: n(r[4]) })) },
-  };
-}
 
 async function buildYouTube(from, to) {
   const res = await sheetBatchGet(YT_SHEET_ID, [
