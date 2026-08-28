@@ -3375,6 +3375,8 @@ function renderOverview() {
     { n:'Google Ads', v: n0(io.gads) },
     { n:'Google Search', v: n0(io.gsc) },
     { n:'TikTok views', v: n0(io.tiktok) },
+    // Channel-wide, not branch-scoped — the awareness table below says so.
+    { n:'YouTube views', v: n0(io.youtube) },
     { n:'Facebook organic reach', v: n0(io.fbPage) },
     { n:'Google Business Profile', v: n0(io.gmb) },
   ].sort((a,b)=>b.v-a.v);
@@ -3407,7 +3409,7 @@ function renderOverview() {
         <div class="stage-head"><span class="stage-name">Impressions</span>
           <span class="stage-val ${isNA(d.totals.impressions)?'na':''}">${num(d.totals.impressions)}</span></div>
         <div class="bar">${srcSeg(impSources, d.totals.impressions||1)}</div>
-        <div class="stage-note"><b>TOFU.</b> Everything that put us in front of someone: Meta Ads, Google Ads, Search Console, TikTok views, Facebook <b>organic</b> reach and Google Business Profile views. Facebook contributes organic distribution only, so Meta Ads keeps its boosted and dark posts without either being counted twice. Units differ per platform, so read this as scale rather than one audited total. Email sends and LINE broadcasts belong here too but have no connector yet.</div>
+        <div class="stage-note"><b>TOFU.</b> Everything that put us in front of someone: Meta Ads, Google Ads, Search Console, TikTok views, <b>YouTube views</b>, Facebook <b>organic</b> reach and Google Business Profile views. YouTube is one corporate channel and cannot be split by branch, so unlike everything else here it is not scoped to the four hospitals. Facebook contributes organic distribution only, so Meta Ads keeps its boosted and dark posts without either being counted twice. Units differ per platform, so read this as scale rather than one audited total. Email sends and LINE broadcasts belong here too but have no connector yet.</div>
       </div>
       <div class="stage minor">
         <div class="stage-head"><span class="stage-name">Interactions</span>
@@ -6239,7 +6241,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.139.0';
+const CLIENT_BUILD = '3.140.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

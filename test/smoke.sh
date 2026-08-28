@@ -81,6 +81,7 @@ check "report"       GET "/api/report?from=$FROM&to=$TO"
 # every read with the access list, so /api/report returned the users array with
 # a 200 and nobody noticed. These assert the payload, not the status.
 REPORT="/api/report?from=$FROM&to=$TO"
+OVERVIEW="/api/overview?from=$FROM&to=$TO"
 SA="d.searchAds.byBrand.find(b=>b.key==="
 echo "--- monthly report: per-hospital split must be able to fail ---"
 # The brand comes from the campaign code. A boundary bug here sent every coded
@@ -197,6 +198,22 @@ expect_field "ai per-assistant KEs" "$REPORT" "d.referral.byBrand[0].ai.rows.eve
 expect_field "rf ai by channel"    "$REPORT" "d.referral.byBrand[0].ai.rows.some(r=>r.source==='facebook')?'ok':undefined"
 # Per-assistant event columns need per-assistant counts.
 expect_field "rf ai per-row events" "$REPORT" "d.referral.byBrand[0].ai.rows.every(r=>r.events&&typeof r.events==='object')?'ok':undefined"
+
+echo "--- overview: YouTube rides along as awareness, NOT in the funnel ---"
+# One Sheets read on the overview pull. It must not join the funnel: YouTube
+# views never become a GA4 session, and the sessions YouTube does drive are
+# already counted under Organic Social, so adding views would double-count the
+# ones that converted and invent the ones that did not.
+expect_field "ov yt awareness"     "$OVERVIEW" "d.impressionsBySource.youtube===1000?1000:undefined"
+expect_field "ov yt reach row"     "$OVERVIEW" "d.reachOnly.some(r=>r.channel==='YouTube')?'ok':undefined"
+# The scope caveat travels on the payload, not just in the client template.
+expect_field "ov yt scope stated"  "$OVERVIEW" "/NOT branch-scoped/.test((d.reachOnly.find(r=>r.channel==='YouTube')||{}).note||'')?'ok':undefined"
+# YouTube must NOT appear as a funnel channel.
+expect_field "ov yt not in funnel" "$OVERVIEW" "d.funnel.every(c=>!/youtube/i.test(c.channel))?'ok':undefined"
+# YouTube IS inside totals.impressions. The bar draws each source as a share of
+# that total, so a source in the bar but not the total makes every percentage
+# overstate and the widths sum past 100%.
+expect_field "ov yt in imp total"  "$OVERVIEW" "(d.totals.impressions>=d.impressionsBySource.youtube)?'ok':undefined"
 
 echo "--- monthly report: YouTube (Studio export, Daily + Videos) ---"
 YT="d.youtube"

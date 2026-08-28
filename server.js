@@ -1204,6 +1204,16 @@ async function buildOverview(from, to) {
   const daysElapsed = today.getDate();
 
   const { data, errors } = await runJobs({
+    /**
+     * YouTube rides along as AWARENESS (MW). One Sheets read, and `runJobs`
+     * nulls it if the sheet is unavailable, so it cannot fail the pull.
+     *
+     * It is NOT in the funnel. YouTube views never become a GA4 session, and the
+     * sessions YouTube DOES drive are already counted under Organic Social —
+     * adding views to the funnel total would double-count the ones that
+     * converted and invent the ones that did not.
+     */
+    youtube: buildYouTube(from, to),
     ga4: ga4Compat(GA4_FUNNEL_DIMS, ["sessions", "engaged_sessions"], from, to),
     keyEvents: ga4KeyEvents(GA4_FUNNEL_DIMS, from, to),
     ga4Ecom: ga4Compat(GA4_FUNNEL_DIMS, GA4_ECOM_METRICS, from, to),
@@ -1277,7 +1287,20 @@ async function buildOverview(from, to) {
   const ke = data.keyEvents || { total: 0, byKey: new Map(), byName: new Map(), failed: true };
   const ecom = data.ga4Ecom;
 
+  /**
+   * YouTube views for the window, or NULL — never 0.
+   *
+   * The export sheet starts at 2025-01-01, so a range before that legitimately
+   * has no rows. `days === 0` means "not in the sheet", which is a different
+   * statement from "nobody watched", and the second is what a 0 would say on an
+   * executive slide. This is the same distinction that let a dead channel look
+   * like a quiet month for 400 days.
+   */
+  const ytTotals = (data.youtube && data.youtube.totals) || null;
+  const ytViews = ytTotals && ytTotals.days ? ytTotals.views : null;
+
   const impressions = {
+    youtube: ytViews,
     meta: sumOrNull(data.meta, "impressions"),
     gads: sumOrNull(data.gads, "impressions"),
     gsc: sumOrNull(data.gsc, "impressions"),
@@ -1380,6 +1403,18 @@ async function buildOverview(from, to) {
       // AND in Meta Ads impressions, so this cannot join the funnel total.
       note: "page reach — includes Boost Post, so not added to the funnel total" },
     { channel: "TikTok", impressions: impressions.tiktok, note: "video views — counted in the funnel as Organic Social" },
+    /**
+     * SCOPE IS ON THE ROW, and it has to be. Everything else in Overview is
+     * filtered to the four hospitals; the YouTube channel is a single corporate
+     * channel that cannot be split by branch. Leaving that unsaid would put a
+     * group-level number inside a BHQ-scoped view — exactly the conflation this
+     * project refuses to make anywhere else.
+     */
+    { channel: "YouTube", impressions: impressions.youtube,
+      note: "video views — one corporate channel, so NOT branch-scoped like the rest of this view",
+      sub: ytTotals && ytTotals.days
+        ? `${ytTotals.days} days in the export${ytTotals.hoursWatched ? ` · ${Math.round(ytTotals.hoursWatched).toLocaleString()} hours watched` : ""}`
+        : "no rows in the export sheet for this range" },
     // LINE is listed only while the connector is on. Showing a permanent
     // "unavailable" row trains people to ignore the panel.
     ...(LINE_ENABLED ? [{ channel: "LINE", impressions: impressions.line, note: lineBasis,
@@ -1420,8 +1455,21 @@ async function buildOverview(from, to) {
        * boosted and dark distribution without either being counted twice.
        * Email sends and LINE broadcasts belong here too but have no connector.
        */
+      /**
+       * YouTube views are IN this total (MW), which is what keeps the bar
+       * honest: the segments are drawn as a share of `totals.impressions`, so a
+       * source in the bar but not in the total makes every percentage overstate
+       * and the widths sum past 100%.
+       *
+       * Note the scope mismatch this creates and does not hide: every other
+       * figure here is filtered to the four hospitals, while the YouTube channel
+       * is one corporate channel. The awareness row below says so explicitly.
+       * The alternative — leaving YouTube out of a slide called "everything that
+       * put us in front of someone" — understates by a million views a month.
+       */
       const vals = [impressions.meta, impressions.gads, impressions.gsc,
-                    impressions.tiktok, impressions.fbPage, impressions.gmb];
+                    impressions.tiktok, impressions.fbPage, impressions.gmb,
+                    impressions.youtube];
       return vals.every((v) => v === null) ? null : vals.reduce((a, v) => a + n(v), 0);
     })(),
     clicks: (() => {
@@ -1582,6 +1630,9 @@ async function buildOverview(from, to) {
     impressionsBySource: {
       meta: impressions.meta, gads: impressions.gads, gsc: impressions.gsc,
       fbPage: impressions.fbPage, gmb: impressions.gmb, tiktok: impressions.tiktok,
+      // Explicit whitelist, so adding a key to `impressions` is not enough —
+      // that is exactly how this one was missed on the first attempt.
+      youtube: impressions.youtube,
       adClicks: addNullable(adClicksByKey.meta, adClicksByKey.gads),
       searchClicks: adClicksByKey.gsc,
       fbEngagements: sumOrNull(data.fbOrganic, "post_engagements"),

@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.139.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.140.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,44 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.140.0 — YouTube joins Overview as AWARENESS (MW).**
+
+**It is in the TOFU impressions bar and its total, and NOT in the session
+funnel.** YouTube views never become a GA4 session, and the sessions YouTube DOES
+drive are already counted under Organic Social — putting views in the funnel
+would double-count the ones that converted and invent the ones that did not.
+`smoke.sh` asserts YouTube is absent from `funnel` for exactly that reason.
+
+**IT HAD TO GO INTO `totals.impressions`, not just the bar.** The segments are
+drawn as a share of that total, so a source in the bar but missing from the total
+makes every percentage overstate and the widths sum past 100%. Asserted.
+
+**THE SCOPE MISMATCH IS REAL AND IS STATED ON THE SLIDE.** Everything else in
+Overview is filtered to the four hospitals; the YouTube channel is a single
+corporate channel that cannot be split by branch. So the awareness row carries
+"one corporate channel, so NOT branch-scoped like the rest of this view", the
+TOFU note repeats it, and `boot.js` asserts the caveat renders. The alternative
+was leaving a million views a month out of a slide captioned "everything that put
+us in front of someone" — but an unlabelled group-level number inside a
+BHQ-scoped view is the one conflation this project refuses everywhere else, so it
+gets a label rather than silence.
+
+**Views are NULL, never 0, when the export has no rows** for the range. The sheet
+starts 2025-01-01, so an earlier window legitimately has nothing; `days === 0`
+means "not in the sheet", which is a different claim from "nobody watched". The
+row then reads "no rows in the export sheet for this range".
+
+**TWO MISTAKES WORTH RECORDING.** `impressionsBySource` is an explicit
+whitelist, so adding a key to the internal `impressions` object was NOT enough —
+the payload silently lacked `youtube` and only the smoke assertion caught it.
+And the TOFU stage-note ENUMERATES what is in the bar, so adding a source
+without editing that prose would have left the note quietly lying about its own
+chart. Anything added to that bar needs all four touched: `impressions`,
+`totals.impressions`, `impressionsBySource`, and the note.
+
+One extra Sheets read per overview pull, wrapped by `runJobs`, so an unavailable
+sheet nulls the row rather than failing the pull.
 
 **v3.139.0 — Overview finally has a real fixture, and the failure that hid two
 bugs is now impossible to hide.**

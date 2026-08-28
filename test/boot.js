@@ -63,7 +63,7 @@ function overviewFixture() {
       { label: "Chat opened",      value: 5045 },
     ],
     impressionsBySource: { meta: 4120000, gads: 2210000, gsc: 1880000,
-      tiktok: 431000, fbPage: 168000, gmb: 32200,
+      tiktok: 431000, fbPage: 168000, gmb: 32200, youtube: 1104891,
       adClicks: 38110, searchClicks: 12892, fbEngagements: 9044, ttEngagements: 14100 },
     offsiteActions: { gbpCalls: 1811, gbpDirections: 2440, gbpWebsiteClicks: 3902,
       gadsCalls: 640, metaMessages: 1290 },
@@ -72,6 +72,9 @@ function overviewFixture() {
     reachOnly: [
       { channel: "Facebook Page", note: "organic reach", sub: "27 branches" },
       { channel: "TikTok",        note: "video views" },
+      // Carries the scope caveat: Overview is branch-scoped, this channel is not.
+      { channel: "YouTube", note: "video views — one corporate channel, so NOT branch-scoped like the rest of this view",
+        sub: "31 days in the export · 15,304 hours watched" },
     ],
     ecommerce: { productViews: 88120, addToCarts: 4410, purchases: 512,
       revenue: 3120400, aov: 6094, cartRate: 0.05, purchaseRate: 0.116 },
@@ -509,6 +512,15 @@ setTimeout(() => {
       ["offsite actions", "Direction requests"],
       ["key events", "Appointment form"],
       ["top packages", "Cardiac screening"],
+      ["YouTube awareness", "YouTube views"],
+      /**
+       * THE SCOPE CAVEAT IS THE POINT, not the number. Every other figure in
+       * Overview is filtered to the four hospitals; the YouTube channel is one
+       * corporate channel that cannot be split by branch. A group-level number
+       * sitting unlabelled inside a BHQ-scoped view is the conflation this
+       * project refuses to make anywhere else, so the label is asserted.
+       */
+      ["YouTube scope caveat", "NOT branch-scoped"],
     ];
     for (const [what, needle] of needs) {
       if (!text.includes(needle)) return fail("overview renders", `${what}: "${needle}" missing`);
