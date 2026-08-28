@@ -25,6 +25,74 @@ const SRC = html;
 let failures = 0;
 
 /** A report payload with every key the renderer reads, one row deep. */
+/**
+ * A COMPLETE `/api/overview` PAYLOAD.
+ *
+ * Added in v3.139.0 because `renderOverview` had NEVER been executed by the
+ * suite — the tab waited for a click and the suite never clicked. The first time
+ * it ran, two bugs fell out at once: 15 calls to an out-of-scope `n0`, and a
+ * white screen on a partial payload. This fixture exists so the NORMAL render
+ * path is exercised, not only the degraded branch.
+ *
+ * Deliberately awkward in the ways the real payload is:
+ *   - `paid.cpc` is null and `topAccounts` is EMPTY — the shape of a Meta pull
+ *     that failed while GA4 succeeded. `runJobs` nulls a failed source and still
+ *     returns 200, so this is the common case, not an edge one.
+ *   - `funnel` carries a channel with ZERO key events, so a rate of 0.0% must be
+ *     distinguishable from a missing one.
+ *   - `trend` spans BOTH chart axes (visits/engagement on y, keyEvents/spend on
+ *     y1), which exercises the conditional `y1` from v3.132.0.
+ *   - `topProducts` holds 9 rows against a `.slice(0, 8)`, so an off-by-one in
+ *     the cap shows up as a named row rather than as nothing.
+ */
+function overviewFixture() {
+  return {
+    cached: false, cacheAgeSec: 0,
+    unavailable: { map: { topAccounts: "facebook HTTP 500 simulated" } },
+    totals: { visits: 412903, engagement: 208114, clicks: 51002,
+      impressions: 8841200, keyEvents: 19477, keyEventsOffsite: 3120 },
+    funnel: [
+      { channel: "Organic Search", visits: 231004, engagement: 121888, keyEvents: 11902 },
+      { channel: "Paid Social",    visits: 98771,  engagement: 44120,  keyEvents: 5411 },
+      { channel: "Direct",         visits: 61228,  engagement: 32006,  keyEvents: 2164 },
+      { channel: "Referral",       visits: 21900,  engagement: 10100,  keyEvents: 0 },
+    ],
+    keyEventBreakdown: [
+      { label: "Appointment form", value: 8112 },
+      { label: "Call tap",         value: 6320 },
+      { label: "Chat opened",      value: 5045 },
+    ],
+    impressionsBySource: { meta: 4120000, gads: 2210000, gsc: 1880000,
+      tiktok: 431000, fbPage: 168000, gmb: 32200,
+      adClicks: 38110, searchClicks: 12892, fbEngagements: 9044, ttEngagements: 14100 },
+    offsiteActions: { gbpCalls: 1811, gbpDirections: 2440, gbpWebsiteClicks: 3902,
+      gadsCalls: 640, metaMessages: 1290 },
+    paid: { spend: 1840220, impressions: 6330000, clicks: 38110, cpc: null,
+      byPlatform: { meta: 1120400, gads: 719820 } },
+    reachOnly: [
+      { channel: "Facebook Page", note: "organic reach", sub: "27 branches" },
+      { channel: "TikTok",        note: "video views" },
+    ],
+    ecommerce: { productViews: 88120, addToCarts: 4410, purchases: 512,
+      revenue: 3120400, aov: 6094, cartRate: 0.05, purchaseRate: 0.116 },
+    forecast: { monthToDate: 1980220, projectedMonthEnd: 3410800,
+      daysElapsed: 18, daysInMonth: 31 },
+    topAccounts: [],
+    topProducts: [
+      { name: "Cardiac screening", views: 9120 }, { name: "Annual checkup", views: 8110 },
+      { name: "Vaccine package", views: 7400 },   { name: "Dental", views: 6210 },
+      { name: "Eye care", views: 5980 },          { name: "Physio", views: 5100 },
+      { name: "MRI", views: 4880 },               { name: "Sleep clinic", views: 4010 },
+      { name: "Ninth row past the cap", views: 3900 },
+    ],
+    trend: [
+      { d: "2026-07-01", visits: 13100, engagement: 6800, keyEvents: 610, spend: 58200 },
+      { d: "2026-07-02", visits: 14020, engagement: 7110, keyEvents: 655, spend: 61100 },
+      { d: "2026-07-03", visits: 12880, engagement: 6440, keyEvents: 588, spend: 57400 },
+    ],
+  };
+}
+
 function reportFixture() {
   const KEYS = ["BGH", "BIH", "BHT", "WSH"];
   const events = [{ id: "find_doctors", label: "Find doctors", value: 5 },
@@ -360,9 +428,11 @@ const dom = new JSDOM(html, {
      * template is actually executed end to end.
      */
     const REPORT = reportFixture();
+    const OVERVIEW = overviewFixture();
     w.fetch = (url) => {
       const u = String(url || "");
-      const body = u.includes("/api/report") ? REPORT : {
+      const body = u.includes("/api/report") ? REPORT
+        : u.includes("/api/overview") ? OVERVIEW : {
         tabs: ["overview", "report"], allTabs: [], admins: [], defaultTabs: [],
         version: "test", isAdmin: false, users: [],
       };
@@ -409,41 +479,67 @@ setTimeout(() => {
     : fail("scope hidden on overview", "scope switch is visible where it does nothing");
 
   /**
-   * A PARTIAL OVERVIEW PAYLOAD MUST NOT WHITE-SCREEN (v3.138.0).
+   * OVERVIEW RENDERS FOR REAL (v3.139.0).
    *
-   * The stub answers `/api/overview` with the generic identity object, which is
-   * exactly the shape of a degraded pull: 200 OK, sections missing. Before the
-   * guard, `renderOverview` read `d.totals.impressions` and threw a TypeError,
-   * leaving an EMPTY tab with no error state and no status — a failure that looks
-   * like nothing at all.
-   *
-   * Only reachable because Overview auto-loads now. While it waited for a click,
-   * `boot.js` never clicked, so this whole function was unexercised by the suite —
-   * which is how 15 calls to an out-of-scope `n0` survived in it.
-   *
-   * NOT a substitute for a real overview fixture: this asserts the DEGRADED
-   * branch. The normal render path, including the impressions-by-source section
-   * where `n0` was broken, is still untested. See CONTEXT.
+   * ASYNCHRONOUS BY NECESSITY, and the ordering is load-bearing. The tab
+   * auto-loads, so its payload lands a microtask after boot — reading
+   * `textContent` straight away returns "" and an emptiness check would PASS on
+   * exactly the white screen it exists to catch. Worse, the report click below
+   * replaces `#viewRoot` in a microtask too, so an unsequenced check reads the
+   * REPORT's markup and blames Overview (which cost a debugging round). Hence:
+   * Overview asserts at 0ms, the report click is deferred behind it.
    */
-  (() => {
+  setTimeout(() => {
     const root = d.getElementById("viewRoot");
-    if (!root) return fail("overview degrades", "no #viewRoot after boot");
-    const t = root.textContent;
-    if (/came back incomplete/i.test(t)) {
-      return root.querySelector('[data-load="overview"]')
-        ? ok("overview degrades", "partial payload states what is missing, offers retry")
-        : fail("overview degrades", "incomplete-pull state has no retry button");
+    const html = root ? root.innerHTML : "";
+    const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+
+    if (errors.length) return fail("overview renders", errors.slice(0, 2).join(" | "));
+    if (!text) return fail("overview renders", "#viewRoot is empty — the white screen is back");
+    if (/Something went wrong|came back incomplete/i.test(text)) {
+      return fail("overview renders", text.slice(0, 140));
     }
-    return /Something went wrong|Pulling/i.test(t)
-      ? ok("overview degrades", "partial payload handled without throwing")
-      : fail("overview degrades", `partial payload rendered nothing usable: "${t.slice(0, 80)}"`);
-  })();
+    /**
+     * These assert the DATA reached the markup. Counting cards proves nothing:
+     * `n0` threw for months inside a section that was in the DOM the whole time.
+     */
+    const needs = [
+      ["the channel funnel", "Organic Search"],
+      ["impressions by source", "Google Business Profile"],
+      ["offsite actions", "Direction requests"],
+      ["key events", "Appointment form"],
+      ["top packages", "Cardiac screening"],
+    ];
+    for (const [what, needle] of needs) {
+      if (!text.includes(needle)) return fail("overview renders", `${what}: "${needle}" missing`);
+    }
+    /**
+     * `topProducts` carries 9 rows against a `.slice(0, 8)`, so asserting the
+     * 9th is ABSENT catches an off-by-one that would otherwise be one extra
+     * table row nobody counts.
+     */
+    if (text.includes("Ninth row past the cap")) {
+      return fail("overview renders", "the topProducts cap is off by one");
+    }
+    /**
+     * Meta failed in this fixture, so `paid.cpc` is null. A null must render as
+     * an em dash, NEVER ฿0 — a zero CPC reads as free advertising rather than as
+     * a number we do not have.
+     */
+    if (/฿0(?![.\d])/.test(text)) {
+      return fail("overview renders", "a null paid metric rendered as ฿0");
+    }
+    ok("overview renders", `${Math.round(html.length / 1024)}kb, nulls held as em dashes`);
+  }, 0);
 
   /**
    * Render the heaviest view for real. Overview with no data exercises almost
    * none of the template; the report renderer is where the removals and
    * refactors land, and a dead identifier there only throws once data arrives.
    */
+  // Deferred behind the Overview assertions above: clicking through re-renders
+  // `#viewRoot`, and a microtask would win the race against their 0ms timer.
+  setTimeout(() => {
   const bgh = d.querySelector('.nav-item[data-view="report"][data-brand="BGH"]');
   if (!bgh) {
     fail("report nav present", "no BGH item under Monthly Reports");
@@ -1008,6 +1104,7 @@ setTimeout(() => {
       finish();
     }, 500);
   }
+  }, 1);
 }, 1200);
 
 function finish() {

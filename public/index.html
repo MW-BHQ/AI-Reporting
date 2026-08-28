@@ -1609,8 +1609,46 @@ function render() {
 // ============================================================ BOARD REPORT
 function renderReport() {
   const d = S.report;
-  if (!d) { loadReport().then(render).catch(e => { $('viewRoot').innerHTML = errorState(e.message); }); 
-            $('viewRoot').innerHTML = '<div class="card"><div class="state"><div class="big">Loading\u2026</div></div></div>'; return; }
+  /**
+   * SAME GUARD AS OVERVIEW (v3.139.0), for the same two reasons.
+   *
+   * `render()` runs on far more than arrival, and `S.report` stays null after a
+   * failure — so the previous `if (!d) loadReport()` refired on EVERY later
+   * render, turning one failed pull into a stream of them. And `.then(render)`
+   * left a throw inside the renderer to escape as an unhandled rejection: a
+   * blank tab with only a console error, which is what an out-of-scope
+   * identifier did to Overview for months.
+   *
+   * `reportLoading` keeps it at-most-one-in-flight; `reportError` stops the
+   * cycle and waits for a person.
+   */
+  if (!d) {
+    if (S.reportError) {
+      $('viewRoot').innerHTML = errorState(S.reportError) +
+        `<div class="card"><div class="state">
+           <button class="btn btn-primary" data-load="report" style="margin-top:4px;">Retry</button>
+         </div></div>`;
+      return;
+    }
+    if (!S.reportLoading) {
+      S.reportLoading = true;
+      loadReport()
+        .catch((e) => { S.reportError = e.message || String(e); })
+        .finally(() => {
+          S.reportLoading = false;
+          try {
+            render();
+          } catch (err) {
+            S.reportError = `The report failed while drawing: ${err.message || err}`;
+            try { render(); } catch (_) {
+              $('viewRoot').innerHTML = errorState(S.reportError);
+            }
+          }
+        });
+    }
+    $('viewRoot').innerHTML = loadingState('Building the monthly report\u2026');
+    return;
+  }
   // BHQ = the four hospitals summed. Distinct from "group"/B+, which means the
   // 27-branch property — using one word for both is how a deck overstates.
   /**
@@ -3227,7 +3265,31 @@ function renderOverview() {
       S.overviewLoading = true;
       loadOverview()
         .catch((err) => { S.overviewError = err.message || String(err); })
-        .finally(() => { S.overviewLoading = false; render(); });
+        .finally(() => {
+          S.overviewLoading = false;
+          /**
+           * A THROW INSIDE THE RENDERER MUST NOT ESCAPE AS AN UNHANDLED
+           * REJECTION.
+           *
+           * `.catch()` above covers the FETCH failing. It does not cover
+           * `render()` itself throwing, and that is the failure that actually
+           * happened: an out-of-scope `n0` threw here, the rejection went
+           * unhandled, and the tab was left blank with nothing but a console
+           * error — no error state, no status, no retry. Indistinguishable from
+           * "the dashboard didn't load".
+           *
+           * Caught and turned into the error state, which renderOverview reaches
+           * without re-entering the code that threw.
+           */
+          try {
+            render();
+          } catch (err) {
+            S.overviewError = `The overview failed while drawing: ${err.message || err}`;
+            try { render(); } catch (_) {
+              $('viewRoot').innerHTML = errorState(S.overviewError);
+            }
+          }
+        });
     }
     $('viewRoot').innerHTML = loadingState('Pulling GA4, Meta, Search Console, GMB\u2026');
     return;
@@ -4264,6 +4326,7 @@ const VIEW_LOADERS = {
    * how a Retry button that looks fine ends up doing nothing at all.
    */
   overview:      { load: () => loadOverview(true),  err: 'overviewError',  busy: 'overviewLoading',  what: 'the overview' },
+  report:        { load: () => loadReport(true),    err: 'reportError',    busy: 'reportLoading',    what: 'the monthly report' },
   audiences:     { load: () => loadAudiences(),     err: 'audiencesError', busy: 'audiencesLoading', what: 'Meta ad sets' },
   ecom:          { load: () => loadEcom(),          err: 'ecomError',      busy: 'ecomLoading',      what: 'the Orders sheet' },
   ecomcentre:    { load: () => loadEcomCentres(),   err: 'ecomcError',     busy: 'ecomcLoading',     what: 'sales by center' },
@@ -6176,7 +6239,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.138.0';
+const CLIENT_BUILD = '3.139.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

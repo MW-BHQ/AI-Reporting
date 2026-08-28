@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.138.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.139.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,52 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.139.0 — Overview finally has a real fixture, and the failure that hid two
+bugs is now impossible to hide.**
+
+**THE ROOT CAUSE OF THE WHOLE EPISODE: an unhandled rejection.** The auto-load's
+`.catch()` covered the FETCH failing. It did NOT cover `render()` itself
+throwing — and that is the failure that actually happened. The out-of-scope `n0`
+threw inside the renderer, the rejection went unhandled, and the tab was left
+BLANK: no error state, no status line, no retry, only a console error. From the
+outside that is indistinguishable from "the dashboard didn't load", which is
+exactly how MW described it. Both `renderOverview` and `renderReport` now catch a
+render throw and turn it into a named error state.
+
+**A COMPLETE `/api/overview` FIXTURE**, so the normal render path is exercised
+rather than only the degraded branch. Deliberately awkward where the real payload
+is: `paid.cpc` null and `topAccounts` EMPTY (a Meta pull that failed while GA4
+succeeded — `runJobs` nulls a source and still returns 200, so this is the common
+case); a funnel channel with ZERO key events; a `trend` spanning both chart axes
+to exercise the conditional `y1`; and **9 `topProducts` rows against a
+`.slice(0, 8)`**, with the 9th named "Ninth row past the cap" so an off-by-one
+shows up as a phrase rather than as one uncounted row.
+
+Assertions check that the DATA reached the markup, not that cards exist —
+counting cards proves nothing, since `n0` threw for months inside a section that
+was in the DOM the whole time. **Verified by putting the `n0` bug back**: the
+suite now reports `FAIL overview renders — The overview failed while drawing: n0
+is not defined`. Before this release the same bug produced a hard process crash
+with no labelled assertion; before v3.138.0 it produced nothing at all.
+
+**ORDERING IN `boot.js` IS LOAD-BEARING, and it cost a debugging round.** Both
+Overview's auto-load and the report click re-render `#viewRoot` in a MICROTASK.
+The first version of these assertions read `textContent` immediately, got `""`,
+and would have PASSED on exactly the white screen it was written to catch; the
+second read the REPORT's markup and blamed Overview. Overview now asserts at 0ms
+and the report click is deferred behind it at 1ms. An emptiness check is also
+explicit, so `""` fails loudly.
+
+**`renderReport` GOT THE SAME GUARD** — `reportLoading` for at-most-one-in-flight,
+`reportError` to stop the retry cycle, both registered in `VIEW_LOADERS` so their
+Retry buttons route through the shared handler.
+
+**A NOTE ON PROCESS.** Two of the fixes in this release were mine to make and one
+of the test needles was a careless guess (`"Messages"` for a label that reads
+`Direction requests`, wrapped in a ternary whose branches were identical). The
+fixture is worth more than the assertions built on it — check needles against the
+source, not against what the field is called.
 
 **v3.138.0 — Overview auto-loads for last month, and doing so exposed TWO real
 bugs that had shipped for months.**
