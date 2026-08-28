@@ -272,7 +272,7 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
    * `--text-3xs` closed that gap; these selectors are now enforced, because the
    * rail is the one place a stray px is least likely to be noticed by eye.
    */
-  const SCOPED = /^\s*\.(slide-title|note|stat|mini|cbc|cbc-\w+|card-title|cb-\w+|lang-tab|clang-tab|brand-name|brand-sub|nav-label|nav-group|nav-item|ai-badge|rail-foot)\b|^\s*table\{/;
+  const SCOPED = /^\s*\.(slide-title|note|stat|mini|cbc|cbc-\w+|card-title|cb-\w+|lang-tab|clang-tab|brand-name|brand-sub|nav-label|nav-group|nav-item|ai-badge|rail-foot|subtitle|dates|btn|status|seg(?![\w-]))\b|^\s*(?:table|h1)\{/;
   /**
    * @media blocks are skipped by tracking brace depth, not by testing the line
    * for "@media" — the overrides live INSIDE the block, on lines that never

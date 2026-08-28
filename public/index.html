@@ -149,8 +149,8 @@
   /* ---------------- main ---------------- */
   .main{flex:1;min-width:0;padding:26px 30px 60px;}
   .head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;margin-bottom:20px;}
-  h1{font-size:25px;font-weight:600;margin:0;letter-spacing:-.02em;}
-  .subtitle{color:var(--muted);font-size:13px;margin-top:3px;}
+  h1{font-size:var(--text-2xl);font-weight:600;margin:0;letter-spacing:-.02em;}
+  .subtitle{color:var(--muted);font-size:var(--text-sm);margin-top:3px;}
 
   .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
   .seg{display:flex;gap:3px;background:var(--glass);border:1px solid var(--line);border-radius:12px;padding:4px;backdrop-filter:blur(10px);}
@@ -161,11 +161,11 @@
   .seg button:hover{color:var(--ink);}
   .seg button.active{background:#fff;color:var(--violet);font-weight:600;box-shadow:var(--shadow-sm);}
   .dates{display:flex;align-items:center;gap:6px;background:var(--glass);border:1px solid var(--line);border-radius:12px;padding:7px 11px;}
-  .dates input{background:transparent;border:none;color:var(--ink);font-family:inherit;font-size:12px;width:104px;}
+  .dates input{background:transparent;border:none;color:var(--ink);font-family:inherit;font-size:var(--text-xs);width:104px;}
   .dates input:focus{outline:none;}
   .dates span{color:var(--faint);}
   .btn{
-    border:none;border-radius:12px;font-family:inherit;font-size:12.5px;font-weight:600;
+    border:none;border-radius:12px;font-family:inherit;font-size:var(--text-xs);font-weight:600;
     padding:10px 16px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:.15s;
   }
   .btn-primary{background:linear-gradient(135deg,var(--violet),#6A7BF7);color:#fff;box-shadow:0 4px 14px rgba(124,107,245,.32);}
@@ -176,7 +176,7 @@
   @keyframes sp{to{transform:rotate(360deg);}}
   .btn.loading .spin{display:inline-block;}
 
-  .status{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted);}
+  .status{display:flex;align-items:center;gap:7px;font-size:var(--text-2xs);color:var(--muted);}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex:none;}
   .dot.idle{background:var(--faint);}
   .dot.busy{background:var(--amber);}
@@ -438,7 +438,7 @@
   .dlt.flat{background:rgba(140,155,190,.14);color:var(--muted);}
   .dlt.none{background:transparent;color:var(--faint);font-weight:400;}
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;}
-  .seg button{border:0;background:transparent;padding:5px 12px;font-size:11.5px;color:var(--muted);
+  .seg button{border:0;background:transparent;padding:5px 12px;font-size:var(--text-2xs);color:var(--muted);
     cursor:pointer;font-family:inherit;}
   .seg button.on{background:var(--violet);color:#fff;font-weight:500;}
   .seg.locked{opacity:.55;cursor:not-allowed;}
@@ -2275,38 +2275,8 @@ function renderReport() {
         </div>
         <hr class="sep">
         <div class="cb-cards"><div class="grid g-2">${shown.map(card).join('')}</div></div>
-        ${idx === 0 ? sourceNote : ''}
       </div>`;
     };
-    /**
-     * WHY THIS NUMBER IS ~5x SMALLER THAN THE LOOKER DECK (MW's decision).
-     *
-     * Two events measure these clicks and they do not measure the same thing.
-     * The dashboard uses the GTM custom event `click_chat_bubble`, which fires
-     * on the bubble's own buttons and therefore sees all ten channels. The
-     * Looker deck used GA4 ENHANCED MEASUREMENT's `click`, which fires on every
-     * outbound <a> on the page — so it counts links that are not chat at all,
-     * and cannot see Webchat or WeChat because those are not links. That is why
-     * it reports both a bigger number AND fewer channels.
-     *
-     * MW chose the ten-channel figure. The note is on the slide rather than in
-     * this comment because the first executive to compare the two decks will
-     * ask, and "the dashboard is lower" invites the wrong conclusion about which
-     * one is broken.
-     */
-    /**
-     * The Looker figure is written out IN FULL rather than through `num()`.
-     * Everything else on the deck is abbreviated for scanning, but this one
-     * number exists to be matched against a specific figure on another report,
-     * and "2.4K" cannot be matched against "2,414".
-     */
-    const alt = CB.altChannelClicks;
-    const sourceNote = `<div class="note" style="margin-top:12px">
-      Channel clicks come from the chat bubble's own click event, so all ten
-      channels are counted.${(alt && alt > 0) ? ` The Looker deck reported
-      ${alt.toLocaleString('en-US')} for the same period because it counted every
-      outbound link on the page, not only chat, and could not see Webchat or
-      WeChat.` : ''}</div>`;
     return `
     <div class="cb-wrap">
       <div class="lang-tabs no-print">
@@ -6076,7 +6046,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.134.0';
+const CLIENT_BUILD = '3.135.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

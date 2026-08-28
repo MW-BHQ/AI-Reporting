@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.134.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.135.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,40 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.135.0 — Chat Bubble footnote removed; header/controls join the type scale
+(2 of 5 groups).**
+
+**The click-source note added in v3.133.0 is gone at MW's request.** Asserted as
+an ABSENCE rather than quietly deleted: the decision behind the number still
+stands and is still in the changelog, so a future session could reasonably
+re-add the note from reading it. It was not wanted on the slide.
+
+**Header/controls migrated:** `h1`, `.subtitle`, `.dates input`, `.btn`,
+`.status`, `.seg button`.
+
+Two sizes move visibly — `h1` 25px → 24px and `.subtitle` 13px → 14px. 13 sits
+exactly between two steps and the token comment calls 14px "secondary copy",
+which is what a subtitle is, so it went up for readability. **Side effect worth
+an eyeball:** the h1/subtitle gap narrows from 12px to 10px, so the heading
+hierarchy is slightly flatter than before. The three controls all round DOWN by
+half a pixel, which is the safe direction for buttons and inputs.
+
+The print `@media` keeps `h1{font-size:20px}` in px deliberately — print is an
+absolute medium and the audit skips `@media` blocks by brace depth.
+
+**A REGEX MISTAKE WORTH RECORDING.** Adding `seg` to the `type:scale` allowlist
+also matched `.seg-val`, because `\b` treats a HYPHEN as a word boundary —
+so the build failed on a selector belonging to the NEXT migration group, which
+had not been touched. Anchored to `seg(?![\w-])`. Any future group added to that
+list needs the same care: `stage` would capture `.stage-name`, `card` would
+capture `.card-title`.
+
+Rule verified by reintroducing `font-size:25px` on `h1` and confirming failure.
+
+**REMAINING GROUPS** (tables last, they are the ones that can break a layout):
+funnel/stages (`.stage-*`, `.seg-val`, `.card h2`) → Monthly Reports leftovers
+(`.mr-*`) → tables and pills (`th`, `tr.grp td`, `.pill`, `.legend`, `.af*`).
 
 **v3.134.0 — app chrome joins the rem type scale (1 of 5 groups).**
 
