@@ -929,6 +929,22 @@ setTimeout(() => {
          * came back short, which is a different fault from nobody pasting at
          * all — and both otherwise read as a soft month.
          */
+        /**
+         * WATCH HOURS MUST CARRY A HUMAN UNIT (MW). 15,304 hours is ~21 months;
+         * the unit is chosen by magnitude, so a fixture at this scale must show
+         * months and must NOT still read "15304 hours".
+         */
+        if (!/months of watch time/i.test(body)) {
+          return fail("youtube", "watch hours has no human-readable duration");
+        }
+        /**
+         * And the figure must not appear twice. The Views card used to repeat
+         * watch hours as its sub-line, which invites the reader to hunt for a
+         * difference between two identical numbers.
+         */
+        if ((body.match(/hours watched/gi) || []).length) {
+          return fail("youtube", "watch hours is duplicated on the Views card");
+        }
         if (!/days are missing/i.test(body)) {
           return fail("youtube", "a short export did not raise the day-gap warning");
         }

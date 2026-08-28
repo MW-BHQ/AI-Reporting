@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.131.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.131.1.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -714,6 +714,23 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.131.1 — watch hours in a unit a person can picture (MW).**
+
+"15.3K" is a number, not a quantity anyone has an intuition for. The card now
+reads ~21 months alongside it, and the figure is violet so it reads as the
+card's own metric rather than a repeat of Views.
+
+**The unit is chosen by MAGNITUDE, not fixed.** The same card has to work for a
+quiet month and a record one: 40 hours must not become "0.005 years" and 15,304
+must not become "15,304 hours". Thresholds are hours under 2 days, days under a
+fortnight, weeks under ~2 months, months under 2 years, then years. Marked with
+a tilde because months are 30.44 days — it is a sense of scale, and the exact
+figure is directly above it.
+
+**The Views card no longer repeats watch hours.** That sub-line predated Watch
+hours having a card of its own, and the same number twice on one slide invites
+the reader to hunt for a difference that is not there. Asserted as an absence.
 
 **v3.131.0 — YouTube gets MoM and YoY, from two tabs a human maintains.**
 

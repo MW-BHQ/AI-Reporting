@@ -2781,18 +2781,46 @@ function renderReport() {
      * class names, so it inherits the rem type scale and cannot drift from every
      * other scorecard on the deck.
      */
-    const card = (label, key, value, sub) => `<div class="stat">
+    /**
+     * WATCH HOURS IN A UNIT A PERSON CAN PICTURE (MW).
+     *
+     * "15.3K hours" is a number, not a quantity anyone has an intuition for.
+     * The unit is chosen by MAGNITUDE rather than fixed, because the same card
+     * has to read sensibly for a quiet month and a record one — 40 hours must
+     * not become "0.005 years" and 15,304 must not become "15,304 hours".
+     *
+     * Deliberately approximate and marked with a tilde: months are 30.44 days
+     * and years 365.25, so this is a sense of scale, not an accounting figure.
+     * The exact hours stay on the card directly above it.
+     */
+    const humanHours = (h) => {
+      if (!h || h < 1) return '';
+      if (h < 48) return `~${Math.round(h)} hours of watch time`;
+      const d = h / 24;
+      if (d < 14) return `~${d.toFixed(1)} days of watch time`;
+      const w = d / 7;
+      if (w < 9) return `~${w.toFixed(1)} weeks of watch time`;
+      const mo = d / 30.44;
+      if (mo < 24) return `~${mo.toFixed(mo < 10 ? 1 : 0)} months of watch time`;
+      return `~${(d / 365.25).toFixed(1)} years of watch time`;
+    };
+    const card = (label, key, value, sub, tone) => `<div class="stat">
       <div class="lab">${esc(label)}</div>
-      <div class="val">${value}</div>
+      <div class="val"${tone ? ` style="color:${tone}"` : ''}>${value}</div>
       ${sub ? `<div class="sub2">${sub}</div>` : ''}
       ${cmp(key)}</div>`;
 
     const cards = [];
-    if (has('views')) {
-      cards.push(card('Views', 'views', num(t.views),
-        has('hoursWatched') ? `${num(t.hoursWatched)} hours watched` : ''));
+    /**
+     * The Views card no longer repeats watch hours — that was written before
+     * Watch hours had a card of its own, and the same figure twice on one slide
+     * invites the reader to look for a difference that is not there.
+     */
+    if (has('views')) cards.push(card('Views', 'views', num(t.views)));
+    if (has('hoursWatched')) {
+      cards.push(card('Watch hours', 'hoursWatched', num(t.hoursWatched),
+        humanHours(t.hoursWatched), 'var(--violet)'));
     }
-    if (has('hoursWatched')) cards.push(card('Watch hours', 'hoursWatched', num(t.hoursWatched)));
     if (has('likes')) cards.push(card('Likes', 'likes', num(t.likes)));
     if (has('comments')) cards.push(card('Comments', 'comments', num(t.comments)));
     if (has('shares')) cards.push(card('Shares', 'shares', num(t.shares)));
@@ -6002,7 +6030,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.131.0';
+const CLIENT_BUILD = '3.131.1';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
