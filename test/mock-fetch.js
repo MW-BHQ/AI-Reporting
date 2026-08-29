@@ -785,6 +785,13 @@ global.fetch = async (url, opts = {}) => {
         "price","full_price","discount_pct","discount_alloc","promo_alloc","txn_fee_alloc",
         "comm_fee_alloc","net_revenue","coupon_no","coupon_status","coupon_expiry",
         "is_valid_sale","map_status","email_key","phone_key","dedup_key"];
+      /**
+       * Shopee (9,000 + 5,000) DELIBERATELY outsells Lazada (7,000 + 3,000),
+       * and "Shopee" sorts last alphabetically. Without that the channel-order
+       * assertion passes on an alphabetical sort, because in a small fixture the
+       * two orders coincide — which is exactly what happened when it was first
+       * written. Do not level these prices.
+       */
       const mk = (o) => head.map((h) => (o[h] === undefined ? "" : o[h]));
       return jsonRes({ values: [head,
         mk({ purchase_date:"2026-07-01", channel:"Shopee", order_id:"A", package_name:"Essence",
@@ -794,11 +801,11 @@ global.fetch = async (url, opts = {}) => {
              sku:"", center:"", price:3000, txn_fee_alloc:90, comm_fee_alloc:400,
              coupon_status:"ซื้อคูปอง", is_valid_sale:"TRUE", email_key:"c2", payment_method:"Card" }),
         mk({ purchase_date:"2026-07-02", channel:"Shopee", order_id:"C", package_name:"Superior",
-             sku:"HD25-02", center:"Check-Up", price:7000, full_price:14000, txn_fee_alloc:140,
+             sku:"HD25-02", center:"Check-Up", price:9000, full_price:14000, txn_fee_alloc:140,
              comm_fee_alloc:350, coupon_status:"ซื้อคูปอง", is_valid_sale:"TRUE", email_key:"c1",
              payment_method:"Card" }),
         mk({ purchase_date:"2026-07-02", channel:"Lazada", order_id:"D", package_name:"Heart",
-             sku:"HT25-01", center:"Heart", price:9000, full_price:12000, txn_fee_alloc:180,
+             sku:"HT25-01", center:"Heart", price:7000, full_price:12000, txn_fee_alloc:180,
              comm_fee_alloc:900, coupon_status:"ใช้งานแล้ว", is_valid_sale:"TRUE", email_key:"c3",
              payment_method:"Card" }),
         // B2B: one huge order that must be excluded from the Online default.

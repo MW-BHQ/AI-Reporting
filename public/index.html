@@ -954,6 +954,9 @@
 // ============================================================ state & helpers
 const S = {
   view: 'overview',
+  // Value vs volume on the centre cross-tab. Defaults to value: revenue is what
+  // the centres table above it is sorted by, so the two agree on first sight.
+  xtabMode: 'value',
   from: null, to: null,
   overview: null,       // cached per range key
   overviewKey: null,
@@ -4387,6 +4390,22 @@ function loadPrompt(view, note) {
   </div></div>`;
 }
 
+/**
+ * VALUE / VOLUME toggle on the centre cross-tab.
+ *
+ * Delegated rather than bound per element: flipping the toggle re-renders the
+ * card, which would destroy any listener attached to the button that was just
+ * clicked. `render()` redraws from `S`, so the mode only has to be stored.
+ */
+document.addEventListener('click', (e) => {
+  const x = e.target.closest('[data-xtab]');
+  if (x) {
+    const mode = x.dataset.xtab === 'units' ? 'units' : 'value';
+    if (S.xtabMode !== mode) { S.xtabMode = mode; render(); }
+    return;
+  }
+});
+
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-load]');
   if (!btn) return;
@@ -5397,19 +5416,42 @@ function renderEcomCentres() {
     </div>
 
     <div class="card mt">
-      <div class="card-title">Which channel sells each center</div>
-      <div class="tscroll"><table class="xtab"><thead><tr><th>Center</th>${d.channels.map(ch=>`<th class="num">${esc(ch)}</th>`).join('')}</tr></thead><tbody>
+      <div class="card-title" style="display:flex;align-items:center;gap:12px">
+        Which channel sells each center
+        <div class="seg no-print" style="margin-left:auto">
+          <button class="${S.xtabMode==='units'?'':'active'}" data-xtab="value">Value</button>
+          <button class="${S.xtabMode==='units'?'active':''}" data-xtab="units">Volume</button>
+        </div>
+      </div>
+      ${(() => {
+        /**
+         * VALUE OR VOLUME (MW). The same row reads differently in each: a centre
+         * can be a small share of baht and a large share of transactions, and
+         * showing only one silently decides which of those the reader may notice.
+         *
+         * Each row still totals 100% of ITSELF, so the two views are directly
+         * comparable — flipping the toggle changes what is being divided, not
+         * how the row is normalised. Column order stays fixed to revenue in both
+         * (set server-side), so nothing reshuffles under the reader's eye.
+         */
+        const units = S.xtabMode === 'units';
+        return `<div class="tscroll"><table class="xtab"><thead><tr><th>Center</th>${d.channels.map(ch=>`<th class="num">${esc(ch)}</th>`).join('')}</tr></thead><tbody>
       ${list.map(c => {
-        const tot = c.revenue || 1;
+        const src = units ? (c.unitsByChannel || {}) : c.byChannel;
+        const tot = Object.values(src).reduce((a,v)=>a+v,0) || 1;
         return `<tr><td class="strong">${c.centre==='Unmapped'?'<span class="pill warn">unmapped</span>':esc(c.centre)}</td>
         ${d.channels.map(ch => {
-          const v = c.byChannel[ch] || 0, s = v/tot;
+          const v = src[ch] || 0, s = v/tot;
           const bg = v ? `background:rgba(123,97,255,${(0.06+s*0.5).toFixed(3)});` : '';
-          return `<td class="num cell" style="${bg}" title="${esc(ch)} · ฿${num(Math.round(v))}">${v?pct(s):'<span style="color:var(--faint)">—</span>'}</td>`;
+          const tip = units ? `${num(v)} coupon${v===1?'':'s'}` : `\u0e3f${num(Math.round(v))}`;
+          return `<td class="num cell" style="${bg}" title="${esc(ch)} \u00b7 ${tip}">${v?pct(s):'<span style="color:var(--faint)">\u2014</span>'}</td>`;
         }).join('')}</tr>`;
       }).join('')}
-      </tbody></table></div>
-      <div class="note">Each row reads across to 100% of that centre's revenue. Darker means more of the centre's
+      </tbody></table></div>`;
+      })()}
+      <div class="note">Each row reads across to 100% of that centre's
+      ${S.xtabMode==='units'?'coupons':'revenue'}. Columns are ordered by total revenue, largest first, and stay
+      in that order in both views so the two can be compared. Darker means more of the centre's
       sales come through that channel. A centre concentrated in one column is exposed if that storefront's terms change —
       which is the practical reason to care where a package sells, not just how much.</div>
     </div>`;
@@ -6274,7 +6316,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.142.0';
+const CLIENT_BUILD = '3.143.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

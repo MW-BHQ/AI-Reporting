@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.142.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.143.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,39 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.143.0 — centre × channel cross-tab: columns by size, and a value/volume
+switch (MW).**
+
+**COLUMNS ARE ORDERED BY REVENUE, NOT ALPHABETICALLY.** Alphabetical put Bangkok
+Hospital Website first and Shopee — 54% of the biggest centre — last, off the
+right edge of the viewport, so the reader scrolled past the small channels to
+reach the one that mattered.
+
+Ordered by revenue **even when the table is showing volume**, deliberately: if
+the columns reshuffled on toggle, comparing the two views would mean re-finding
+every column.
+
+**VALUE / VOLUME SWITCH.** A centre can be a small share of baht and a large
+share of transactions; showing only one silently decides which of those the
+reader is allowed to notice. Each row still totals 100% of ITSELF in both views,
+so the toggle changes what is divided, not how the row is normalised. Handler is
+DELEGATED — flipping re-renders the card, which would destroy a listener bound
+to the button that was just clicked.
+
+**THE ORDERING ASSERTION PASSED ON A BROKEN IMPLEMENTATION AT FIRST, and that is
+the lesson.** Reverting to `.sort()` still gave a green test, because in the
+fixture Shopee and Lazada each totalled 12,000 and alphabetical order happened to
+coincide with revenue order. A test whose fixture cannot distinguish the right
+answer from the wrong one is worth nothing.
+
+Fixed by swapping two day-2 prices (Shopee 7,000→9,000, Lazada 9,000→7,000) so
+Shopee outsells Lazada while every total, every day-1 figure and every other
+assertion stays byte-identical. **Do not level those prices.** The first attempt
+added a new fixture row instead and broke five unrelated assertions — changing
+totals to make one test work is how fixtures rot.
+
+Re-verified after the fix: `.sort()` now fails.
 
 **v3.142.0 — frozen first column on the centre × channel cross-tab (MW).**
 

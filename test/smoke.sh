@@ -320,6 +320,13 @@ expect_field "centre at-risk"   "$CEN" "d.totals.unredeemedValue>0?'yes':undefin
 expect_field "centre discount"  "$CEN" "d.centres.some(c=>c.discountDepth!==null)?'yes':undefined"
 expect_field "centre matrix"    "$CEN" "d.channels.length>=2?'ok':undefined"
 expect_field "cmp on centres"   "$CEN" "d.centres.every(c=>'mom' in c && 'yoy' in c)?'ok':undefined"
+# CHANNEL COLUMNS ORDERED BY REVENUE, NOT ALPHABETICALLY (MW). Alphabetical put
+# the biggest channel off the right edge of the viewport, so the reader had to
+# scroll past the small ones to reach the one that mattered.
+expect_field "centre chan order" "$CEN" "(function(t){d.channels.forEach(c=>t[c]=0);d.centres.forEach(c=>Object.entries(c.byChannel).forEach(([k,v])=>t[k]+=v));return d.channels.every((c,i)=>!i||t[d.channels[i-1]]>=t[c])?'ok':undefined})({})"
+# Volume rides alongside value so the cross-tab can be read either way. Coupons
+# must be COUNTS, so the per-centre total has to match that centre's coupons.
+expect_field "centre units field" "$CEN" "d.centres.every(c=>c.unitsByChannel&&Object.values(c.unitsByChannel).reduce((a,v)=>a+v,0)===c.coupons)?'ok':undefined"
 CH2="/api/ecommerce/channels?from=$FROM&to=2026-08-31&scope=all"
 expect_field "chan months"      "$CH2" "d.months.length===2?'2':undefined"
 expect_field "chan affinity"    "$CH2" "d.channels.some(c=>c.bestAt.length)?'yes':undefined"

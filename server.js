@@ -6209,7 +6209,7 @@ async function buildCentres(from, to, scope) {
     const key = r.center || "Unmapped";
     const c = centres.get(key) || {
       centre: key, revenue: 0, coupons: 0, redeemed: 0, orders: new Set(),
-      listPrice: 0, discounted: 0, byChannel: {}, packages: new Map(),
+      listPrice: 0, discounted: 0, byChannel: {}, unitsByChannel: {}, packages: new Map(),
     };
     c.revenue += r.price;
     c.coupons++;
@@ -6218,13 +6218,36 @@ async function buildCentres(from, to, scope) {
     // Discount depth only counts rows where the master knows a list price.
     if (r.fullPrice > 0) { c.listPrice += r.fullPrice; c.discounted += r.price; }
     c.byChannel[r.channel] = (c.byChannel[r.channel] || 0) + r.price;
+    // Coupons alongside revenue, so the cross-tab can be read by VALUE or by
+    // VOLUME (MW). They tell different stories: a centre can be a small share
+    // of baht and a large share of transactions, and picking one silently
+    // decides which of those the reader is allowed to notice.
+    c.unitsByChannel[r.channel] = (c.unitsByChannel[r.channel] || 0) + 1;
     const p = c.packages.get(r.pkg) || { name: r.pkg, revenue: 0, units: 0 };
     p.revenue += r.price; p.units++;
     c.packages.set(r.pkg, p);
     centres.set(key, c);
   }
 
-  const channels = [...channelSet].sort();
+  /**
+   * CHANNEL COLUMNS ARE ORDERED BY SIZE, NOT ALPHABETICALLY (MW).
+   *
+   * Alphabetical put Bangkok Hospital Website first and Shopee — 54% of the
+   * biggest centre — last, off the right edge of the viewport. The reader had
+   * to scroll past the small channels to reach the one that matters.
+   *
+   * Ordered by REVENUE even when the table is showing volume, deliberately: the
+   * columns must not reshuffle when the toggle is flipped, or comparing the two
+   * views means re-finding every column.
+   */
+  const chanRevenue = new Map();
+  for (const c of centres.values()) {
+    for (const [ch, v] of Object.entries(c.byChannel)) {
+      chanRevenue.set(ch, (chanRevenue.get(ch) || 0) + v);
+    }
+  }
+  const channels = [...channelSet]
+    .sort((a, b) => (chanRevenue.get(b) || 0) - (chanRevenue.get(a) || 0) || a.localeCompare(b));
   const list = [...centres.values()].map((c) => {
     const top = Object.entries(c.byChannel).sort((a, b) => b[1] - a[1])[0];
     const best = [...c.packages.values()].sort((a, b) => b.revenue - a.revenue)[0];
@@ -6245,6 +6268,7 @@ async function buildCentres(from, to, scope) {
       topPackage: best ? best.name : "",
       topPackageUnits: best ? best.units : 0,
       byChannel: c.byChannel,
+      unitsByChannel: c.unitsByChannel,
     };
   }).sort((a, b) => b.revenue - a.revenue);
 
