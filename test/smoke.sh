@@ -302,6 +302,11 @@ expect_field "gads adgroups"    "$GADS" "d.campaigns.every(c=>Array.isArray(c.gr
 expect_field "gads group sum"   "$GADS" "d.campaigns.every(c=>!c.groups.length||Math.abs(c.groups.reduce((a,g)=>a+g.spend,0)-c.spend)<1)?'ok':undefined"
 # Google Ads must reach the Campaign tab through the shared platform registry.
 ECOM="/api/ecommerce?from=$FROM&to=$TO"
+# PACKAGES ARE GROUPED BY NAME, NOT BY SKU (MW). The master re-codes a package
+# every promo cycle (0101-2604, 0101-2608), so grouping by SKU would split one
+# package into a row per cycle. A duplicate name in the list means that split
+# has come back.
+expect_field "packages by name"  "$ECOM" "(function(n){return d.packages.every(p=>!n[p.name]&&(n[p.name]=1))?'ok':undefined})({})"
 expect_field "ecom channels"    "$ECOM" "d.channels.length===2?'2':undefined"
 expect_field "ecom stacked day" "$ECOM" "d.daily[0].byChannel.Shopee===5000?'ok':undefined"
 # Unmapped rows must show up as a visible gap, never be dropped or hidden.

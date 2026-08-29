@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.143.1.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.144.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,32 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.144.0 — Customers card removed; Top packages goes full width (MW).**
+
+MW: "this block tells me nothing." Four counts with no comparison, no trend and
+no action attached to them. Removed rather than shrunk — the four-metric grid
+implied an analysis that was never there, and Top packages was being squeezed
+into two thirds of the row so a card nobody read could sit beside it. Package
+names are Thai and long; the truncation that forced is gone with it.
+
+`d.customers` is still on the payload and still computed. Left alone: it costs
+nothing, and the churn tab is the place where customer analysis belongs if it is
+ever wanted.
+
+**PACKAGES ARE GROUPED BY NAME, WHICH IS WHAT MW ASKED FOR AND WAS ALREADY TRUE.**
+`byPkg` keys on `r.pkg`, never on SKU, so a package re-coded across promo cycles
+(`0101-2604`, `0101-2608`) counts once. MW: "if name is the name then use them as
+one — never mind the promo codes." Now asserted, because nothing was stopping a
+future change from keying on SKU and silently splitting one package into a row
+per cycle. The note on the card says so on the slide too.
+
+**A PRODUCT-LEVEL VIEW DOES NOT NEED SKU** — worth recording, since the plan
+assumed it did. `package_name` is **100% filled across 2024, 2025 and 2026**
+(SKU is 3% / 7% / 12%). Name identifies the product; SKU adds only the English
+name and the merging of promo re-codes. So the question of "2026 only or back to
+2025" does not arise: any product view works on all history immediately and
+improves by itself as SKUs land.
 
 **v3.143.1 — the frozen centre column actually freezes.**
 

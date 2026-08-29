@@ -5544,29 +5544,18 @@ function renderEcom() {
       <div class="note">Take rate is transaction plus commission fees as a share of that channel's revenue — what the storefront costs you per baht sold.</div>
     </div>
 
-    <div class="grid g-2-1 mt">
-      <div class="card">
-        <div class="card-title">Top packages</div>
-        <table class="roomy sortable"><thead><tr><th>Package</th><th class="num">Sold</th><th class="num">Avg price ฿</th><th class="num">Revenue ฿</th></tr></thead><tbody>
-        ${d.packages.map(p => `<tr>
-          <td class="trunc i18n" style="max-width:0;" title="${esc(p.name)}">${esc(p.name)}</td>
-          <td class="num">${num(p.units)}</td>
-          <td class="num">${num(Math.round(p.revenue/(p.units||1)))}</td>
-          <td class="num strong">${num(Math.round(p.revenue))}</td></tr>`).join('')}
-        </tbody></table>
-        <div class="note">${num(t.packages)} distinct packages sold in this range.</div>
-      </div>
-      <div class="card">
-        <div class="card-title">Customers</div>
-        <div class="grid g-2">
-          <div class="stat"><div class="lab">Distinct</div><div class="val">${num(d.customers.count)}</div></div>
-          <div class="stat"><div class="lab">Bought twice or more</div><div class="val">${num(d.customers.repeat)}</div></div>
-          <div class="stat"><div class="lab">Used 2+ channels</div><div class="val">${num(d.customers.multiChannel)}</div></div>
-          <div class="stat"><div class="lab">Revenue each</div><div class="val">฿${num(Math.round(d.customers.revenuePer))}</div></div>
-        </div>
-        <div class="note">Counted by an irreversible key, never by name, phone or email — none of which leave the source sheet.
-        ${d.customers.topShare>=0.05?`The largest single buyer accounts for <b>${pct(d.customers.topShare)}</b> of revenue across ${num(d.customers.topOrders)} orders, so treat the averages with that in mind.`:''}</div>
-      </div>
+    <div class="card mt">
+      <div class="card-title">Top packages</div>
+      <table class="roomy sortable"><thead><tr><th>Package</th><th class="num">Sold</th><th class="num">Avg price ฿</th><th class="num">Revenue ฿</th></tr></thead><tbody>
+      ${d.packages.map(p => `<tr>
+        <td class="i18n" title="${esc(p.name)}">${esc(p.name)}</td>
+        <td class="num">${num(p.units)}</td>
+        <td class="num">${num(Math.round(p.revenue/(p.units||1)))}</td>
+        <td class="num strong">${num(Math.round(p.revenue))}</td></tr>`).join('')}
+      </tbody></table>
+      <div class="note">${num(t.packages)} distinct packages sold in this range. Grouped by package
+      NAME, so a package re-coded across promo cycles counts once — the SKU is not used here, and
+      does not need to be.</div>
     </div>
 
     ${t.mappedShare < 0.999 ? `<div class="card mt">
@@ -6323,7 +6312,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.143.1';
+const CLIENT_BUILD = '3.144.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
