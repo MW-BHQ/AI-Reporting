@@ -4266,17 +4266,23 @@ function monthWeekLabels(from, to) {
 }
 
 /**
- * YOUTUBE — read from the Sheet the Apps Script writes (see
- * `youtube-to-sheet.gs`). Tabs and columns are known exactly because we wrote
- * the producer, so nothing here is inferred from a screenshot.
+ * YOUTUBE — read from a Sheet a HUMAN maintains, two YouTube Studio exports.
  *
- * WHY A SHEET AND NOT AN API. bangkokhospital.com is not Workspace, so the
- * OAuth routes are dead ends for an unattended job: an "Internal" client needs
- * Workspace, and "External + Testing" expires refresh tokens after SEVEN DAYS.
- * A service account cannot read a YouTube channel at all — Google supports that
- * flow only for Content Partners (CMS accounts), not channel owners. Apps
- * Script runs under MW's own account, so there is no OAuth app to verify and no
- * token to rotate.
+ * The Apps Script that used to write this sheet is GONE (deleted Aug 2026), and
+ * so is `youtube-to-sheet.gs` from this repo. It could never work: it ran as a
+ * fixed identity and the channel is a BRAND ACCOUNT, so it queried MW's personal
+ * channel and wrote 398 days of zeros while reporting success.
+ *
+ * WHY A PERSON AND NOT AN API. Every automated route is closed —
+ * bangkokhospital.com is not Workspace so an "Internal" OAuth client is
+ * impossible; "External + Testing" expires refresh tokens after seven days;
+ * a service account cannot read a channel at all (Content Partners only); and
+ * "External + Production" was tried and the Brand Account grant still failed.
+ * A browser shows an account picker, so a human can BE the brand account for the
+ * length of one export. That is the only door that opens. See CONTEXT §12.
+ *
+ * The tabs are `Daily` (Studio's DATE view) and `Videos` (its CONTENT view with
+ * a hand-added Month column). Columns are read BY NAME — see `buildYouTube`.
  */
 const YT_SHEET_ID = process.env.YT_SHEET_ID || "1o0n44IioDyEvAlNt_Tf11SxD11mDpkzlfABbBSbJZus";
 

@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.146.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.146.1.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,28 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.146.1 — `youtube-to-sheet.gs` deleted from the repo.**
+
+The Apps Script it mirrored was deleted from Google in Aug 2026 and the sheet is
+now maintained by hand from two YouTube Studio exports. A copy of a producer that
+no longer exists is worse than no copy: it reads as the live source, and its
+`CHANNEL_ID` blank-means-personal-channel behaviour was the exact bug that
+produced 398 days of zeros.
+
+The comment above `YT_SHEET_ID` in `server.js` pointed at that file and now
+explains the human process instead.
+
+**The normaliser menu was reorganised (v2.10.0 of the Apps Script, which lives in
+the Sheet, not here).** Nine flat items in the order they were written became a
+numbered 1-4 monthly run, two occasional tools, and a "Setup and repair"
+submenu. `First-time setup` DELETES the Orders tab and was sitting one click from
+the monthly import. Labels changed, function names did not.
+
+A README for the sheet's first tab went with it, covering the two alerts that
+look like failures and are not: `reapplyMapping` reports "Refreshed 0 rows"
+because it counts only SKU changes, and it times out on the tidy-up AFTER the
+data is written. Both cost real time this session before being understood.
 
 **v3.146.0 — cross-tab shows figures, not shares, and re-sorts with the toggle
 (MW).**
