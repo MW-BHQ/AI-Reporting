@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.141.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.142.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,53 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.142.0 — frozen first column on the centre × channel cross-tab (MW).**
+
+The table is wider than the viewport, so scrolling to a right-hand channel lost
+the centre name and left a row of percentages belonging to nobody.
+
+**`left:22px`, not `left:0`.** Sticky offsets are measured from the scrollport,
+and `.tscroll` runs `margin:0 -22px; padding:0 22px` to bleed to the card edge.
+At `left:0` the frozen column parks 22px outside the text column, under the
+card's rounded corner. 22px pins it exactly where it already sits unscrolled, so
+nothing shifts until scrolling starts.
+
+**The background has to be opaque.** `--glass` is `rgba(255,255,255,.72)`, so
+cells sliding underneath would read straight through the centre name.
+
+Scoped to `.xtab`, which only this table uses.
+
+---
+
+**E-COMMERCE CENTRE MAPPING IS COMPLETE (28 Aug 2026).** `COUNTIF(Orders!P2:P,"")`
+returns **0** against 85,528 rows — every order carries a centre, and the
+`(unmapped)` bucket is gone from the Centres tab. 17 centres, ฿10.0M for July.
+
+The route there, because the shape of the problem was not obvious:
+
+- **Package_Map is only written during import**, at the moment a package is first
+  seen. Nothing ever re-checked, so a map row deleted or lost to a half-finished
+  import orphaned that package permanently: Orders kept the sales, no menu item
+  noticed. 27 packages and 3,603 order rows were in that state, one carrying
+  3,175 orders on its own. Fixed by `rebuildPackageMap` in normaliser v2.9.0.
+- **The dashboard never reads Package_Map.** It takes `center` and `sku` straight
+  from Orders columns, so map edits reach the report only after
+  "Re-apply Package_Map to Orders". That step is what took centre coverage from
+  40% to 100%.
+- **"Refreshed 0 rows" is misleading** — `reapplyMapping` counts only SKU and
+  status changes, so it reports 0 while writing centre on tens of thousands of
+  rows. It also times out on the final tidy-up after the data is already saved.
+
+**SKU IS DELIBERATELY NOT DONE, and does not block anything.** 1,023 of 1,183
+packages have no SKU. It affects only the English package name and the
+full-price/discount columns — not centre, not revenue, not any total. MW's call:
+2026 first, 2025 nice-to-have. Scoped, that is **324 packages covering ฿154m of
+2026 revenue, of which the top 40 carry 80%** — the existing
+`prioritisePackageMap` with a `2026-01-01` cutoff ranks exactly those.
+
+**Every other e-commerce tab was always safe**: revenue, orders, channels, AOV,
+ROAS, monthly, churn and migration read neither centre nor SKU.
 
 **v3.141.0 — Off-site reach & action sorted by volume (MW); tables and pills
 join the type scale (5 of 5 CSS groups).**

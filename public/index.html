@@ -288,6 +288,27 @@
   .xtab td, .xtab th{padding:10px 14px;}
   .xtab td:first-child, .xtab th:first-child{padding-left:0;}
   .xtab td.cell{border-radius:5px;}
+  /**
+   * FROZEN FIRST COLUMN (MW). These cross-tabs are wider than the viewport, and
+   * once a reader scrolls to a right-hand channel the centre name is gone — the
+   * row becomes a line of percentages belonging to nobody.
+   *
+   * `left:22px`, not 0. Sticky offsets are measured from the scrollport, and
+   * `.tscroll` runs `margin:0 -22px; padding:0 22px` so its bleed reaches the
+   * card edge. At `left:0` the frozen column would park 22px outside the card's
+   * text column and sit under its rounded corner; 22px pins it exactly where it
+   * already sits unscrolled, so nothing moves until scrolling starts.
+   *
+   * The background must be OPAQUE. `--glass` is rgba(255,255,255,.72), so cells
+   * sliding underneath would read straight through the centre name. `--bg` with
+   * a white layer under it matches the card without being see-through.
+   */
+  .xtab td:first-child, .xtab th:first-child{
+    position:sticky;left:22px;z-index:2;
+    background:#fff;background-clip:padding-box;
+    box-shadow:1px 0 0 var(--line);
+  }
+  .xtab thead th:first-child{z-index:3;}
   .affinity{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;}
   .afcard{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--glass-2);}
   .afhead{display:flex;align-items:center;gap:2px;font-size:var(--text-xs);margin-bottom:8px;}
@@ -6253,7 +6274,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.141.0';
+const CLIENT_BUILD = '3.142.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
