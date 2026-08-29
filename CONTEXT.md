@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.144.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.145.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,40 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.145.0 — E-commerce · Packages, a product-level tab that needs no SKU.**
+
+`/api/ecommerce/packages`, new nav item under E-commerce, one row per product
+with revenue, share, units, average price, discount depth, centre, dominant
+channel, MoM and YoY.
+
+**KEYED ON PACKAGE NAME, NEVER ON SKU, and that is what makes it possible now.**
+`package_name` is 100% filled across 2024, 2025 and 2026; SKU is 3% / 7% / 12%.
+The master also re-codes a package every promo cycle (`0101-2604`, `0101-2608`)
+with no effective dates, so grouping by SKU would split one product into a row
+per cycle even where SKUs exist. MW: "if name is the name then use them as one —
+never mind the promo codes."
+
+SKU is still read, for two narrow purposes: the English name when the normaliser
+has filled it, and a COUNT of how many promo codes a package has been sold under.
+A package carrying four codes is a naming problem worth showing on the row, not a
+reason to split it.
+
+**NULL IS NOT ZERO, again.** `discountDepth` is null where the master has no list
+price, and `redemption` is null where there are no units — a package with an
+unknown discount must not read as a package sold at full price.
+
+**Concentration is on the header card** (`top80`): "978 packages sold" and "eight
+of them are 80% of the money" are the same fact told two ways, and only the
+second helps decide what to promote.
+
+Capped at the top 200 rows by revenue, and the note says so when the cap bites.
+
+**Registration is EIGHT places for one tab** — worth writing down, because
+missing any one fails silently and differently: `TABS` in `server.js`, the route
+guard, the nav item, `TITLES`, the refresh branch, the render branch, the tab
+group list, and `VIEW_LOADERS`. Miss `VIEW_LOADERS` and the Load button does
+nothing at all.
 
 **v3.144.0 — Customers card removed; Top packages goes full width (MW).**
 

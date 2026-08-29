@@ -70,6 +70,7 @@ check "google ads" GET "/api/google-ads?from=$FROM&to=$TO"
 check "page"       GET "/api/page?url=/th/bangkok&from=$FROM&to=$TO"
 check "ecommerce"  GET "/api/ecommerce?from=$FROM&to=$TO"
 check "ecom centres" GET "/api/ecommerce/centres?from=$FROM&to=$TO"
+check "ecom packages" GET "/api/ecommerce/packages?from=$FROM&to=$TO"
 check "ecom channels" GET "/api/ecommerce/channels?from=$FROM&to=$TO"
 check "ecom migration" GET "/api/ecommerce/migration?from=$FROM&to=$TO"
 check "ecom churn"   GET "/api/ecommerce/churn?from=$FROM&to=$TO"
@@ -319,6 +320,21 @@ expect_field "ecom repeat cust" "$ECOM" "d.customers.repeat===1?'1':undefined"
 # The ฿500k Agent order must NOT be in the Online default, and must appear with scope=all.
 expect_field "B2B excluded"     "$ECOM" "d.totals.revenue===24000?'24000':undefined"
 expect_field "B2B in scope=all" "/api/ecommerce?from=$FROM&to=$TO&scope=all" "d.totals.revenue===524000?'524000':undefined"
+PKG="/api/ecommerce/packages?from=$FROM&to=$TO"
+expect_field "pkg rows"          "$PKG" "d.packages.length>0?'ok':undefined"
+# GROUPED BY NAME, NEVER BY SKU. The master re-codes a package every promo cycle,
+# and SKU is filled on 3-12% of rows while package_name is 100% — so a duplicate
+# name here means the grouping has moved to SKU and split one product into a row
+# per cycle.
+expect_field "pkg by name"       "$PKG" "(function(n){return d.packages.every(p=>!n[p.name]&&(n[p.name]=1))?'ok':undefined})({})"
+expect_field "pkg sorted"        "$PKG" "d.packages.every((p,i)=>!i||d.packages[i-1].revenue>=p.revenue)?'ok':undefined"
+# Units must reconcile: every coupon in range belongs to exactly one package.
+expect_field "pkg units total"   "$PKG" "d.packages.reduce((a,p)=>a+p.units,0)===d.totals.units?'ok':undefined"
+# A missing list price means an UNKNOWN discount, not a 0% one.
+expect_field "pkg discount null" "$PKG" "d.packages.some(p=>p.discountDepth===null)?'ok':undefined"
+expect_field "pkg cmp fields"    "$PKG" "d.packages.every(p=>'mom' in p && 'yoy' in p)?'ok':undefined"
+expect_field "pkg top80"         "$PKG" "(d.totals.top80>0&&d.totals.top80<=d.totals.packages)?'ok':undefined"
+
 CEN="/api/ecommerce/centres?from=$FROM&to=$TO"
 expect_field "centre count"     "$CEN" "d.centres.length===3?'3':undefined"
 expect_field "centre at-risk"   "$CEN" "d.totals.unredeemedValue>0?'yes':undefined"

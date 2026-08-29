@@ -791,6 +791,7 @@ const TABS = [
   { id: "gads",      label: "Google Ads" },
   { id: "ecom",      label: "E-commerce" },
   { id: "ecomcentre",label: "E-commerce · Centres" },
+  { id: "ecompackages", label: "E-commerce · Packages" },
   { id: "ecomchannels", label: "E-commerce · Channels" },
   { id: "ecommigration", label: "E-commerce · Migration" },
   { id: "ecomchurn",  label: "E-commerce · Churn" },
@@ -6000,6 +6001,10 @@ async function fetchEcomRows() {
       pkg: String(g("package_name") || ""),
       sku: String(g("sku") || ""),
       center: String(g("center") || ""),
+      // Written by the normaliser from the master via the SKU, so it fills in as
+      // SKUs are confirmed: 1% of 2024 rows, 9% of 2026. Shown when present,
+      // never substituted for the Thai name, which is always there.
+      english: String(g("english_name") || ""),
       method: String(g("payment_method") || ""),
       price: n(g("price")),
       txn: n(g("txn_fee_alloc")),
@@ -6304,6 +6309,126 @@ async function buildCentres(from, to, scope) {
     },
   };
 }
+
+/**
+ * PACKAGES — one row per product, for the whole history.
+ *
+ * KEYED ON PACKAGE NAME, NEVER ON SKU. The master re-codes a package every promo
+ * cycle (0101-2604, 0101-2608) with no effective dates, so grouping by SKU would
+ * split one product into a row per cycle. It also would not work: SKU is filled
+ * on 3% of 2024 rows, 7% of 2025 and 12% of 2026, while `package_name` is 100%
+ * across all three. The name IS the product here. MW: "if name is the name then
+ * use them as one — never mind the promo codes."
+ *
+ * SKU is still read, but only for the English name and to SAY how many distinct
+ * codes a package has been sold under — a package with four is a naming problem
+ * worth seeing, not a reason to split the row.
+ */
+async function buildPackages(from, to, scope) {
+  const all = await ecomRows();
+  const inRange = all.filter((r) => r.date >= from && r.date <= to);
+  const rows = scope === "all" ? inRange : inRange.filter((r) => r.type === "Online");
+  if (!rows.length) return { empty: true, scope: scope || "online", rangeHas: all.length };
+
+  const pkgs = new Map();
+  let revenue = 0;
+
+  for (const r of rows) {
+    revenue += r.price;
+    const key = r.pkg || "(no name)";
+    const p = pkgs.get(key) || {
+      name: key, revenue: 0, units: 0, orders: new Set(), redeemed: 0,
+      listPrice: 0, discounted: 0, centres: new Set(), channels: {},
+      skus: new Set(), english: "",
+    };
+    p.revenue += r.price;
+    p.units++;
+    p.orders.add(r.orderId);
+    if (r.couponStatus === "ใช้งานแล้ว") p.redeemed++;
+    // Discount depth only counts rows where the master knows a list price;
+    // averaging over rows without one would understate every discount.
+    if (r.fullPrice > 0) { p.listPrice += r.fullPrice; p.discounted += r.price; }
+    if (r.center) p.centres.add(r.center);
+    if (r.sku) p.skus.add(r.sku);
+    if (!p.english && r.english) p.english = r.english;
+    p.channels[r.channel] = (p.channels[r.channel] || 0) + r.price;
+    pkgs.set(key, p);
+  }
+
+  const cw = comparisonWindows(from, to);
+  const inScope = (r) => scope === "all" || r.type === "Online";
+  const scoped = all.filter(inScope);
+  const prev = revenueBy(scoped, cw.prev, (r) => r.pkg || "(no name)");
+  const yoy = revenueBy(scoped, cw.yoy, (r) => r.pkg || "(no name)");
+
+  const list = [...pkgs.values()].map((p) => {
+    const top = Object.entries(p.channels).sort((a, b) => b[1] - a[1])[0];
+    const prevRevenue = prev.byKey.get(p.name) || 0;
+    const yoyRevenue = yoy.byKey.get(p.name) || 0;
+    return {
+      name: p.name,
+      english: p.english || "",
+      revenue: p.revenue,
+      share: revenue ? p.revenue / revenue : 0,
+      units: p.units,
+      orders: p.orders.size,
+      avgPrice: p.units ? p.revenue / p.units : 0,
+      /**
+       * Redemption and discount are NULL rather than 0 when nothing supports
+       * them. A package with no list price in the master has an unknown
+       * discount, which is a different statement from a 0% discount.
+       */
+      redemption: p.units ? p.redeemed / p.units : null,
+      discountDepth: p.listPrice > 0 ? 1 - p.discounted / p.listPrice : null,
+      centre: p.centres.size === 1 ? [...p.centres][0] : (p.centres.size ? "(several)" : ""),
+      centreCount: p.centres.size,
+      topChannel: top ? top[0] : "",
+      topChannelShare: top && p.revenue ? top[1] / p.revenue : 0,
+      // How many promo codes this one product has been sold under.
+      skuCount: p.skus.size,
+      prevRevenue, yoyRevenue,
+      mom: pctChange(p.revenue, prevRevenue),
+      yoy: pctChange(p.revenue, yoyRevenue),
+    };
+  }).sort((a, b) => b.revenue - a.revenue);
+
+  /**
+   * Concentration, because "we sell 978 packages" and "eight of them are 80% of
+   * the money" are the same fact told two ways, and only the second is useful
+   * when deciding what to promote.
+   */
+  let cum = 0, top80 = 0;
+  for (const p of list) { cum += p.revenue; top80++; if (revenue && cum >= revenue * 0.8) break; }
+
+  return {
+    scope: scope || "online",
+    packages: list.slice(0, 200),
+    totals: {
+      revenue,
+      packages: list.length,
+      units: rows.length,
+      top80,
+      top80Share: list.length ? top80 / list.length : 0,
+      // Packages carrying more than one promo code — a naming problem, surfaced.
+      multiSku: list.filter((p) => p.skuCount > 1).length,
+      noSku: list.filter((p) => p.skuCount === 0).length,
+    },
+  };
+}
+
+app.get("/api/ecommerce/packages", requireTab("ecompackages"), async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  try {
+    const scope = req.query.scope === "all" ? "all" : "online";
+    const out = await withCache(`ecompkg:${scope}:${from}:${to}`, req.query.refresh === "1",
+      () => buildPackages(from, to, scope));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "ecom_packages_failed", { error: String(err.message || err) });
+    res.status(500).json({ error: err.message || "Packages failed" });
+  }
+});
 
 app.get("/api/ecommerce/centres", requireTab("ecomcentre"), async (req, res) => {
   const { from, to } = req.query;

@@ -880,6 +880,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V9l5-4 5 4v11"/><path d="M14 20V12h6v8"/><path d="M2 20h20"/></svg>
         Centers
       </div>
+      <div class="nav-item sub" data-view="ecompackages">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg>
+        Packages
+      </div>
       <div class="nav-item sub" data-view="ecomchannels">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17l5-6 4 3 5-7 4 4"/><circle cx="8" cy="11" r="1"/><circle cx="12" cy="14" r="1"/></svg>
         Channels
@@ -1286,6 +1290,7 @@ const TITLES = {
   audiences: ['Audiences', 'Meta audience sets ranked by cost per first-degree result'],
   ecom: ['E-commerce', 'Package sales across every online sales channel'],
   ecomcentre: ['E-commerce · Centers', 'Which centers sell, and through which channel'],
+  ecompackages: ['E-commerce · Packages', 'Every product, grouped by name — promo re-codes count once'],
   ecomchannels: ['E-commerce · Channels', 'How each channel performs over time, and what it is distinctively good at'],
   ecommigration: ['E-commerce · Migration', 'Do customers who start online later buy offline'],
   ecomroas: ['E-commerce · Ad Performance', 'What the marketplace ad accounts spent, reached and earned in clicks'],
@@ -1407,6 +1412,17 @@ async function loadEcomMigration(refresh = false) {
   S.ecommig = await res.json(); S.ecommigKey = key;
   setStatus('ok', S.ecommig.cached ? `cached ${S.ecommig.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
   return S.ecommig;
+}
+
+async function loadEcomPackages(refresh = false) {
+  const key = `${$('from').value}|${$('to').value}|${S.ecomScope}`;
+  if (!refresh && S.ecompkgKey === key && S.ecompkg) return S.ecompkg;
+  setStatus('busy', 'grouping sales by package…');
+  const res = await fetch(`/api/ecommerce/packages?from=${$('from').value}&to=${$('to').value}&scope=${S.ecomScope}${refresh?'&refresh=1':''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,220)}`);
+  S.ecompkg = await res.json(); S.ecompkgKey = key;
+  setStatus('ok', S.ecompkg.cached ? `cached ${S.ecompkg.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.ecompkg;
 }
 
 async function loadEcomCentres(refresh = false) {
@@ -1555,6 +1571,7 @@ $('loadBtn').addEventListener('click', async () => {
     else if (S.view === 'audiences') { S.audiencesError = null; await loadAudiences(true); }
     else if (S.view === 'ecom') { S.ecomError = null; await loadEcom(true); }
     else if (S.view === 'ecomcentre') { S.ecomcError = null; await loadEcomCentres(true); }
+    else if (S.view === 'ecompackages') { S.ecompkgError = null; await loadEcomPackages(true); }
     else if (S.view === 'ecomchannels') { S.ecomchError = null; await loadEcomChannels(true); }
     else if (S.view === 'ecommigration') { S.ecommigError = null; await loadEcomMigration(true); }
     else if (S.view === 'ecomchurn') { S.ecomchurnError = null; await loadEcomChurn(true); }
@@ -1621,6 +1638,7 @@ function render() {
   else if (S.view === 'audiences') renderAudiences();
   else if (S.view === 'ecom') renderEcom();
   else if (S.view === 'ecomcentre') renderEcomCentres();
+  else if (S.view === 'ecompackages') renderEcomPackages();
   else if (S.view === 'ecomchannels') renderEcomChannels();
   else if (S.view === 'ecommigration') renderEcomMigration();
   else if (S.view === 'ecomchurn') renderEcomChurn();
@@ -3988,7 +4006,7 @@ function renderUsers() {
   const GROUPS = [
     { name: 'Reporting', ids: ['overview','campaigns','gbp','topics'] },
     { name: 'Meta Ads', ids: ['benchmark','audiences','audit'] },
-    { name: 'E-commerce', ids: ['ecom','ecomcentre','ecomchannels','ecomroas','ecommonthly','ecomchurn','ecommigration'] },
+    { name: 'E-commerce', ids: ['ecom','ecomcentre','ecompackages','ecomchannels','ecomroas','ecommonthly','ecomchurn','ecommigration'] },
   ];
   const grouped = GROUPS.map(g => ({ ...g, items: g.ids.map(id => tabs.find(t => t.id === id)).filter(Boolean) }));
   const ungrouped = tabs.filter(t => !GROUPS.some(g => g.ids.includes(t.id)));
@@ -4375,6 +4393,7 @@ const VIEW_LOADERS = {
   audiences:     { load: () => loadAudiences(),     err: 'audiencesError', busy: 'audiencesLoading', what: 'Meta ad sets' },
   ecom:          { load: () => loadEcom(),          err: 'ecomError',      busy: 'ecomLoading',      what: 'the Orders sheet' },
   ecomcentre:    { load: () => loadEcomCentres(),   err: 'ecomcError',     busy: 'ecomcLoading',     what: 'sales by center' },
+  ecompackages:  { load: () => loadEcomPackages(),  err: 'ecompkgError',   busy: 'ecompkgLoading',   what: 'sales by package' },
   ecomchannels:  { load: () => loadEcomChannels(),  err: 'ecomchError',    busy: 'ecomchLoading',    what: 'channel performance' },
   ecommigration: { load: () => loadEcomMigration(), err: 'ecommigError',   busy: 'ecommigLoading',   what: 'customer journeys' },
   ecomchurn:     { load: () => loadEcomChurn(),     err: 'ecomchurnError', busy: 'ecomchurnLoading', what: 'lapsed customers' },
@@ -5368,6 +5387,61 @@ function renderEcomChannels() {
   }));
 }
 
+/**
+ * PACKAGES — one row per product, grouped by NAME.
+ *
+ * The whole point is that this works today: `package_name` is 100% filled across
+ * every year, while SKU is 3-12%. SKU is shown only as a COUNT, because a
+ * package sold under four promo codes is a naming problem worth seeing, not a
+ * reason to split it into four rows.
+ */
+function renderEcomPackages() {
+  const d = S.ecompkg;
+  if (S.ecompkgError) { const m = S.ecompkgError; $('viewRoot').innerHTML = errorState(m); S.ecompkgError = null; return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecompackages', 'Reads the Orders sheet and groups every sale by package name.'); return; }
+  if (d.empty) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in this range</div>
+    <div style="font-size:var(--text-xs);color:var(--muted);">The Orders sheet holds ${num(d.rangeHas)} row(s).</div></div></div>`; return; }
+
+  const t = d.totals, list = d.packages;
+  const maxRev = Math.max(...list.map(p => p.revenue), 1);
+  $('viewRoot').innerHTML = `
+    <div class="grid g-3" style="margin-bottom:14px;">
+      <div class="stat"><div class="lab">Packages sold</div><div class="val">${num(t.packages)}</div>
+        <div class="sub2">${num(t.units)} coupons</div></div>
+      <div class="stat"><div class="lab">Revenue</div><div class="val">฿${num(Math.round(t.revenue))}</div></div>
+      <div class="stat"><div class="lab">Carry 80% of revenue</div><div class="val">${num(t.top80)}</div>
+        <div class="sub2">${pct(t.top80Share)} of the range</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Every package</div>
+      <table class="roomy sortable" data-heat="1"><thead><tr>
+        <th>Package</th><th class="num">Revenue ฿</th><th class="num">Share</th>
+        <th class="num">Sold</th><th class="num">Avg price ฿</th><th class="num">Discount</th>
+        <th>Center</th><th>Leans on</th><th class="num">MoM</th><th class="num">YoY</th>
+      </tr></thead><tbody>
+      ${list.map(p => `<tr>
+        <td class="strong i18n" title="${esc(p.name)}">${esc(p.name)}
+          ${p.english ? `<div class="note" style="margin:2px 0 0">${esc(p.english)}</div>` : ''}
+          ${p.skuCount > 1 ? `<div class="note" style="margin:2px 0 0">sold under ${num(p.skuCount)} promo codes, counted once</div>` : ''}</td>
+        <td class="num barcell"><span class="minibar" style="width:${(p.revenue/maxRev*100).toFixed(1)}%"></span><b>${num(Math.round(p.revenue))}</b></td>
+        <td class="num">${pct(p.share)}</td>
+        <td class="num">${num(p.units)}</td>
+        <td class="num">${num(Math.round(p.avgPrice))}</td>
+        <td class="num">${p.discountDepth === null ? '<span style="color:var(--faint)">\u2014</span>' : pct(p.discountDepth)}</td>
+        <td>${p.centre ? esc(p.centre) : '<span style="color:var(--faint)">\u2014</span>'}</td>
+        <td>${p.topChannel ? `${esc(p.topChannel)} <span class="note">${pct(p.topChannelShare)}</span>` : ''}</td>
+        <td class="num">${delta(p.mom, `฿${num(Math.round(p.prevRevenue||0))} in the previous period`)}</td>
+        <td class="num">${delta(p.yoy, `฿${num(Math.round(p.yoyRevenue||0))} a year earlier`)}</td>
+      </tr>`).join('')}
+      </tbody></table>
+      <div class="note">Grouped by package NAME, so a product re-coded across promo cycles counts once
+      \u2014 ${num(t.multiSku)} package(s) here carry more than one code.
+      Discount is blank where the master has no list price to compare against, which is not the same
+      as a 0% discount. ${list.length >= 200 ? 'Showing the top 200 by revenue.' : ''}</div>
+    </div>`;
+}
+
 function renderEcomCentres() {
   const d = S.ecomc;
   if (S.ecomcError) { const m = S.ecomcError; $('viewRoot').innerHTML = errorState(m); S.ecomcError = null; return; }
@@ -6312,7 +6386,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.144.0';
+const CLIENT_BUILD = '3.145.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
