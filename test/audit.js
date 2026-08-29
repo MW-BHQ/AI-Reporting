@@ -236,12 +236,21 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
   const blk = at < 0 ? "" : html.slice(at, at + 4000);
   const whiteBody = /body\{background:#fff!important/.test(blk);
   const pageBreak = /\.slide\{[^}]*break-after:page/.test(html);
+  /**
+   * The slide must also be PINNED to the canvas height. `break-after:page` on
+   * its own let a section a few millimetres too tall spill a remainder onto its
+   * own page — 81 pages for ~40 sections, alternating full and near-empty.
+   * 6.6in is the 7.5in canvas less the 0.45in margin top and bottom.
+   */
+  const pinned = /\.slide\{[^}]*height:6\.6in[^}]*overflow:hidden/s.test(html);
   at < 0
     ? fail("print:deck", "the 16:9 @page rule is gone")
     : (whiteBody
       ? fail("print:deck", "print forces a white body — the palette is stripped from the PDF")
       : (pageBreak
-        ? ok("print:deck", "16:9 page, palette kept, one section per page")
+        ? (pinned
+          ? ok("print:deck", "16:9 page, palette kept, one section pinned per page")
+          : fail("print:deck", ".slide is not pinned to 6.6in — tall sections will spill a second page"))
         : fail("print:deck", ".slide has no break-after:page — sections will run together")));
 }
 

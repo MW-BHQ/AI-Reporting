@@ -740,8 +740,35 @@
      * uglier and visible, which is the point: an overflowing section is a
      * content problem to fix, not something to hide.
      */
-    .slide{break-inside:auto;break-after:page;page-break-after:always;}
+    /**
+     * THE SLIDE IS EXACTLY ONE PAGE TALL, AND CLIPS (MW: "anything else cut off").
+     *
+     * `break-after:page` alone was not enough. A section a few millimetres too
+     * tall spilled its remainder onto a page of its own, so the export ran
+     * 81 pages for ~40 sections, alternating full page / near-empty page all the
+     * way down.
+     *
+     * 6.6in = the 7.5in canvas less the 0.45in @page margin top and bottom. With
+     * `overflow:hidden` a section can no longer produce a second page at all,
+     * which is what makes the count equal the number of sections.
+     *
+     * WHAT THIS COSTS, STATED PLAINLY: clipped content disappears with NO mark
+     * on the page. There is no CSS way to detect the overflow and flag it. So a
+     * section's content has to be sized on purpose — a table that grows a row
+     * next month loses its last row silently. Every section needs eyes on it
+     * once, and re-checking when the data grows.
+     */
+    .slide{
+      break-inside:auto;break-after:page;page-break-after:always;
+      height:6.6in;max-height:6.6in;overflow:hidden;
+      box-sizing:border-box;padding:0 0 0.12in;
+      display:flex;flex-direction:column;
+    }
     .slide:last-child{break-after:auto;page-break-after:auto;}
+    /* Short sections should not sit in the top third of an otherwise empty page:
+       the cards take the slack so the page reads as composed rather than cut. */
+    .slide > .grid,.slide > .card{flex:0 0 auto;}
+    .slide > .card:last-child{flex:1 1 auto;}
     .slide > .card{break-inside:avoid;}
   }
   @media print{
@@ -6436,7 +6463,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.147.0';
+const CLIENT_BUILD = '3.148.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

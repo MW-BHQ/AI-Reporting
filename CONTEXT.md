@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.147.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.148.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,35 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.148.0 — one section, one page, enforced by height (MW).**
+
+The first export ran **81 pages for ~40 sections**, alternating a full page with
+a near-empty one (1480 chars, then 234, then 1392, then 231…). `break-after:page`
+guarantees a section ENDS a page; it does nothing to stop one a few millimetres
+too tall from spilling its remainder onto a page of its own.
+
+`.slide` is now pinned: `height:6.6in; overflow:hidden` — the 7.5in canvas less
+the 0.45in `@page` margin top and bottom. A section can no longer produce a
+second page at all, so the page count equals the section count.
+
+**WHAT THIS COSTS, AND IT IS NOT SMALL:** clipped content vanishes with NO mark
+on the page. CSS cannot detect the overflow to flag it. MW asked for exactly this
+("anything else cut off"), but it means every section has to be sized on purpose
+and re-checked as data grows — **a table that gains a row next month loses its
+last row silently.** That is the same silent-loss shape as the 400 days of zeros,
+accepted deliberately this time rather than by accident.
+
+Short sections use a flex column so the last card takes the slack, rather than
+leaving the content stranded in the top third of an empty page.
+
+**NOT A CODE PROBLEM: Chrome's header.** Every page carried
+"8/29/26, 10:36 PM" and the page URL. That is the print dialog's
+Headers and footers checkbox — no stylesheet can remove it. Margins must be
+None and Background graphics ticked in the same dialog.
+
+`print:deck` now also asserts the pin, so removing the height silently reverts to
+the 81-page behaviour.
 
 **v3.147.0 — the PDF becomes a 16:9 deck that keeps its colours (MW).**
 
