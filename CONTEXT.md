@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.145.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.146.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,24 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.146.0 — cross-tab shows figures, not shares, and re-sorts with the toggle
+(MW).**
+
+**Cells carry the number.** A share describes the SHAPE of a row and never its
+size: a centre taking ฿33.5K through a channel and one taking ฿33 both read
+"3.9%". Value shows baht, Volume shows coupons. The shading still encodes the
+share so the pattern survives at a glance, and the percentage moved to the
+tooltip.
+
+**Rows re-sort with the toggle.** `d.centres` arrives sorted by REVENUE, which is
+right for Value and wrong for Volume — the centre selling the most coupons is
+often not the one taking the most baht, and leaving revenue order in place buried
+it. Sorted client-side, because the toggle is a view of the same query rather
+than a different one.
+
+**Columns deliberately do NOT re-sort** — they stay in revenue order in both
+views, so the two can be read side by side without re-finding every column.
 
 **v3.145.0 — E-commerce · Packages, a product-level tab that needs no SKU.**
 

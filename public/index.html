@@ -5516,24 +5516,42 @@ function renderEcomCentres() {
          * (set server-side), so nothing reshuffles under the reader's eye.
          */
         const units = S.xtabMode === 'units';
+        const cellsOf = (c) => units ? (c.unitsByChannel || {}) : c.byChannel;
+        const rowTotal = (c) => Object.values(cellsOf(c)).reduce((a,v)=>a+v,0);
+        /**
+         * ROWS RE-SORT WITH THE TOGGLE (MW).
+         *
+         * `d.centres` arrives sorted by REVENUE, which is right for the Value
+         * view and wrong for Volume — the centre selling the most coupons is
+         * often not the one taking the most baht, and leaving revenue order in
+         * place would bury it. Sorted here rather than server-side because the
+         * toggle is a client-side view, not a different query.
+         */
+        const rows = [...list].sort((a,b) => rowTotal(b) - rowTotal(a));
+        /**
+         * CELLS SHOW THE FIGURE, NOT THE PERCENTAGE (MW). A share tells you the
+         * shape of a row but never its size, so a centre taking ฿33.5K and one
+         * taking ฿33 could read identically at 3.9%. The shading still carries
+         * the share, so the pattern survives; the tooltip carries the percentage.
+         */
         return `<div class="tscroll xflush"><table class="xtab"><thead><tr><th>Center</th>${d.channels.map(ch=>`<th class="num">${esc(ch)}</th>`).join('')}</tr></thead><tbody>
-      ${list.map(c => {
-        const src = units ? (c.unitsByChannel || {}) : c.byChannel;
-        const tot = Object.values(src).reduce((a,v)=>a+v,0) || 1;
+      ${rows.map(c => {
+        const cells = cellsOf(c);
+        const tot = rowTotal(c) || 1;
         return `<tr><td class="strong">${c.centre==='Unmapped'?'<span class="pill warn">unmapped</span>':esc(c.centre)}</td>
         ${d.channels.map(ch => {
-          const v = src[ch] || 0, s = v/tot;
+          const v = cells[ch] || 0, s = v/tot;
           const bg = v ? `background:rgba(123,97,255,${(0.06+s*0.5).toFixed(3)});` : '';
-          const tip = units ? `${num(v)} coupon${v===1?'':'s'}` : `\u0e3f${num(Math.round(v))}`;
-          return `<td class="num cell" style="${bg}" title="${esc(ch)} \u00b7 ${tip}">${v?pct(s):'<span style="color:var(--faint)">\u2014</span>'}</td>`;
+          const shown = units ? num(v) : num(Math.round(v));
+          return `<td class="num cell" style="${bg}" title="${esc(ch)} \u00b7 ${pct(s)} of this centre">${v?shown:'<span style="color:var(--faint)">\u2014</span>'}</td>`;
         }).join('')}</tr>`;
       }).join('')}
       </tbody></table></div>`;
       })()}
-      <div class="note">Each row reads across to 100% of that centre's
-      ${S.xtabMode==='units'?'coupons':'revenue'}. Columns are ordered by total revenue, largest first, and stay
-      in that order in both views so the two can be compared. Darker means more of the centre's
-      sales come through that channel. A centre concentrated in one column is exposed if that storefront's terms change —
+      <div class="note">${S.xtabMode==='units'?'Coupons sold':'Revenue in baht'} per centre per channel.
+      Rows are ordered by that measure, largest first, so switching the toggle re-ranks them.
+      Columns stay in revenue order in both views so the two can be compared side by side.
+      Shading is the channel's share of that centre's row \u2014 hover for the percentage. A centre concentrated in one column is exposed if that storefront's terms change —
       which is the practical reason to care where a package sells, not just how much.</div>
     </div>`;
 
@@ -6386,7 +6404,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.145.0';
+const CLIENT_BUILD = '3.146.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
