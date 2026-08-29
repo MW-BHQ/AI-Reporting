@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.143.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.143.1.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,19 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.143.1 — the frozen centre column actually freezes.**
+
+v3.143.0 used `left:22px` to compensate for `.tscroll`'s
+`margin:0 -22px; padding:0 22px`, on the theory that `left:0` would drag the
+column outside the card's text column. Wrong twice: **sticky never MOVES an
+element already past its threshold**, so 0 leaves the unscrolled position alone
+— and the 22px offset opened a strip to the left of the frozen column where
+scrolled cells showed straight through, which is what MW saw.
+
+`left:0`, plus `.xflush` to drop the bleed on this one wrapper so 0 lands on the
+content edge. The table no longer reaches the card's rounded corner; fair trade
+for a column that stays put.
 
 **v3.143.0 — centre × channel cross-tab: columns by size, and a value/volume
 switch (MW).**
