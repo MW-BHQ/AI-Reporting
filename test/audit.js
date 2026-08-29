@@ -219,6 +219,33 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
 }
 
 /**
+ * PRINT KEEPS THE PALETTE AND BREAKS ONE SECTION PER PAGE (v3.147.0).
+ *
+ * This deck is exported as a PDF for submission and read on a screen; it is
+ * never printed on paper. Two rules encode that and both are easy to undo by
+ * accident, because "make it white for print" is the reflex:
+ *   - `body` must NOT be forced to #fff in print, or the palette is gone.
+ *   - `.slide` must carry `break-after:page`, or sections flow together and the
+ *     export stops being a deck.
+ *
+ * Static, because jsdom has no print rendering — a runtime check of either would
+ * pass no matter what the stylesheet said.
+ */
+{
+  const at = html.indexOf("@page{size:13.333in 7.5in");
+  const blk = at < 0 ? "" : html.slice(at, at + 4000);
+  const whiteBody = /body\{background:#fff!important/.test(blk);
+  const pageBreak = /\.slide\{[^}]*break-after:page/.test(html);
+  at < 0
+    ? fail("print:deck", "the 16:9 @page rule is gone")
+    : (whiteBody
+      ? fail("print:deck", "print forces a white body — the palette is stripped from the PDF")
+      : (pageBreak
+        ? ok("print:deck", "16:9 page, palette kept, one section per page")
+        : fail("print:deck", ".slide has no break-after:page — sections will run together")));
+}
+
+/**
  * EVERY ASSISTANT MARK IS THE SAME SIZE.
  *
  * They were 16px for ChatGPT/Gemini/Claude and 26px for Copilot/Perplexity, so

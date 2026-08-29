@@ -726,15 +726,39 @@
          below carries break-inside:avoid, so if it cannot fit the remaining
          height it moves on and abandons its title. */
       break-after:avoid;page-break-after:avoid;}
-    /* The slide is the unit that breaks, not the cards inside it. */
-    .slide{break-inside:auto;}
+    /**
+     * ONE SECTION, ONE PAGE (MW).
+     *
+     * The slide used to flow, so a tall section spilled onto a second page and a
+     * short one left half a page blank before the next began. Each `.slide` now
+     * ENDS its page, which is what makes the export read as a deck rather than a
+     * long document cut at arbitrary points.
+     *
+     * `break-inside:avoid` is deliberately NOT set on the slide. A section
+     * genuinely taller than the canvas would then be pushed whole onto the next
+     * page and still overflow it, losing a page to nothing. Letting it break is
+     * uglier and visible, which is the point: an overflowing section is a
+     * content problem to fix, not something to hide.
+     */
+    .slide{break-inside:auto;break-after:page;page-break-after:always;}
+    .slide:last-child{break-after:auto;page-break-after:auto;}
     .slide > .card{break-inside:avoid;}
   }
   @media print{
     /* 13.333in x 7.5in is the standard 16:9 slide canvas. */
     @page{size:13.333in 7.5in;margin:0.45in;}
     *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
-    body{background:#fff!important;font-size:11px;}
+    /**
+     * THE PALETTE SURVIVES THE EXPORT (MW). This PDF is read on a screen and
+     * submitted as a file — it is never put on paper — so the reasoning that
+     * stripped colour for a mono printer no longer applies.
+     *
+     * The page tint is a FLAT colour, not the app's two radial gradients. Print
+     * renders a gradient once per page, so each page would start its own fade
+     * and the deck would pulse light-dark-light as you scroll it. `--bg` alone
+     * is the same family and identical on every page.
+     */
+    body{background:var(--bg)!important;font-size:11px;}
     .rail,.toolbar,.status,.search,.tags,.btn,#loadBtn,.no-print,.acct-tabs{display:none!important;}
     .shell{display:block;}
     .main{padding:0!important;}
@@ -746,11 +770,19 @@
     }
     .print-head img{width:132px;height:auto;}
     .print-head .pmeta{text-align:right;font-size:10.5px;color:#4C5878;line-height:1.5;}
+    /**
+     * Cards go SOLID white, not `--glass`. `backdrop-filter` does not run in
+     * print, so a translucent card would render as flat rgba over the page tint
+     * — muddier than either, and different again wherever it overlapped a
+     * darker area. Solid white on the tint keeps the contrast the screen has.
+     */
     .card{
       background:#fff!important;box-shadow:none!important;backdrop-filter:none!important;
-      border:1px solid #dde3f0!important;border-radius:10px;padding:12px 14px;
+      border:1px solid var(--stroke)!important;border-radius:12px;padding:12px 14px;
       break-inside:avoid;page-break-inside:avoid;
     }
+    /* Same reasoning for every other translucent surface on the deck. */
+    .stat,.mini,.afcard,.u-card{background:#fff!important;backdrop-filter:none!important;}
     .grid{gap:10px;break-inside:avoid;page-break-inside:avoid;}
     /* Hold the two-up layouts in print. Collapsed to one column they push the
        second card onto its own page, which is what split Sessions overview
@@ -6404,7 +6436,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.146.1';
+const CLIENT_BUILD = '3.147.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

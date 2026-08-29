@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.146.1.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.147.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,40 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.147.0 — the PDF becomes a 16:9 deck that keeps its colours (MW).**
+
+**The PDF is for SUBMISSION AND SCREEN READING, never paper.** That reverses the
+reasoning behind most of the old print block, which stripped colour so a mono
+printer would cope.
+
+- **`body` keeps `--bg`** instead of being forced white. The two radial gradients
+  are dropped though — print renders a gradient once PER PAGE, so each page would
+  restart its own fade and the deck would pulse light-dark-light while scrolling.
+  A flat tint is identical on every page.
+- **Cards go solid white**, not `--glass`. `backdrop-filter` does not run in
+  print, so a translucent card renders as flat rgba over the tint — muddier than
+  either, and different again wherever it overlaps something darker. Same
+  override for `.stat`, `.mini`, `.afcard`, `.u-card`.
+- **`.slide` carries `break-after:page`**, so one section is one page. Previously
+  a tall section spilled and a short one left half a page blank.
+
+**`break-inside:avoid` is deliberately NOT set on `.slide`.** A section taller
+than the canvas would be pushed whole onto the next page and still overflow it,
+losing a page to nothing. Letting it break is uglier and VISIBLE, which is the
+point — an overflowing section is content to fix, not something to hide.
+
+`@page{size:13.333in 7.5in}` was already correct: that is 33.87 × 19.05 cm, the
+standard 16:9 slide canvas, the same shape as 1920×1080.
+
+**New audit rule `print:deck`** guards both halves, because "make it white for
+print" is the reflex and would silently undo this. Static — jsdom has no print
+rendering, so a runtime check would pass whatever the stylesheet said. Verified
+against both failure modes.
+
+**STILL TO DO: fitting each section to the canvas.** The page break is in place;
+whether every section actually FITS one page is unknown until MW exports and
+looks. Expect per-section tuning.
 
 **v3.146.1 — `youtube-to-sheet.gs` deleted from the repo.**
 
