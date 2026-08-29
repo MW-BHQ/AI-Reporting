@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.148.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.148.1.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,24 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.148.1 — three regressions from pinning the slide (MW spotted all three).**
+
+**Horizontal padding.** Pinning `.slide` set `padding:0`, so section headers sat
+hard against the page edge and the first letter of "SESSIONS OVERVIEW" was
+trimmed by the printer margin. Worse, `.tscroll`'s `margin:0 -22px` bleed — which
+is wanted on screen, where it lets a wide table reach the card edge — ran clean
+off the sheet. Padding restored at 0.2in and the bleed cancelled in print.
+
+**Card shadow.** Killed by an old rule written for paper, where a soft grey halo
+is just muddy toner. On a screen PDF it is the only thing separating a white card
+from a white-ish page, so the cards were dissolving into the tint. Restored, a
+little tighter than on screen: print has no display anti-aliasing to help, so a
+large blur reads as a smudge.
+
+**Background bands.** The tint was set on `body` only. Chrome paints the page
+canvas from the ROOT element, so white showed wherever body's box did not reach —
+every page edge on a fixed-height layout. Now on `html` as well.
 
 **v3.148.0 — one section, one page, enforced by height (MW).**
 

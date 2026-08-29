@@ -761,9 +761,18 @@
     .slide{
       break-inside:auto;break-after:page;page-break-after:always;
       height:6.6in;max-height:6.6in;overflow:hidden;
-      box-sizing:border-box;padding:0 0 0.12in;
+      /**
+       * HORIZONTAL PADDING, because the slide is now the clipping box.
+       * With `padding:0` the section headers sat hard against the page edge and
+       * `.tscroll`'s `margin:0 -22px` bleed ran off the sheet entirely — the
+       * first letter of "SESSIONS OVERVIEW" was being trimmed by the printer
+       * margin. On screen the bleed is wanted; on a fixed page it is overflow.
+       */
+      box-sizing:border-box;padding:0 0.2in 0.12in;
       display:flex;flex-direction:column;
     }
+    /* The screen bleed has nothing to run into on a page — cancel it. */
+    .tscroll{margin:0!important;padding:0!important;overflow:visible!important;}
     .slide:last-child{break-after:auto;page-break-after:auto;}
     /* Short sections should not sit in the top third of an otherwise empty page:
        the cards take the slack so the page reads as composed rather than cut. */
@@ -785,7 +794,13 @@
      * and the deck would pulse light-dark-light as you scroll it. `--bg` alone
      * is the same family and identical on every page.
      */
-    body{background:var(--bg)!important;font-size:11px;}
+    /**
+     * `html` as well as `body`. Chrome paints the page canvas from the ROOT
+     * element, so a tint set only on `body` leaves white bands wherever body's
+     * box does not reach — which is every page edge on a fixed-height layout.
+     */
+    html,body{background:var(--bg)!important;}
+    body{font-size:11px;}
     .rail,.toolbar,.status,.search,.tags,.btn,#loadBtn,.no-print,.acct-tabs{display:none!important;}
     .shell{display:block;}
     .main{padding:0!important;}
@@ -803,8 +818,16 @@
      * — muddier than either, and different again wherever it overlapped a
      * darker area. Solid white on the tint keeps the contrast the screen has.
      */
+    /**
+     * THE SHADOW STAYS. It was killed for paper, where a soft grey halo is just
+     * muddy toner. On a screen PDF it is what separates a white card from a
+     * white-ish page, and without it the cards dissolve into the tint.
+     * Slightly tighter than the screen shadow: print has no anti-aliasing help
+     * from a display, so a large blur reads as a smudge.
+     */
     .card{
-      background:#fff!important;box-shadow:none!important;backdrop-filter:none!important;
+      background:#fff!important;backdrop-filter:none!important;
+      box-shadow:0 1px 3px rgba(27,35,64,.10),0 1px 1px rgba(27,35,64,.04)!important;
       border:1px solid var(--stroke)!important;border-radius:12px;padding:12px 14px;
       break-inside:avoid;page-break-inside:avoid;
     }
@@ -6463,7 +6486,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.148.0';
+const CLIENT_BUILD = '3.148.1';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
