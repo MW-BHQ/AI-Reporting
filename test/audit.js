@@ -371,6 +371,29 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
     : ok("type:scale", "report font sizes all come from the rem scale");
 }
 
+// ------------------------------------------------- backticks in HTML comments
+/**
+ * A BACKTICK INSIDE A TEMPLATE LITERAL TERMINATES IT.
+ *
+ * Almost all of this file's markup is built in template literals, and the
+ * habit of writing `code` in a comment is strong enough that this broke the
+ * client THREE times in one session — each time inside an HTML comment
+ * explaining the markup right next to it. `client parses` catches it, but only
+ * after a full boot, and the error ("Unexpected identifier 'kwtable'") points
+ * at a token nowhere near the real cause.
+ *
+ * This names the actual mistake. Any HTML comment is suspect: they only ever
+ * appear inside template literals here.
+ */
+{
+  const bad = [...html.matchAll(/<!--[\s\S]{0,400}?-->/g)]
+    .filter((m) => m[0].includes("`"))
+    .map((m) => m[0].replace(/\s+/g, " ").slice(0, 70));
+  bad.length
+    ? fail("js:comment-backtick", `${bad.length} backtick in an HTML comment — ends the template literal: ${bad[0]}`)
+    : ok("js:comment-backtick", "no backticks inside HTML comments");
+}
+
 // ---------------------------------------------------------------- print assets
 /**
  * TWO WAYS AN IMAGE VANISHES FROM THE PDF, both of which shipped in v3.149.0

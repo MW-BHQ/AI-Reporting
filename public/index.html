@@ -7,7 +7,13 @@
 <link rel="icon" type="image/png" href="/brand/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Noto Sans SC and JP are LOADED, not just named. v3.151.0 added them to the
+     `.i18n` font stack and nothing changed, because naming a font the machine
+     does not have is a no-op — the browser fell through to a system fallback
+     that had kana but no Han, which is why Japanese showed カナ and dropped
+     every kanji, and Chinese came out entirely blank. Google serves these with
+     per-subset unicode-range, so only the codepoints actually used download. -->
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
 <!-- Chart.js stays self-hosted: a blocked CDN here breaks the page, not just the type. -->
 <script src="/vendor/chart.umd.js"></script>
 <style>
@@ -612,6 +618,8 @@
      stretching across the whole slide; at four across the width is wanted. */
   @media print{
     .cb-cards{padding-left:0;padding-right:0;}
+    /* Four across in print only — see the note at the channel card markup. */
+    .cb-cards > .grid{grid-template-columns:repeat(4,1fr)!important;}
     /**
      * FOUR ACROSS MEANS NARROW CARDS, and a narrow card wraps its channel name
      * — "Messenger (Burmese)" and the native-script labels run to three lines,
@@ -690,8 +698,8 @@
        ten on Search: the page has the room and MW asked for it by name. */
     .lang-page table:not(.nocap) tbody tr:nth-child(n+11){display:none!important;}
     .clang-page table:not(.nocap) tbody tr:nth-child(n+11){display:none!important;}
-    .lang-page table.kwtable tbody tr:nth-child(n+16){display:none!important;}
-    .lang-page table.kwtable tbody tr:nth-child(-n+15){display:table-row!important;}
+    table.kwtable tbody tr:nth-child(n+16){display:none!important;}
+    table.kwtable tbody tr:nth-child(-n+15){display:table-row!important;}
   }
   .lang-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px;}
   /**
@@ -738,6 +746,8 @@
   .slide .card-title{margin-bottom:var(--space-md);}
   /* A second heading INSIDE a card, run in under a chart or table. It is not
      starting a new card, so it does not want a card's worth of space above it. */
+  .lflag{margin-right:8px;font-size:1.05em;line-height:1;
+    font-family:'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;}
   .slide .card-title.tight{margin-top:var(--space-sm);margin-bottom:var(--space-sm);}
   .cb-page .grid + .grid{margin-top:24px;}
   /**
@@ -815,6 +825,19 @@
        overridden to ink here back when the deck was meant for a mono printer;
        this PDF is read on a screen, so the palette should survive. The rule
        below the title stays ink — it is a divider, not a heading. */
+    /**
+     * A SHORTER HEADER GIVES EVERY SLIDE 24px BACK.
+     *
+     * `min-height:4rem` sizes the header around a 64px platform mark. On a
+     * 720px page that is 9% of the height spent on a 13px heading, and it was
+     * the last thing keeping Google reviews, YouTube and Search Ads a few tens
+     * of pixels over their page. The marks shrink with it so nothing overflows
+     * the shorter box; at print scale the difference is barely visible, and it
+     * buys 24px on all twenty-five slides rather than patching three.
+     */
+    .slide-title{min-height:2.5rem;}
+    .slide-title .plogo{width:2.5rem;height:2.5rem;margin-right:.6rem;vertical-align:-.75rem;}
+    .slide-logo{width:112px!important;}
     .slide-title{font-size:13px;color:var(--violet);margin:0 0 10px;
       border-bottom:2px solid #1B2340;padding-bottom:6px;
       /* Without this the heading prints alone at the foot of a slide: the card
@@ -903,6 +926,30 @@
      */
     .slide > .grid,.slide > .card{flex:0 0 auto;}
     .slide > .card{break-inside:avoid;}
+    /**
+     * FILL THE PAGE (MW: "expand their content height to 100% so there's no
+     * space left ... content look rich and grand").
+     *
+     * OPT-IN per slide, not global. A global stretch is exactly what was
+     * removed in v3.151.0, because on a one-card slide — Sessions by language,
+     * Top videos — it left a short table floating in a 7.5in box, which reads
+     * as a rendering fault rather than a full page. It only looks grand when
+     * the thing being stretched is a GRID OF CARDS whose rows grow with it.
+     *
+     * So: three slides carry `slide-fill` today. Add it to another only after
+     * looking at what that slide's direct children actually are.
+     */
+    .slide-fill > .grid,.slide-fill > .card{flex:1 1 auto;}
+    .slide-fill > .grid{align-content:stretch;}
+    /**
+     * AND THE CHART GROWS WITH THE CARD. Stretching the card alone just made a
+     * taller box with the same 115px chart marooned at the top of it — filled
+     * the page without filling the eye. On a fill slide the chart takes the
+     * slack, which is what makes the page read as composed.
+     */
+    .slide-fill > .card,.slide-fill > .grid > .card{display:flex;flex-direction:column;}
+    .slide-fill .chart-wrap{flex:1 1 auto;height:auto!important;max-height:none!important;
+      min-height:130px;}
   }
   @media print{
     /* 13.333in x 7.5in is the standard 16:9 slide canvas. */
@@ -1007,9 +1054,9 @@
      * Ads, it is white on white and the cards disappeared entirely. Same
      * hairline the cards use.
      */
-    .slide .grid > .stat:not(.card){border:1px solid #DDE3F2!important;padding:12px 14px;}
+    .slide .grid > .stat:not(.card){border:1px solid #DDE3F2!important;padding:9px 12px;}
     /* Thinner funnel stages so the whole section fits (MW). */
-    .fn-row{margin-bottom:4px;}
+    .fn-row{margin-bottom:2px;}
     .fn-bar{padding:5px 12px;font-size:13px;}
     .fn-stage,.fn-lab{font-size:9.5px;}
     .grid{gap:10px;break-inside:avoid;page-break-inside:avoid;}
@@ -1046,7 +1093,26 @@
      * charts plus two tables in one card, and at their screen heights that
      * section still lost 315px off the page.
      */
-    .chart-wrap{max-height:150px;}
+    .chart-wrap{max-height:115px;}
+    /**
+     * THE CANVAS IS CONTAINED, not merely asked politely (MW: charts "still
+     * crash together", three sections).
+     *
+     * `resizeChartsForPrint()` on `beforeprint` was supposed to handle this.
+     * It does not reliably: Chrome fires `beforeprint` BEFORE the print layout
+     * is applied, so Chart.js re-measures the container at its SCREEN size and
+     * the canvas keeps a height taller than its box. The canvas then paints
+     * over whatever follows — the Clicks heading on Google Business Profile,
+     * the Rating mix table on Google reviews.
+     *
+     * Pinning the canvas to its wrapper makes overflow impossible whatever the
+     * resize does. The cost is that a chart whose bitmap did not get re-measured
+     * is scaled slightly rather than redrawn; on a screen-read PDF that is
+     * invisible, and it is strictly better than painting over the next block.
+     */
+    .chart-wrap{position:relative;overflow:hidden;}
+    .chart-wrap canvas{position:absolute!important;top:0;left:0;
+      width:100%!important;height:100%!important;}
     .slide{min-height:6.3in;}
     .stat .val{font-size:20px;}
     table{font-size:11px;}
@@ -1055,10 +1121,18 @@
     .chart-wrap{height:150px;}
     /* Keep a campaign report to a single slide. */
     .card h2{font-size:10.5px;margin-bottom:8px;}
+    /* 16px under every card heading is a screen rhythm; half that is enough at
+       print scale, and it was the last 11px Facebook needed. */
+    .slide .card-title{margin-bottom:8px;}
     .stat .lab{font-size:8.5px;}
     .stat .sub{font-size:8px;}
     table{font-size:10px;}
-    td,th{padding:5px 0;}
+    /* Tighter rows and a smaller gap above a table. Facebook's page card was
+       the last section 55px over its page; both are global because a denser
+       table is right for a slide deck everywhere, not just there. */
+    td,th{padding:3px 0;}
+    .grid + table,.grid + .sortable,.card > .grid + table{margin-top:10px;}
+    .card{padding:10px 12px;}
     td.trunc{max-width:200px;}
     .note,.stage-note{font-size:9px;}
     /* Force a new slide before these blocks so sections don't split awkwardly. */
@@ -2139,10 +2213,12 @@ function renderReport() {
    * the same idea looked different on different slides. The scope is now an
    * argument and this is the only place that decides how it is drawn.
    */
-  const slide = (title, body, first, scope, platform) => {
+  const slide = (title, body, first, scope, platform, fill) => {
     if (!body) return '';
     const pill = scope ? ` <span class="all-four">${esc(scope === true ? 'BHQ' : scope)}</span>` : '';
-    return `<div class="slide ${first ? '' : 'slide-break'}"><div class="slide-title">
+    // `fill`: stretch this slide's cards to the full printed page. Only for
+    // slides whose direct children are grids of cards — see the CSS note.
+    return `<div class="slide ${first ? '' : 'slide-break'}${fill ? ' slide-fill' : ''}"><div class="slide-title">
          <span>${platform ? plogo(platform) : ''}${esc(title)}${pill}</span>
          ${logoImg}
        </div>${body}</div>`;
@@ -2286,6 +2362,21 @@ function renderReport() {
    * that is genuinely per-brand rather than a comparison, which is why it is
    * not badged "all four".
    */
+  /**
+   * A flag per LOCALE, keyed off the locale segment (MW). Not a claim about
+   * where the reader is — `en` is not only Britain and `ar` is not only Saudi
+   * Arabia — it is a recognisable mark for the language, which is what makes a
+   * ten-row table scannable.
+   *
+   * Emoji flags are regional-indicator PAIRS. macOS, iOS and Android draw them;
+   * Windows has no flag glyphs in Segoe UI Emoji and draws the two letters
+   * instead ("TH"), which still reads correctly, just not as a flag. Nothing
+   * breaks either way.
+   */
+  const LANG_FLAG = { th:'\u{1F1F9}\u{1F1ED}', en:'\u{1F1EC}\u{1F1E7}', zh:'\u{1F1E8}\u{1F1F3}',
+    ja:'\u{1F1EF}\u{1F1F5}', ar:'\u{1F1F8}\u{1F1E6}', de:'\u{1F1E9}\u{1F1EA}',
+    my:'\u{1F1F2}\u{1F1F2}', vn:'\u{1F1FB}\u{1F1F3}', km:'\u{1F1F0}\u{1F1ED}', id:'\u{1F1EE}\u{1F1E9}' };
+  const langFlag = (k) => LANG_FLAG[k] ? `<span class="lflag">${LANG_FLAG[k]}</span>` : '';
   const AL = (d.actionsByLanguage || {})[sel] || [];
   const alv = (row, ev) => (row.events && row.events[ev]) || 0;
   const actionsLangBody = AL.length ? `
@@ -2302,7 +2393,7 @@ function renderReport() {
         <th class="num">${actIcon('revenue')}Revenue \u0e3f</th>
       </tr></thead><tbody>
       ${AL.map(r=>`<tr>
-        <td class="strong">${esc(r.label)}</td>
+        <td class="strong">${langFlag(r.key)}${esc(r.label)}</td>
         <td class="num strong">${num(r.views)}</td>
         <td class="num strong">${num(r.sessions)}</td>
         <td class="num strong">${num(alv(r,'find_doctors'))}</td>
@@ -2323,7 +2414,7 @@ function renderReport() {
   const channelsBody = CH.some(c => c.rows.length) ? `
     <div class="grid g-2">
       ${CH.map(c => `<div class="card">
-        <div class="card-title"><span class="hcode">${esc(c.label)}</span></div>
+        <div class="card-title">${hlogo(c.key, 30)}</div>
         <table class="sortable" data-heat="1"><thead><tr><th>Channel</th><th class="num">Sessions</th><th class="num">MoM</th></tr></thead><tbody>
         ${c.rows.length ? c.rows.map((r,i)=>`<tr>
           <td class="strong">${i+1}. ${esc(r.channel)}</td>
@@ -2338,7 +2429,7 @@ function renderReport() {
   const countryBody = CO.some(c => c.rows.length) ? `
     <div class="grid g-2">
       ${CO.map(c => `<div class="card">
-        <div class="card-title"><span class="hcode">${esc(c.label)}</span></div>
+        <div class="card-title">${hlogo(c.key, 30)}</div>
         <table class="sortable" data-heat="1"><thead><tr><th>Country</th><th class="num">Sessions</th><th class="num">MoM</th></tr></thead><tbody>
         ${c.rows.length ? c.rows.map((r,i)=>`<tr>
           <td class="strong">${i+1}. ${esc(r.country)}</td>
@@ -2669,11 +2760,13 @@ function renderReport() {
        * the value outside the card it belonged to, which is what read as odd.
        */
       /**
-       * FOUR per row (MW, v3.152.0). It was two — MW's original "1 1 / 1 1"
-       * — but with a dozen channels that is six rows and the section lost
-       * 726px off the bottom of the printed page. Four across is three rows
-       * and fits. The card is identity-left / figure-right, so it reads at
-       * half the width without changing shape.
+       * TWO per row on SCREEN (MW's original "1 1 / 1 1"), four in PRINT.
+       *
+       * v3.152.0 changed the markup to four and broke the desktop view: at
+       * `.cb-cards`'s 10rem side inset a four-column row is far too cramped to
+       * read. The printed page genuinely does need four — at two, a dozen
+       * channels is six rows and the section loses 726px off the bottom — so
+       * the column count is now a PRINT override and the markup stays at two.
        */
       /**
        * Identity on the LEFT (mark + name), performance on the RIGHT (MW).
@@ -2707,7 +2800,7 @@ function renderReport() {
             s.contactUs ? `of ${num(s.contactUs)} contact us events` : 'no contact us events')}
         </div>
         <hr class="sep">
-        <div class="cb-cards"><div class="grid g-4">${shown.map(card).join('')}</div></div>
+        <div class="cb-cards"><div class="grid g-2">${shown.map(card).join('')}</div></div>
       </div>`;
     };
     return `
@@ -2887,9 +2980,16 @@ function renderReport() {
         }).join('')}
         </tbody></table>
       </div>
-    </div>
-    ${(RVB.samples || []).some(Boolean) ? `<div class="card mt">
-      <div class="card-title">What they actually said \u00b7 one review per rating</div>
+    </div>` : '';
+
+  /**
+   * THE QUOTES GET THEIR OWN SLIDE. They were a third card under the two
+   * charts, which put Google reviews 255px over its page — and the thing
+   * clipped was the quotes themselves, so the section silently lost the only
+   * part of it that is in the patient's own words.
+   */
+  const reviewQuotesBody = (RVB && (RVB.samples || []).some(Boolean)) ? `<div class="card">
+      <div class="card-title">One review per rating, most recent with a comment</div>
       <table><tbody>
       ${RVB.samples.filter(Boolean).map(sm=>`<tr>
         <td style="width:74px;vertical-align:top;color:${sm.stars>=4?'#2E9E6F':(sm.stars===3?'#F2A93B':'#D9534F')};
@@ -2902,8 +3002,8 @@ function renderReport() {
       </tr>`).join('')}
       </tbody></table>
       <div class="note">The most recent review carrying a comment at each star level. Ratings without a
-      comment are counted in the mix above but cannot be quoted.</div>
-    </div>` : ''}` : '';
+      comment are counted in the mix on the previous page but cannot be quoted.</div>
+    </div>` : '';
 
   /**
    * Facebook: one page for all four hospitals, so the funnel on the left is
@@ -2929,8 +3029,9 @@ function renderReport() {
       above. Tell Claude which brand each belongs to.</div>
     </div>` : '';
 
+  // Full width now that Meta Ads has its own slide: left in a two-column grid
+  // the page card kept half the width, ran taller, and still overflowed.
   const facebookBody = (FB.page || fbMine) ? `
-    <div class="grid g-2">
       <div class="card">
         <div class="card-title">The page <span class="all-four">BHQ</span></div>
         ${FB.page ? `
@@ -2964,7 +3065,21 @@ function renderReport() {
           || '<tr><td colspan="3" class="num">no key events from Facebook in range</td></tr>'}
         </tbody></table>
         ` : '<div class="note">page data unavailable</div>'}
-      </div>
+      </div>` : '';
+
+  /**
+   * META ADS ON ITS OWN SLIDE. The organic page and the ad spend were two
+   * cards side by side, each 680px tall in a 594px hole, and Facebook was
+   * losing 239px off the bottom — the unmapped-accounts warning among it,
+   * which is the one thing on the slide that exists to be noticed.
+   *
+   * The two are still adjacent pages, and the note below still says plainly
+   * that the reach on the organic page is the product of this spend. They were
+   * put on one slide so the reader would not treat them as separate numbers; a
+   * page turn does not undo that, and losing the bottom of both did.
+   */
+  const metaAdBody = (FB.page || fbMine) ? `
+    <div class="grid g-2-1">
       <div class="card">
         <div class="card-title">${plogo('meta', 28)}Meta Ad <span class="all-four">BHQ</span></div>
         ${(FB.byBrand||[]).some(b=>b.spend) ? `
@@ -3041,8 +3156,9 @@ function renderReport() {
       </div>
       <div class="card">
         <div class="card-title">Search keywords \u00b7 what people typed</div>
-        <!-- No row cap: MW asked for every term here, and this column has the room. -->
-        <table class="sortable nocap" data-heat="1"><thead><tr>
+        <!-- kwtable caps this at 15 in print. Uncapped (v3.151.0) it ran past
+             the bottom of the page and was trimmed at an arbitrary row instead. -->
+        <table class="sortable nocap kwtable" data-heat="1"><thead><tr>
           <th>Search keyword</th><th class="num">Impressions</th><th class="num">Clicks</th><th class="num">CTR</th>
         </tr></thead><tbody>
         ${SAB.terms.length ? SAB.terms.map(t=>`<tr>
@@ -3398,9 +3514,9 @@ function renderReport() {
    */
   $('viewRoot').innerHTML = `
     <!-- ================= MW's sequence ================= -->
-    ${slide('Sessions overview', usersBody, true, 'BHQ')}
-    ${slide('Who reaches us from outside Thailand', countryBody, false, true)}
-    ${slide('Actions \u00b7 what we want them to do', actionsBody, false, 'BHQ')}
+    ${slide('Sessions overview', usersBody, true, 'BHQ', null, true)}
+    ${slide('Who reaches us from outside Thailand', countryBody, false, true, null, true)}
+    ${slide('Actions \u00b7 what we want them to do', actionsBody, false, 'BHQ', null, true)}
     ${apptBody ? slide('Appointments', apptBody, false, sel) : ''}
     ${slide('Sessions by language', langMatrixBody, false, 'BHQ')}
     ${slide('Actions by language', actionsLangBody, false, sel)}
@@ -3410,7 +3526,9 @@ function renderReport() {
     ${searchPagesBody}
     ${gbpDetailBody}
     ${slide('Google reviews', reviewBody, false, false, 'gbp')}
-    ${slide('Facebook', facebookBody, false, false, 'facebook')}
+    ${slide('Google reviews \u00b7 what they said', reviewQuotesBody, false, false, 'gbp', true)}
+    ${slide('Facebook', facebookBody, false, false, 'facebook', true)}
+    ${slide('Facebook \u00b7 Meta Ads', metaAdBody, false, false, 'facebook')}
     ${slide('YouTube', ytBody, false, 'BHQ', 'youtube')}
     ${slide('YouTube \u00b7 Top videos', ytTopBody, false, 'BHQ', 'youtube')}
 
@@ -6731,7 +6849,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.152.0';
+const CLIENT_BUILD = '3.153.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

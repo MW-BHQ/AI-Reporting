@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.152.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.153.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,69 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.153.0 — MW's third PDF pass. Zero sections clipping, for the first time.**
+
+**THE CJK FONTS WERE NEVER LOADED.** v3.151.0 added `Noto Sans SC` and JP to
+the `.i18n` stack and nothing changed, because NAMING a font the machine does
+not have is a no-op — only Poppins and Sarabun are in the Google Fonts link.
+The browser fell through to a system fallback with kana but no Han, which is
+exactly what the export showed: Japanese kept カナ and dropped every kanji,
+Chinese came out entirely blank. They are in the `<link>` now. Google serves
+per-subset unicode-range, so only the codepoints used download.
+
+Lesson worth keeping: a font-family change that "should" work and visibly does
+not is almost always a loading problem, not a stack-order problem.
+
+**CHAT BUBBLE: DESKTOP ROLLED BACK, print keeps four across.** v3.152.0 changed
+the markup from `g-2` to `g-4`, which fixed the page and broke the screen — at
+`.cb-cards`'s 10rem inset four columns are unreadably cramped. The column count
+is a PRINT override now and the markup is back to two. MW was right that the
+grid-collapse fix alone was the necessary part.
+
+**CHARTS ARE CONTAINED, not asked politely.** `resizeChartsForPrint()` on
+`beforeprint` is not reliable: Chrome fires that event BEFORE applying the print
+layout, so Chart.js re-measures at SCREEN size and the canvas keeps a height
+taller than its box, painting over whatever follows — the Clicks heading on
+GBP, the Rating mix table on Google reviews, off the page on YouTube and
+TikTok. The canvas is now pinned to its wrapper (`position:absolute`, 100% of
+both axes, wrapper `overflow:hidden`), so overflow is impossible whatever the
+resize does. A chart that missed the re-measure is scaled slightly instead of
+redrawn; invisible on a screen-read PDF and strictly better than painting over
+the next block.
+
+**FILL THE PAGE — opt-in, three slides** (`slide-fill`). A global stretch is
+what v3.151.0 removed, because on a one-card slide it leaves a short table
+floating in a 7.5in box. It only reads as grand when the thing stretched is a
+grid of cards. Stretching the card alone was not enough either: it made a taller
+box with a 115px chart marooned at the top, so on a fill slide the chart takes
+the slack too.
+
+**Three more sections split onto their own slides** — Google reviews quotes,
+Facebook Meta Ads, following AI assistants in v3.151. In each case the thing
+being clipped was the most human part of the section: the patient's own words,
+the unmapped-accounts warning. A page turn does not undo "read these together";
+losing the bottom of both did.
+
+Also: emoji flags per locale on Actions by language (regional-indicator PAIRS —
+macOS/iOS/Android draw flags, Windows draws the two letters, both legible);
+hospital logos replace codes on Countries and Channels; Search Ads keywords
+capped at 15 rather than uncapped-and-trimmed.
+
+**Global print density**, which is what closed the last four sections rather
+than patching each: header `min-height` 4rem → 2.5rem with the marks scaled to
+match (24px back on all 26 slides), `td,th` padding 5px → 3px, card padding and
+card-title margin halved, chart ceiling 300 → 115.
+
+**26 sections, 0 clipping.** `test/print-overflow.py` exits 0 for the first
+time. Run it before shipping any report layout change.
+
+**A BACKTICK IN AN HTML COMMENT ENDS THE TEMPLATE LITERAL — three times in two
+sessions**, each time writing `code` in a comment sitting inside a template
+string. `client parses` caught it every time, but only after a full boot and
+with an error pointing at a token nowhere near the cause. There is now a rule
+that names the actual mistake: `js:comment-backtick`. Verified by reintroducing
+it. Suite 237.
 
 **v3.152.0 — the rest of MW's PDF review: clipping down from 9 sections to 4.**
 
