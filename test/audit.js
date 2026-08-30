@@ -242,15 +242,23 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
    * own page — 81 pages for ~40 sections, alternating full and near-empty.
    * 6.6in is the 7.5in canvas less the 0.45in margin top and bottom.
    */
-  const pinned = /\.slide\{[^}]*height:6\.6in[^}]*overflow:hidden/s.test(html);
+  const pinned = /\.slide\{[^}]*height:7\.5in[^}]*overflow:hidden/s.test(html);
+  /**
+   * The @page margin must stay ZERO. A non-zero margin is UNPAINTED, so the tint
+   * stops at the content box and every page gets a white border that no CSS can
+   * colour. The slide carries the padding instead.
+   */
+  const fullBleed = /@page\{size:13\.333in 7\.5in;margin:0;\}/.test(html);
   at < 0
     ? fail("print:deck", "the 16:9 @page rule is gone")
     : (whiteBody
       ? fail("print:deck", "print forces a white body — the palette is stripped from the PDF")
       : (pageBreak
         ? (pinned
-          ? ok("print:deck", "16:9 page, palette kept, one section pinned per page")
-          : fail("print:deck", ".slide is not pinned to 6.6in — tall sections will spill a second page"))
+          ? (fullBleed
+            ? ok("print:deck", "16:9 full-bleed page, palette kept, one section pinned per page")
+            : fail("print:deck", "@page has a margin — it prints as a white border the tint cannot reach"))
+          : fail("print:deck", ".slide is not pinned to 7.5in — tall sections will spill a second page"))
         : fail("print:deck", ".slide has no break-after:page — sections will run together")));
 }
 

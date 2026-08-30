@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.148.1.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.149.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,35 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.149.0 — full-bleed pages, no shadow, ten rows per table (MW).**
+
+**THE WHITE BORDER WAS THE `@page` MARGIN, and it could never have been fixed
+by colouring anything.** A non-zero page margin is UNPAINTED: the tint stops at
+the content box and the strip outside stays white whatever `html` and `body` say.
+`margin:0` and the padding moves inside `.slide` (0.34in top, 0.42in sides), so
+the colour now runs edge to edge. Slide height becomes the full 7.5in.
+
+**SHADOWS OFF.** Chrome rasterises a box-shadow into PDF as a banded grey
+gradient rather than the soft falloff a screen shows, so it read as a dirty edge
+— which is what MW saw twice. A 1px `#DDE3F2` border does the same job of
+separating a white card from the tint and prints crisply.
+
+**TEN ROWS PER TABLE IN PRINT.** The keyword tables run to 17-20 rows and were
+the main thing pushing sections past the page. Everything past the tenth was
+being clipped anyway; this just decides WHICH ten rather than letting the page
+edge decide. Every table is already sorted, so the ten kept are the ten that
+matter, and tables shorter than ten are untouched. Screen still shows the full
+list.
+
+**MW ASKED WHETHER DROPPING THE FIXED 16:9 WOULD HELP. It would not.** CSS can
+only size a page from a rule, not from measured content, so "each section as tall
+as it needs" means either one page size for everything (what we have) or a named
+`@page` per section with a height guessed in advance — worse, because a wrong
+guess is a blank strip instead of a clip. Variable page heights also stop it
+being a deck: a submitted PDF that changes shape as you scroll reads as a
+document that went wrong. The white border was the real complaint and it was a
+margin bug, not a consequence of the fixed size.
 
 **v3.148.1 — three regressions from pinning the slide (MW spotted all three).**
 

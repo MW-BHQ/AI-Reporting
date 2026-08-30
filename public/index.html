@@ -760,7 +760,8 @@
      */
     .slide{
       break-inside:auto;break-after:page;page-break-after:always;
-      height:6.6in;max-height:6.6in;overflow:hidden;
+      /* Full page now that @page has no margin of its own. */
+      height:7.5in;max-height:7.5in;overflow:hidden;
       /**
        * HORIZONTAL PADDING, because the slide is now the clipping box.
        * With `padding:0` the section headers sat hard against the page edge and
@@ -768,11 +769,21 @@
        * first letter of "SESSIONS OVERVIEW" was being trimmed by the printer
        * margin. On screen the bleed is wanted; on a fixed page it is overflow.
        */
-      box-sizing:border-box;padding:0 0.2in 0.12in;
+      box-sizing:border-box;padding:0.34in 0.42in 0.3in;
       display:flex;flex-direction:column;
     }
     /* The screen bleed has nothing to run into on a page — cancel it. */
     .tscroll{margin:0!important;padding:0!important;overflow:visible!important;}
+    /**
+     * TEN ROWS PER TABLE (MW). The keyword tables run to 17-20 rows and were
+     * the main thing pushing a section off its page — everything after the tenth
+     * was being clipped anyway, just without deciding WHICH ten.
+     *
+     * Every table is already sorted, so the ten kept are the ten that matter.
+     * Tables shorter than ten are untouched. This is print only; the screen
+     * still shows the full list, which is where someone goes to see the rest.
+     */
+    .slide table tbody tr:nth-child(n+11){display:none!important;}
     .slide:last-child{break-after:auto;page-break-after:auto;}
     /* Short sections should not sit in the top third of an otherwise empty page:
        the cards take the slack so the page reads as composed rather than cut. */
@@ -782,7 +793,15 @@
   }
   @media print{
     /* 13.333in x 7.5in is the standard 16:9 slide canvas. */
-    @page{size:13.333in 7.5in;margin:0.45in;}
+    /**
+   * FULL BLEED: `margin:0`, and the padding moves INSIDE the slide.
+   *
+   * A non-zero `@page` margin is UNPAINTED — the page tint stops at the content
+   * box and the printer margin stays white, which is the odd white border MW
+   * saw on every page. There is no way to colour that strip; the only fix is to
+   * remove it and let the slide own its own padding.
+   */
+  @page{size:13.333in 7.5in;margin:0;}
     *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
     /**
      * THE PALETTE SURVIVES THE EXPORT (MW). This PDF is read on a screen and
@@ -825,10 +844,16 @@
      * Slightly tighter than the screen shadow: print has no anti-aliasing help
      * from a display, so a large blur reads as a smudge.
      */
+    /**
+     * NO SHADOW (MW, after seeing it). Chrome rasterises a box-shadow into the
+     * PDF as a banded grey gradient rather than the soft falloff a screen
+     * shows, so it reads as a dirty edge. A hairline border does the same job —
+     * separating the white card from the tint — and prints crisply.
+     */
     .card{
       background:#fff!important;backdrop-filter:none!important;
-      box-shadow:0 1px 3px rgba(27,35,64,.10),0 1px 1px rgba(27,35,64,.04)!important;
-      border:1px solid var(--stroke)!important;border-radius:12px;padding:12px 14px;
+      box-shadow:none!important;
+      border:1px solid #DDE3F2!important;border-radius:12px;padding:12px 14px;
       break-inside:avoid;page-break-inside:avoid;
     }
     /* Same reasoning for every other translucent surface on the deck. */
@@ -6486,7 +6511,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.148.1';
+const CLIENT_BUILD = '3.149.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
