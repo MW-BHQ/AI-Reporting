@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.151.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.152.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,64 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.152.0 — the rest of MW's PDF review: clipping down from 9 sections to 4.**
+
+Continues v3.151.0. Nine sections were clipping content off the bottom of their
+page; four still are, listed at the end with numbers.
+
+**BOTH SCOPE PAGES WERE PRINTING, STACKED.** Chat Bubble and Appointments each
+render two `.cb-page` blocks — the open hospital and BHQ — and CSS picks one on
+screen. The print rule was `display:block!important`, which showed BOTH, so the
+second was always clipped away invisibly. Chat Bubble was losing 1611px: over
+two full pages of content that nobody could see and no one knew was there.
+
+Print now shows the ACTIVE scope only. The scope tabs are a screen affordance
+and the slide title already names the hospital. To print both instead, give
+`.cb-page` the `.lang-page` treatment — its own 7.5in box with a page break —
+rather than reverting the rule.
+
+**CHAT BUBBLE CHANNEL CARDS ARE FOUR ACROSS** (MW). They were `g-2`, which was
+MW's own earlier "1 1 / 1 1"; with a dozen channels that is six rows. Four
+across is three. Narrow cards wrap their channel names, though — the
+native-script labels run to three lines — so in print the card stacks identity
+above the figure, which gives the name the full card width instead of half of
+it. That was the difference between 514px over and fitting.
+
+**A CEILING ON CHART HEIGHT IN PRINT**, `max-height:150px`. The authored inline
+height still wins when it is smaller; print should never grow a chart.
+
+**`test/print-overflow.py` — THE DETECTOR THIS PROJECT HAS NEEDED.**
+
+CONTEXT has said for several releases that clipped content disappears with no
+mark on the page, that there is no CSS way to detect it, and that every section
+needs eyes on it as the data grows. That was true of CSS and false of the
+browser: `scrollHeight - clientHeight` on each section says exactly how much
+fell off, and there is a Chromium in the container.
+
+Run it before shipping any report layout change:
+
+    (WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ECOM_SHEET_ID=mock \
+     ADMIN_EMAILS=admin@bkh.test ACCESS_BUCKET=mock-bucket PORT=8412 \
+     node --require ./test/mock-fetch.js server.js &) ; sleep 4
+    python3 test/print-overflow.py
+
+Exit 1 if anything clips. Not in `npm test` because it needs a browser. It
+defaults to a 900px layout ON PURPOSE: the print layout can be narrower than the
+window, and a wide render hides the whole grid-collapse class of bug — at 1600px
+the v3.150 grids measured correct while MW's export was visibly broken.
+
+**STILL CLIPPING** (mock data, 900px):
+
+    Facebook          263px    not on MW's list; clips anyway
+    Google reviews    255px    after the margin and footnote fixes
+    YouTube            69px
+    Search Ads         11px
+
+These are content-too-tall, not mechanical: each needs a layout decision about
+what to drop or shrink, which is MW's call rather than a guess. Facebook is two
+680px cards side by side in a 594px hole. Google reviews is two 538px cards plus
+a 199px quote card.
 
 **v3.151.0 — MW's PDF review: purple headers, grids, language pages, footnotes.**
 

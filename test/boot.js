@@ -926,10 +926,11 @@ setTimeout(() => {
         if (/Unrecognised click ids/.test(pages[0].textContent)) {
           return fail("chat bubble", "footer still rendering");
         }
-        // The intro row is g-3 since the BHQ-share card was added, so the
-        // channel grid is the one inside `.cb-cards` specifically.
-        const cols = pages[0].querySelectorAll(".cb-cards .grid.g-2").length;
-        if (cols < 1) return fail("chat bubble", "channel cards are not in a 2-column grid");
+        // The intro row is g-4 (KPIs), so the channel grid is the one inside
+        // `.cb-cards` specifically. Four across as of v3.152.0 — at two it was
+        // six rows of channels and the section lost 726px off the printed page.
+        const cols = pages[0].querySelectorAll(".cb-cards .grid.g-4").length;
+        if (cols < 1) return fail("chat bubble", "channel cards are not in a 4-column grid");
         /**
          * The click-source note was added in v3.133.0 and REMOVED in v3.135.0 at
          * MW's request. Asserted as an absence rather than deleted quietly: the

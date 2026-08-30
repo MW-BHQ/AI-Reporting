@@ -608,7 +608,26 @@
   .cb-cards{padding-left:10rem;padding-right:10rem;}
   @media(max-width:1400px){ .cb-cards{padding-left:4rem;padding-right:4rem;} }
   @media(max-width:1080px){ .cb-cards{padding-left:0;padding-right:0;} }
-  @media print{ .cb-cards{padding-left:6rem;padding-right:6rem;} }
+  /* No side inset in print. It was there to stop TWO wide channel cards
+     stretching across the whole slide; at four across the width is wanted. */
+  @media print{
+    .cb-cards{padding-left:0;padding-right:0;}
+    /**
+     * FOUR ACROSS MEANS NARROW CARDS, and a narrow card wraps its channel name
+     * — "Messenger (Burmese)" and the native-script labels run to three lines,
+     * which is what kept this section 514px over its page even after the grid
+     * was fixed. Stacking identity above the figure gives the name the full
+     * card width instead of half of it, and the whole card gets tighter.
+     */
+    .cbc{flex-direction:column;align-items:flex-start;gap:6px;padding:10px 12px;
+      border:1px solid #DDE3F2!important;}
+    .cbc-id{gap:8px;}
+    .cbc-lab{font-size:11px;line-height:1.2;}
+    .cbc-num{font-size:22px;}
+    .cbc-unit{font-size:9px;margin-left:4px;}
+    .cbc-foot{font-size:9px;margin-top:2px;}
+    .cbc .plogo{width:22px!important;height:22px!important;}
+  }
   .cbc-id{display:flex;align-items:center;gap:14px;min-width:0;}
   .cbc-lab{font-size:var(--text-lg);font-weight:700;color:var(--ink);line-height:1.25;
     overflow-wrap:anywhere;}
@@ -623,7 +642,23 @@
   @media(max-width:1080px){ .cbc-num{font-size:30px;} }
   /* Chat bubble scope tabs: hospital vs BHQ, same show-one-of-two mechanism. */
   @media screen{ .cb-page:not(.active){display:none;} }
-  @media print{ .cb-page{display:block!important;} }
+  /**
+   * ONLY THE ACTIVE SCOPE PRINTS.
+   *
+   * Chat Bubble and Appointments each render TWO `.cb-page` blocks — the open
+   * hospital and BHQ — and CSS picks one on screen. `display:block!important`
+   * here showed BOTH in print, stacked, so the second was always clipped away
+   * invisibly: Chat Bubble was losing 1611px, over two full pages of content
+   * nobody could see. The scope tabs are a screen affordance; the printed deck
+   * is the hospital that was open, which is what the slide title already says.
+   *
+   * To print both instead, give `.cb-page` the `.lang-page` treatment (its own
+   * 7.5in box with a page break) rather than reverting this.
+   */
+  @media print{
+    .cb-page{display:none!important;}
+    .cb-page.active{display:block!important;}
+  }
   /**
    * THE LANGUAGE PAGES ARE PAGES, and until now only half-knew it.
    *
@@ -1005,6 +1040,13 @@
      * heights are already tuned per section; print should not second-guess them.
      */
     .chart-wrap{height:200px;}
+    /**
+     * A CEILING, not a fixed height. The authored inline height wins when it is
+     * smaller — print should not grow a chart — but Google reviews stacks two
+     * charts plus two tables in one card, and at their screen heights that
+     * section still lost 315px off the page.
+     */
+    .chart-wrap{max-height:150px;}
     .slide{min-height:6.3in;}
     .stat .val{font-size:20px;}
     table{font-size:11px;}
@@ -2627,9 +2669,11 @@ function renderReport() {
        * the value outside the card it belonged to, which is what read as odd.
        */
       /**
-       * Two per row (MW's 1 1 / 1 1 / 1 1 / 1 1), mark at 44px. The label and
-       * the figure sit in the same card as the mark so each channel reads as
-       * one object.
+       * FOUR per row (MW, v3.152.0). It was two — MW's original "1 1 / 1 1"
+       * — but with a dozen channels that is six rows and the section lost
+       * 726px off the bottom of the printed page. Four across is three rows
+       * and fits. The card is identity-left / figure-right, so it reads at
+       * half the width without changing shape.
        */
       /**
        * Identity on the LEFT (mark + name), performance on the RIGHT (MW).
@@ -2663,7 +2707,7 @@ function renderReport() {
             s.contactUs ? `of ${num(s.contactUs)} contact us events` : 'no contact us events')}
         </div>
         <hr class="sep">
-        <div class="cb-cards"><div class="grid g-2">${shown.map(card).join('')}</div></div>
+        <div class="cb-cards"><div class="grid g-4">${shown.map(card).join('')}</div></div>
       </div>`;
     };
     return `
@@ -6687,7 +6731,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.151.0';
+const CLIENT_BUILD = '3.152.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
