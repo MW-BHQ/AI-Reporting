@@ -347,7 +347,15 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
    */
   const offenders = [];
   let mediaDepth = 0, inMedia = false;
-  for (const line of styleBlock.split("\n")) {
+  /**
+   * COMMENTS ARE STRIPPED FIRST. The brace tracker keys off the literal text
+   * "@media", so a COMMENT that merely mentions `@media` reset the depth
+   * mid-block and threw the rest of the print rules back into top-level scope —
+   * eight legitimate print overrides reported as offenders. Prose about the CSS
+   * must not be read as CSS.
+   */
+  const scanBlock = styleBlock.replace(/\/\*[\s\S]*?\*\//g, "");
+  for (const line of scanBlock.split("\n")) {
     if (/@media/.test(line)) { inMedia = true; mediaDepth = 0; }
     if (inMedia) {
       mediaDepth += (line.match(/\{/g) || []).length - (line.match(/\}/g) || []).length;

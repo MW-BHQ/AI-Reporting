@@ -893,7 +893,7 @@ function logJson(severity, message, extra = {}) {
 
 const LOCALES = {
   th: "Thai", en: "English", zh: "Chinese", ja: "Japanese", ar: "Arabic",
-  de: "German", my: "Burmese", vn: "Vietnamese", km: "Khmer", id: "Indonesian",
+  de: "German", my: "Myanmar", vn: "Vietnamese", km: "Khmer", id: "Indonesian",
 };
 
 /**

@@ -641,8 +641,10 @@ setTimeout(() => {
        * tables too — a loose text match gave a false pass in v3.103.0.
        */
       (() => {
-        const card = [...(root ? root.querySelectorAll(".card") : [])]
-          .find(c => (c.querySelector(".card-title") || {}).textContent === "AI assistants (LLMs)");
+        // Matched on `.ai-card`, not on the title text: as of v3.151.0 the block
+        // is its own slide and the title moved to the slide header, so there is
+        // no `.card-title` to read. The class is also the more stable hook.
+        const card = root ? root.querySelector(".card.ai-card") : null;
         if (!card) return fail("ai card layout", "AI card not found");
         const rows = [...card.querySelectorAll(".grid.g-5")];
         // `.mini` is the styled scorecard added in v3.105.0; `.stat` is the
@@ -694,7 +696,9 @@ setTimeout(() => {
       text.includes("not attributed to a hospital")
         ? fail("unattributed card removed", "still rendering")
         : ok("unattributed card removed", "gone");
-      present("tiktok channel rendered", "daily reached audience");
+      // Was the reach footnote, removed in v3.151.0 (MW). "Profile views" is
+      // the TikTok channel card's own label and appears nowhere else.
+      present("tiktok channel rendered", "Profile views");
       present("tiktok clicks rendered", "Bio link clicks");
       present("tiktok top rendered", "Top like rate");
       /**

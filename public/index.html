@@ -86,7 +86,12 @@
     font-size:var(--text-base);
   }
   /* Thai and other scripts fall through Poppins to Sarabun, then system */
-  .i18n{font-family:'Poppins','Sarabun',system-ui,'Noto Sans Thai','Noto Sans JP','Noto Sans Arabic','Noto Sans Myanmar','Noto Sans Khmer',sans-serif;}
+  /* 'Noto Sans SC' and 'Noto Sans TC' are NOT optional (MW: "chinese font is not
+     coming - just blank"). 'Noto Sans JP' covers the Han characters Japanese
+     uses, so Chinese text rendered as long as it stayed inside that overlap and
+     dropped to blank boxes the moment a Simplified-only glyph appeared. Listed
+     before JP so Chinese gets a Chinese face rather than a Japanese one. */
+  .i18n{font-family:'Poppins','Sarabun',system-ui,'Noto Sans Thai','Noto Sans SC','Noto Sans TC','Noto Sans JP','Noto Sans Arabic','Noto Sans Myanmar','Noto Sans Khmer',sans-serif;}
 
   .shell{display:flex;min-height:100vh;}
 
@@ -619,8 +624,40 @@
   /* Chat bubble scope tabs: hospital vs BHQ, same show-one-of-two mechanism. */
   @media screen{ .cb-page:not(.active){display:none;} }
   @media print{ .cb-page{display:block!important;} }
-  @media print{ .clang-page{display:block!important;break-before:page;page-break-before:always;} }
-  @media print{ .lang-page{display:block!important;break-before:page;page-break-before:always;} }
+  /**
+   * THE LANGUAGE PAGES ARE PAGES, and until now only half-knew it.
+   *
+   * `.lang-page` (Search) and `.clang-page` (Content) each become their own
+   * printed page, but they were never given the box `.slide` has — no padding,
+   * no height, no clipping. That is why Search - Thai printed hard against the
+   * paper edge (MW: "the padding collapsed") and why Content printed Thai in
+   * full and then cut English off mid-card: all the language pages were stuffed
+   * inside ONE 7.5in `.slide` wrapper that clipped everything past the first.
+   *
+   * They get the same geometry as `.slide` here, and the `.slide` that WRAPS
+   * them is released from its own clamp below, so each language owns a page.
+   */
+  @media print{
+    .clang-page,.lang-page{
+      display:block!important;
+      break-before:page;page-break-before:always;
+      break-after:page;page-break-after:always;
+      box-sizing:border-box;height:7.5in;max-height:7.5in;overflow:hidden;
+      padding:0.34in 0.42in 0.3in;
+    }
+    /* A wrapper whose only job is to hold language pages must not clip them. */
+    .slide.slide-pages{
+      height:auto!important;max-height:none!important;overflow:visible!important;
+      padding:0!important;display:block!important;
+      break-before:auto;page-break-before:auto;break-after:auto;page-break-after:auto;
+    }
+    /* Same ten-row discipline the slides have, and fifteen keywords rather than
+       ten on Search: the page has the room and MW asked for it by name. */
+    .lang-page table:not(.nocap) tbody tr:nth-child(n+11){display:none!important;}
+    .clang-page table:not(.nocap) tbody tr:nth-child(n+11){display:none!important;}
+    .lang-page table.kwtable tbody tr:nth-child(n+16){display:none!important;}
+    .lang-page table.kwtable tbody tr:nth-child(-n+15){display:table-row!important;}
+  }
   .lang-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px;}
   /**
    * Section rhythm (MW: easier to skim and scan). Grids get a real gutter,
@@ -643,6 +680,17 @@
     background:var(--glass);border:1px solid var(--stroke);border-radius:var(--r);
     box-shadow:var(--shadow);padding:18px 20px;
   }
+  /**
+   * FUNNEL STAGE (TOFU / MOFU / BOFU). Shared by Search-by-language and Search
+   * Ads, which had the same markup inline in two places; a class means the
+   * print version can be thinned in one edit rather than two.
+   */
+  .fn-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+  .fn-stage{width:46px;font-size:var(--text-3xs);font-weight:700;color:var(--faint);}
+  .fn-lab{width:92px;font-size:11.5px;color:var(--ink-2);}
+  .fn-track{flex:1;min-width:0;}
+  .fn-bar{min-width:64px;border-radius:20px;padding:9px 14px;text-align:right;
+    font-weight:700;font-size:16px;}
   .grid + .grid{margin-top:20px;}
   .sep{border:0;border-top:1px solid var(--line);margin:28px 0 22px;}
   /**
@@ -653,6 +701,9 @@
   .card > .grid + table{margin-top:var(--space-lg);}
   .card-title{font-size:var(--text-lg);font-weight:700;}
   .slide .card-title{margin-bottom:var(--space-md);}
+  /* A second heading INSIDE a card, run in under a chart or table. It is not
+     starting a new card, so it does not want a card's worth of space above it. */
+  .slide .card-title.tight{margin-top:var(--space-sm);margin-bottom:var(--space-sm);}
   .cb-page .grid + .grid{margin-top:24px;}
   /**
    * Platform mark on a slide title. The monogram sits underneath and the real
@@ -724,7 +775,12 @@
   .hcode-sm{font-size:var(--text-xs);font-weight:800;color:#002D73;}
   .slide-title:first-child{margin-top:0;}
   @media print{
-    .slide-title{font-size:13px;color:#1B2340;margin:0 0 10px;
+    /* The section header keeps the VIOLET it has on screen (MW: "keep the
+       purple for all page section headers, now they are black"). It was
+       overridden to ink here back when the deck was meant for a mono printer;
+       this PDF is read on a screen, so the palette should survive. The rule
+       below the title stays ink — it is a divider, not a heading. */
+    .slide-title{font-size:13px;color:var(--violet);margin:0 0 10px;
       border-bottom:2px solid #1B2340;padding-bottom:6px;
       /* Without this the heading prints alone at the foot of a slide: the card
          below carries break-inside:avoid, so if it cannot fit the remaining
@@ -787,12 +843,30 @@
      * Tables shorter than ten are untouched. This is print only; the screen
      * still shows the full list, which is where someone goes to see the rest.
      */
-    .slide table tbody tr:nth-child(n+11){display:none!important;}
+    .slide table:not(.nocap) tbody tr:nth-child(n+11){display:none!important;}
+    /**
+     * `nth-child` COUNTS HIDDEN ROWS. The back-links table hides blacklisted
+     * referrers with `display:none`, and those rows still occupy positions 1-10
+     * here — which is why a table capped at "ten" printed six (MW: "should show
+     * top 10 sites"). Blacklisted rows are dropped from print outright and the
+     * cap is applied at render time over the rows that remain, marked `.pr-cut`.
+     */
+    .bl-wrap:not(.bl-hidden) .bl-row{display:none!important;}
+    .pr-cut{display:none!important;}
     .slide:last-child{break-after:auto;page-break-after:auto;}
-    /* Short sections should not sit in the top third of an otherwise empty page:
-       the cards take the slack so the page reads as composed rather than cut. */
+    /**
+     * EVERY CARD HUGS ITS CONTENT (MW: "the table height should cover content
+     * height not the whole section space").
+     *
+     * The last card used to take `flex:1 1 auto` so a short section filled its
+     * page rather than sitting in the top third. On a one-card slide — Sessions
+     * by language, Actions by language, Top videos — that stretched the card to
+     * the full 7.5in and left a table floating in a tall empty box.
+     *
+     * Whitespace under a short section is the better trade: it reads as a
+     * finished slide, where the stretched box read as a rendering fault.
+     */
     .slide > .grid,.slide > .card{flex:0 0 auto;}
-    .slide > .card:last-child{flex:1 1 auto;}
     .slide > .card{break-inside:avoid;}
   }
   @media print{
@@ -889,17 +963,48 @@
     /* `.cbc` was translucent-with-a-shadow and covered by neither rule. */
     .stat,.mini,.afcard,.u-card,.cbc{background:#fff!important;backdrop-filter:none!important;
       -webkit-backdrop-filter:none!important;}
+    /**
+     * SCORECARDS KEEP THEIR EDGE (MW: "the 3 score cards design are gone").
+     *
+     * `.stat` draws its border with `--stroke`, which is `rgba(255,255,255,.85)`
+     * — white. On the tinted page that reads as an edge, so scorecards sitting
+     * directly on a slide looked right. Inside a white `.card`, as on Search
+     * Ads, it is white on white and the cards disappeared entirely. Same
+     * hairline the cards use.
+     */
+    .slide .grid > .stat:not(.card){border:1px solid #DDE3F2!important;padding:12px 14px;}
+    /* Thinner funnel stages so the whole section fits (MW). */
+    .fn-row{margin-bottom:4px;}
+    .fn-bar{padding:5px 12px;font-size:13px;}
+    .fn-stage,.fn-lab{font-size:9.5px;}
     .grid{gap:10px;break-inside:avoid;page-break-inside:avoid;}
     /* Hold the two-up layouts in print. Collapsed to one column they push the
        second card onto its own page, which is what split Sessions overview
        across pages 2 and 3. */
+    /**
+     * ALL FIVE, not three (MW: "grid 4 becomes 2", four separate times).
+     *
+     * `@media(max-width:1080px)` collapses `.g-5` and `.g-4` to two columns for
+     * narrow screens. Print inherits it whenever the page lays out under
+     * 1080px, which is why Appointments, Google Business Profile, TikTok top
+     * performances and Chat Bubble all printed 2-up and then overflowed — four
+     * bug reports, one missing line. `.g-2-1`, `.g-2` and `.g-3` were already
+     * pinned here for exactly this reason; `.g-4` and `.g-5` were forgotten.
+     */
     .g-2-1{grid-template-columns:1.6fr 1fr!important;}
     .g-2{grid-template-columns:repeat(2,1fr)!important;}
     .g-3{grid-template-columns:repeat(3,1fr)!important;}
-    /* Inline heights would otherwise survive into print. Sized to FILL the
-       16:9 slide rather than shrink to fit \u2014 at 190px a slide was half empty. */
-    .chart-wrap[style]{height:300px!important;}
-    .chart-wrap{height:300px;}
+    .g-4{grid-template-columns:repeat(4,1fr)!important;}
+    .g-5{grid-template-columns:repeat(5,1fr)!important;}
+    /**
+     * THE AUTHORED HEIGHT WINS (MW: "the chart is overflow").
+     *
+     * This used to force every chart to 300px to fill the slide. Google reviews
+     * carries two charts at 230px and 210px, so print grew them to 600px of
+     * chart on one page and pushed 517px of content off the bottom. The inline
+     * heights are already tuned per section; print should not second-guess them.
+     */
+    .chart-wrap{height:200px;}
     .slide{min-height:6.3in;}
     .stat .val{font-size:20px;}
     table{font-size:11px;}
@@ -2166,8 +2271,6 @@ function renderReport() {
         <td class="num strong">${num(Math.round(r.revenue))}</td>
       </tr>`).join('')}
       </tbody></table>
-      <div class="note">Views are page views; sessions are visits. Revenue is GA4 web only and reads 0 while
-      orders are not reaching GA4 (\u00a711). Language comes from the URL locale segment.</div>
     </div>` : '';
 
   /**
@@ -2212,15 +2315,12 @@ function renderReport() {
         ${LM.locales.map(l=>`<th class="num"><div style="font-size:13px;font-weight:700;color:var(--ink)">${esc(l.code)}</div>
           <div style="font-size:9.5px;font-weight:400;color:var(--faint)">${esc(l.label)}</div></th>`).join('')}
       </tr></thead><tbody>
-      ${LM.rows.map(r=>`<tr><td><span class="hcode-sm">${esc(r.label)}</span><div style="font-size:9.5px;color:var(--faint);font-weight:600">(MoM)</div></td>
+      ${LM.rows.map(r=>`<tr><td>${hlogo(r.key, 26)}<div style="font-size:9.5px;color:var(--faint);font-weight:600">(MoM)</div></td>
         ${r.cells.map(c=>`<td class="num">
           <div style="font-size:14px;font-weight:600">${c.sessions?num(c.sessions):'\u2014'}</div>
           <div style="font-size:9.5px">${c.sessions?dltPlain(c.mom):''}</div></td>`).join('')}
       </tr>`).join('')}
       </tbody></table>
-      <div class="note">Sessions by the locale segment of the landing page, per hospital, with
-      <b>MoM</b> beneath each figure \u2014 the same length of window one month back. A page carries both
-      facts, which hospital and which language, so this is one query, not forty.</div>
     </div>` : '';
 
   /**
@@ -2259,12 +2359,11 @@ function renderReport() {
             ${[['TOFU','Impressions',x.impressions,100,'#4B8DF8','#fff'],
                 ['MOFU','Visits',x.visits,pv,'#7FB0F5','#fff'],
                 ['BOFU','Actions',x.actionsTotal,pa,'#BFD8FA','#1B2340']].map(([stage,lab,val,w,bg,fg])=>`
-              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-                <div style="width:46px;font-size:var(--text-3xs);font-weight:700;color:var(--faint)">${stage}</div>
-                <div style="width:92px;font-size:11.5px;color:var(--ink-2)">${lab}</div>
-                <div style="flex:1;min-width:0">
-                  <div style="width:${w}%;min-width:64px;background:${bg};color:${fg};border-radius:20px;
-                              padding:9px 14px;text-align:right;font-weight:700;font-size:16px">${num(val)}</div>
+              <div class="fn-row">
+                <div class="fn-stage">${stage}</div>
+                <div class="fn-lab">${lab}</div>
+                <div class="fn-track">
+                  <div class="fn-bar" style="width:${w}%;background:${bg};color:${fg}">${num(val)}</div>
                 </div>
               </div>`).join('')}
             <div style="border-top:1px solid var(--line);margin:26px 0 0"></div>
@@ -2276,12 +2375,10 @@ function renderReport() {
                 <td class="num">${dltPlain(a.mom)}</td></tr>`).join('')
                 : '<tr><td colspan="3" class="num">no actions in range</td></tr>'}
             </tbody></table>
-            <div class="note">Bar widths are relative to impressions, so the narrowing is to scale.
-            All nine key events appear when they fire, Better AI included.</div>
           </div>
           <div class="card">
             <div class="card-title">Top keywords</div>
-            <table class="sortable" data-heat="2"><thead><tr><th>Keyword</th><th class="num">Imp.</th><th class="num">Clicks</th><th class="num">CTR</th><th class="num">Pos.</th></tr></thead><tbody>
+            <table class="sortable kwtable" data-heat="2"><thead><tr><th>Keyword</th><th class="num">Imp.</th><th class="num">Clicks</th><th class="num">CTR</th><th class="num">Pos.</th></tr></thead><tbody>
             ${x.terms.map(t=>`<tr>
               <td class="strong i18n">${esc(t.query)}</td>
               <td class="num">${num(t.impressions)}</td>
@@ -2357,27 +2454,41 @@ function renderReport() {
             ['add_to_cart',  'Add to cart'],
           ];
           return `
-        <table class="sortable" data-heat="1"><thead><tr>
+        <table class="sortable nocap" data-heat="1"><thead><tr>
           <th>Source</th><th class="num">${actIcon('sessions')}Sessions</th>
           ${COLS.map(([id,lab])=>`<th class="num">${actIcon(id)}${esc(lab)}</th>`).join('')}
         </tr></thead><tbody>
-        ${RF.referrers.length ? RF.referrers.map(r=>`<tr${r.blacklisted?' class="bl-row"':''}>
+        ${RF.referrers.length ? (() => { let shown = 0; return RF.referrers.map(r=>{
+          /**
+           * The print cap has to be decided HERE, not in CSS. `nth-child`
+           * counts blacklisted rows even though they are hidden, so a table
+           * capped at ten printed six (MW: "should show top 10 sites"). Rank
+           * among the rows that actually print, and mark the rest.
+           */
+          const cut = !r.blacklisted && ++shown > 10;
+          return `<tr class="${r.blacklisted ? 'bl-row' : ''}${cut ? ' pr-cut' : ''}">
           <td class="strong i18n">${esc(r.source)}${r.blacklisted?' <span style="font-size:9.5px;color:var(--faint)">blacklisted</span>':''}</td>
           <td class="num">${num(r.sessions)}</td>
           ${COLS.map(([id])=>`<td class="num">${num((r.events||{})[id]||0)}</td>`).join('')}
-          </tr>`).join('')
+          </tr>`; }).join(''); })()
           : `<tr><td colspan="${COLS.length+2}" class="num">no referral traffic in range</td></tr>`}
         </tbody></table>`;
         })()}
-        <div class="note">Sorted by sessions, but <b>read the action columns</b> \u2014 they are what separates
-        a back link worth cultivating from one that sends volume that leaves. A source with traffic and
-        no actions is a link, not a referral.
-        These five are MW's selection, not all nine key events: Purchase, View cart and the two Better AI
-        events are tracked elsewhere and are near-zero from referral.
-        A zero is a real answer, not missing data.</div>
       </div>
-    <div class="card mt">
-      <div class="card-title">AI assistants (LLMs)</div>
+    </div>`;
+  })() : '';
+
+  /**
+   * AI ASSISTANTS ON ITS OWN PAGE (MW). It used to be the third card on the
+   * Referral slide, which made that slide the tallest in the deck and pushed
+   * the assistant table off the bottom. It is a separate question anyway —
+   * back links are sites, these are models.
+   */
+  const aiAssistBody = RF ? (() => {
+    const A = RF.ai;
+    // `ai-card`: the slide title now names this block, so there is no
+    // `.card-title` left to match on. A class is a better hook than the text.
+    return `<div class="card ai-card">
       ${A.rows.length ? `
       <div class="grid g-5" style="margin-bottom:8px">
         ${mini('Sessions', num(A.totals.sessions), { lead: true, icon: 'sessions',
@@ -2420,7 +2531,7 @@ function renderReport() {
       : `<div class="note"><b>No assistant traffic identified in this range.</b> That is a real answer, not
       a gap \u2014 but it is a floor: an assistant that strips the referrer arrives as Direct and cannot be
       told apart from any other direct visit.</div>`}
-    </div></div>`;
+    </div>`;
   })() : '';
 
   /**
@@ -2493,7 +2604,7 @@ function renderReport() {
     // Tabs now render inside each page, under its header (MW), so the slide
     // itself just holds the pages.
     return [['doctor','package'], ['article','center']].map((pair, idx) => `
-      <div class="slide slide-break">
+      <div class="slide slide-pages slide-break">
         ${langs.map(l=>page(l.key, l.label, pair, idx)).join('')}
       </div>`).join('');
   })();
@@ -2693,7 +2804,9 @@ function renderReport() {
       <div class="card">
         <div class="card-title">Reviews this month</div>
         <div class="chart-wrap" style="height:230px"><canvas id="rvMonth"></canvas></div>
-        <div class="card-title">Rating mix this period</div>
+        <!-- A run-in title under a chart, not a card heading: the default
+             breathing room here was costing the slide 517px. -->
+        <div class="card-title tight">Rating mix this period</div>
         <table><tbody>
         ${[5,4,3,2,1].map(st=>{
           const v = RVB.stars[String(st)] || 0;
@@ -2717,7 +2830,7 @@ function renderReport() {
           ${RVB.lifetime ? num(RVB.lifetime.total) : '\u2014'} reviews</div>
         <div class="card-title">Last 6 months</div>
         <div class="chart-wrap" style="height:210px"><canvas id="rvStack"></canvas></div>
-        <div class="card-title" style="margin-top:12px">Rating mix \u00b7 as at ${esc(d.range.to)}</div>
+        <div class="card-title tight">Rating mix \u00b7 as at ${esc(d.range.to)}</div>
         <table><tbody>
         ${[5,4,3,2,1].map(st=>{
           const tot = [1,2,3,4,5].reduce((a2,k)=>a2+((RVB.mixToDate||{})[k]||0),0);
@@ -2729,13 +2842,6 @@ function renderReport() {
             </div></td><td class="num" style="width:52px">${num(v)}</td></tr>`;
         }).join('')}
         </tbody></table>
-        <div class="note">Every review held, accumulated to the end of the selected period. Google
-        publishes a lifetime average and count but not the lifetime star split, so this covers the reviews
-        on record rather than the full ${num((RVB.lifetime||{}).total||0)}.</div>
-        ${(RVB.avg && RVB.lifetime && RVB.lifetime.avg) ? `<div class="note">
-          This period is <b>${(RVB.avg - RVB.lifetime.avg >= 0 ? '+' : '') + (RVB.avg - RVB.lifetime.avg).toFixed(2)}</b>
-          against the lifetime average \u2014 the direction of travel, which a single month's score alone does not show.
-          A lifetime average over hundreds of reviews moves slowly, so a gap here takes months to close.</div>` : ''}
       </div>
     </div>
     ${(RVB.samples || []).some(Boolean) ? `<div class="card mt">
@@ -2868,12 +2974,11 @@ function renderReport() {
         ${[['TOFU','Impressions',SAB.impressions,100,'#4B8DF8','#fff'],
            ['MOFU','Visits',SAB.visits,pv,'#7FB0F5','#fff'],
            ['BOFU','Actions',SAB.actionsTotal,pa,'#BFD8FA','#1B2340']].map(([stage,lab,val,w,bg,fg])=>`
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-            <div style="width:46px;font-size:var(--text-3xs);font-weight:700;color:var(--faint)">${stage}</div>
-            <div style="width:92px;font-size:11.5px;color:var(--ink-2)">${lab}</div>
-            <div style="flex:1;min-width:0">
-              <div style="width:${w}%;min-width:64px;background:${bg};color:${fg};border-radius:20px;
-                          padding:9px 14px;text-align:right;font-weight:700;font-size:16px">${num(val)}</div>
+          <div class="fn-row">
+            <div class="fn-stage">${stage}</div>
+            <div class="fn-lab">${lab}</div>
+            <div class="fn-track">
+              <div class="fn-bar" style="width:${w}%;background:${bg};color:${fg}">${num(val)}</div>
             </div>
           </div>`).join('')}
         <div class="grid g-3" style="margin:14px 0 0">
@@ -2892,7 +2997,8 @@ function renderReport() {
       </div>
       <div class="card">
         <div class="card-title">Search keywords \u00b7 what people typed</div>
-        <table class="sortable" data-heat="1"><thead><tr>
+        <!-- No row cap: MW asked for every term here, and this column has the room. -->
+        <table class="sortable nocap" data-heat="1"><thead><tr>
           <th>Search keyword</th><th class="num">Impressions</th><th class="num">Clicks</th><th class="num">CTR</th>
         </tr></thead><tbody>
         ${SAB.terms.length ? SAB.terms.map(t=>`<tr>
@@ -2935,10 +3041,6 @@ function renderReport() {
           ${kpi('Reach', num(c.reach))}
           ${kpi('Profile views', num(c.profileViews))}
         </div>
-        <div class="note"><b>Reach is the sum of the daily reached audience</b>, so someone who watched on
-        two days counts twice \u2014 it is an upper bound on the month's unique viewers, not a unique count.
-        TikTok publishes no monthly unique figure. A view counts autoplay, so views and reach are
-        different units and are never summed.</div>
       </div>
       <div class="card">
         <div class="card-title">Views trend</div>
@@ -2965,8 +3067,6 @@ function renderReport() {
         </div>
         ${bar('Bio link clicks', c.bioLinkClicks, clkMax, '#4B8DF8')}
         ${bar('Phone clicks', c.phoneClicks, clkMax, '#7FB0F5')}
-        <div class="note">The only two profile actions TikTok exposes. There is no website-click field on
-        this connector${c.accounts.length ? ` \u2014 in scope: <b>${esc(c.accounts.join(', '))}</b>` : ''}.</div>
       </div>
     </div>`;
   })() : '<div class="note">TikTok is unavailable for this range.</div>';
@@ -3262,6 +3362,7 @@ function renderReport() {
     ${slide('Actions by language', actionsLangBody, false, sel)}
     ${slide('Channels \u00b7 where do they find us', channelsBody, false, true)}
     ${referralBody ? slide('Referral \u00b7 Back Links', referralBody, false, sel) : ''}
+    ${aiAssistBody ? slide('AI assistants (LLMs)', aiAssistBody, false, sel) : ''}
     ${searchPagesBody}
     ${gbpDetailBody}
     ${slide('Google reviews', reviewBody, false, false, 'gbp')}
@@ -4047,7 +4148,7 @@ function renderTopics() {
       <input class="text i18n" id="topicInput" placeholder="Clinical topic — e.g. gallbladder" value="${esc(S.topicTerm)}" autocomplete="off">
       <button class="btn btn-primary" id="topicGo"><span class="spin"></span><span>Explore</span></button>
     </div>
-    <p class="hint">Claude expands the topic across Thai, English, Chinese, Japanese, Arabic, German, Burmese, Vietnamese, Khmer &amp; Indonesian, then matches it against what the site actually ranks for. Language is read from the ranking page's URL locale, not guessed from the script.</p>
+    <p class="hint">Claude expands the topic across Thai, English, Chinese, Japanese, Arabic, German, Myanmar, Vietnamese, Khmer &amp; Indonesian, then matches it against what the site actually ranks for. Language is read from the ranking page's URL locale, not guessed from the script.</p>
     <div class="tags">${['gallbladder','heart disease','cancer screening','knee replacement','diabetes'].map(t=>`<button class="tag" data-t="${t}">${t}</button>`).join('')}</div>
     <div id="topicBody">${d?'':`<div class="card"><div class="state"><div class="big">No topic explored yet</div>
       <div style="max-width:420px;font-size:12.5px;">Enter a clinical topic to see multilingual search demand and content gaps.</div></div></div>`}</div>
@@ -6522,6 +6623,28 @@ $('printBtn').addEventListener('click', () => {
  * thumbnail that is simply slow. Capped at 3s so a dead CDN cannot block the
  * export — a missing thumbnail is better than no dialog.
  */
+/**
+ * CHARTS DO NOT KNOW THE PAGE GOT NARROWER (MW: "the chart is overflow").
+ *
+ * Chart.js sizes its canvas in device pixels once, at draw time, against the
+ * SCREEN width. Print lays the page out at 13.333in, which is narrower than the
+ * window the chart was drawn in, and the canvas keeps its old pixel width — so
+ * the plot runs past the right edge of its card and off the sheet.
+ *
+ * `beforeprint` rather than the print button, deliberately: it fires for Ctrl+P
+ * and for the browser's own Print menu too, which the button handler cannot see.
+ * Chart.js re-reads the container on `resize()`, which by then has the print
+ * width. Guarded per chart so one dead instance cannot block the rest.
+ */
+function resizeChartsForPrint() {
+  document.querySelectorAll('canvas').forEach(cv => {
+    const ch = cv._chart || (window.Chart && window.Chart.getChart && window.Chart.getChart(cv));
+    if (!ch || typeof ch.resize !== 'function') return;
+    try { ch.resize(); } catch (e) { /* a chart that cannot resize still prints at its old size */ }
+  });
+}
+window.addEventListener('beforeprint', resizeChartsForPrint);
+
 function printWhenImagesReady() {
   const imgs = [...document.images].filter(i => i.src && !i.complete);
   if (!imgs.length) { window.print(); return; }
@@ -6564,7 +6687,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.150.0';
+const CLIENT_BUILD = '3.151.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

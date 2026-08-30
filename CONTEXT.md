@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.150.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.151.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,92 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.151.0 — MW's PDF review: purple headers, grids, language pages, footnotes.**
+
+MW's second pass over the exported deck, ~15 items. Most of them turned out to
+be four root causes. Verified by rendering, not by reading CSS.
+
+**"GRID 4 BECOMES 2" WAS ONE MISSING LINE, reported four times.** The print
+block pins `.g-2-1`, `.g-2` and `.g-3` with `!important` specifically to defeat
+the `max-width:1080px` mobile collapse. `.g-4` and `.g-5` were never added, so
+print inherits the collapse whenever the page lays out under 1080px. That is
+Appointments, Google Business Profile, TikTok top performances and Chat Bubble.
+
+It is also **Actions**: MW wrote "show only 2 hospitals", which reads as a
+request and is actually a bug report — `g-5` collapsing made each hospital card
+tall enough that only two fitted. All four show now.
+
+Note the export width matters: at a 1600px layout the grids were already
+correct, which is why this never reproduced locally before. Render narrow.
+
+**THE LANGUAGE PAGES WERE NEVER GIVEN A PAGE.** `.lang-page` (Search) and
+`.clang-page` (Content) had `break-before:page` and nothing else — no padding,
+no height, no clipping. Two symptoms, one cause: Search · Thai printed hard
+against the sheet edge ("the padding collapsed"), and Content printed Thai in
+full then cut English off mid-card, because every language page was stuffed
+inside ONE 7.5in `.slide` wrapper that clipped everything past the first. They
+now carry `.slide`'s geometry, and the wrapper (`.slide-pages`) is released from
+its own clamp. Content is one page per language, as MW asked.
+
+**CARDS HUG THEIR CONTENT.** `.slide > .card:last-child{flex:1 1 auto}` existed
+so a short section filled its page. On a one-card slide it stretched the card to
+the full 7.5in and left a table floating in a tall empty box — Sessions by
+language, Actions by language, Top videos. Removed. Whitespace under a short
+section is the better trade.
+
+**PURPLE HEADERS.** Print overrode `.slide-title` to `#1B2340` back when the
+deck was meant for a mono printer. Now `var(--violet)`, as on screen.
+
+**CHINESE PRINTED BLANK** because `.i18n` listed Thai, JP, Arabic, Myanmar and
+Khmer but **no Chinese face**. `Noto Sans JP` covers the Han characters Japanese
+shares, so Chinese rendered fine until a Simplified-only glyph appeared and then
+dropped to blank boxes. Added `Noto Sans SC` and `Noto Sans TC`, ahead of JP.
+
+**`nth-child` COUNTS HIDDEN ROWS.** The back-links table hides blacklisted
+referrers with `display:none`, and those rows still occupy positions 1-10 in the
+ten-row print cap — which is why a table capped at ten printed six. The cap is
+now applied at render time over the rows that actually print (`.pr-cut`), and
+the table opts out of the CSS rule with `nocap`. Search keywords get 15; Search
+Ads keywords are uncapped (MW: "show everything, we have space").
+
+**SCORECARDS VANISHED INSIDE CARDS.** `.stat` draws its border with `--stroke`,
+which is `rgba(255,255,255,.85)` — white. On the tinted page that reads as an
+edge, so scorecards sitting directly on a slide looked right; inside a white
+`.card`, as on Search Ads, it was white on white. Given the card hairline.
+
+**CHARTS OVERFLOWED HORIZONTALLY** because Chart.js sizes its canvas once,
+against the screen width, and print lays out narrower. `resizeChartsForPrint()`
+on `beforeprint` — that event rather than the print button, so Ctrl+P and the
+browser's own Print menu are covered too. Separately, the print rule forcing
+every chart to 300px was removed: Google reviews authors 230 and 210, and print
+was growing them to 600px of chart on one page.
+
+Also: hospital logos replace abbreviations on Sessions by language; AI
+assistants moved to its own slide (it made Referral the tallest in the deck);
+footnotes removed from six sections; funnel stages thinned; Burmese renamed
+Myanmar throughout the report.
+
+**THE TYPE-SCALE AUDIT WAS BROKEN BY A COMMENT.** Its brace tracker keys off the
+literal text `@media`, so a COMMENT mentioning `@media` reset the depth
+mid-block and threw the rest of the print rules into top-level scope — eight
+legitimate overrides reported as offenders. Comments are stripped before the
+scan now. Prose about the CSS must not be read as CSS.
+
+**A BACKTICK INSIDE A TEMPLATE LITERAL TERMINATES IT.** Twice this session, from
+writing an HTML comment in markdown habit inside a JS template string. Caught
+both times by `client parses`, which is the one assertion standing between that
+mistake and a white screen.
+
+**STILL CLIPPING — not fixed in this release** (mock data, measured):
+
+    Chat Bubble    726px      Facebook       263px
+    Google reviews 315px      YouTube        119px
+    Appointments   300px      Google Bus.     30px
+                              Search Ads      11px
+
+The grid and footnote work moved these but did not close them. Facebook is not
+on MW's list and clips anyway. Next release.
 
 **v3.150.0 — PDF export: uniform pages, no shadow anywhere, images actually print (MW).**
 
