@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.153.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.154.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,40 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.154.0 — MW rejected the section splits and the squeezed charts. Both undone.**
+
+**THE SPLITS ARE REVERTED.** v3.153.0 put the Google reviews quotes and the
+Facebook Meta Ad card on slides of their own because both sections were
+clipping. MW: they are one thought, and a second title makes them read as two.
+Reverted — quotes are back under the rating mixes, Meta Ad is back beside the
+organic page.
+
+**`slide-flow` is the replacement.** One section per page stays the rule; these
+two are the exceptions and now carry `height:auto; overflow:visible`, so the
+section runs onto a CONTINUATION page instead of clipping. The continuation has
+no header, which is the trade — and a better one than either losing the bottom
+of the section or renaming half of it. Add it sparingly; if a third section
+needs it, the section is probably too full.
+
+`print-overflow.py` skips `.slide-flow` sections: they cannot lose content, so
+measuring them would report an overflow that is the intended behaviour.
+
+**CHARTS WERE SQUEEZED FLAT.** The ceiling had walked down 300 → 180 → 150 →
+130 → 115 across two releases, each time to buy a few pixels for one section.
+At 115px a trend line is a smear. It is 190px now, close to the authored
+heights, and the sections that no longer fit carry `slide-flow` rather than
+being shrunk further.
+
+Only YouTube — six scorecards above its chart — still missed at 190. Its chart
+alone is capped at 130 via `:has(#repYtViews)`, scoped to the one slide instead
+of lowering the ceiling for every chart in the deck.
+
+**The general lesson, since this went wrong twice:** a global knob turned down
+to fix one section is almost always the wrong fix. Scope it, or give that
+section an escape hatch.
+
+**22 sections, 0 clipping**, `print-overflow.py` exit 0. Suite 237.
 
 **v3.153.0 — MW's third PDF pass. Zero sections clipping, for the first time.**
 

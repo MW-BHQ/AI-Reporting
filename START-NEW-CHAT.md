@@ -1,6 +1,6 @@
-# BHQ War Room — handover at v3.153.0
+# BHQ War Room — handover at v3.154.0
 
-Paste this into a new chat along with `bkh-dashboard-v3_153_0-FULL.zip`.
+Paste this into a new chat along with `bkh-dashboard-v3_154_0-FULL.zip`.
 
 ---
 
@@ -31,7 +31,7 @@ it needs **Contents: Read and write**. Delete it at the end of the session.
      node --require ./test/mock-fetch.js server.js &) ; sleep 4
     python3 test/print-overflow.py
 
-**Exit 0 as of v3.153.0 — 26 sections, none clipping. Keep it that way.**
+**Exit 0 as of v3.154.0 — 22 sections, none clipping. Keep it that way.**
 
 It renders the report in print media and reports, per section, how many pixels
 fall off the bottom of its page. It exists because the deck pins every section
@@ -54,6 +54,8 @@ Notes that matter:
   than the window. At 1600px the v3.150 grids measured correct while MW's real
   export was visibly broken — a wide render hides the entire grid-collapse class
   of bug.
+- `.slide-flow` sections are skipped — they are allowed to run onto a
+  continuation page, so they have nothing to lose.
 - To see a page rather than a number: `pg.pdf(width="13.333in", height="7.5in",
   margin=0, print_background=True)` then `pdftoppm -png -r 55 -f N -l N`.
 
@@ -73,6 +75,8 @@ fifteen separate complaints were four root causes.**
   1611px invisibly); `print-overflow.py` added.
 - **v3.153.0** — CJK fonts actually **loaded**; canvas contained; opt-in page
   fill; three sections split onto their own slides; global print density.
+- **v3.154.0** — MW rejected two of those splits and the squeezed charts. Both
+  undone; `slide-flow` added as the replacement.
 
 ---
 
@@ -81,18 +85,23 @@ fifteen separate complaints were four root causes.**
 ### Live
 Nothing. MW's PDF list is closed. Wait for the next screenshot.
 
-### Three judgement calls MW has not yet responded to
-Flagged when v3.153.0 shipped; revert cheaply if MW dislikes them.
+### Settled in v3.154.0 — do not re-propose
+**Splitting a section across two titled slides is not acceptable to MW.** Two of
+the three v3.153 splits were reverted: Google reviews quotes and Facebook Meta
+Ads are one thought each, and a second title makes them read as two. When a
+section will not fit, use `slide-flow` — it runs onto an unheaded continuation
+page instead of clipping. AI assistants (v3.151) stayed split and MW has not
+objected; it is genuinely a different subject from back links.
 
-1. **Sections split onto their own slides** — AI assistants (was on Referral),
-   Google reviews quotes, Facebook Meta Ads. Each was clipping, and the part
-   being cut was the most human one: the patient's own words, the
-   unmapped-accounts warning. MW may want them back together.
-2. **The printed header shrank** — `min-height` 4rem to 2.5rem with the marks
-   scaled to match. That bought 24px on all 26 slides and closed the last four
-   sections. Tables, card padding and card-title margins are tighter too. If it
-   reads cramped, this is the lever.
-3. **The date range and generated timestamp are not in the PDF at all.** MW
+**Do not shrink a global to fix one section.** The chart ceiling walked 300 to
+115 across two releases, a few pixels at a time, until trend lines were smears.
+Scope the fix, or give that section `slide-flow`.
+
+### Two judgement calls MW has still not responded to
+1. **The printed header shrank** — `min-height` 4rem to 2.5rem with the marks
+   scaled to match. That bought 24px on every slide. Tables, card padding and
+   card-title margins are tighter too. If it reads cramped, this is the lever.
+2. **The date range and generated timestamp are not in the PDF at all.** MW
    rejected the cover page in v3.150 and both mastheads are `display:none` in
    print. `printTitle` / `printRange` are still populated, so putting the stamp
    back somewhere per-slide is cheap.

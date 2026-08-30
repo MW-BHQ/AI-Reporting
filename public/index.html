@@ -939,6 +939,28 @@
      * So: three slides carry `slide-fill` today. Add it to another only after
      * looking at what that slide's direct children actually are.
      */
+    /**
+     * A SECTION THAT IS ALLOWED TO RUN ONTO A SECOND PAGE.
+     *
+     * One section per page is the rule and it should stay the rule — it is what
+     * makes the export read as a deck. But two sections genuinely do not fit:
+     * Google reviews (two charts, two rating tables and the quotes) and
+     * Facebook (the organic page beside the Meta Ad table).
+     *
+     * v3.153.0 handled those by splitting each into two titled slides. MW
+     * rejected that — they are one thought, and a second title makes them read
+     * as two. The alternative that keeps them one thought is to let the section
+     * overflow onto a continuation page, which is what this does: no fixed
+     * height, no clipping, and the next section still starts on a fresh page.
+     *
+     * The continuation page has no header. That is the trade, and it is a
+     * better one than either clipping the content or renaming half of it.
+     */
+    .slide-flow{height:auto!important;max-height:none!important;overflow:visible!important;}
+    /* YouTube carries six scorecards above its chart and is the one section
+       that does not clear 190px. Scoped here rather than lowering the ceiling
+       for every chart in the deck to suit one slide. */
+    .chart-wrap:has(#repYtViews){max-height:130px;}
     .slide-fill > .grid,.slide-fill > .card{flex:1 1 auto;}
     .slide-fill > .grid{align-content:stretch;}
     /**
@@ -1093,7 +1115,10 @@
      * charts plus two tables in one card, and at their screen heights that
      * section still lost 315px off the page.
      */
-    .chart-wrap{max-height:115px;}
+    /* 115px squeezed them flat (MW). The authored heights are 200-300; this is
+       a ceiling for the tallest, not a target for all. Sections that no longer
+       fit at this size carry `slide-flow` instead of being shrunk further. */
+    .chart-wrap{max-height:190px;}
     /**
      * THE CANVAS IS CONTAINED, not merely asked politely (MW: charts "still
      * crash together", three sections).
@@ -2213,12 +2238,13 @@ function renderReport() {
    * the same idea looked different on different slides. The scope is now an
    * argument and this is the only place that decides how it is drawn.
    */
-  const slide = (title, body, first, scope, platform, fill) => {
+  const slide = (title, body, first, scope, platform, fill, flow) => {
     if (!body) return '';
     const pill = scope ? ` <span class="all-four">${esc(scope === true ? 'BHQ' : scope)}</span>` : '';
     // `fill`: stretch this slide's cards to the full printed page. Only for
     // slides whose direct children are grids of cards — see the CSS note.
-    return `<div class="slide ${first ? '' : 'slide-break'}${fill ? ' slide-fill' : ''}"><div class="slide-title">
+    // `flow`: let this section run onto a second page instead of clipping.
+    return `<div class="slide ${first ? '' : 'slide-break'}${fill ? ' slide-fill' : ''}${flow ? ' slide-flow' : ''}"><div class="slide-title">
          <span>${platform ? plogo(platform) : ''}${esc(title)}${pill}</span>
          ${logoImg}
        </div>${body}</div>`;
@@ -2980,16 +3006,9 @@ function renderReport() {
         }).join('')}
         </tbody></table>
       </div>
-    </div>` : '';
-
-  /**
-   * THE QUOTES GET THEIR OWN SLIDE. They were a third card under the two
-   * charts, which put Google reviews 255px over its page — and the thing
-   * clipped was the quotes themselves, so the section silently lost the only
-   * part of it that is in the patient's own words.
-   */
-  const reviewQuotesBody = (RVB && (RVB.samples || []).some(Boolean)) ? `<div class="card">
-      <div class="card-title">One review per rating, most recent with a comment</div>
+    </div>
+    ${(RVB.samples || []).some(Boolean) ? `<div class="card mt">
+      <div class="card-title">What they actually said \u00b7 one review per rating</div>
       <table><tbody>
       ${RVB.samples.filter(Boolean).map(sm=>`<tr>
         <td style="width:74px;vertical-align:top;color:${sm.stars>=4?'#2E9E6F':(sm.stars===3?'#F2A93B':'#D9534F')};
@@ -3002,8 +3021,8 @@ function renderReport() {
       </tr>`).join('')}
       </tbody></table>
       <div class="note">The most recent review carrying a comment at each star level. Ratings without a
-      comment are counted in the mix on the previous page but cannot be quoted.</div>
-    </div>` : '';
+      comment are counted in the mix above but cannot be quoted.</div>
+    </div>` : ''}` : '';
 
   /**
    * Facebook: one page for all four hospitals, so the funnel on the left is
@@ -3029,9 +3048,8 @@ function renderReport() {
       above. Tell Claude which brand each belongs to.</div>
     </div>` : '';
 
-  // Full width now that Meta Ads has its own slide: left in a two-column grid
-  // the page card kept half the width, ran taller, and still overflowed.
   const facebookBody = (FB.page || fbMine) ? `
+    <div class="grid g-2">
       <div class="card">
         <div class="card-title">The page <span class="all-four">BHQ</span></div>
         ${FB.page ? `
@@ -3065,21 +3083,7 @@ function renderReport() {
           || '<tr><td colspan="3" class="num">no key events from Facebook in range</td></tr>'}
         </tbody></table>
         ` : '<div class="note">page data unavailable</div>'}
-      </div>` : '';
-
-  /**
-   * META ADS ON ITS OWN SLIDE. The organic page and the ad spend were two
-   * cards side by side, each 680px tall in a 594px hole, and Facebook was
-   * losing 239px off the bottom — the unmapped-accounts warning among it,
-   * which is the one thing on the slide that exists to be noticed.
-   *
-   * The two are still adjacent pages, and the note below still says plainly
-   * that the reach on the organic page is the product of this spend. They were
-   * put on one slide so the reader would not treat them as separate numbers; a
-   * page turn does not undo that, and losing the bottom of both did.
-   */
-  const metaAdBody = (FB.page || fbMine) ? `
-    <div class="grid g-2-1">
+      </div>
       <div class="card">
         <div class="card-title">${plogo('meta', 28)}Meta Ad <span class="all-four">BHQ</span></div>
         ${(FB.byBrand||[]).some(b=>b.spend) ? `
@@ -3525,10 +3529,8 @@ function renderReport() {
     ${aiAssistBody ? slide('AI assistants (LLMs)', aiAssistBody, false, sel) : ''}
     ${searchPagesBody}
     ${gbpDetailBody}
-    ${slide('Google reviews', reviewBody, false, false, 'gbp')}
-    ${slide('Google reviews \u00b7 what they said', reviewQuotesBody, false, false, 'gbp', true)}
-    ${slide('Facebook', facebookBody, false, false, 'facebook', true)}
-    ${slide('Facebook \u00b7 Meta Ads', metaAdBody, false, false, 'facebook')}
+    ${slide('Google reviews', reviewBody, false, false, 'gbp', false, true)}
+    ${slide('Facebook', facebookBody, false, false, 'facebook', false, true)}
     ${slide('YouTube', ytBody, false, 'BHQ', 'youtube')}
     ${slide('YouTube \u00b7 Top videos', ytTopBody, false, 'BHQ', 'youtube')}
 
@@ -6849,7 +6851,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.153.0';
+const CLIENT_BUILD = '3.154.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

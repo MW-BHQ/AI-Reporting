@@ -48,7 +48,7 @@ with sync_playwright() as p:
     pg.wait_for_timeout(600)
 
     rows = pg.evaluate("""() =>
-      [...document.querySelectorAll('.slide:not(.slide-pages),.lang-page,.clang-page')]
+      [...document.querySelectorAll('.slide:not(.slide-pages):not(.slide-flow),.lang-page,.clang-page')]
         .map(s => ({
           title: ((s.querySelector('.slide-title')||{}).textContent||'')
                    .trim().replace(/\\s+/g,' ').slice(0,40),
