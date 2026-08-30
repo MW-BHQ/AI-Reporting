@@ -363,5 +363,50 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
     : ok("type:scale", "report font sizes all come from the rem scale");
 }
 
+// ---------------------------------------------------------------- print assets
+/**
+ * TWO WAYS AN IMAGE VANISHES FROM THE PDF, both of which shipped in v3.149.0
+ * and neither of which raises anything at runtime — the image just is not
+ * there, and the export looks merely plain rather than broken.
+ *
+ *  1. `loading="lazy"` — Chrome will not print an image it never fetched, and
+ *     `window.print()` does not force one. On a 40-section deck that is nearly
+ *     every logo below the first page.
+ *  2. A bare `brand/...` src is RELATIVE to whatever path the page is served
+ *     from. Today that is always `/`, so it happens to resolve — this is
+ *     hardening, not a live bug. It is guarded because the failure mode is
+ *     invisible: the images have an `onerror` that hides or removes them, so a
+ *     404 looks like a design choice rather than a break.
+ *
+ * Both are one attribute wide and easy to reintroduce by copying an existing
+ * <img>, which is exactly why they are guarded here.
+ */
+{
+  const lazies = (html.match(/<img[^>]*loading\s*=\s*["']lazy["']/gi) || []).length;
+  lazies
+    ? fail("print:no-lazy-img", `${lazies} <img loading="lazy"> — will not render in the PDF export`)
+    : ok("print:no-lazy-img", "no lazy images, all print");
+
+  const rel = [...html.matchAll(/src\s*=\s*["'`]brand\//g)].length;
+  rel
+    ? fail("print:brand-paths", `${rel} relative brand/ src — breaks if the app is ever served off /, use /brand/`)
+    : ok("print:brand-paths", "brand assets are root-relative");
+}
+
+/**
+ * NO SHADOW SURVIVES THE EXPORT (MW). Chrome bands a box-shadow into a grey
+ * gradient in the PDF. This was fixed selector by selector twice and both times
+ * a surface was missed, so what is asserted is the BLANKET rule, not the
+ * absence of any particular offender.
+ */
+{
+  const printBlocks = html.match(/@media print\{[\s\S]*?\n  \}/g) || [];
+  const blanket = printBlocks.some((b) =>
+    /\*\s*,\s*\*::before\s*,\s*\*::after\s*\{[^}]*box-shadow:\s*none\s*!important/.test(b));
+  blanket
+    ? ok("print:no-shadow", "box-shadow killed globally in print")
+    : fail("print:no-shadow", "no blanket box-shadow:none in @media print — shadows will band in the PDF");
+}
+
 console.log(failures ? `\n${failures} audit check(s) failed` : "\nstatic audit clean");
 process.exit(failures ? 1 : 0);

@@ -560,7 +560,11 @@
    */
   .slide{padding:var(--space-2xl) 0;}
   .slide + .slide{margin-top:0;border-top:1px solid var(--line);}
-  .slide:first-child{padding-top:var(--space-md);}
+  /* SCREEN ONLY. `.slide:first-child` outspecifies the `.slide` rule inside
+     `@media print`, so this was silently overriding the printed slide's
+     0.34in top padding on page 1 and nowhere else — half of why page 1 never
+     matched the rest of the deck (MW: "make every page like page 3"). */
+  @media screen{ .slide:first-child{padding-top:var(--space-md);} }
   /* One logo per slide, so every printed page says which hospital it belongs
      to. print-head only renders once, at the top of the document. */
   /* Hospital wordmark at 150px wide (MW). */
@@ -804,6 +808,17 @@
   @page{size:13.333in 7.5in;margin:0;}
     *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
     /**
+     * NO SHADOW ANYWHERE (MW: "shadow still there"). Chrome rasterises a
+     * box-shadow into the PDF as a banded grey gradient, not a soft falloff, so
+     * it reads as a dirty edge.
+     *
+     * Killed GLOBALLY rather than selector by selector. The card rule below
+     * already did this, but `.cbc` and `.slide .grid > .stat:not(.card)` kept
+     * theirs and were missed — and the next surface someone adds would be
+     * missed too. A blanket rule cannot fall behind the markup.
+     */
+    *,*::before,*::after{box-shadow:none!important;text-shadow:none!important;filter:none!important;}
+    /**
      * THE PALETTE SURVIVES THE EXPORT (MW). This PDF is read on a screen and
      * submitted as a file — it is never put on paper — so the reasoning that
      * stripped colour for a mono printer no longer applies.
@@ -825,12 +840,26 @@
     .main{padding:0!important;}
     .head{margin-bottom:10px;border-bottom:1px solid #d8dfee;padding-bottom:8px;}
     h1{font-size:20px;}
-    .print-head{
-      display:flex!important;align-items:center;justify-content:space-between;
-      gap:14px;margin-bottom:12px;padding-bottom:10px;border-bottom:2px solid #1B2340;
-    }
-    .print-head img{width:132px;height:auto;}
-    .print-head .pmeta{text-align:right;font-size:10.5px;color:#4C5878;line-height:1.5;}
+    /**
+     * NO MASTHEAD IN PRINT (MW: "no cover").
+     *
+     * `.print-head` and `.head` render ONCE, at the top of the document, so
+     * page 1 carried ~1.2in of chrome that no other page had: its slide started
+     * lower, its padding read differently from every other page, and the bottom
+     * of the section was pushed past the sheet. There is no way to give page 1
+     * that height back while they sit in the flow above it.
+     *
+     * A cover page was tried and rejected. Hiding both is the other way to make
+     * every page identical, and it is what MW asked for.
+     *
+     * WHAT IT COSTS: the date range and generated timestamp are no longer
+     * anywhere in the PDF. Every slide still carries its own hospital logo and
+     * title, so the deck is self-identifying, but a reader cannot tell WHICH
+     * period it covers from the file alone. Say so when submitting it, or ask
+     * for the stamp to be put back somewhere per-slide.
+     */
+    .print-head{display:none!important;}
+    .head{display:none!important;}
     /**
      * Cards go SOLID white, not `--glass`. `backdrop-filter` does not run in
      * print, so a translucent card would render as flat rgba over the page tint
@@ -857,7 +886,9 @@
       break-inside:avoid;page-break-inside:avoid;
     }
     /* Same reasoning for every other translucent surface on the deck. */
-    .stat,.mini,.afcard,.u-card{background:#fff!important;backdrop-filter:none!important;}
+    /* `.cbc` was translucent-with-a-shadow and covered by neither rule. */
+    .stat,.mini,.afcard,.u-card,.cbc{background:#fff!important;backdrop-filter:none!important;
+      -webkit-backdrop-filter:none!important;}
     .grid{gap:10px;break-inside:avoid;page-break-inside:avoid;}
     /* Hold the two-up layouts in print. Collapsed to one column they push the
        second card onto its own page, which is what split Sessions overview
@@ -1841,7 +1872,7 @@ function renderReport() {
     const p = HOSPITAL[key];
     if (!p) return `<span class="all-four">${esc(key)}</span>`;
     return `<span class="hlogo" style="--hh:${h || 34}px">
-      <img src="brand/${esc(p.file)}" alt="${esc(key)}" title="${esc(key)}" loading="lazy"
+      <img src="/brand/${esc(p.file)}" alt="${esc(key)}" title="${esc(key)}"
         data-alt="${esc(p.url)}"
         onerror="if(this.dataset.alt){this.src=this.dataset.alt;this.dataset.alt='';}else{this.replaceWith(document.createTextNode('${esc(key)}'));}">
     </span>`;
@@ -1854,7 +1885,7 @@ function renderReport() {
    *
    * `BHQ` maps to BGH's file deliberately: BGH uses the BHQ mark.
    */
-  const logoImg = `<img class="slide-logo" src="brand/${
+  const logoImg = `<img class="slide-logo" src="/brand/${
     (HOSPITAL[sel] || HOSPITAL.BGH).file}" alt="${esc(sel)}"
     onerror="this.style.display='none'">`;
 
@@ -1925,8 +1956,8 @@ function renderReport() {
   const plogo = (id, size) => {
     const p = PLATFORM[id]; if (!p) return '';
     const sz = size ? ` style="width:${size}px;height:${size}px"` : '';
-    return `<img class="plogo"${sz} src="brand/${esc(p.file)}" alt="${esc(p.label)}"
-      title="${esc(p.label)}" loading="lazy" onerror="this.remove()">`;
+    return `<img class="plogo"${sz} src="/brand/${esc(p.file)}" alt="${esc(p.label)}"
+      title="${esc(p.label)}" onerror="this.remove()">`;
   };
   /**
    * Assistant source -> platform mark, for the AI table rows.
@@ -2947,7 +2978,7 @@ function renderReport() {
      * collapse rather than leave a torn box on a printed slide.
      */
     const thumb = (v) => v && v.thumb
-      ? `<img src="${esc(v.thumb)}" alt="" loading="lazy"
+      ? `<img src="${esc(v.thumb)}" alt=""
               style="width:74px;height:98px;object-fit:cover;border-radius:6px;background:var(--line)"
               onerror="this.style.display='none'">`
       : `<div style="width:74px;height:98px;border-radius:6px;background:var(--line)"></div>`;
@@ -6468,19 +6499,41 @@ function drawChart(canvasId, rows, series) {
 
 // ============================================================ boot
 $('printBtn').addEventListener('click', () => {
+  // The masthead no longer prints at all (MW: "no cover"), so nothing here
+  // needs to decide whether to show it. The fields are still filled: they are
+  // cheap, and if the period stamp is ever wanted back on the page the values
+  // are already correct.
   const [t] = TITLES[S.view];
   const extra = S.view === 'campaigns' && S.campaign ? ` — ${S.campaign.topic || S.campaign.code}` : '';
-  // The monthly report carries its own printed masthead, so the generic
-  // dashboard header would only repeat it.
-  const isMonthly = S.view === 'ecommonthly';
-  const ph = document.querySelector('.print-head');
-  if (ph) ph.style.display = isMonthly ? 'none' : '';
-  // Name the hospital in the masthead so an exported deck is self-identifying.
-  const brandTag = S.view === 'report' ? ` \u2014 ${S.reportBrand || 'BHQ'}` : '';
-  $('printTitle').textContent = isMonthly ? '' : t + extra + brandTag;
+  const brandTag = S.view === 'report' ? ` \\u2014 ${S.reportBrand || 'BHQ'}` : '';
+  $('printTitle').textContent = t + extra + brandTag;
   $('printRange').textContent = `${$('from').value} to ${$('to').value} · generated ${new Date().toLocaleString()}`;
-  window.print();
+  printWhenImagesReady();
 });
+
+/**
+ * NO IMAGES IN THE PDF (MW). Chrome does not print an image that has not
+ * finished loading, and `window.print()` does not wait for one. Anything below
+ * the fold — which on a 40-section deck is nearly every logo and thumbnail —
+ * had never been fetched at the moment the dialog opened, so it printed empty.
+ *
+ * `loading="lazy"` has been removed from the three helpers that carried it;
+ * this is the belt to that pair of braces, and also covers a remote TikTok
+ * thumbnail that is simply slow. Capped at 3s so a dead CDN cannot block the
+ * export — a missing thumbnail is better than no dialog.
+ */
+function printWhenImagesReady() {
+  const imgs = [...document.images].filter(i => i.src && !i.complete);
+  if (!imgs.length) { window.print(); return; }
+  const done = Promise.all(imgs.map(i => new Promise(res => {
+    i.loading = 'eager';
+    i.addEventListener('load', res, { once: true });
+    // An error still resolves: `onerror` on these images removes or hides them,
+    // which is a finished state as far as printing is concerned.
+    i.addEventListener('error', res, { once: true });
+  })));
+  Promise.race([done, new Promise(res => setTimeout(res, 3000))]).then(() => window.print());
+}
 
 // Light tooltips across every chart — the default dark panel reads as harsh
 // against a clinical light theme.
@@ -6511,7 +6564,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.149.0';
+const CLIENT_BUILD = '3.150.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

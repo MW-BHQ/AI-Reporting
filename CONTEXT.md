@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.149.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.150.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,101 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.150.0 — PDF export: uniform pages, no shadow anywhere, images actually print (MW).**
+
+Three of MW's four items after exporting v3.149.0. Item 4 (truncation) is NOT in
+this release — see the finding at the end, it is bigger than it looked.
+
+**VERIFIED BY RENDERING THE PDF, not by reading the CSS.** There is a Chromium
+at `/opt/pw-browsers/chromium-1194` and the python `playwright` package is
+installed. Boot the mock server, drive the UI, `emulate_media("print")`, measure.
+Numbers below are from that render. Use it — every previous print change in this
+project was shipped unverified.
+
+    (WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ECOM_SHEET_ID=mock \
+     ADMIN_EMAILS=admin@bkh.test ACCESS_BUCKET=mock-bucket PORT=8412 \
+     node --require ./test/mock-fetch.js server.js &) ; sleep 4
+
+The page needs the IAP header as a context header, then click the `report` nav
+item, then `#loadBtn`, then wait ~9s. The server dies between tool calls, so
+start it and render in the SAME shell.
+
+**PAGE 1 WAS NEVER GOING TO MATCH ("make every page like page 3").** Two causes,
+both page-1-only:
+
+- `.slide:first-child{padding-top:var(--space-md)}` lives outside any media
+  query and OUTSPECIFIES the `.slide` rule inside `@media print` — (0,2,0) beats
+  (0,1,0) regardless of source order — so it was silently replacing the printed
+  0.34in top padding on the first slide and nowhere else. Now scoped to
+  `@media screen`.
+- `.print-head` AND `.head` render once, at the top of the document, so page 1
+  carried ~1.2in of chrome no other page had. There is no way to give that
+  height back while they sit in the flow above the first slide.
+
+A cover page was built and MW rejected it ("no cover"). **Both are now
+`display:none` in print.** Measured after: all 19 slides report
+`pt=32.64px pb=28.8px pl=40.32px h=720px` — identical. 21 pages for 21 sections,
+no blanks (the two extra over the 19 `.slide`s are the Search language pages,
+which break separately).
+
+**WHAT THAT COSTS:** the date range and generated timestamp are no longer
+anywhere in the PDF. Every slide carries its own logo and title so the deck is
+self-identifying, but a reader cannot tell WHICH period it covers from the file
+alone. `printTitle` / `printRange` are still populated, so putting the stamp
+back somewhere per-slide is cheap if it is ever wanted.
+
+**SHADOWS KILLED GLOBALLY, not surface by surface.** `.card` had
+`box-shadow:none!important`, but `.cbc` and `.slide .grid > .stat:not(.card)`
+kept theirs and banded into the PDF as grey gradients. Second time a
+per-selector fix missed a surface, so the rule is now
+`*,*::before,*::after{box-shadow:none!important}` plus `text-shadow` and
+`filter`. A blanket rule cannot fall behind the markup. Measured after: zero
+elements with a computed `box-shadow` in print media. `.cbc` also joins the
+solid-white print surfaces — it was `--glass` with a `backdrop-filter` that does
+not run in print.
+
+**NO IMAGES IN THE PDF — the cause was `loading="lazy"`,** on three helpers
+(hospital logo, platform mark, TikTok thumbnail). Chrome will not print an image
+it never fetched and `window.print()` does not force one, so on a 40-section
+deck nearly every image was absent. Attribute removed, plus
+`printWhenImagesReady()`: sets pending images to `eager`, waits for load-or-error,
+races a 3s cap so a dead CDN cannot block the dialog. Measured after: 68 images,
+0 pending, 0 lazy; the only broken ones are the fixture's fake tiktokcdn URLs.
+
+**`src="brand/..."` → `/brand/...` is HARDENING, not a bug fix.** I claimed in
+review that the relative path 404'd on `/bangkok/` and friends. **That was
+wrong** — those segments are GA4 URL path filters, not Express routes; the app
+is only ever served from `/`, where `brand/x.svg` resolves correctly. Confirmed:
+`/bangkok/` itself is a 404. The change stands because the failure mode would be
+invisible if the mount point ever moved (the `onerror` handlers hide the image,
+so a 404 looks like a design choice), but it fixed nothing that was broken.
+
+**Three new audit rules**, each verified by reintroducing the bug it guards and
+confirming the suite fails: `print:no-lazy-img`, `print:brand-paths`,
+`print:no-shadow` — which asserts the BLANKET rule exists rather than the absence
+of any particular offender, because per-offender checking is what failed twice.
+The two boot assertions that hard-coded `^brand/` now require the leading slash;
+a remote `https://` src still fails them.
+
+**ITEM 4 IS NINE SECTIONS, NOT TWO.** MW reported Appointments and Google Review.
+The render says otherwise — clipped overflow per section, on mock data:
+
+    Chat Bubble          736px   (more than a full page lost)
+    Google reviews       517px
+    Appointments         348px
+    Google Business      260px
+    Referral/Back Links  254px
+    YouTube              230px
+    Facebook             193px
+    Search Ads            70px
+    TikTok                59px
+
+Appointments and Google Review are simply the two where the loss is legible.
+The others are losing content just as silently. Real data will differ from these
+figures but not in kind. **Re-run the measurement before designing the fix, and
+re-run it whenever the data grows** — this is the closest thing to a detector for
+the clipping risk that this design cannot otherwise flag.
 
 **v3.149.0 — full-bleed pages, no shadow, ten rows per table (MW).**
 

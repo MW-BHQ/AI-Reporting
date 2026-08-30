@@ -789,7 +789,13 @@ setTimeout(() => {
         // Marks are a bare <img> as of v3.112.0 — the monogram and its coloured
         // plate were removed because the plate showed through transparent SVGs
         // as a solid box. Each mark must therefore point at a real asset.
-        const bad = marks.filter(m => !/^brand\/[\w.-]+\.svg$/.test(m.getAttribute("src") || ""));
+        // ROOT-RELATIVE `/brand/` as of v3.150.0. The app is served at
+        // `/bangkok/`, `/bangkok-heart/` and friends, so a bare `brand/...`
+        // resolved to `/bangkok/brand/...`, which express.static (mounted at
+        // the root) does not serve — the images fell through to their onerror
+        // fallback. The leading slash is the point of the assertion; a remote
+        // https:// src still fails it.
+        const bad = marks.filter(m => !/^\/brand\/[\w.-]+\.svg$/.test(m.getAttribute("src") || ""));
         if (bad.length) return fail("platform marks", `${bad.length} mark(s) with no brand asset src`);
         if (!root.querySelector('.card-title img[title="Meta"]')) {
           return fail("platform marks", "no Meta mark on the Meta Ad card");
@@ -1057,11 +1063,11 @@ setTimeout(() => {
          * to be a second remote `LOGOS` map fetching the same four over the
          * network, so the same logo arrived two ways and only one was local.
          */
-        const localFirst = logos.every(l => /^brand\/hosp-/.test(l.getAttribute("src") || ""));
-        if (!localFirst) return fail("hospital logos", "a logo is not served from brand/");
+        const localFirst = logos.every(l => /^\/brand\/hosp-/.test(l.getAttribute("src") || ""));
+        if (!localFirst) return fail("hospital logos", "a logo is not served from /brand/");
         const header = root.querySelector(".slide-title .slide-logo");
         if (!header) return fail("hospital logos", "no slide header logo");
-        /^brand\/hosp-/.test(header.getAttribute("src") || "")
+        /^\/brand\/hosp-/.test(header.getAttribute("src") || "")
           ? ok("hospital logos", `${logos.length} logos + header, all local`)
           : fail("hospital logos", `header logo src is ${header.getAttribute("src")}`);
       })();
