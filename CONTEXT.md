@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.155.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.156.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,47 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.156.0 — CJK on the base font stack; charts stop distorting; pale hairline.**
+
+**THE CJK FIX WAS ON THE WRONG SELECTOR.** v3.153 loaded Noto Sans SC and JP and
+added them to `.i18n` — and Content · Japanese still printed kana with every
+kanji missing. `.i18n` is on captions and keyword cells; the page titles, centre
+names and article headings that make up most of those tables are plain `<td>`
+and never carried it, so they fell through to a system fallback with kana and no
+Han. The faces are on the BASE `font-family` now. Google serves them per-subset
+by unicode-range, so a page with no CJK downloads none of them.
+
+Third attempt at this. The pattern: each time the fix was correct and applied to
+too small a scope. Check WHERE a font rule lands before concluding it is wrong.
+
+**CHARTS WERE DISTORTING ON FILL SLIDES.** Pinning the canvas to its box
+(v3.153) is the right trade for a small chart in a fixed slot — slight scaling
+beats painting over the next block. It is the wrong trade on Sessions by month
+and YouTube, where the chart IS the page and the box is a very different shape
+from the one it was drawn at, so the stretch shows. On `.slide-fill` the canvas
+now sizes with `max-width`/`max-height` and auto dimensions, which scales a
+replaced element proportionally: it letterboxes instead of squashing, and still
+cannot overflow.
+
+**CHAT BUBBLE KEEPS THE DESKTOP LAYOUT** (MW). The four-across print override
+and the column-stacked print card are both gone; the printed page is the screen
+layout. The section is `slide-flow`, so a dozen channels continue onto the next
+page rather than being clipped or reshaped into something MW did not ask for.
+
+**The rule under every slide title is pale** (`1px #C9D4EC`, was `2px #1B2340`).
+At near-black it read as a printer's crop mark across the top of every page.
+
+**TikTok top-post labels** get the violet accent on a tinted pill — MW asked for
+a little shine. A pill, not a gradient: gradients that carry meaning stay out.
+
+23 sections, 0 clipping. Suite 237.
+
+**STILL OPEN: TikTok MoM.** MW asked for it and it is NOT in this release. The
+TikTok payload has no previous-window figures at all — no `prev` anywhere in
+`server.js` for that connector — so this is a server change (a second Windsor
+fetch for the prior window, aggregated the same way), not a display tweak. Doing
+it badly would mean inventing a comparison, so it is written down instead.
 
 **v3.155.0 — a broken page needs a header; the slack goes to the chart.**
 

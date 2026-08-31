@@ -85,7 +85,15 @@
     background-repeat:no-repeat;
     background-attachment:fixed;
     color:var(--ink);
-    font-family:'Poppins','Sarabun',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    /* The CJK faces are on the BASE stack, not only `.i18n`. Page titles,
+       centre names and article headings are plain table cells that never
+       carried that class, so kanji and hanzi still fell through to a system
+       fallback with kana but no Han — kana rendered, every ideograph did not.
+       Cheap to list here: Google serves them per-subset by unicode-range, so a
+       page with no CJK on it downloads none of them. */
+    font-family:'Poppins','Sarabun','Noto Sans Thai','Noto Sans SC','Noto Sans JP',
+      'Noto Sans Arabic','Noto Sans Myanmar','Noto Sans Khmer',
+      -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
     -webkit-font-smoothing:antialiased;
     /* Base is 1rem (16px), Tailwind's `base`. Everything else steps off the
        scale in :root rather than being a one-off px value. */
@@ -619,8 +627,10 @@
      stretching across the whole slide; at four across the width is wanted. */
   @media print{
     .cb-cards{padding-left:0;padding-right:0;}
-    /* Four across in print only — see the note at the channel card markup. */
-    .cb-cards > .grid{grid-template-columns:repeat(4,1fr)!important;}
+    /* MW asked for the DESKTOP layout in print too, so no column override
+       here: two across, as on screen. The section is `slide-flow`, so if a
+       dozen channels do not fit they continue on the next page rather than
+       being clipped or squeezed into a shape MW did not ask for. */
     /**
      * FOUR ACROSS MEANS NARROW CARDS, and a narrow card wraps its channel name
      * — "Messenger (Burmese)" and the native-script labels run to three lines,
@@ -747,6 +757,11 @@
   .slide .card-title{margin-bottom:var(--space-md);}
   /* A second heading INSIDE a card, run in under a chart or table. It is not
      starting a new card, so it does not want a card's worth of space above it. */
+  /* TikTok's top-post labels carry the ranking, so they get the accent rather
+     than the same grey every other `.lab` uses — MW asked for a little shine.
+     A tinted pill, not a gradient: gradients that carry meaning are out. */
+  .tk-lab{color:var(--violet)!important;background:rgba(124,107,245,.10);
+    border-radius:6px;padding:2px 7px;display:inline-flex!important;}
   .lflag{margin-right:8px;font-size:1.05em;line-height:1;
     font-family:'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;}
   .slide .card-title.tight{margin-top:var(--space-sm);margin-bottom:var(--space-sm);}
@@ -840,7 +855,9 @@
     .slide-title .plogo{width:2.5rem;height:2.5rem;margin-right:.6rem;vertical-align:-.75rem;}
     .slide-logo{width:112px!important;}
     .slide-title{font-size:13px;color:var(--violet);margin:0 0 10px;
-      border-bottom:2px solid #1B2340;padding-bottom:6px;
+      /* A pale rule, not near-black (MW). At 2px of #1B2340 it read as a
+         printer's crop mark across the top of every page. */
+      border-bottom:1px solid #C9D4EC;padding-bottom:6px;
       /* Without this the heading prints alone at the foot of a slide: the card
          below carries break-inside:avoid, so if it cannot fit the remaining
          height it moves on and abandons its title. */
@@ -1159,6 +1176,21 @@
     .chart-wrap{position:relative;overflow:hidden;}
     .chart-wrap canvas{position:absolute!important;top:0;left:0;
       width:100%!important;height:100%!important;}
+    /**
+     * ON A FILL SLIDE THE CANVAS KEEPS ITS ASPECT (MW: "distort charts").
+     *
+     * Stretching the bitmap to the box is the right trade for a small chart in
+     * a fixed slot — slight scaling beats painting over the next block. It is
+     * the WRONG trade for Sessions by month and YouTube, where the chart is the
+     * page and the box it has to fill is a very different shape from the one it
+     * was drawn at, so the stretch is visible as distortion.
+     *
+     * `max-*` with auto sizing scales a replaced element proportionally, so it
+     * still cannot overflow — it just letterboxes instead of squashing.
+     */
+    .slide-fill .chart-wrap canvas{position:relative!important;
+      width:auto!important;height:auto!important;
+      max-width:100%!important;max-height:100%!important;margin:0 auto;display:block;}
     .slide{min-height:6.3in;}
     .stat .val{font-size:20px;}
     table{font-size:11px;}
@@ -3281,7 +3313,7 @@ function renderReport() {
       <div class="card" style="display:flex;gap:10px;align-items:flex-start">
         ${thumb(v)}
         <div style="min-width:0;flex:1">
-          <div class="lab">${esc(title)}</div>
+          <div class="lab tk-lab">${esc(title)}</div>
           <div class="val" style="margin:2px 0 4px">${v ? big(v) : '\u2014'}</div>
           <div class="note i18n" style="margin:0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">
             ${v ? esc(v.caption || '(no caption)') : 'nothing in range'}</div>
@@ -3574,7 +3606,7 @@ function renderReport() {
     ${slide('TikTok', tkChannelBody, false, true, 'tiktok')}
     ${tkTopBody ? slide('TikTok \u00b7 Top performances', tkTopBody, false, true, 'tiktok') : ''}
     ${contentBody}
-    ${chatBody ? slide('Chat Bubble', chatBody, false, sel) : ''}`;
+    ${chatBody ? slide('Chat Bubble', chatBody, false, sel, null, false, true) : ''}`;
 
   // Charts must be drawn after the markup is in the DOM.
   if (U && U.months.length && window.Chart) {
@@ -6886,7 +6918,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.155.0';
+const CLIENT_BUILD = '3.156.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

@@ -1,6 +1,6 @@
-# BHQ War Room — handover at v3.155.0
+# BHQ War Room — handover at v3.156.0
 
-Paste this into a new chat along with `bkh-dashboard-v3_155_0-FULL.zip`.
+Paste this into a new chat along with `bkh-dashboard-v3_156_0-FULL.zip`.
 
 ---
 
@@ -31,7 +31,7 @@ it needs **Contents: Read and write**. Delete it at the end of the session.
      node --require ./test/mock-fetch.js server.js &) ; sleep 4
     python3 test/print-overflow.py
 
-**Exit 0 as of v3.155.0 — 24 sections, none clipping. Keep it that way.**
+**Exit 0 as of v3.156.0 — 23 sections, none clipping. Keep it that way.**
 
 It renders the report in print media and reports, per section, how many pixels
 fall off the bottom of its page. It exists because the deck pins every section
@@ -85,7 +85,12 @@ fifteen separate complaints were four root causes.**
 ## Backlog
 
 ### Live
-Nothing. MW's PDF list is closed. Wait for the next screenshot.
+**TikTok MoM.** MW asked for it in the v3.156 round and it was not built. The
+TikTok payload carries no previous-window figures — there is no `prev` for that
+connector anywhere in `server.js` — so it needs a second Windsor fetch for the
+prior window, aggregated the same way (remember: one row per campaign x ad set
+x date, aggregate before counting). Display side is then the same `mom()` helper
+every other scorecard uses. Do not fake it from what is on the payload today.
 
 ### Settled in v3.154.0 — do not re-propose
 **A break is fine; an ANONYMOUS page is not.** Three attempts landed here.
