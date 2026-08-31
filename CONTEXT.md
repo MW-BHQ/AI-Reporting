@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.158.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.159.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,15 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.159.0 — the quotes card is "Customers Voices".**
+
+MW renamed it. The card that lists one review per star level was titled with its
+own selection rule — "One review per rating, most recent with a comment" — which
+described the query rather than naming the block. The rule still sits in the note
+underneath, where it belongs.
+
+The slide header stays "Google reviews · what they said". Nothing else changed.
 
 **v3.158.0 — every printed page is vertically centred; Sessions overview to 80%;
 Chat Bubble back onto one page.**

@@ -3141,7 +3141,7 @@ function renderReport() {
    * has to be told what they are looking at.
    */
   const reviewQuotesBody = (RVB && (RVB.samples || []).some(Boolean)) ? `<div class="card">
-      <div class="card-title">One review per rating, most recent with a comment</div>
+      <div class="card-title">Customers Voices</div>
       <table><tbody>
       ${RVB.samples.filter(Boolean).map(sm=>`<tr>
         <td style="width:74px;vertical-align:top;color:${sm.stars>=4?'#2E9E6F':(sm.stars===3?'#F2A93B':'#D9534F')};
@@ -7026,7 +7026,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.158.0';
+const CLIENT_BUILD = '3.159.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
