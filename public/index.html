@@ -628,27 +628,22 @@
   @media print{
     .cb-page > .sep{display:none!important;}
     .cb-cards{padding-left:6rem;padding-right:6rem;}
-    /* MW asked for the DESKTOP layout in print too, so no column override
-       here: two across, as on screen. The section is `slide-flow`, so if a
-       dozen channels do not fit they continue on the next page rather than
-       being clipped or squeezed into a shape MW did not ask for.
-       The `.sep` under the KPI row lands mid-break on a two-page section and
-       reads as a stray line at the top of page two, so it goes. */
     /**
-     * FOUR ACROSS MEANS NARROW CARDS, and a narrow card wraps its channel name
-     * — "Messenger (Burmese)" and the native-script labels run to three lines,
-     * which is what kept this section 514px over its page even after the grid
-     * was fixed. Stacking identity above the figure gives the name the full
-     * card width instead of half of it, and the whole card gets tighter.
+     * THE DESKTOP CARD, IN PRINT TOO (MW, twice now).
+     *
+     * The print variant stacked identity above the figure and shrank the type,
+     * on the reasoning that a narrow card wraps a long channel name. It does —
+     * but the stacked card is 105px tall against the row card's ~70px, so the
+     * "fix" was what pushed the section onto a second page in the first place.
+     * The row layout is both what MW asked for and the shorter of the two.
+     *
+     * Only the surface and the padding are print-specific: the hairline border
+     * replaces the shadow, which does not rasterise cleanly, and 12px/18px is
+     * enough to keep twelve channels inside one page.
      */
-    .cbc{flex-direction:column;align-items:flex-start;gap:6px;padding:10px 12px;
-      border:1px solid #DDE3F2!important;}
-    .cbc-id{gap:8px;}
-    .cbc-lab{font-size:11px;line-height:1.2;}
-    .cbc-num{font-size:22px;}
-    .cbc-unit{font-size:9px;margin-left:4px;}
-    .cbc-foot{font-size:9px;margin-top:2px;}
-    .cbc .plogo{width:22px!important;height:22px!important;}
+    .cbc{border:1px solid #DDE3F2!important;padding:12px 18px;}
+    /* The `.sep` under the KPI row reads as a stray line once the cards below
+       it start on the same page, so it goes. */
   }
   .cbc-id{display:flex;align-items:center;gap:14px;min-width:0;}
   .cbc-lab{font-size:var(--text-lg);font-weight:700;color:var(--ink);line-height:1.25;
@@ -1060,26 +1055,33 @@
     /**
      * CHAT BUBBLE ON ONE PAGE (MW: "still break to 2 page — find a way to fix").
      *
-     * It carried `slide-flow` and used the screen's two-across layout in print,
-     * which is five rows for ten channels and ~55px past the page — so it took
-     * a second page for one row of cards. Two-across cannot be made to fit by
-     * tightening: the channel list grows, and at twelve channels it is six rows
-     * whatever the padding is.
+     * v3.158 went three-across to buy the rows. Wrong lever: MW then asked for
+     * the desktop card back, and the desktop card — identity left, figure right
+     * — is ~35px SHORTER than the stacked print variant that was there to save
+     * space. Two across, desktop layout, twelve channels, one page.
      *
-     * So the COLUMN COUNT carries it instead, stepping with the number of cards
-     * so the block is never more than four rows: three across normally, four
-     * once there are thirteen or more channels. The side inset comes down to
-     * match — 6rem was there to stop two wide cards spanning the sheet, and at
-     * three across the width is wanted.
-     *
-     * This is the one place the printed layout deliberately differs from the
-     * desktop one. Two across on screen is still right; on a fixed page it is
-     * the thing that does not fit.
+     * Pinned explicitly because `@media(max-width:1080px)` collapses `.g-2` to
+     * a single column and print lays out narrow.
      */
-    .cb-wrap .cb-cards{padding-left:2rem!important;padding-right:2rem!important;}
-    .cb-wrap .cb-cards > .grid{grid-template-columns:repeat(3,1fr)!important;}
-    .cb-wrap .cb-cards > .grid:has(.cbc:nth-child(n+13)){
-      grid-template-columns:repeat(4,1fr)!important;}
+    .cb-wrap .cb-cards > .grid{grid-template-columns:repeat(2,1fr)!important;}
+    /**
+     * YOUTUBE KEEPS ITS DESKTOP SCORECARDS (MW: "keep the desktop design ...
+     * same as chat bubble").
+     *
+     * The global print density (v3.153) takes `.stat .val` from 30px to 17px
+     * and the label to 8.5px, which on the one slide where six scorecards ARE
+     * the top half of the page made them read as a footnote. This is a fill
+     * slide, so what the cards take back comes out of the chart's slack rather
+     * than off the bottom of the page.
+     *
+     * Scoped by the canvas id. Every other slide keeps the density — it is the
+     * reason those pages fit.
+     */
+    .slide:has(#repYtViews) > .grid > .stat{padding:16px 18px!important;}
+    .slide:has(#repYtViews) > .grid > .stat .val{font-size:30px!important;}
+    .slide:has(#repYtViews) > .grid > .stat .lab{font-size:11px!important;}
+    .slide:has(#repYtViews) > .grid > .stat .sub2,
+    .slide:has(#repYtViews) > .grid > .stat .note{font-size:11px!important;}
   }
   @media print{
     /* 13.333in x 7.5in is the standard 16:9 slide canvas. */
@@ -7026,7 +7028,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.159.0';
+const CLIENT_BUILD = '3.160.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

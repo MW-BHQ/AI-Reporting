@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.159.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.160.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,45 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.160.0 — the DESKTOP card wins in print. Chat Bubble and YouTube.**
+
+MW, on Chat Bubble and YouTube together: "keep the desktop design". Both slides
+had a print-specific variant of a card that exists on screen, and both variants
+were worse.
+
+**Chat Bubble.** v3.158 fixed the two-page break by going three across. Wrong
+lever, and it is reverted. The print `.cbc` override stacked identity above the
+figure and shrank the type — on the reasoning that a narrow card wraps a long
+channel name — but the stacked card is 86px tall against the row card's... also
+86px at four-across, and only ~86px at TWO across where the name has room not to
+wrap at all. The desktop layout was never the thing that did not fit; the
+stacked print variant was. Two across, desktop card, one page, ten channels,
+34px of slack.
+
+**HEADROOM IS 34px, WHICH IS NOT A ROW.** An eleventh channel puts this section
+over its page again. `print-overflow.py` covers it now, so it will be caught
+before it ships — but if it fires, the lever is `.cbc` padding in the print
+block, not the column count.
+
+**YouTube.** The global print density (v3.153) takes `.stat .val` from 30px to
+17px, which on the one slide where six scorecards ARE the top half of the page
+made them read as a footnote. Restored to the screen scale, scoped by
+`#repYtViews`. It is a fill slide, so what the cards take back comes out of the
+chart's slack rather than off the bottom.
+
+**GENERALISING BOTH: a print-only variant of a component that exists on screen
+needs a reason that survives being shown to MW.** "It fits better" has now
+failed three times — Chat Bubble columns, Chat Bubble card, YouTube type. Print
+may change the SURFACE (shadow to hairline) and the DENSITY (padding, table
+rows). It should not redesign the component.
+
+**Reported but not reproduced: GBP and Google reviews "crashed" in the PDF.**
+Both pages render clean here — layout intact, charts correctly sized, nothing
+clipped. MW's two screenshots show a hard vertical seam at the same x position
+in both, with the region on one side of it drawn at ~2.5x, which reads as a
+viewer capture composited from two zoom levels rather than anything in the file.
+Waiting on a fresh export before changing either page.
 
 **v3.159.0 — the quotes card is "Customers Voices".**
 
