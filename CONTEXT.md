@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.162.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.163.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,61 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.163.0 — the GBP / Google reviews white boxes are macOS PREVIEW corrupting
+the file. Not Chrome, not this deck.**
+
+MW sent the PDF. Read it rather than a screenshot of it, and it settled in one
+pass. **Do not spend another release on this.**
+
+**WHAT IS IN THE FILE.** Two white rectangles per page. Measured on page 1:
+x 13-182, y 64-108 px, and a second in the top strip. Real, in the file, not a
+viewer artifact — the earlier scale-seam theory was right about the seam and
+wrong about the boxes.
+
+**WHERE THEY COME FROM.** Chrome puts each chart card in its own transparency
+group and knocks the card's rectangle out of the layer beneath it with an alpha
+soft mask — a compositing optimisation, and correct. In Chrome's own output the
+mask group carries `/Matrix [4.166667 0 0 -4.166667 0 2250]` and its stream
+begins `.24 0 0 -.24 0 540 cm`. Those multiply out to IDENTITY, so the hole sits
+exactly over the chart that is painted on top of it and nothing shows.
+
+MW's file carries `/Matrix [0.24 0 0 -0.24 0 540]` and NO inner `cm`. The `cm`
+was folded into the `/Matrix` and **the 4.166667 was dropped.** The mask
+geometry is therefore scaled by 0.24: the hole meant for the chart lands near
+the top-left corner, and what shows through a hole in the background layer is
+white.
+
+**THE ARITHMETIC, because this is the whole proof.** The mask paints black over
+39.75-569.25 x 199.5-342 in its own space. At 0.24 with the Y flip that maps to
+x 9.54-136.6 pt, y 457.9-492.1 pt = **x 12.7-182.2, y 63.9-109.5 px**. Measured
+in MW's file: **13-182, 64-108.** Same rectangle.
+
+**WHO DID IT.** `Producer: macOS Version 26.6.2 Quartz PDFContext`. Chrome
+writes `Skia/PDF`. This file was re-written by macOS — the filename ends
+`_copy.pdf`, i.e. it was opened in Preview and duplicated. Our own Skia output
+was checked side by side and has the same five mask groups with the correct
+`4.166667` matrices, which is why it renders clean at true scale and always did.
+
+**WHY ONLY THESE TWO PAGES.** They are the only two slides carrying more than
+one canvas, so they are the only two where a displaced mask lands over content
+instead of over margin. That is the whole of "only these two are broken".
+
+**WHAT MW SHOULD DO.** Use the PDF straight out of Chrome's print dialog. Do not
+open-and-duplicate it in Preview before sending it on.
+
+**A DEAD END WORTH RECORDING.** `.chart-wrap{overflow:hidden}` plus an
+absolutely positioned canvas looked like the trigger for the mask, and removing
+it was tried: `/SMask` count stayed at ten. The mask comes from the canvas being
+its own composited layer, which cannot be styled away. **The change was reverted
+rather than shipped, because its stated reason turned out to be false and a
+comment that explains a fix which is not one is worse than no comment.**
+
+**THE ONE-LINE MITIGATION, IF THE WORKFLOW EVER HAS TO GO THROUGH PREVIEW.** The
+hole shows white. Against `--bg` that is a visible rectangle; against a white
+page it would be invisible. `html,body{background:#fff!important}` in the print
+block is the whole change. Not taken — the tint is MW's design and the file
+Chrome produces is correct.
 
 **v3.162.0 — THE SHRINK-TO-FIT IS GONE, and it was hiding four blank pages.
 Centring reimplemented without touching pagination. TikTok bars.**
