@@ -577,7 +577,9 @@
   .state.bad .big{color:var(--rose);}
   .note{font-size:var(--text-sm);color:var(--faint);margin-top:12px;padding-top:11px;border-top:1px solid var(--line);}
   .warnbox{background:#FFF8EC;border:1px solid #FBE3BE;color:#9A6712;border-radius:12px;padding:11px 14px;font-size:12px;margin-bottom:14px;}
-  .chart-wrap{height:250px;}
+  /* `min-width:0` so a canvas can never hold its grid track open at a width the
+     track does not have — see `clearPrintPrep`. */
+  .chart-wrap{height:250px;min-width:0;}
   .hidden{display:none!important;}
 
   /* ---------------- print / PDF: 16:9 presentation ---------------- */
@@ -1384,6 +1386,35 @@
     a{color:#1B2340!important;text-decoration:none!important;}
   }
 
+  /**
+   * PRINT-SIZING MODE (v3.164.0) — the fix for "the chart is twice the
+   * thickness of the desktop".
+   *
+   * Chart.js sizes a canvas bitmap ONCE, at draw time, against the box it can
+   * see. Neither hook can give it the print box:
+   *   · `beforeprint` fires BEFORE Chrome relayouts, so it measures the screen
+   *     (known since v3.153);
+   *   · `matchMedia('print')` never fires for Chrome's print PREVIEW, because
+   *     Chrome CLONES the document to render it and the clone copies the canvas
+   *     bitmap exactly as it stands.
+   * So the bitmap that reaches the sheet is always the one drawn for the
+   * author's WINDOW, and the print rule `canvas{width:100%;height:100%}`
+   * stretches it to the printed box. On a ~1200px window the printed card is
+   * about 1.9x the on-screen one, which is why the lines and the legend came
+   * out at double weight while every non-canvas element was correct.
+   *
+   * It cannot be measured in a headless rig: `page.pdf()` re-lays out the live
+   * document, so Chart.js observes the new box and redraws. That is why five
+   * renders here looked perfect while MW's browser did not.
+   *
+   * The only place with both the print width and a live Chart.js is the page
+   * itself, BEFORE the dialog opens. This class makes the live layout the same
+   * width as a printed page, the charts are resized into it, and only then does
+   * `window.print()` run. Removed again on `afterprint`.
+   */
+  body.print-prep .rail{display:none!important;}
+  body.print-prep .main{width:12.493in!important;max-width:none!important;padding:0!important;}
+  body.print-prep{overflow:hidden!important;}
   @media(max-width:1080px){.g-6,.g-5,.g-4{grid-template-columns:repeat(2,1fr);}.g-2-1,.g-3,.g-2{grid-template-columns:1fr;}}
   @media(max-width:760px){
     .shell{flex-direction:column;}
@@ -7315,6 +7346,48 @@ function cjkFontsReady() {
   return Promise.all(jobs.map(j => j.catch(() => {}))).then(() => ready);
 }
 
+/**
+ * Put the live document at printed-page width, let Chart.js redraw into it, and
+ * only then hand over to `window.print()`. Two frames because the class change
+ * has to be laid out before Chart.js's ResizeObserver can see the new box, and
+ * a short settle after `resize()` because the redraw is not synchronous.
+ *
+ * `PRINT_PREP` is idempotent and self-clearing: `afterprint` removes it, and so
+ * does a timeout, because a cancelled dialog does not always fire `afterprint`.
+ */
+function sizeForPrint() {
+  const body = document.body;
+  if (!body) return Promise.resolve();
+  body.classList.add('print-prep');
+  return new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)))
+    .then(() => { resizeChartsForPrint(); return new Promise((r) => setTimeout(r, 150)); });
+}
+function clearPrintPrep() {
+  document.body.classList.remove('print-prep');
+  /**
+   * The canvases are now sized for a PAGE, not for this window, and Chart.js
+   * reads the container — so the resize has to wait for the class removal to be
+   * laid out. Resizing synchronously here measures the print width again and
+   * leaves every chart overflowing its card once the dialog is dismissed.
+   */
+  /**
+   * CLEAR THE INLINE SIZE FIRST, or the layout cannot come back. A grid item is
+   * `min-width:auto`, so a canvas still carrying `style="width:687px"` from the
+   * print pass holds its card — and therefore its grid track — open at the
+   * printed width. Chart.js then measures that same 687px container and keeps
+   * it. The chart stays page-sized on screen and nothing can shrink it, which
+   * is a deadlock, not a race: the canvas has to let go before it is measured.
+   */
+  document.querySelectorAll('.chart-wrap canvas').forEach((c) => {
+    // 1px, NOT empty. With no CSS width a canvas falls back to its BITMAP as
+    // its intrinsic size, which is larger still — clearing the style blew the
+    // track out to 1375px instead of collapsing it.
+    c.style.width = '1px'; c.style.height = '1px';
+  });
+  requestAnimationFrame(() => requestAnimationFrame(() => resizeChartsForPrint()));
+}
+window.addEventListener('afterprint', clearPrintPrep);
+
 function printWhenImagesReady() {
   /**
    * FONTS FIRST — see `cjkFontsReady`. The faces the printed page needs are
@@ -7323,8 +7396,12 @@ function printWhenImagesReady() {
    */
   const fonts = cjkFontsReady();
   const imgs = [...document.images].filter(i => i.src && !i.complete);
+  const go = () => sizeForPrint().then(() => {
+    window.print();
+    setTimeout(clearPrintPrep, 1000);
+  });
   if (!imgs.length) {
-    Promise.race([fonts, new Promise(res => setTimeout(res, 6000))]).then(() => window.print());
+    Promise.race([fonts, new Promise(res => setTimeout(res, 6000))]).then(go);
     return;
   }
   const done = Promise.all(imgs.map(i => new Promise(res => {
@@ -7338,7 +7415,7 @@ function printWhenImagesReady() {
   // triggers itself, and a print that opens 300ms early loses every ideograph
   // on the page — a worse outcome than waiting.
   Promise.race([Promise.all([done, fonts]), new Promise(res => setTimeout(res, 6000))])
-    .then(() => window.print());
+    .then(go);
 }
 
 // Light tooltips across every chart — the default dark panel reads as harsh
@@ -7370,7 +7447,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.163.0';
+const CLIENT_BUILD = '3.164.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

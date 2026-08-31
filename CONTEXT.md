@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.163.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.164.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,68 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.164.0 — THE CHARTS WERE PRINTING AT DOUBLE WEIGHT because the canvas is
+sized for the WINDOW and stretched to the PAGE. v3.163's diagnosis was wrong.**
+
+MW: "it wasn't like this before, and these 2 are from browser, so there IS a
+white mask at the top left, and the chart is twice the thickness of desktop's. I
+don't call this ok to go." Both corrections landed. The screenshots were from the
+browser, so macOS Preview cannot be the cause, and **v3.163 is retracted** — the
+Quartz matrix arithmetic was real and was a SYMPTOM, not the cause.
+
+**THE CAUSE.** Chart.js sizes a canvas bitmap ONCE, against the box it can see.
+Neither print hook can hand it the print box:
+ · `beforeprint` fires BEFORE Chrome relayouts, so it measures the screen —
+   known since v3.153 and still true;
+ · `matchMedia('print')` NEVER FIRES for Chrome's print preview, because Chrome
+   CLONES the document to render it, and the clone copies the canvas bitmap
+   exactly as it stands.
+So the bitmap that reaches the sheet is always the one drawn for the author's
+WINDOW, and `canvas{width:100%;height:100%}` in the print block stretches it to
+the printed box. Measured on a 1200px window: the chart box is **505px** on
+screen and **687px** in print. On MW's narrower window the ratio reaches about
+1.9 — which is exactly "twice the thickness", and why only the canvas was wrong
+while every other element was right.
+
+**WHY FIVE CLEAN RENDERS HERE PROVED NOTHING.** `page.pdf()` re-lays out the
+LIVE document, so Chart.js's ResizeObserver sees the new box and redraws before
+the capture. The rig cannot reproduce this class of bug at all — not at DPR 1,
+not at DPR 2, not at a narrow viewport. **A tool that redraws the thing under
+test is not a test.** That is what let this survive three reports.
+
+**THE FIX.** The only place that has both the print width and a live Chart.js is
+the page itself, before the dialog opens. `sizeForPrint()` puts the live layout
+at printed-page width (`body.print-prep`: rail hidden, `.main` at 12.493in),
+waits two frames so the new box is laid out, resizes every chart into it, then
+calls `window.print()`. `afterprint` and a 1s fallback undo it.
+
+**COMING BACK OUT IS THE HARD HALF, and took three attempts:**
+ 1. Remove the class and resize synchronously — measures the print width again.
+ 2. Remove the class, resize on the next frame — the chart stays at 687px. A
+    grid item is `min-width:auto`, so a canvas still carrying
+    `style="width:687px"` HOLDS ITS OWN TRACK OPEN at the printed width and
+    Chart.js measures that. A deadlock, not a race.
+ 3. Clear the inline size to `''` first — **worse**: with no CSS width a canvas
+    falls back to its BITMAP as intrinsic size, so the track blew out to 1375px.
+ 4. Set it to `1px`, let the track collapse, then resize. Verified round trip:
+    505 -> 687 -> 505.
+`.chart-wrap` also gained `min-width:0` so a canvas can never hold a track open
+again.
+
+**WHAT THIS DOES NOT COVER.** Ctrl+P and the browser's own Print menu. They fire
+`beforeprint` too late to relayout, and there is no hook that runs earlier. The
+print BUTTON is the supported path; if MW uses Ctrl+P the charts will stretch
+again, and that is worth telling him rather than discovering later.
+
+**The white box at the top left is expected to go with it** — a canvas scaled
+inside its layer is what produced the mask whose geometry v3.163 measured. Not
+claimed as verified: it cannot be, here. It is the first change that addresses a
+CONFIRMED symptom, and MW's next export is the test.
+
+**v3.163.0 — RETRACTED. The Quartz soft-mask arithmetic is accurate and is a
+consequence of the scaled canvas layer, not the cause of it. Kept below because
+the measurements are sound and may be useful again; ignore the conclusion.**
 
 **v3.163.0 — the GBP / Google reviews white boxes are macOS PREVIEW corrupting
 the file. Not Chrome, not this deck.**
