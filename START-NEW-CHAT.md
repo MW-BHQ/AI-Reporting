@@ -1,6 +1,6 @@
-# BHQ War Room — handover at v3.156.0
+# BHQ War Room — handover at v3.157.0
 
-Paste this into a new chat along with `bkh-dashboard-v3_156_0-FULL.zip`.
+Paste this into a new chat along with `bkh-dashboard-v3_157_0-FULL.zip`.
 
 ---
 
@@ -31,7 +31,7 @@ it needs **Contents: Read and write**. Delete it at the end of the session.
      node --require ./test/mock-fetch.js server.js &) ; sleep 4
     python3 test/print-overflow.py
 
-**Exit 0 as of v3.156.0 — 23 sections, none clipping. Keep it that way.**
+**Exit 0 as of v3.157.0 — 23 sections, none clipping. Keep it that way.**
 
 It renders the report in print media and reports, per section, how many pixels
 fall off the bottom of its page. It exists because the deck pins every section
@@ -85,12 +85,7 @@ fifteen separate complaints were four root causes.**
 ## Backlog
 
 ### Live
-**TikTok MoM.** MW asked for it in the v3.156 round and it was not built. The
-TikTok payload carries no previous-window figures — there is no `prev` for that
-connector anywhere in `server.js` — so it needs a second Windsor fetch for the
-prior window, aggregated the same way (remember: one row per campaign x ad set
-x date, aggregate before counting). Display side is then the same `mom()` helper
-every other scorecard uses. Do not fake it from what is on the payload today.
+Nothing. Wait for the next screenshot.
 
 ### Settled in v3.154.0 — do not re-propose
 **A break is fine; an ANONYMOUS page is not.** Three attempts landed here.
@@ -101,6 +96,14 @@ continuation page was also wrong — MW: "give the header to it too". So: use
 `slide-flow` when the overflow is a continuation of the same idea, and a titled
 slide when the overflowing part is its own idea. AI assistants (v3.151) stayed
 split and MW has not objected.
+
+**Anything the printed page needs must be RESOLVED before the dialog opens, not
+merely referenced.** Images (v3.150) and webfonts (v3.157) were the same bug in
+two asset types, and the font one cost three releases. If a third type appears,
+assume it too.
+
+**`beforeprint` fires BEFORE Chrome relayouts.** Measure in a
+`matchMedia('print')` change listener instead.
 
 **Do not shrink a global to fix one section.** The chart ceiling walked 300 to
 115 across two releases, a few pixels at a time, until trend lines were smears.

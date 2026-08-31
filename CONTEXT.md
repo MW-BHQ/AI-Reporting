@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.156.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.157.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,45 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.157.0 — the CJK bug was a TIMING bug; chat bubble polish.**
+
+**THE FONTS WERE RIGHT. THEY WERE NOT LOADED YET.** Third symptom, third cause.
+v3.153 loaded Noto Sans SC/JP but named them only on `.i18n`; v3.156 moved them
+to the base stack and MW still saw kana with no kanji. The remaining cause is
+that Google serves these as per-subset unicode-range files fetched only when a
+glyph in that range is FIRST NEEDED — and `window.print()` does not wait for a
+font any more than it waits for an image. The dialog was opening before the
+kanji subset arrived, so Chrome rasterised the fallback.
+
+`printWhenImagesReady()` now awaits `document.fonts.ready` alongside the images,
+with the cap raised 3s to 4s. The images fix in v3.150 was the same bug in a
+different asset type; the font case was simply never considered.
+
+**Worth generalising: anything the printed page needs must be RESOLVED before
+the dialog opens, not merely referenced.** Images, then fonts. If a third asset
+type ever appears, assume it has the same problem.
+
+**CHARTS: STRETCH, PLUS A RESIZE THAT ACTUALLY LANDS.** v3.156 letterboxed the
+canvas to stop the distortion, which left a blank strip under YouTube's chart.
+Back to filling the box — and the reason filling it looked distorted is now
+fixed properly: `beforeprint` fires BEFORE Chrome relayouts, so the resize there
+measures the SCREEN. The print media query changes AFTER the relayout, so a
+`matchMedia('print')` change listener redraws at the real page size and the
+stretch becomes a no-op. Both listeners are kept.
+
+**Chat bubble**: the standard `delta()` chip for MoM, matching every other
+section instead of a bare percentage; the `.sep` under the KPI row is hidden in
+print, where on a two-page section it landed mid-break and read as a stray line
+at the top of page two; the 6rem side inset is back, as on screen.
+
+**`Rating mix · as at 31 Jul 2026`**, not `2026-07-31`. ISO is right in a
+filename and wrong in a sentence on an executive slide. `niceDate()` falls back
+to the raw string rather than printing "Invalid Date".
+
+**TikTok MoM is dropped** — MW: "forget it". Removed from the backlog.
+
+23 sections, 0 clipping. Suite 237.
 
 **v3.156.0 — CJK on the base font stack; charts stop distorting; pale hairline.**
 

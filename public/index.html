@@ -626,11 +626,14 @@
   /* No side inset in print. It was there to stop TWO wide channel cards
      stretching across the whole slide; at four across the width is wanted. */
   @media print{
-    .cb-cards{padding-left:0;padding-right:0;}
+    .cb-page > .sep{display:none!important;}
+    .cb-cards{padding-left:6rem;padding-right:6rem;}
     /* MW asked for the DESKTOP layout in print too, so no column override
        here: two across, as on screen. The section is `slide-flow`, so if a
        dozen channels do not fit they continue on the next page rather than
-       being clipped or squeezed into a shape MW did not ask for. */
+       being clipped or squeezed into a shape MW did not ask for.
+       The `.sep` under the KPI row lands mid-break on a two-page section and
+       reads as a stray line at the top of page two, so it goes. */
     /**
      * FOUR ACROSS MEANS NARROW CARDS, and a narrow card wraps its channel name
      * — "Messenger (Burmese)" and the native-script labels run to three lines,
@@ -1189,8 +1192,7 @@
      * still cannot overflow — it just letterboxes instead of squashing.
      */
     .slide-fill .chart-wrap canvas{position:relative!important;
-      width:auto!important;height:auto!important;
-      max-width:100%!important;max-height:100%!important;margin:0 auto;display:block;}
+      width:100%!important;height:100%!important;display:block;}
     .slide{min-height:6.3in;}
     .stat .val{font-size:20px;}
     table{font-size:11px;}
@@ -2860,7 +2862,7 @@ function renderReport() {
         <div class="cbc-perf">
           <div class="cbc-num">${num(r.clicks)}<span class="cbc-unit">clicks</span></div>
           <div class="cbc-foot">${r.prev
-            ? `${changeText((r.clicks - r.prev) / r.prev)} <span class="cbc-prev">vs ${num(r.prev)}</span>`
+            ? `${delta((r.clicks - r.prev) / r.prev, 'MoM')} <span class="cbc-prev">vs ${num(r.prev)}</span>`
             : '<span class="dlt none">new this month</span>'}</div>
         </div>
       </div>`;
@@ -3046,7 +3048,7 @@ function renderReport() {
           ${RVB.lifetime ? num(RVB.lifetime.total) : '\u2014'} reviews</div>
         <div class="card-title">Last 6 months</div>
         <div class="chart-wrap" style="height:210px"><canvas id="rvStack"></canvas></div>
-        <div class="card-title tight">Rating mix \u00b7 as at ${esc(d.range.to)}</div>
+        <div class="card-title tight">Rating mix \u00b7 as at ${esc(niceDate(d.range.to))}</div>
         <table><tbody>
         ${[5,4,3,2,1].map(st=>{
           const tot = [1,2,3,4,5].reduce((a2,k)=>a2+((RVB.mixToDate||{})[k]||0),0);
@@ -4793,6 +4795,18 @@ function changeText(v, digits = 0) {
   const sign = v > 0 ? '+' : '';
   return `${sign}${(v * 100).toFixed(digits)}%`;
 }
+
+/**
+ * `31 Jul 2026`, not `2026-07-31` (MW). ISO is right in a filename and wrong in
+ * a sentence on an executive slide. Falls back to the raw string rather than
+ * printing "Invalid Date" if the input is ever not an ISO day.
+ */
+const niceDate = (iso) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+  if (!m) return String(iso || '');
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${Number(m[3])} ${MON[Number(m[2]) - 1]} ${m[1]}`;
+};
 
 const delta = (v, label) => {
   if (v === null || v === undefined) return `<span class="dlt none" data-tip="No ${esc(label)} data to compare against">—</span>`;
@@ -6875,10 +6889,35 @@ function resizeChartsForPrint() {
   });
 }
 window.addEventListener('beforeprint', resizeChartsForPrint);
+/**
+ * AND AGAIN once the print layout is actually applied. `beforeprint` fires
+ * BEFORE Chrome relayouts, so the resize above measures screen dimensions and
+ * the canvas bitmap keeps the wrong aspect — which is what made a stretched
+ * chart look distorted. The print media query changes AFTER the relayout, so a
+ * resize here redraws at the real page size and the stretch becomes a no-op.
+ * Both are kept: whichever fires usefully, the chart ends up correct.
+ */
+if (window.matchMedia) {
+  const mq = window.matchMedia('print');
+  const onMq = (e) => { if (e.matches) resizeChartsForPrint(); };
+  if (mq.addEventListener) mq.addEventListener('change', onMq);
+  else if (mq.addListener) mq.addListener(onMq);
+}
 
 function printWhenImagesReady() {
+  /**
+   * FONTS FIRST. Google serves the CJK faces as per-subset unicode-range files
+   * that are fetched only when a glyph in that range is first needed. Print
+   * does not wait for them, so the dialog could open before the kanji subset
+   * had arrived and Chrome would rasterise the fallback — kana rendered, every
+   * ideograph missing. That is the symptom that survived TWO font fixes.
+   * `document.fonts.ready` settles once every face in use has resolved.
+   */
+  const fonts = document.fonts && document.fonts.ready
+    ? document.fonts.ready.catch(() => {})
+    : Promise.resolve();
   const imgs = [...document.images].filter(i => i.src && !i.complete);
-  if (!imgs.length) { window.print(); return; }
+  if (!imgs.length) { fonts.then(() => window.print()); return; }
   const done = Promise.all(imgs.map(i => new Promise(res => {
     i.loading = 'eager';
     i.addEventListener('load', res, { once: true });
@@ -6886,7 +6925,8 @@ function printWhenImagesReady() {
     // which is a finished state as far as printing is concerned.
     i.addEventListener('error', res, { once: true });
   })));
-  Promise.race([done, new Promise(res => setTimeout(res, 3000))]).then(() => window.print());
+  Promise.race([Promise.all([done, fonts]), new Promise(res => setTimeout(res, 4000))])
+    .then(() => window.print());
 }
 
 // Light tooltips across every chart — the default dark panel reads as harsh
@@ -6918,7 +6958,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.156.0';
+const CLIENT_BUILD = '3.157.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
