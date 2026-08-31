@@ -723,7 +723,9 @@
       display:block!important;
       break-before:page;page-break-before:always;
       break-after:page;page-break-after:always;
-      box-sizing:border-box;height:7.5in;max-height:7.5in;overflow:hidden;
+      box-sizing:border-box;overflow:hidden;
+      /* Two pixels short of the sheet — see `.slide`. */
+      height:calc(7.5in - 2px);max-height:calc(7.5in - 2px);
       padding:0.34in 0.42in 0.3in;
     }
     /* A wrapper whose only job is to hold language pages must not clip them. */
@@ -930,7 +932,22 @@
     .slide{
       break-inside:auto;break-after:page;page-break-after:always;
       /* Full page now that @page has no margin of its own. */
-      height:7.5in;max-height:7.5in;overflow:hidden;
+      /**
+       * TWO PIXELS SHORT OF THE SHEET, AND THAT IS THE WHOLE BUG BEHIND FOUR
+       * BLANK PAGES.
+       *
+       * `height:7.5in` is EXACTLY the printable height, so the box ends on the
+       * page boundary — and sub-pixel rounding lets it spill a fraction onto
+       * the next sheet. The following page box then asks for `break-before`,
+       * Chrome honours it against that fraction, and the result is an empty
+       * page. It happened after Facebook and after each Thai Content page,
+       * every one of which is an exact multiple of the page height.
+       *
+       * Invisible for as long as the export was being shrink-to-fit, which
+       * scaled the whole document and hid the overshoot. Once that stopped, the
+       * page count read 29 for 24 sections.
+       */
+      height:calc(7.5in - 2px);max-height:calc(7.5in - 2px);overflow:hidden;
       /**
        * HORIZONTAL PADDING, because the slide is now the clipping box.
        * With `padding:0` the section headers sat hard against the page edge and
@@ -1056,59 +1073,49 @@
      */
     .slide-fill:has(#repUsers) > .grid{flex:0 0 80%!important;}
     /**
-     * VERTICALLY CENTRED ON EVERY PAGE (MW).
+     * VERTICALLY CENTRED ON EVERY PAGE (MW), WITH TWO FLEX SPACERS.
      *
-     * The slide is already a column flexbox and every child is `flex:0 0 auto`,
-     * so a short section sat in the top third with all the slack below it. Two
-     * `auto` margins in a flex container SPLIT the free space equally, so this
-     * centres the body in whatever is left under the title while the title
-     * itself stays pinned to the top of the page.
+     * Third mechanism, and the first that does not touch pagination. The
+     * history is worth keeping because each attempt failed differently:
      *
-     * Nothing needed a wrapper element and nothing measures anything, which is
-     * why this is two lines rather than a layout pass: a slide with no free
-     * space — `slide-fill`, `slide-flow` — has nothing for the autos to absorb
-     * and is untouched.
+     *  1. Two `auto` margins, on the first and last body child. Correct CSS,
+     *     wrong assumption — the element directly after the title is often the
+     *     `no-print` tab strip, which is `display:none`, so the margin landed
+     *     on nothing and Search and Content stayed pinned to the top.
+     *  2. `position:absolute` on the title plus `justify-content:center`. It
+     *     measured perfectly and PAGINATED BADLY: taking the title out of the
+     *     flow and making every slide a containing block gave Facebook a page
+     *     containing nothing but its own header, and left two Content slides
+     *     with a blank continuation page. Invisible until the PDF stopped being
+     *     shrink-to-fit, at which point it was obvious.
+     *  3. This. `::before` and `::after` are flex items, so two zero-basis
+     *     spacers either side of the body absorb the free space and split it
+     *     equally. `order` puts the title first and the spacers around what
+     *     follows. Nothing leaves the flow, nothing becomes a containing block,
+     *     no padding is faked, and the body's first child can be hidden without
+     *     consequence.
+     *
+     * Excluded, deliberately: `slide-fill` and `slide-flow`. A fill slide's card
+     * already carries `flex:1 1 auto`, so adding growable spacers would make it
+     * share the slack three ways instead of taking it; a flow slide is
+     * `height:auto` and has no slack to split. Sessions overview is the one fill
+     * slide that opts back in, because its grid is pinned to 80% above and the
+     * remaining fifth is exactly what wants centring.
      */
+    .slide:not(.slide-fill):not(.slide-flow):not(.slide-pages)::before,
+    .slide:not(.slide-fill):not(.slide-flow):not(.slide-pages)::after,
+    .slide-fill:has(#repUsers)::before,.slide-fill:has(#repUsers)::after,
+    .lang-page::before,.lang-page::after,
+    .clang-page::before,.clang-page::after{
+      content:'';display:block;flex:1 1 0;min-height:0;}
+    .slide > .slide-title,.lang-page > .slide-title,.clang-page > .slide-title{order:0;}
+    .slide::before,.lang-page::before,.clang-page::before{order:1;}
+    .slide > *:not(.slide-title),.lang-page > *:not(.slide-title),
+    .clang-page > *:not(.slide-title){order:2;}
+    .slide::after,.lang-page::after,.clang-page::after{order:3;}
     /* The language pages are their own page box (see above) but were laid out
        as blocks, so they had no flex container to centre in. */
     .lang-page,.clang-page{display:flex!important;flex-direction:column;}
-    .slide,.lang-page,.clang-page{position:relative;justify-content:center;}
-    /**
-     * THE TITLE LEAVES THE FLOW so it cannot be centred with the body. Two
-     * `auto` margins were tried first and are the tidier CSS, but the element
-     * directly after the title is often the `no-print` tab strip — `display:
-     * none`, so the margin lands on nothing and the whole section stays pinned
-     * to the top. Taking the title out of the flow and centring what is left
-     * does not care what the body's first child turns out to be.
-     *
-     * The space it used to occupy is given back as `padding-top`: 0.34in of
-     * page padding plus the title's own 2.5rem box and its 10px rule gap.
-     */
-    .slide > .slide-title,.lang-page > .slide-title,.clang-page > .slide-title{
-      position:absolute!important;top:0.34in;left:0.42in;right:0.42in;margin:0!important;}
-    .slide,.lang-page,.clang-page{padding-top:calc(0.34in + 50px);}
-    /**
-     * GBP AND GOOGLE REVIEWS ARE OUT OF THE CENTRING (MW: "still brutally
-     * damaged ... roll them back to the version before I report").
-     *
-     * These two pages came back wrong twice and I could not reproduce either
-     * report — both render clean here, in DOM measurement and in a rasterised
-     * PDF. What they have that the rest of the deck does not is FOUR canvases
-     * across two columns, and the centring above is the only global print
-     * change between the last good export and the first bad one. So they go
-     * back to exactly the v3.157 geometry: title in the flow, no positioned
-     * ancestor, no free-space distribution.
-     *
-     * This is a rollback, not a fix. If MW's next export still shows it, the
-     * centring was NOT the cause and the search moves on with one suspect
-     * eliminated instead of none.
-     */
-    .slide:has(canvas[id^="gbpImp"]),.slide:has(#rvMonth),.slide:has(#rvStack){
-      position:static;justify-content:normal;padding-top:0.34in;}
-    .slide:has(canvas[id^="gbpImp"]) > .slide-title,
-    .slide:has(#rvMonth) > .slide-title,
-    .slide:has(#rvStack) > .slide-title{
-      position:static!important;top:auto;left:auto;right:auto;margin:0 0 10px!important;}
     /**
      * CHAT BUBBLE ON ONE PAGE (MW: "still break to 2 page — find a way to fix").
      *
@@ -1249,6 +1256,21 @@
     .fn-bar{padding:5px 12px;font-size:13px;}
     .fn-stage,.fn-lab{font-size:9.5px;}
     .grid{gap:10px;break-inside:avoid;page-break-inside:avoid;}
+    /**
+     * A FLOW SLIDE'S GRID MAY BREAK, and must, or the slide leaves a blank
+     * sheet behind it.
+     *
+     * `slide-flow` exists precisely because the section is taller than a page.
+     * With `break-inside:avoid` its grid cannot start on a page that has a
+     * title's worth of height already used, so Chrome moves the WHOLE slide to
+     * the next sheet — and the page the forced break already turned to is left
+     * empty. Facebook was doing exactly that: blank sheet, then the section.
+     *
+     * The only sections carrying `slide-flow` are ones MW has agreed may run
+     * on, so letting their grid split is what he asked for; it is the empty
+     * page that was never intended.
+     */
+    .slide-flow .grid{break-inside:auto;page-break-inside:auto;}
     /* Hold the two-up layouts in print. Collapsed to one column they push the
        second card onto its own page, which is what split Sessions overview
        across pages 2 and 3. */
@@ -3507,12 +3529,20 @@ function renderReport() {
     const c = TK.channel;
     const engMax = Math.max(c.likes, c.comments, c.shares, 1);
     const clkMax = Math.max(c.bioLinkClicks, c.phoneClicks, 1);
+    /**
+     * FULLY ROUND, LIKE EVERY OTHER BAR ON THE DECK (MW: "TK bar is rounded
+     * corner not full round like other charts, keep it consistent").
+     *
+     * These were the only value bars authored with a corner radius smaller than
+     * half their height — 4px on a 21px pill — so they read as a different
+     * component from the funnel stages and the rating mix, which are pills.
+     */
     const bar = (lab, val, max, col) => `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
         <div style="width:104px;font-size:11px;color:var(--ink-2)">${esc(lab)}</div>
         <div style="flex:1;min-width:0">
-          <div style="width:${Math.max(4, Math.round((val/max)*100))}%;min-width:34px;background:${col};
-                      color:#fff;border-radius:4px;padding:3px 8px;text-align:right;
+          <div style="width:${Math.max(4, Math.round((val/max)*100))}%;min-width:38px;background:${col};
+                      color:#fff;border-radius:20px;padding:3px 9px;text-align:right;
                       font-size:11px;font-weight:700">${num(val)}</div>
         </div>
       </div>`;
@@ -7325,7 +7355,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.161.0';
+const CLIENT_BUILD = '3.162.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

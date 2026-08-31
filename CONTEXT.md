@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.161.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.162.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,76 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.162.0 — THE SHRINK-TO-FIT IS GONE, and it was hiding four blank pages.
+Centring reimplemented without touching pagination. TikTok bars.**
+
+**READ THIS FIRST: `pg.pdf()` IS TRUSTWORTHY AGAIN.** Since v3.150 the rendered
+PDF came out shrunk to about two-thirds, which is why CONTEXT has been saying
+the PDF lies about vertical geometry. It does not any more — a card's left edge
+now measures 42px against the 0.42in (40px) padding it is authored with. The
+horizontal overflow that was triggering Chrome's fit-to-page is gone, most
+likely with the chart-box changes in v3.161. **Rasterise and look at pages
+again; that instruction was withdrawn and is now reinstated.**
+
+The first thing it showed: **the deck was printing 29 pages for 24 sections.**
+Four blank sheets and a page containing nothing but the word FACEBOOK — none of
+it visible while everything was being scaled to fit.
+
+**BLANK PAGE CAUSE 1: `height:7.5in` IS EXACTLY THE PAGE.** A page box the same
+height as its fragmentainer ends ON the boundary, and sub-pixel rounding lets it
+spill a fraction onto the next sheet. The following box's `break-before` is then
+honoured against that fraction and Chrome emits an empty page. It hit after
+Facebook and after each Thai Content page — every section that is an exact
+multiple of the page height. `.slide`, `.lang-page` and `.clang-page` are now
+`calc(7.5in - 2px)`. Two pixels; four pages.
+
+**BLANK PAGE CAUSE 2: `break-inside:avoid` ON A FLOW SLIDE'S GRID.**
+`slide-flow` exists because the section is taller than a page — but with the
+grid unbreakable it could not start on a sheet that had already spent a title's
+worth of height, so Chrome moved the whole slide to the next one and left the
+page the forced break had just turned to empty. `.slide-flow .grid` may break.
+The sections carrying `slide-flow` are ones MW has already agreed may run on; it
+was only the empty page that was never intended.
+
+**CENTRING, THIRD MECHANISM — TWO FLEX SPACERS.** The v3.158 implementation
+(`position:absolute` title + `justify-content:center`) measured perfectly and
+paginated badly; it is the reason Facebook got a header-only page. Gone.
+`::before` and `::after` are flex items, so two zero-basis spacers either side
+of the body split the free space equally, with `order` keeping the title first.
+Nothing leaves the flow, nothing becomes a containing block, no padding is
+faked, and the body's first child may be `display:none` — which was what broke
+mechanism one. Excluded from `slide-fill` and `slide-flow`, where there is no
+slack to split; Sessions overview opts back in because its grid is pinned to 80%.
+
+**Because the mechanism no longer touches pagination, the v3.161 opt-out for GBP
+and Google reviews is REMOVED.** Both pages are centred like everything else and
+both render clean at true scale — verified by raster, not by reasoning.
+
+**ON MW'S GBP / GOOGLE REVIEWS REPORTS.** Three reports, no reproduction. At
+true scale both pages are correct: layout intact, chart type proportionate, no
+white boxes. The screenshots share a signature that content cannot produce — a
+hard vertical seam at the SAME x position on two pages with different layouts,
+everything on one side of it drawn ~1.5x larger, and in one shot the viewer's
+own "Search documents and file names for text" tooltip in frame. A PDF page has
+one transformation matrix; it cannot be at two scales at once. That is a tiled
+viewer showing stale tiles from the previous zoom level beside freshly rendered
+ones. **Next step is to read MW's actual file rather than a screenshot of it.**
+
+**TIKTOK BARS ARE PILLS** (MW: "rounded corner not full round like other charts,
+keep it consistent"). 4px radius on a 21px bar was the only value bar on the
+deck with a corner smaller than half its height, so it read as a different
+component from the funnel stages and the rating mix. 20px, and the minimum width
+goes 34 -> 38px to keep the figure inside.
+
+**CJK IS CONFIRMED FIXED** by MW. `document.fonts.load()` with the page's own
+characters was the answer; see v3.161.
+
+**A NOTE ON THE AUDIT.** Removing `break-after:page` from `.slide` looked like
+part of the blank-page fix and was not. `print:deck` failed immediately — ".slide
+has no break-after:page — sections will run together" — which is the rule
+working exactly as intended on a change that would have merged sections. It was
+restored; the 2px and the flow-grid break are the real fixes.
 
 **v3.161.0 — a styling pass. Funnel scale, flags, CJK subsets, mobile chart
 proportions, YouTube thumbnails; GBP and Google reviews rolled back.**
