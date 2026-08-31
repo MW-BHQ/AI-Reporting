@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.160.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.161.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,115 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.161.0 — a styling pass. Funnel scale, flags, CJK subsets, mobile chart
+proportions, YouTube thumbnails; GBP and Google reviews rolled back.**
+
+One block from MW, nine items. Grouped by what they actually were rather than
+by the order they arrived.
+
+**GBP AND GOOGLE REVIEWS ARE ROLLED BACK, NOT FIXED.** MW: "still brutally
+damaged — whatever you did roll them back to the version before I report". Both
+pages are now opted out of the v3.158 centring: title in the flow, no positioned
+ancestor, original page padding, no free-space distribution. I still cannot
+reproduce either report — both render clean here in DOM measurement AND in a
+rasterised PDF — and the centring is the only global print change between MW's
+last good export and the first bad one. What these two pages have that the rest
+of the deck does not is four canvases across two columns. **If the next export
+is still wrong, the centring was not the cause and one suspect is eliminated
+rather than none.** Do not "fix" this again without a reproduction.
+
+**THE FUNNEL BAR IS A POWER CURVE NOW** (MW: "the scale doesn't make sense ...
+at least make it long, mid, short — not long, short, short"). Linear width
+against the top stage gave BGH Thai 100 / 14 / 3 — one long bar and two stubs of
+the same length, so the reader could not see that Visits is five times Actions,
+which is the only thing a funnel is drawn for. `fnW()` raises the ratio to the
+0.45 power: the same figures become 100 / 42 / 20. Monotonic, so a bigger number
+is always a longer bar, and every stage still prints its own number. One helper
+replaces three copies of the linear formula — Search-by-language, Search Ads and
+Facebook each had their own.
+
+**FLAGS COME FROM CLDR, NOT FROM A MAP I TYPED.** Country rows lead with a flag
+instead of a rank number and the language matrix header carries a flag instead
+of "TH"/"EN". The language side already had `LANG_FLAG`. The country side needed
+name -> ISO-3166, and GA4 sends only the English name — so the index is built
+BACKWARDS out of `Intl.DisplayNames` at load: walk all 676 two-letter
+combinations, keep the ones CLDR names. It is the same table GA4's names come
+from, it cannot go stale, and it is 280 entries with nothing to proofread.
+
+Two traps, both caught by measuring rather than assuming:
+- **CLDR still answers for RETIRED codes.** "BU" gives Myanmar, "VD" gives
+  Vietnam, "DD" gives Germany — and an alphabetical walk lets those beat MM, VN
+  and DE into the index. There is no flag emoji for a retired code, so Myanmar
+  printed the letters "BU". Skipped by round-tripping each code through
+  `new Intl.Locale('und-XX').region`, which canonicalises a deprecated subtag to
+  its modern one: a code that does not survive the trip is not the current code.
+  Again from the browser's tables, not from a skip-list here.
+- GA4 shortens a few CLDR names, so the parenthetical, " SAR China" and "&" are
+  indexed as aliases. Anything unmatched keeps its rank number, so this is never
+  worse than what it replaced.
+
+**"(MoM)" -> "MoM"** in the matrix stub column (MW).
+
+**THE CJK BUG WAS `fonts.ready` ANSWERING A QUESTION NOBODY ASKED.** Fourth
+report, fourth cause, and the previous three were each correct about something
+else. The faces are named (v3.151), on the base stack (v3.156) and awaited
+(v3.157) — and still blank. `document.fonts.ready` resolves once the loads that
+are ALREADY PENDING settle; it promises nothing about a face the browser has not
+yet decided it needs. Google serves Noto SC and JP as ~100 per-subset files
+behind `unicode-range`, and Chrome requests a subset only when it is about to
+PAINT a glyph in that range. So: page loads, no ideograph painted, nothing
+pending, `ready` resolves instantly and truthfully, print opens, and only then
+does Chrome discover it needs the Han subset.
+
+`cjkFontsReady()` inverts it. It walks the document for CJK codepoints, reduces
+them to a character SET, and calls `document.fonts.load('400 16px "Noto Sans
+SC"', text)` — which NAMES the glyphs and returns a promise for the faces needed
+to draw them. Exactly the required subsets, no guessing which, no fetching the
+other ninety. The two CJK families also moved to their own stylesheet link with
+`display=block` instead of `swap`: for Latin, swap's paint-then-replace is the
+right trade; for Han the fallback has no ideographs, so swap paints blanks and a
+raster taken before the swap keeps them forever. Print wait cap 4s -> 6s, since
+it now has to cover fetches this code triggers itself.
+
+**GENERALISING: "we awaited it" IS NOT "we asked for it".** Images (v3.150),
+fonts (v3.157) and font SUBSETS (here) were the same bug three times. The test
+is not whether the page waits — it is whether anything has requested the asset
+before the wait begins.
+
+**CHART TYPE IS A FUNCTION OF CANVAS WIDTH** (MW: "all charts in mobile are
+unproportionally big — consider another render technique"). Every chart carried
+fixed 9-11px type, which is right on a 900px card and absurd on a 340px one: the
+legend, ticks and axis labels took more of the canvas than the data, and the
+dates collided. Chart.js font options are SCRIPTABLE, which is the technique
+worth having — `cvFont()`/`cvBox()` size from `ctx.chart.width`, so they are
+right at every width, follow a rotation or a window drag with no resize
+listener, and are right in print, where the page is narrower than the window the
+chart was drawn in. Measured: 653px canvas -> 10px legend, 316px -> 7.5px.
+
+Chart BOXES are a ratio on a phone rather than a pixel height, for the same
+reason — the authored `height:200px..270px` is a third of a wide card and most
+of a square on a narrow one. `aspect-ratio` 16/9 under 760px, 2/1 under 430px.
+
+**YOUTUBE TOP VIDEOS: THUMBNAIL AND PUBLISH DATE** (MW). Studio's CONTENT view
+puts the eleven-character video id in the `Content` column, which is what makes
+`i.ytimg.com/vi/<id>/mqdefault.jpg` possible at all. Both additions are
+conditional on the export rather than assumed from it:
+- The thumbnail is only built when the id MATCHES THE ID GRAMMAR. A
+  hand-maintained sheet is a hand-maintained sheet; if someone pastes the title
+  view, `id` is a sentence, and ten broken images would be the only symptom.
+- The date column appears only when Studio's "Video publish time" is switched
+  on. When it is not, the header is not drawn either and a note says which
+  setting to turn on — a column of ten dashes reads as missing data rather than
+  as an unticked box.
+
+**SCORECARD SPACING AND THE MoM CARD.** The ragged gap under every YouTube
+figure (MW: "unnecessary spacing which ruined the layout") was the comparison
+row wrapping BETWEEN a chip and its own label — "+238%" on one line and "YoY"
+alone on the next. Chip and label are now one unwrappable unit and the row
+wraps between the pairs. Chat Bubble's MoM scorecard takes the deck's green/red
+(MW), so the one number on that page whose sign is the message is no longer the
+only one in near-black.
 
 **v3.160.0 — the DESKTOP card wins in print. Chat Bubble and YouTube.**
 

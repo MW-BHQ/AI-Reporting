@@ -13,7 +13,16 @@
      that had kana but no Han, which is why Japanese showed カナ and dropped
      every kanji, and Chinese came out entirely blank. Google serves these with
      per-subset unicode-range, so only the codepoints actually used download. -->
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- SEPARATE REQUEST, AND `display=block` RATHER THAN `swap`, FOR THE CJK FACES.
+     `swap` paints the fallback immediately and replaces it when the real face
+     lands. For Latin that is the right trade. For Han it is the BUG: the
+     fallback has no ideographs, so `swap` paints blanks and — if the print
+     raster happens before the subset arrives — those blanks are what ends up in
+     the PDF, permanently. `block` holds the text invisible for a moment and
+     paints it once, correctly. Split into its own link because css2 applies one
+     `display` to the whole request and Poppins must keep `swap`. -->
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&display=block" rel="stylesheet">
 <!-- Chart.js stays self-hosted: a blocked CDN here breaks the page, not just the type. -->
 <script src="/vendor/chart.umd.js"></script>
 <style>
@@ -498,6 +507,26 @@
   td.barcell{position:relative;}
   td.barcell b{position:relative;}
   .stat .sub2{font-size:var(--text-xs);color:var(--faint);margin-top:2px;}
+  /**
+   * MoM / YoY ON ONE SCORECARD (MW: "unnecessary spacing which ruined the
+   * layout").
+   *
+   * The two comparisons used to be four inline nodes separated by `&nbsp;`, so
+   * a card narrow enough to wrap broke BETWEEN a chip and its own label —
+   * "+238%" on one line and "YoY" alone on the next, which is what left the
+   * ragged gap under every YouTube figure. Each chip and its label are now one
+   * unwrappable unit, and the row wraps between the pairs instead.
+   */
+  .cmp-row{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;}
+  .cmp-pair{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;}
+  /* Top videos: thumbnail then title, on one baseline. A fixed 16:9 box means
+     the rows stay the same height whether or not an image resolved, and the
+     placeholder keeps the titles aligned when an id is not an id. */
+  .yt-vid{display:flex;align-items:center;gap:12px;min-width:0;}
+  .yt-thumb{width:84px;height:47px;flex:0 0 auto;border-radius:6px;object-fit:cover;
+    background:var(--line);display:block;}
+  .yt-thumb-none{background:var(--line);}
+  @media(max-width:760px){ .yt-thumb{width:58px;height:33px;} }
   td.num.bad{color:#D9534F;font-weight:600;} td.num.good{color:#2E9E6F;font-weight:600;}
   .qec-head,.qec{display:inline-flex;align-items:center;}
   .qec-head b{width:38px;text-align:center;font-weight:600;color:var(--muted);}
@@ -761,6 +790,12 @@
   .tk-lab{color:var(--violet)!important;background:rgba(124,107,245,.10);
     border-radius:6px;padding:2px 7px;display:inline-flex!important;}
   .lflag{margin-right:8px;font-size:1.05em;line-height:1;
+    font-family:'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;}
+  /* The matrix header carries the flag ALONE (MW), so it is sized as a mark
+     rather than run in beside text. The written language name stays underneath,
+     which is what keeps it readable on Windows, where Segoe UI Emoji has no
+     flag glyphs and draws the two letters instead. */
+  .lmflag{font-size:19px;line-height:1.1;font-weight:700;color:var(--ink);
     font-family:'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;}
   .slide .card-title.tight{margin-top:var(--space-sm);margin-bottom:var(--space-sm);}
   .cb-page .grid + .grid{margin-top:24px;}
@@ -1053,6 +1088,28 @@
       position:absolute!important;top:0.34in;left:0.42in;right:0.42in;margin:0!important;}
     .slide,.lang-page,.clang-page{padding-top:calc(0.34in + 50px);}
     /**
+     * GBP AND GOOGLE REVIEWS ARE OUT OF THE CENTRING (MW: "still brutally
+     * damaged ... roll them back to the version before I report").
+     *
+     * These two pages came back wrong twice and I could not reproduce either
+     * report — both render clean here, in DOM measurement and in a rasterised
+     * PDF. What they have that the rest of the deck does not is FOUR canvases
+     * across two columns, and the centring above is the only global print
+     * change between the last good export and the first bad one. So they go
+     * back to exactly the v3.157 geometry: title in the flow, no positioned
+     * ancestor, no free-space distribution.
+     *
+     * This is a rollback, not a fix. If MW's next export still shows it, the
+     * centring was NOT the cause and the search moves on with one suspect
+     * eliminated instead of none.
+     */
+    .slide:has(canvas[id^="gbpImp"]),.slide:has(#rvMonth),.slide:has(#rvStack){
+      position:static;justify-content:normal;padding-top:0.34in;}
+    .slide:has(canvas[id^="gbpImp"]) > .slide-title,
+    .slide:has(#rvMonth) > .slide-title,
+    .slide:has(#rvStack) > .slide-title{
+      position:static!important;top:auto;left:auto;right:auto;margin:0 0 10px!important;}
+    /**
      * CHAT BUBBLE ON ONE PAGE (MW: "still break to 2 page — find a way to fix").
      *
      * v3.158 went three-across to buy the rows. Wrong lever: MW then asked for
@@ -1298,7 +1355,24 @@
     .nav-item.sub{margin-left:0;}
     .brand{flex-direction:row;padding:0;}.brand-logo{width:112px;}
     .main{padding:18px 16px 40px;}
+    /**
+     * A CHART BOX IS A RATIO ON A PHONE, NOT A PIXEL HEIGHT.
+     *
+     * Every chart is authored with an explicit `height:200px`..`height:270px`,
+     * which is a sensible third of a wide card and most of a square on a 340px
+     * one — the reason the mobile charts read as oversized. `height:auto` plus
+     * an aspect ratio makes the box derive from whatever width it actually got,
+     * so the proportions hold at any screen size instead of at one.
+     *
+     * `!important` because the heights are inline styles, and inline beats a
+     * class. Print is unaffected: the print block sets its own heights and
+     * comes later in the cascade.
+     */
+    .chart-wrap{height:auto!important;max-height:none!important;aspect-ratio:16/9;}
   }
+  /* Narrower still and 16:9 is taller than it looks — a phone in portrait has
+     ~330px of card, and the axis needs to stay a minority of it. */
+  @media(max-width:430px){ .chart-wrap{aspect-ratio:2/1;} }
 </style>
 </head>
 <body>
@@ -1655,7 +1729,98 @@ function num(v, opts = {}) {
   if (a >= 1e3) return (v/1e3).toFixed(1) + 'K';
   return String(Math.round(v));
 }
+/**
+ * COUNTRY FLAG FROM THE COUNTRY NAME (MW: "put emoji flags instead of numbers").
+ *
+ * GA4 gives the English CLDR region name and no code, so a flag needs a
+ * name -> ISO-3166 alpha-2 lookup. A hand-written map of 249 countries is the
+ * obvious way and the wrong one: it goes stale, it is 249 chances to typo, and
+ * it silently returns nothing for whatever country turns up next month.
+ *
+ * `Intl.DisplayNames` already holds the table — the browser ships CLDR, which
+ * is the same source GA4's names come from. So the index is built BACKWARDS
+ * from it: walk all 676 two-letter combinations, ask for each one's English
+ * region name, and keep the ones that answer with something other than the
+ * code itself. It runs once, takes under a millisecond, and is correct by
+ * construction rather than by proofreading.
+ *
+ * Three alias forms are indexed because GA4 shortens a few of CLDR's names:
+ * the parenthetical is stripped ("Myanmar (Burma)" -> "Myanmar"), " SAR China"
+ * is stripped ("Hong Kong SAR China" -> "Hong Kong"), and "&" is spelled out.
+ *
+ * Unmatched names fall back to the rank number, so this is never worse than
+ * what it replaced.
+ */
+const COUNTRY_CC = (() => {
+  const idx = {};
+  try {
+    if (!(window.Intl && Intl.DisplayNames)) return idx;
+    const dn = new Intl.DisplayNames(['en'], { type: 'region', fallback: 'none' });
+    const put = (name, cc) => {
+      const k = String(name || '').trim().toLowerCase();
+      if (k && !idx[k]) idx[k] = cc;
+    };
+    for (let a = 65; a <= 90; a++) {
+      for (let b = 65; b <= 90; b++) {
+        const cc = String.fromCharCode(a, b);
+        /**
+         * DEPRECATED CODES MUST LOSE. CLDR still answers for the retired ones —
+         * "BU" gives Myanmar, "VD" gives Vietnam, "DD" gives Germany — and
+         * because the walk is alphabetical those beat MM, VN and DE to the
+         * index. There is no flag emoji for a retired code, so the result was
+         * the letters "BU" and "VD" printed beside Myanmar and Vietnam.
+         *
+         * `Intl.Locale` canonicalises a region subtag, replacing a deprecated
+         * code with its modern equivalent. A code that does not survive that
+         * round trip is not the current code for its country, so it is skipped
+         * — again from the browser's own tables rather than from a list here.
+         */
+        let canon;
+        try { canon = new Intl.Locale('und-' + cc).region; } catch (e) { continue; }
+        if (canon !== cc) continue;
+        let name;
+        try { name = dn.of(cc); } catch (e) { continue; }
+        if (!name || name === cc) continue;
+        put(name, cc);
+        put(name.replace(/\s*\([^)]*\)\s*/g, ' '), cc);
+        put(name.replace(/\s+SAR China$/i, ''), cc);
+        put(name.replace(/&/g, 'and'), cc);
+      }
+    }
+  } catch (e) { /* no Intl.DisplayNames: every country falls back to its rank */ }
+  return idx;
+})();
+/** Regional-indicator pair for an alpha-2 code. */
+const ccFlag = (cc) => String.fromCodePoint(
+  ...[...String(cc)].map(ch => 0x1F1E6 + ch.toUpperCase().charCodeAt(0) - 65));
+const countryFlag = (name) => {
+  const cc = COUNTRY_CC[String(name || '').trim().toLowerCase()];
+  return cc ? `<span class="lflag">${ccFlag(cc)}</span>` : '';
+};
 const isNA = (v) => v === null || v === undefined;
+/**
+ * FUNNEL BAR WIDTH (MW: "search bar scale doesn't make sense ... at least make
+ * it long, mid, short - not long, short, short").
+ *
+ * A funnel is a power law. Linear width against the top stage gave BGH Thai
+ * 100% / 14% / 3%, which reads as one long bar and two stubs of the same
+ * length — the reader cannot see that Visits is five times Actions, which is
+ * the whole point of drawing it.
+ *
+ * A power curve fixes the READABILITY without lying about the ORDER: it is
+ * monotonic, so a bigger number is always a longer bar, and every stage keeps
+ * its printed figure beside it for the actual magnitude. 0.45 was chosen
+ * because it turns that same 100 / 14 / 3 into 100 / 42 / 20 — long, mid,
+ * short — while a genuinely tiny stage still reads as tiny.
+ *
+ * Shared by Search-by-language, Search Ads and Facebook, which had three
+ * copies of the linear formula and would otherwise drift apart.
+ */
+function fnW(val, max, floor = 7) {
+  const v = Number(val) || 0, m = Number(max) || 0;
+  if (m <= 0 || v <= 0) return floor;
+  return Math.max(floor, Math.min(100, Math.round(Math.pow(v / m, 0.45) * 100)));
+}
 /**
  * Numeric coercion where a null must contribute 0 to a SUM rather than NaN.
  *
@@ -2378,6 +2543,23 @@ function renderReport() {
   const kpi = (lab, val, sub) => `<div class="stat"><div class="lab">${lab}</div>
     <div class="val">${val}</div>${sub?`<div class="sub2">${sub}</div>`:''}</div>`;
   /**
+   * A CHANGE SCORECARD IS COLOURED LIKE EVERY OTHER CHANGE (MW: "consider use
+   * the same color scheme on MoM for +/-").
+   *
+   * Chat Bubble's MoM card printed its percentage in the same near-black as
+   * Bubble Clicks beside it, so the one number on the page whose SIGN is the
+   * message was the only one not carrying the green/red the rest of the deck
+   * uses. Same thresholds as `dlt` — a flat month stays grey rather than being
+   * called an improvement.
+   */
+  const kpiChange = (lab, v, sub) => {
+    const tone = v === null || v === undefined ? 'var(--muted)'
+      : (v > 0.005 ? '#2E9E6F' : (v < -0.005 ? '#D9534F' : 'var(--muted)'));
+    const txt = v === null || v === undefined ? '\u2014' : changeText(v);
+    return `<div class="stat"><div class="lab">${lab}</div>
+      <div class="val" style="color:${tone}">${txt}</div>${sub?`<div class="sub2">${sub}</div>`:''}</div>`;
+  };
+  /**
    * Mini scorecard for the dense 2x5 grids. Takes a key-event id so the icon
    * comes from the SHARED set rather than a one-off glyph, which is what keeps
    * the icons consistent between the cards and the table beneath them.
@@ -2583,7 +2765,7 @@ function renderReport() {
         <div class="card-title">${hlogo(c.key, 30)}</div>
         <table class="sortable" data-heat="1"><thead><tr><th>Country</th><th class="num">Sessions</th><th class="num">MoM</th></tr></thead><tbody>
         ${c.rows.length ? c.rows.map((r,i)=>`<tr>
-          <td class="strong">${i+1}. ${esc(r.country)}</td>
+          <td class="strong">${countryFlag(r.country) || `${i+1}. `}${esc(r.country)}</td>
           <td class="num" style="font-weight:600">${num(r.sessions)}</td>
           <td class="num">${dlt(r.mom)}</td></tr>`).join('')
           : '<tr><td colspan="3" class="num">no data</td></tr>'}
@@ -2596,10 +2778,13 @@ function renderReport() {
   const langMatrixBody = (LM && LM.available && LM.rows.some(r => r.cells.some(c => c.sessions))) ? `
     <div class="card">
       <table class="roomy"><thead><tr><th></th>
-        ${LM.locales.map(l=>`<th class="num"><div style="font-size:13px;font-weight:700;color:var(--ink)">${esc(l.code)}</div>
-          <div style="font-size:9.5px;font-weight:400;color:var(--faint)">${esc(l.label)}</div></th>`).join('')}
+        ${LM.locales.map(l=>{
+          const fl = LANG_FLAG[String(l.code||'').toLowerCase()];
+          return `<th class="num"><div class="lmflag">${fl || esc(l.code)}</div>
+          <div style="font-size:9.5px;font-weight:400;color:var(--faint)">${esc(l.label)}</div></th>`;
+        }).join('')}
       </tr></thead><tbody>
-      ${LM.rows.map(r=>`<tr><td>${hlogo(r.key, 26)}<div style="font-size:9.5px;color:var(--faint);font-weight:600">(MoM)</div></td>
+      ${LM.rows.map(r=>`<tr><td>${hlogo(r.key, 26)}<div style="font-size:9.5px;color:var(--faint);font-weight:600">MoM</div></td>
         ${r.cells.map(c=>`<td class="num">
           <div style="font-size:14px;font-weight:600">${c.sessions?num(c.sessions):'\u2014'}</div>
           <div style="font-size:9.5px">${c.sessions?dltPlain(c.mom):''}</div></td>`).join('')}
@@ -2633,8 +2818,8 @@ function renderReport() {
         ${SB.map(t=>`<button class="lang-tab ${t.key===activeLang?'active':''}" data-lang="${esc(t.key)}">${esc(t.label)}</button>`).join('')}
       </div>`;
       const mx = Math.max(x.impressions||1, 1);
-      const pv = Math.max(8, Math.round((x.visits/mx)*100));
-      const pa = Math.max(6, Math.round((x.actionsTotal/mx)*100));
+      const pv = fnW(x.visits, mx);
+      const pa = fnW(x.actionsTotal, mx);
       return `<div class="lang-page ${x.key===activeLang?'active':''}" data-langpage="${esc(x.key)}">
         <div class="slide-title" style="margin-top:0"><span>${plogo('google')}Search \u00b7 ${esc(x.label)} <span class="all-four">${esc(sel)}</span></span>${logoImg}</div>
         ${langTabs}
@@ -2941,7 +3126,7 @@ function renderReport() {
           ${kpi(s.basis === 'opens' ? 'Bubble Clicks' : 'Channel clicks', num(s.total),
             s.basis === 'opens' ? `${num(s.channelClicks)} channel clicks`
                                 : 'bubble clicks not tracked')}
-          ${kpi('MoM', s.totalChangePct === null ? '\u2014' : changeText(s.totalChangePct),
+          ${kpiChange('MoM', s.totalChangePct,
             s.totalPrev ? `vs ${num(s.totalPrev)} last month` : '')}
           ${kpi('BHQ share', s.bhqShare === null ? '100%' : (s.bhqShare * 100).toFixed(1) + '%',
             s.bhqShare === null ? 'all four hospitals'
@@ -3199,7 +3384,7 @@ function renderReport() {
             ['','Post engagements',FB.page.engagements],
             ['MOFU','Visits',FB.visits],
             ['BOFU','Actions',FB.actionsTotal]].map(([stage,lab,val],i)=>{
-          const w = FB.page.impressions ? Math.max(9, Math.round((val/FB.page.impressions)*100)) : 100;
+          const w = fnW(val, FB.page.impressions, 9);
           const tone = ['#4B8DF8','#6BA3F7','#9CC3FA','#C6DBFC'][i];
           return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
             <div style="width:42px;font-size:var(--text-3xs);font-weight:700;color:var(--faint)">${stage}</div>
@@ -3264,8 +3449,8 @@ function renderReport() {
   const SAB = (SA.byBrand || []).find(x => x.key === sel) || null;
   const searchAdsBody = (SA.available && SAB) ? (() => {
     const mx = Math.max(SAB.impressions || 1, 1);
-    const pv = Math.max(8, Math.round((SAB.visits / mx) * 100));
-    const pa = Math.max(6, Math.round((SAB.actionsTotal / mx) * 100));
+    const pv = fnW(SAB.visits, mx);
+    const pa = fnW(SAB.actionsTotal, mx);
     return `
     <div class="grid g-2">
       <div class="card">
@@ -3451,9 +3636,9 @@ function renderReport() {
      * percentage on a hospital deck is unreadable without knowing what it is
      * measured against, so the tooltips name the window.
      */
-    const cmp = (k) => `<div class="note" style="margin-top:6px">
-      ${dlt(mom[k], 'MoM \u2014 same length of window, one month back')} MoM
-      &nbsp;&nbsp;${dlt(yy[k], 'YoY \u2014 the same dates one year earlier')} YoY</div>`;
+    const cmp = (k) => `<div class="note cmp-row" style="margin-top:6px">
+      <span class="cmp-pair">${dlt(mom[k], 'MoM \u2014 same length of window, one month back')} MoM</span>
+      <span class="cmp-pair">${dlt(yy[k], 'YoY \u2014 the same dates one year earlier')} YoY</span></div>`;
     /**
      * Built on the same `stat` markup `kpi()` emits rather than a private set of
      * class names, so it inherits the rem type scale and cannot drift from every
@@ -3568,20 +3753,47 @@ function renderReport() {
       ['likes', 'Likes', (v) => num(v.likes)],
       ['comments', 'Comments', (v) => num(v.comments)],
     ].filter(([k]) => has(k));
+    /**
+     * THUMBNAIL AND PUBLISH DATE (MW: "put thumbnails in front of the text
+     * title, also put a col of release date").
+     *
+     * Both are conditional on the export, not assumed from it. The thumbnail
+     * comes from the video id, which the server only passes through when it
+     * matches the id grammar; the date column appears only when Studio's
+     * "Video publish time" is switched on. When it is not, the header is not
+     * drawn either — a column of ten dashes reads as missing data rather than
+     * as a setting nobody has turned on, so the note says which it is.
+     *
+     * `mqdefault` (320x180) rather than `default` (120x90): the larger file is
+     * still tiny and the small one is visibly soft at 84px on a retina screen
+     * and in a printed deck. `onerror` removes the image instead of leaving a
+     * broken-image glyph, and leaves the title where it was.
+     */
+    const anyPub = YT.videosHavePublished && vids.some(v => v.published);
+    const thumb = (v) => v.thumb
+      ? `<img class="yt-thumb" src="https://i.ytimg.com/vi/${esc(v.thumb)}/mqdefault.jpg"
+           alt="" loading="eager" onerror="this.remove()">`
+      : '<span class="yt-thumb yt-thumb-none"></span>';
     return `<div class="card">
       <div class="card-title">Top videos</div>
       <table class="sortable" data-heat="1"><thead><tr>
-        <th>Video</th><th class="num">Views</th><th></th>
+        <th>Video</th>${anyPub ? '<th class="num">Published</th>' : ''}
+        <th class="num">Views</th><th></th>
         ${cols.map(([, label]) => `<th class="num">${esc(label)}</th>`).join('')}
       </tr></thead><tbody>
       ${vids.map(v => `<tr>
-        <td class="strong i18n" title="${esc(v.id)}">${esc(v.title || v.id)}</td>
+        <td class="strong i18n" title="${esc(v.id)}"><div class="yt-vid">${thumb(v)}
+          <span>${esc(v.title || v.id)}</span></div></td>
+        ${anyPub ? `<td class="num">${v.published ? esc(v.published) : '\u2014'}</td>` : ''}
         <td class="num strong">${num(v.views)}</td>
         <td style="width:22%"><div style="height:7px;border-radius:4px;background:var(--violet);
           width:${Math.max(3, Math.round(((v.views || 0) / vmx) * 100))}%"></div></td>
         ${cols.map(([, , fn]) => `<td class="num">${fn(v)}</td>`).join('')}
       </tr>`).join('')}
       </tbody></table>
+      ${anyPub ? '' : `<div class="note">No publish date in this export. Switch
+        <b>Video publish time</b> on in YouTube Studio's Content view and the column
+        appears here automatically.</div>`}
     </div>`;
   })() : '';
 
@@ -3693,11 +3905,11 @@ function renderReport() {
         options:{ responsive:true, maintainAspectRatio:false, animation:false,
           // Stacked: the months chart is about the group total AND its mix.
           scales:{ x:{ stacked:true, grid:{display:false},
-                       ticks:{color:'#8A94AD',font:{family:'Poppins',size:9}} },
+                       ticks:{color:'#8A94AD',font:cvFont(9),autoSkipPadding:8} },
                    y:{ stacked:true, beginAtZero:true, grid:{color:'#EEF1F8'},
-                       ticks:{color:'#8A94AD',font:{family:'Poppins',size:9},
+                       ticks:{color:'#8A94AD',font:cvFont(9),autoSkipPadding:8,
                               callback:(v)=> v>=1e6?(v/1e6)+'M' : v>=1e3?(v/1e3)+'K' : v} } },
-          plugins:{ legend:{ labels:{color:'#4C5878',font:{family:'Poppins',size:10},usePointStyle:true,boxWidth:7} } } },
+          plugins:{ legend:{ labels:{color:'#4C5878',font:cvFont(10),usePointStyle:true,boxWidth:cvBox(7)} } } },
       });
     }
   }
@@ -3737,12 +3949,12 @@ function renderReport() {
             band('s3','#F2A93B','3\u2605'), band('s2','#EE8A5B','2\u2605'), band('s1','#D9534F','1\u2605'),
           ]},
           options:{ responsive:true, maintainAspectRatio:false, animation:false,
-            scales:{ x:{ stacked:true, grid:{display:false}, ticks:{color:'#8A94AD',font:{family:'Poppins',size:9}} },
+            scales:{ x:{ stacked:true, grid:{display:false}, ticks:{color:'#8A94AD',font:cvFont(9),autoSkipPadding:8} },
                      y:{ stacked:true, beginAtZero:true, grid:{color:'#EEF1F8'},
-                         ticks:{color:'#8A94AD',font:{family:'Poppins',size:9}} },
+                         ticks:{color:'#8A94AD',font:cvFont(9),autoSkipPadding:8} },
                      y1:{ position:'right', grid:{display:false}, suggestedMin:3.5, suggestedMax:5,
-                          ticks:{color:'#8A94AD',font:{family:'Poppins',size:9}} } },
-            plugins:{ legend:{ labels:{color:'#4C5878',font:{family:'Poppins',size:10},usePointStyle:true,boxWidth:7} } } },
+                          ticks:{color:'#8A94AD',font:cvFont(9),autoSkipPadding:8} } },
+            plugins:{ legend:{ labels:{color:'#4C5878',font:cvFont(10),usePointStyle:true,boxWidth:cvBox(7)} } } },
         });
       }
     }
@@ -6505,7 +6717,7 @@ function renderGbp() {
         layout:{ padding:{ top:16 } },
         interaction:{mode:'index', intersect:false},
         plugins:{
-          legend:{ labels:{ color:'#4C5878', font:{family:'Poppins',size:10.5}, usePointStyle:true, boxWidth:8 } },
+          legend:{ labels:{ color:'#4C5878', font:cvFont(10.5), usePointStyle:true, boxWidth:cvBox(8) } },
           tooltip:{ callbacks:{
             // The dot already carries the all-time figure, so the tooltip is
             // free to answer the other question: how did THIS month do?
@@ -6522,9 +6734,9 @@ function renderGbp() {
           } },
         },
         scales:{
-          x:{ stacked:true, ticks:{ color:'#A7B0C7', font:{family:'Poppins',size:10} }, grid:{ display:false } },
+          x:{ stacked:true, ticks:{ color:'#A7B0C7', font:cvFont(10), autoSkipPadding:8 }, grid:{ display:false } },
           y:{ stacked:true, beginAtZero:true, title:{display:true,text:'Reviews',color:'#A7B0C7',font:{size:10}},
-              ticks:{ color:'#A7B0C7', font:{size:10}, precision:0 }, grid:{ color:'rgba(90,110,160,.09)' } },
+              ticks:{ color:'#A7B0C7', font:cvFont(10), autoSkipPadding:6, precision:0 }, grid:{ color:'rgba(90,110,160,.09)' } },
           y1:{ position:'right',
                // The running all-time score moves in hundredths, so a full 1-5
                // axis would flatten it into a straight line. Padded around the
@@ -6533,7 +6745,7 @@ function renderGbp() {
                            return Math.max(1, Math.min(4, Math.floor((Math.min(...v)-0.15)*10)/10)); })(),
                max: 5,
                title:{display:true,text:'Rating (all-time)',color:'#A7B0C7',font:{size:10}},
-               ticks:{ color:'#A7B0C7', font:{size:10} }, grid:{ display:false } },
+               ticks:{ color:'#A7B0C7', font:cvFont(10), autoSkipPadding:6 }, grid:{ display:false } },
         },
       },
     });
@@ -6826,6 +7038,43 @@ function drawFunnelChart(canvasId, stages) {
  * language. Horizontal by default because category labels are long and
  * multilingual, and rotated labels are unreadable at slide size.
  */
+/**
+ * CHART TYPE SCALES WITH THE CANVAS (MW: "all charts in mobile version are
+ * unproportionally big, make them look out of context — consider another
+ * render technique").
+ *
+ * Every chart carried fixed 9-11px type. That is right on a 900px card and
+ * absurd on a 340px one: on a phone the legend, the axis labels and the tick
+ * text take more of the canvas than the data does, and the date labels run
+ * into each other.
+ *
+ * Chart.js font options are SCRIPTABLE, which is the render technique worth
+ * having here — the size is a function of `ctx.chart.width`, so it is right at
+ * every width, follows a rotation or a window drag with no resize listener,
+ * and is right in print too, where the page is narrower than the window it was
+ * drawn in. There is no second copy of the sizes to keep in step.
+ *
+ * `autoSkipPadding` is raised alongside it: Chart.js skips a tick only when the
+ * NEXT one would overlap, and at these sizes "just touching" still reads as
+ * collided.
+ */
+function cvFont(base, weight) {
+  return (ctx) => {
+    const w = (ctx.chart && ctx.chart.width) || 900;
+    const k = w < 340 ? 0.72 : w < 480 ? 0.8 : w < 640 ? 0.88 : 1;
+    const o = { family: 'Poppins', size: Math.max(7.5, Math.round(base * k * 10) / 10) };
+    if (weight) o.weight = weight;
+    return o;
+  };
+}
+/** Legend point size has to come down with the text or it dwarfs it. */
+function cvBox(base) {
+  return (ctx) => {
+    const w = (ctx.chart && ctx.chart.width) || 900;
+    return w < 480 ? Math.max(4, base - 2) : base;
+  };
+}
+
 function drawBars(canvasId, labels, datasets, opts = {}) {
   const el = document.getElementById(canvasId);
   if (!el || !window.Chart) return;
@@ -6843,14 +7092,14 @@ function drawBars(canvasId, labels, datasets, opts = {}) {
       animation: false,          // print captures the canvas as-is
       plugins: {
         legend: { display: datasets.length > 1,
-          labels: { color:'#4C5878', font:{family:'Poppins',size:10}, usePointStyle:true, boxWidth:7 } },
+          labels: { color:'#4C5878', font:cvFont(10), usePointStyle:true, boxWidth:cvBox(7) } },
         tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${c.parsed[horizontal?'x':'y'].toLocaleString()}` } },
       },
       scales: {
         x: { beginAtZero: true, grid:{ color:'#EEF1F8' },
-             ticks:{ color:'#8A94AD', font:{family:'Poppins',size:9},
+             ticks:{ color:'#8A94AD', font:cvFont(9), autoSkipPadding:10,
                      callback:(v)=> v>=1e6?(v/1e6)+'M' : v>=1e3?(v/1e3)+'K' : v } },
-        y: { grid:{ display:false }, ticks:{ color:'#4C5878', font:{family:'Poppins',size:10} } },
+        y: { grid:{ display:false }, ticks:{ color:'#4C5878', font:cvFont(10), autoSkipPadding:6 } },
       },
     },
   });
@@ -6875,7 +7124,7 @@ function drawChart(canvasId, rows, series) {
         responsive: true, maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
         plugins: {
-          legend: { labels: { color:'#4C5878', font:{family:'Poppins',size:11}, usePointStyle:true, boxWidth:7 } },
+          legend: { labels: { color:'#4C5878', font:cvFont(11), usePointStyle:true, boxWidth:cvBox(7) } },
           tooltip: { callbacks: { title: (items) => {
             const d = items && items[0] && items[0].label;
             if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return d || '';
@@ -6885,8 +7134,8 @@ function drawChart(canvasId, rows, series) {
           } } },
         },
         scales: {
-          x: { ticks:{ color:'#A7B0C7', font:{family:'Poppins',size:10}, maxRotation:0, autoSkip:true, maxTicksLimit:8 }, grid:{ color:'rgba(90,110,160,.09)' } },
-          y: { position:'left', ticks:{ color:'#A7B0C7', font:{size:10} }, grid:{ color:'rgba(90,110,160,.09)' } },
+          x: { ticks:{ color:'#A7B0C7', font:cvFont(10), maxRotation:0, autoSkip:true, autoSkipPadding:12, maxTicksLimit:8 }, grid:{ color:'rgba(90,110,160,.09)' } },
+          y: { position:'left', ticks:{ color:'#A7B0C7', font:cvFont(10), autoSkipPadding:6 }, grid:{ color:'rgba(90,110,160,.09)' } },
           /**
            * THE RIGHT-HAND AXIS ONLY EXISTS WHEN A SERIES ASKS FOR IT.
            *
@@ -6901,7 +7150,7 @@ function drawChart(canvasId, rows, series) {
            * visibly wrong, rather than onto a phantom scale where it is not.
            */
           ...(series.some((s) => s.axis === 'y1')
-            ? { y1: { position:'right', ticks:{ color:'#A7B0C7', font:{size:10} }, grid:{ display:false } } }
+            ? { y1: { position:'right', ticks:{ color:'#A7B0C7', font:cvFont(10), autoSkipPadding:6 }, grid:{ display:false } } }
             : {}),
         },
       },
@@ -6974,20 +7223,65 @@ if (window.matchMedia) {
   else if (mq.addListener) mq.addListener(onMq);
 }
 
+/**
+ * ASK FOR THE CJK SUBSETS BY NAME, THEN WAIT (v3.161.0).
+ *
+ * `document.fonts.ready` was supposed to close this and did not — MW: "CN still
+ * broken, JP still broken", third report. `ready` resolves once the loads that
+ * are ALREADY PENDING settle; it makes no promise about a face the browser has
+ * not decided it needs yet. Google serves Noto SC and JP as ~100 per-subset
+ * files behind `unicode-range`, and Chrome requests a subset only when it is
+ * about to PAINT a glyph in that range. So the sequence was: page loads, no
+ * ideograph has been painted, nothing is pending, `ready` resolves instantly
+ * and truthfully, print opens, and only THEN does Chrome discover it needs the
+ * Han subset — too late to appear in the raster.
+ *
+ * `document.fonts.load(font, text)` inverts that: it names the glyphs up front
+ * and returns a promise for the faces required to draw them. Feeding it the
+ * document's own CJK characters means exactly the needed subsets are fetched,
+ * with no guessing at which ones and no downloading of the other ninety.
+ *
+ * Deduplicated to a character SET, because the argument is only used to pick
+ * subsets and a 4,000-character page would otherwise build a 4,000-character
+ * string for no gain.
+ */
+function cjkFontsReady() {
+  const F = document.fonts;
+  if (!F) return Promise.resolve();
+  const ready = F.ready ? F.ready.catch(() => {}) : Promise.resolve();
+  if (typeof F.load !== 'function') return ready;
+  const seen = new Set();
+  // Han, kana, and the CJK punctuation the titles use. Thai and Arabic are not
+  // here: Sarabun and the Arabic fallback are single-file faces.
+  const RE = /[\u2E80-\u303F\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/;
+  const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+    const t = n.nodeValue || '';
+    for (const ch of t) if (RE.test(ch)) seen.add(ch);
+  }
+  if (!seen.size) return ready;
+  const text = [...seen].join('');
+  const jobs = [];
+  for (const fam of ['Noto Sans SC', 'Noto Sans JP']) {
+    for (const w of ['400', '700']) {
+      try { jobs.push(F.load(`${w} 16px "${fam}"`, text)); } catch (e) { /* face absent */ }
+    }
+  }
+  return Promise.all(jobs.map(j => j.catch(() => {}))).then(() => ready);
+}
+
 function printWhenImagesReady() {
   /**
-   * FONTS FIRST. Google serves the CJK faces as per-subset unicode-range files
-   * that are fetched only when a glyph in that range is first needed. Print
-   * does not wait for them, so the dialog could open before the kanji subset
-   * had arrived and Chrome would rasterise the fallback — kana rendered, every
-   * ideograph missing. That is the symptom that survived TWO font fixes.
-   * `document.fonts.ready` settles once every face in use has resolved.
+   * FONTS FIRST — see `cjkFontsReady`. The faces the printed page needs are
+   * REQUESTED here rather than merely waited for, which is the difference
+   * between the previous three attempts and this one.
    */
-  const fonts = document.fonts && document.fonts.ready
-    ? document.fonts.ready.catch(() => {})
-    : Promise.resolve();
+  const fonts = cjkFontsReady();
   const imgs = [...document.images].filter(i => i.src && !i.complete);
-  if (!imgs.length) { fonts.then(() => window.print()); return; }
+  if (!imgs.length) {
+    Promise.race([fonts, new Promise(res => setTimeout(res, 6000))]).then(() => window.print());
+    return;
+  }
   const done = Promise.all(imgs.map(i => new Promise(res => {
     i.loading = 'eager';
     i.addEventListener('load', res, { once: true });
@@ -6995,7 +7289,10 @@ function printWhenImagesReady() {
     // which is a finished state as far as printing is concerned.
     i.addEventListener('error', res, { once: true });
   })));
-  Promise.race([Promise.all([done, fonts]), new Promise(res => setTimeout(res, 4000))])
+  // 6s, not 4s: the cap now has to cover the CJK subset fetches this function
+  // triggers itself, and a print that opens 300ms early loses every ideograph
+  // on the page — a worse outcome than waiting.
+  Promise.race([Promise.all([done, fonts]), new Promise(res => setTimeout(res, 6000))])
     .then(() => window.print());
 }
 
@@ -7028,7 +7325,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.160.0';
+const CLIENT_BUILD = '3.161.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

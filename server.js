@@ -4428,6 +4428,14 @@ async function buildYouTube(from, to) {
   const monthKey = String(from).slice(0, 7);
   const vHead = headOf(vids), vCol = colOf(vHead);
   const vMonth = vCol("month"), vId = vCol("content"), vTitle = vCol("video title");
+  /**
+   * PUBLISH DATE IS OPTIONAL, because it is a column someone has to switch on
+   * in Studio. Read by name like everything else, and simply absent from the
+   * payload when the export does not carry it — the slide then omits the column
+   * rather than printing ten dashes and inviting the question. `colOf` is
+   * exact-then-prefix, so "Video publish time" resolves from "video publish".
+   */
+  const vPub = vCol("video publish");
   const VM = { views: vCol("views"), hoursWatched: vCol("watch time"),
     shares: vCol("shares"), likes: vCol("likes"), comments: vCol("comments") };
   if (VM.hoursWatched >= 0 && !vHead[VM.hoursWatched].includes("hour")) VM.hoursWatched = -1;
@@ -4442,6 +4450,18 @@ async function buildYouTube(from, to) {
       && (vMonth < 0 || mKey(r[vMonth]) === monthKey))
     .map((r) => ({
       id: String(r[vId]).trim(),
+      /**
+       * THE THUMBNAIL IS ONLY OFFERED WHEN THE ID LOOKS LIKE AN ID.
+       *
+       * Studio's CONTENT view puts the eleven-character video id in this
+       * column, which is what makes `i.ytimg.com` thumbnails possible at all.
+       * But a hand-maintained sheet is a hand-maintained sheet: if someone
+       * pastes the title view instead, `id` is a sentence, and building a
+       * thumbnail URL from it would give ten broken images with no clue why.
+       * Checked against the id grammar rather than assumed.
+       */
+      thumb: /^[A-Za-z0-9_-]{11}$/.test(String(r[vId]).trim()) ? String(r[vId]).trim() : null,
+      published: vPub >= 0 ? (apptDay(r[vPub]) || null) : null,
       title: String(vTitle >= 0 ? (r[vTitle] || "") : "").trim(),
       views: VM.views >= 0 ? n(r[VM.views]) : null,
       hours: VM.hoursWatched >= 0 ? Math.round(n(r[VM.hoursWatched])) : null,
@@ -4463,6 +4483,7 @@ async function buildYouTube(from, to) {
     covered, stale,
     expectedDays: expected, foundDays: cur.days, dayGaps,
     videosMonth: monthKey,
+    videosHavePublished: vPub >= 0,
     series: { metric: M.views >= 0 ? "Views" : null, rows: series },
     videos: { rows: videoRows },
   };
