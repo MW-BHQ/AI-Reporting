@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.157.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.158.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,57 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.158.0 — every printed page is vertically centred; Sessions overview to 80%;
+Chat Bubble back onto one page.**
+
+Three asks from MW in one turn, all print layout.
+
+**VERTICAL CENTRING (MW: "try to align middle vertical, every page").** A short
+section sat in the top third with all its slack below it — deliberate since
+v3.151, when the global card stretch was removed, but it reads as an unfinished
+page. Every page box (`.slide`, `.lang-page`, `.clang-page`) now centres its
+body in the space under the title.
+
+The tidier CSS was two `auto` margins in the existing column flexbox — one on
+the first body child, one on the last — and it measured correctly on most
+slides. It is WRONG for Search and Content: the element directly after the title
+there is the `no-print` tab strip, which is `display:none`, so the margin landed
+on nothing and those pages stayed pinned to the top. So the title is taken OUT
+OF THE FLOW instead (`position:absolute`, its box given back as `padding-top`)
+and the container simply uses `justify-content:center`. That does not care what
+the body's first child turns out to be.
+
+**SESSIONS OVERVIEW AT 80% (MW).** `slide-fill` stretches to 100%, which made
+the chart the entire sheet. A flex-basis percentage resolves against the slide's
+content box, so `flex:0 0 80%` on that one grid is all it takes; the remaining
+20% becomes whitespace, which the centring rule then splits above and below.
+Scoped by `#repUsers` — the other fill slides still want the whole page.
+
+**CHAT BUBBLE ON ONE PAGE (MW: "still break to 2 page — find a way to fix").**
+It carried `slide-flow` and printed at the screen's two-across layout: five rows
+for ten channels, ~55px past the page, so it took a whole second page for one
+row of cards. Two-across cannot be tightened into fitting — the channel list
+grows, and at twelve channels it is six rows whatever the padding is. The COLUMN
+COUNT carries it instead, stepping with the card count so the block is never
+more than four rows: three across, four at thirteen or more channels, side inset
+6rem to 2rem to match. `slide-flow` removed, which also means `print-overflow.py`
+now measures this section — 24 sections, not 23.
+
+This is the one place the printed layout deliberately differs from the desktop
+one. Two across on screen is still right; on a fixed page it is the thing that
+does not fit.
+
+**MEASURE IN `emulate_media("print")`, NOT IN A RENDERED PDF.** Two of these
+changes appeared to have NO EFFECT in `pg.pdf()` output while the DOM showed
+them applied correctly, and half an hour went into the wrong explanation. The
+cause is that the printed document is ~1920px wide against a 1280px page, so
+Chrome shrink-to-fits the whole deck to ~⅔ and vertical space stops meaning what
+it looks like it means. `document.documentElement.scrollWidth` is 9516 at a
+1280px viewport — this is PRE-EXISTING, not from this release, and MW's own
+exports do not appear to suffer, so it is left alone. But it makes the PDF a
+liar about vertical layout. `print-overflow.py`'s DOM measurement is the
+authority; use `pg.pdf()` for eyeballing content, never for geometry.
 
 **v3.157.0 — the CJK bug was a TIMING bug; chat bubble polish.**
 

@@ -1012,6 +1012,74 @@
        to push the page. */
     .slide-fill .chart-wrap{flex:1 1 0;height:0!important;max-height:none!important;
       min-height:120px;}
+    /**
+     * SESSIONS OVERVIEW AT 80% OF THE PAGE (MW: "try 80% height").
+     *
+     * `slide-fill` stretches its grid to whatever is left, which on this slide
+     * is the entire sheet. A flex-basis percentage resolves against the slide's
+     * content box, so this pins the grid to 80% of the printable height and
+     * lets the remaining 20% fall out as whitespace — which the centring rule
+     * below then splits above and below it.
+     *
+     * Scoped by the canvas id, not by loosening `slide-fill`: the other fill
+     * slides (YouTube, Actions) still want the whole page.
+     */
+    .slide-fill:has(#repUsers) > .grid{flex:0 0 80%!important;}
+    /**
+     * VERTICALLY CENTRED ON EVERY PAGE (MW).
+     *
+     * The slide is already a column flexbox and every child is `flex:0 0 auto`,
+     * so a short section sat in the top third with all the slack below it. Two
+     * `auto` margins in a flex container SPLIT the free space equally, so this
+     * centres the body in whatever is left under the title while the title
+     * itself stays pinned to the top of the page.
+     *
+     * Nothing needed a wrapper element and nothing measures anything, which is
+     * why this is two lines rather than a layout pass: a slide with no free
+     * space — `slide-fill`, `slide-flow` — has nothing for the autos to absorb
+     * and is untouched.
+     */
+    /* The language pages are their own page box (see above) but were laid out
+       as blocks, so they had no flex container to centre in. */
+    .lang-page,.clang-page{display:flex!important;flex-direction:column;}
+    .slide,.lang-page,.clang-page{position:relative;justify-content:center;}
+    /**
+     * THE TITLE LEAVES THE FLOW so it cannot be centred with the body. Two
+     * `auto` margins were tried first and are the tidier CSS, but the element
+     * directly after the title is often the `no-print` tab strip — `display:
+     * none`, so the margin lands on nothing and the whole section stays pinned
+     * to the top. Taking the title out of the flow and centring what is left
+     * does not care what the body's first child turns out to be.
+     *
+     * The space it used to occupy is given back as `padding-top`: 0.34in of
+     * page padding plus the title's own 2.5rem box and its 10px rule gap.
+     */
+    .slide > .slide-title,.lang-page > .slide-title,.clang-page > .slide-title{
+      position:absolute!important;top:0.34in;left:0.42in;right:0.42in;margin:0!important;}
+    .slide,.lang-page,.clang-page{padding-top:calc(0.34in + 50px);}
+    /**
+     * CHAT BUBBLE ON ONE PAGE (MW: "still break to 2 page — find a way to fix").
+     *
+     * It carried `slide-flow` and used the screen's two-across layout in print,
+     * which is five rows for ten channels and ~55px past the page — so it took
+     * a second page for one row of cards. Two-across cannot be made to fit by
+     * tightening: the channel list grows, and at twelve channels it is six rows
+     * whatever the padding is.
+     *
+     * So the COLUMN COUNT carries it instead, stepping with the number of cards
+     * so the block is never more than four rows: three across normally, four
+     * once there are thirteen or more channels. The side inset comes down to
+     * match — 6rem was there to stop two wide cards spanning the sheet, and at
+     * three across the width is wanted.
+     *
+     * This is the one place the printed layout deliberately differs from the
+     * desktop one. Two across on screen is still right; on a fixed page it is
+     * the thing that does not fit.
+     */
+    .cb-wrap .cb-cards{padding-left:2rem!important;padding-right:2rem!important;}
+    .cb-wrap .cb-cards > .grid{grid-template-columns:repeat(3,1fr)!important;}
+    .cb-wrap .cb-cards > .grid:has(.cbc:nth-child(n+13)){
+      grid-template-columns:repeat(4,1fr)!important;}
   }
   @media print{
     /* 13.333in x 7.5in is the standard 16:9 slide canvas. */
@@ -3608,7 +3676,7 @@ function renderReport() {
     ${slide('TikTok', tkChannelBody, false, true, 'tiktok')}
     ${tkTopBody ? slide('TikTok \u00b7 Top performances', tkTopBody, false, true, 'tiktok') : ''}
     ${contentBody}
-    ${chatBody ? slide('Chat Bubble', chatBody, false, sel, null, false, true) : ''}`;
+    ${chatBody ? slide('Chat Bubble', chatBody, false, sel) : ''}`;
 
   // Charts must be drawn after the markup is in the DOM.
   if (U && U.months.length && window.Chart) {
@@ -6958,7 +7026,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.157.0';
+const CLIENT_BUILD = '3.158.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
