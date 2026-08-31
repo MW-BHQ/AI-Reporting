@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.164.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.165.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,41 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.165.0 — v3.164's own regression: `print-prep` was constraining the PAGE.
+And a canvas can now never be scaled up in print, on any print path.**
+
+MW: "the dimension is wrong, you can see the empty space on the right, and the
+chart thickness is still there." Two separate faults, one of them mine from an
+hour earlier. The white box is gone, which confirms it was the scaled canvas
+layer.
+
+**THE EMPTY RIGHT MARGIN WAS `print-prep` LEAKING INTO PRINT MEDIA.** The class
+sets `.main{width:12.493in}` so the SCREEN measures like a page. It was written
+outside any media block, so it also applied while the sheet was rendering — the
+printed slide came out 1199px wide inside a 1280px page, giving 0.42in of padding
+on the left and 1.06in on the right. Now wrapped in `@media screen`. Measured
+after: content spans x 40-1240 of 1280, margins 40 and 39.
+
+**THE THICKNESS NEEDED A FIX THAT DOES NOT DEPEND ON THE BUTTON.**
+`sizeForPrint()` makes the on-screen box equal the printed box, which is exact —
+but only when the deck's own print button is used. Ctrl+P and the browser's Print
+menu fire `beforeprint` too late to relayout and there is no earlier hook, so on
+those paths the window-sized bitmap still arrived and `width:100%` still
+stretched it.
+
+So the stretch is now IMPOSSIBLE rather than merely avoided: `width:auto` with
+`max-width:100%` (and the same for height), centred in the wrap. A canvas draws
+at its own resolution and only ever scales DOWN. A chart that comes in small
+sits centred with a little space either side; a chart that comes in large is
+fitted proportionally and still cannot overflow. **Both failure modes are better
+than double-weight lines, which is the point — the previous rule had no failure
+mode that was acceptable.**
+
+**THE LESSON WORTH KEEPING: a print fix that only works on one route out of
+three is not finished.** There are three ways to print this deck and only one of
+them runs our JavaScript. Anything that must hold on the page has to hold in
+CSS.
 
 **v3.164.0 — THE CHARTS WERE PRINTING AT DOUBLE WEIGHT because the canvas is
 sized for the WINDOW and stretched to the PAGE. v3.163's diagnosis was wrong.**

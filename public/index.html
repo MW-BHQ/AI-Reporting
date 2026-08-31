@@ -1342,9 +1342,29 @@
      * is scaled slightly rather than redrawn; on a screen-read PDF that is
      * invisible, and it is strictly better than painting over the next block.
      */
-    .chart-wrap{position:relative;overflow:hidden;}
-    .chart-wrap canvas{position:absolute!important;top:0;left:0;
-      width:100%!important;height:100%!important;}
+    /**
+     * A CANVAS IS NEVER SCALED UP IN PRINT (MW: "the chart thickness is still
+     * there", twice).
+     *
+     * `width:100%;height:100%` stretches whatever bitmap arrives to fill the
+     * printed box, and the bitmap that arrives is the one drawn for the
+     * author's window. On a narrow window that is a 1.4-1.9x enlargement, and
+     * everything inside a canvas — line weight, legend, tick text — enlarges
+     * with it. `sizeForPrint()` makes the two match when the print BUTTON is
+     * used, but Ctrl+P and the browser's own Print menu cannot be given a
+     * relayout, so the stretch has to be impossible rather than merely avoided.
+     *
+     * `auto` with a `max-` cap means the canvas draws at its own resolution and
+     * only ever scales DOWN. A chart that came in small sits centred with a
+     * little space either side, which is a far better failure than one drawn at
+     * double weight; a chart that came in large is fitted proportionally, so it
+     * still cannot overflow the card.
+     */
+    .chart-wrap{position:relative;overflow:hidden;
+      display:flex;align-items:center;justify-content:center;}
+    .chart-wrap canvas{position:static!important;
+      width:auto!important;height:auto!important;
+      max-width:100%!important;max-height:100%!important;}
     /**
      * ON A FILL SLIDE THE CANVAS KEEPS ITS ASPECT (MW: "distort charts").
      *
@@ -1357,8 +1377,9 @@
      * `max-*` with auto sizing scales a replaced element proportionally, so it
      * still cannot overflow — it just letterboxes instead of squashing.
      */
-    .slide-fill .chart-wrap canvas{position:relative!important;
-      width:100%!important;height:100%!important;display:block;}
+    .slide-fill .chart-wrap canvas{position:static!important;
+      width:auto!important;height:auto!important;
+      max-width:100%!important;max-height:100%!important;display:block;}
     .slide{min-height:6.3in;}
     .stat .val{font-size:20px;}
     table{font-size:11px;}
@@ -1412,9 +1433,17 @@
    * width as a printed page, the charts are resized into it, and only then does
    * `window.print()` run. Removed again on `afterprint`.
    */
-  body.print-prep .rail{display:none!important;}
-  body.print-prep .main{width:12.493in!important;max-width:none!important;padding:0!important;}
-  body.print-prep{overflow:hidden!important;}
+  @media screen{
+    /* SCREEN ONLY, and that matters. Left unscoped, `.main{width:12.493in}`
+       also applied while the sheet was being rendered — so the printed slide
+       was 1199px wide inside a 1280px page and the deck came out with 0.42in of
+       padding on the left and 1.06in on the right. MW: "the dimension is wrong,
+       you can see the empty space on the right." The class exists to make the
+       SCREEN measure like a page, never to constrain the page itself. */
+    body.print-prep .rail{display:none!important;}
+    body.print-prep .main{width:12.493in!important;max-width:none!important;padding:0!important;}
+    body.print-prep{overflow:hidden!important;}
+  }
   @media(max-width:1080px){.g-6,.g-5,.g-4{grid-template-columns:repeat(2,1fr);}.g-2-1,.g-3,.g-2{grid-template-columns:1fr;}}
   @media(max-width:760px){
     .shell{flex-direction:column;}
@@ -7447,7 +7476,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.164.0';
+const CLIENT_BUILD = '3.165.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
