@@ -43,6 +43,11 @@ with sync_playwright() as p:
     pg.evaluate("()=>document.getElementById('loadBtn').click()")
     pg.wait_for_timeout(9000)
     pg.emulate_media(media="print")
+    # The two `pn` slides (GBP, Google reviews) print at DESKTOP styling and are
+    # fitted to the sheet by `fitNativeSlides()` at print time. Measuring them
+    # without it measures a page that is never produced.
+    pg.evaluate("()=>{ try { fitNativeSlides(); } catch (e) {} }")
+    pg.wait_for_timeout(400)
     pg.wait_for_timeout(300)
     pg.evaluate("()=>{try{resizeChartsForPrint()}catch(e){}}")
     pg.wait_for_timeout(600)

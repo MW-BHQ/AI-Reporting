@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.165.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.166.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,47 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.166.0 — GBP and Google reviews print at DESKTOP styling, fitted to the
+sheet with `zoom`. MW: "start from zero, print as it is on desktop."**
+
+Exploratory step, shipped so MW can look at it. Everything else is unchanged.
+
+**WHAT WAS BEING DONE TO THESE TWO PAGES.** Measured, screen vs print: body
+16px -> 11px, scorecard figures 30px -> 17px, labels 12px -> 8.5px, card and
+scorecard padding 18/20 -> 10/12, corner radius 18px -> 12px, table rows 9px ->
+3px, grid gap 16/14 -> 10, chart boxes capped at 190px and 165px. That density
+pass is what makes twenty-odd sections fit and reads fine on most of them; on
+these two it never has.
+
+**NOW.** `.slide.pn` opts out of the whole pass and keeps its screen values, and
+the fit is bought back with `zoom` measured per slide by `fitNativeSlides()`.
+Mock data gives 0.884 for GBP and 0.737 for Google reviews.
+
+**`zoom`, NOT `transform:scale`.** Zoom is a layout operation, so text is re-laid
+out and rasterised at the printed size and stays crisp; a transform would blur
+it. More importantly zoom creates NO COMPOSITED LAYER — and a scaled canvas
+layer is exactly what produced the white boxes that cost four releases.
+
+**ZOOM SHRINKS THE BOX TOO.** First render came out at 88% of the sheet: clipped
+at the bottom, short at the right. The page box is now enlarged by the same
+factor in JS (`width = 1280/k`, `height = 718/k`), in CSS pixels — a `calc()` on
+`in` units gets re-interpreted at the zoomed scale as well. The wider layout
+makes the content shorter than the height that produced `k`, so the fit errs
+towards slack at the bottom. That is the right direction to be wrong in; a
+second measuring pass would tighten it and could overshoot into a clip.
+
+**`print-overflow.py` NOW CALLS `fitNativeSlides()`.** Without it the test read
+95px and 252px of clipping on these two — a page that is never produced. This is
+the first time the test needs to run product JavaScript to measure the real
+output, and it is worth being uneasy about: the guard is now only as good as
+that call.
+
+**THE REAL WEAKNESS, SAY IT PLAINLY.** The fit is JavaScript, so it runs on the
+print BUTTON and not on Ctrl+P or the browser's Print menu. On those routes
+these two pages clip by 95px and 252px. Every other page is CSS-only and safe on
+all three routes. If MW keeps this look, the next step is a static CSS `zoom`
+floor (0.72 covers both measured cases) with the JS refining it upward.
 
 **v3.165.0 — v3.164's own regression: `print-prep` was constraining the PAGE.
 And a canvas can now never be scaled up in print, on any print path.**

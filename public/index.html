@@ -1075,6 +1075,39 @@
      */
     .slide-fill:has(#repUsers) > .grid{flex:0 0 80%!important;}
     /**
+     * GBP AND GOOGLE REVIEWS PRINT AS THEY LOOK ON THE DESKTOP (MW: "start from
+     * zero, try to print as it is on desktop").
+     *
+     * Every other slide is re-typeset for the page: body 16px -> 11px, scorecard
+     * figures 30px -> 17px, card padding 18/20 -> 10/12, table rows 9px -> 3px,
+     * chart boxes capped. That density is what makes twenty-odd sections fit,
+     * and on most of them it reads fine. On these two it never has.
+     *
+     * So they opt out of the whole density pass and keep their screen values,
+     * and the FIT is bought back with `zoom` instead. Zoom rather than
+     * `transform:scale` deliberately: zoom is a layout operation, so text is
+     * re-laid out and rasterised at the printed size and stays crisp, and it
+     * creates no composited layer — which matters here, because a scaled canvas
+     * layer is exactly what produced the white boxes MW chased for four
+     * releases.
+     *
+     * The factor is measured, not guessed: `fitNativeSlides()` reads each
+     * slide's natural height while the page is at print width and sets the zoom
+     * that makes it fit. Because these two slides now print at their SCREEN
+     * styling, the on-screen measurement IS the printed measurement.
+     */
+    .slide.pn{font-size:16px;}
+    .slide.pn .slide-title{font-size:16px;min-height:64px;margin-bottom:24px;}
+    .slide.pn .stat,.slide.pn .card{padding:18px 20px;border-radius:18px;}
+    .slide.pn .stat .val{font-size:30px!important;}
+    .slide.pn .stat .lab{font-size:12px!important;}
+    .slide.pn .stat .sub2,.slide.pn .note{font-size:12px!important;}
+    .slide.pn .card-title{font-size:18px;margin-bottom:16px;}
+    .slide.pn .grid{gap:16px 14px;}
+    .slide.pn td,.slide.pn th{padding:9px 0!important;font-size:14px!important;}
+    .slide.pn .chart-wrap{max-height:none!important;}
+    .slide.pn tbody tr{display:table-row!important;}
+    /**
      * VERTICALLY CENTRED ON EVERY PAGE (MW), WITH TWO FLEX SPACERS.
      *
      * Third mechanism, and the first that does not touch pagination. The
@@ -3905,7 +3938,7 @@ function renderReport() {
   const GR = d.gbpRanks || {};
 
   const gbpDetailBody = GD.map((g, gi) => `
-    <div class="slide slide-break">
+    <div class="slide slide-break pn">
       <div class="slide-title"><span>${plogo('gbp')}Google Business Profile <span class="all-four">${esc(g.label)}</span></span>${logoImg}</div>
       <div class="grid g-4" style="margin-bottom:10px">
         ${[['Impressions', g.totals.impressions, g.mom.impressions],
@@ -3984,7 +4017,7 @@ function renderReport() {
     ${aiAssistBody ? slide('AI assistants (LLMs)', aiAssistBody, false, sel) : ''}
     ${searchPagesBody}
     ${gbpDetailBody}
-    ${slide('Google reviews', reviewBody, false, false, 'gbp')}
+    ${slide('Google reviews', reviewBody, false, false, 'gbp').replace('class="slide ', 'class="slide pn ')}
     ${slide('Google reviews \u00b7 what they said', reviewQuotesBody, false, false, 'gbp', true)}
     ${slide('Facebook', facebookBody, false, false, 'facebook', false, true)}
     ${slide('YouTube', ytBody, false, 'BHQ', 'youtube', true)}
@@ -7384,15 +7417,67 @@ function cjkFontsReady() {
  * `PRINT_PREP` is idempotent and self-clearing: `afterprint` removes it, and so
  * does a timeout, because a cancelled dialog does not always fire `afterprint`.
  */
+/**
+ * Set each `pn` slide's zoom so its DESKTOP layout fits one sheet.
+ *
+ * Only valid while `print-prep` is on, because that is when the screen is at
+ * printed-page width; and only meaningful for `pn` slides, because they are the
+ * ones that print at their screen styling, which is what makes an on-screen
+ * measurement a printed measurement.
+ *
+ * The comparison is content box to content box. The printed content height is
+ * 7.5in less the page's own 0.34in/0.3in padding; the slide's natural height is
+ * its `scrollHeight` less whatever padding it has on screen. Rounded DOWN to
+ * three decimals and capped at 1 — a slide that already fits is left alone
+ * rather than blown up.
+ */
+const PAGE_W_PX = 13.333 * 96;
+const PAGE_H_PX = 7.5 * 96 - 2;
+const PRINT_CONTENT_H = PAGE_H_PX - (0.34 + 0.3) * 96;
+function fitNativeSlides() {
+  document.querySelectorAll('.slide.pn').forEach((el) => {
+    el.style.zoom = '';
+    const cs = getComputedStyle(el);
+    const pad = parseFloat(cs.paddingTop || 0) + parseFloat(cs.paddingBottom || 0);
+    const natural = el.scrollHeight - pad;
+    if (!(natural > 0)) return;
+    const k = Math.min(1, Math.floor((PRINT_CONTENT_H / natural) * 1000) / 1000);
+    if (k >= 1) return;
+    el.style.zoom = String(k);
+    /**
+     * ZOOM SHRINKS THE BOX AS WELL AS THE CONTENT, so the page box has to be
+     * enlarged by the same factor or the slide renders at 88% of the sheet —
+     * clipped at the bottom and short of the right edge. Sized in CSS pixels
+     * because a `calc()` on `in` units would be re-interpreted at the zoomed
+     * scale as well.
+     *
+     * The wider layout makes the content SHORTER than the height that produced
+     * `k`, so the fit errs towards a little slack at the bottom. That is the
+     * right direction to be wrong in: a second measuring pass would tighten it
+     * and could just as easily overshoot into a clip.
+     */
+    el.style.width = (PAGE_W_PX / k) + 'px';
+    el.style.height = (PAGE_H_PX / k) + 'px';
+    el.style.maxHeight = (PAGE_H_PX / k) + 'px';
+  });
+}
+function clearNativeSlides() {
+  document.querySelectorAll('.slide.pn').forEach((el) => {
+    el.style.zoom = ''; el.style.width = ''; el.style.height = ''; el.style.maxHeight = '';
+  });
+}
+
 function sizeForPrint() {
   const body = document.body;
   if (!body) return Promise.resolve();
   body.classList.add('print-prep');
   return new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)))
-    .then(() => { resizeChartsForPrint(); return new Promise((r) => setTimeout(r, 150)); });
+    .then(() => { resizeChartsForPrint(); fitNativeSlides();
+                  return new Promise((r) => setTimeout(r, 150)); });
 }
 function clearPrintPrep() {
   document.body.classList.remove('print-prep');
+  clearNativeSlides();
   /**
    * The canvases are now sized for a PAGE, not for this window, and Chart.js
    * reads the container — so the resize has to wait for the class removal to be
@@ -7476,7 +7561,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.165.0';
+const CLIENT_BUILD = '3.166.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
