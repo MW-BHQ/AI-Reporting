@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.154.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.155.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,45 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.155.0 — a broken page needs a header; the slack goes to the chart.**
+
+**GOOGLE REVIEWS: THE QUOTES GET A PAGE *AND* A HEADER.** Three attempts on this
+one. v3.153 gave them their own titled slide — MW rejected it. v3.154 let the
+section flow onto an unheaded continuation page — MW rejected that too: "if you
+need to break the review quote, please give the header to it too."
+
+The rule those two rejections describe together: **a break is fine, an anonymous
+page is not.** A reader who lands on page two has to be told what they are
+looking at. The quotes are a titled slide again. Facebook keeps `slide-flow` —
+MW confirmed the Meta Ads break is right.
+
+**THE SLACK GOES TO THE CHART.** `slide-fill` gave every direct child
+`flex:1 1 auto`, so YouTube split its spare 200px three ways between a warning
+note, six scorecards and the chart. The chart came out at 124px on a page that
+was technically full — filled, and still squeezed. A scorecard gains nothing
+from being taller; a trend line does. Now only a card containing a chart grows,
+and sibling grids stop growing when a direct-child chart card exists
+(`:has(> .card .chart-wrap)`), scoped so Sessions overview — whose chart lives
+INSIDE its grid — still stretches.
+
+`.slide-fill .chart-wrap` is `flex:1 1 0` with a zeroed height, not `1 1 auto`.
+With an auto basis the chart starts at its authored 200-300px and pushes the
+page over, which is what forced the per-slide caps in the first place.
+
+**YouTube's scorecards are one row of six**, not two of three. That was the
+other half of its chart's height, on a page 13.3in wide with room to spare. New
+`.g-6`, with the print override and the narrow-screen collapse both wired up —
+`.g-4`/`.g-5` were missing from those two places for months and cost four bug
+reports, so the new one went in complete.
+
+Result: YouTube's chart 133px → 229px, Sessions overview's 546px.
+
+**Google reviews' own two charts are capped at 165px** via
+`:has(#rvMonth), :has(#rvStack)` — scoped to that slide, not the deck ceiling,
+which is the v3.154 lesson applied rather than restated.
+
+24 sections, 0 clipping. Suite 237.
 
 **v3.154.0 — MW rejected the section splits and the squeezed charts. Both undone.**
 

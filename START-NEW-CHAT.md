@@ -1,6 +1,6 @@
-# BHQ War Room — handover at v3.154.0
+# BHQ War Room — handover at v3.155.0
 
-Paste this into a new chat along with `bkh-dashboard-v3_154_0-FULL.zip`.
+Paste this into a new chat along with `bkh-dashboard-v3_155_0-FULL.zip`.
 
 ---
 
@@ -31,7 +31,7 @@ it needs **Contents: Read and write**. Delete it at the end of the session.
      node --require ./test/mock-fetch.js server.js &) ; sleep 4
     python3 test/print-overflow.py
 
-**Exit 0 as of v3.154.0 — 22 sections, none clipping. Keep it that way.**
+**Exit 0 as of v3.155.0 — 24 sections, none clipping. Keep it that way.**
 
 It renders the report in print media and reports, per section, how many pixels
 fall off the bottom of its page. It exists because the deck pins every section
@@ -77,6 +77,8 @@ fifteen separate complaints were four root causes.**
   fill; three sections split onto their own slides; global print density.
 - **v3.154.0** — MW rejected two of those splits and the squeezed charts. Both
   undone; `slide-flow` added as the replacement.
+- **v3.155.0** — review quotes get a page AND a header; `slide-fill` gives the
+  slack to the chart rather than splitting it; YouTube scorecards to one row.
 
 ---
 
@@ -86,12 +88,14 @@ fifteen separate complaints were four root causes.**
 Nothing. MW's PDF list is closed. Wait for the next screenshot.
 
 ### Settled in v3.154.0 — do not re-propose
-**Splitting a section across two titled slides is not acceptable to MW.** Two of
-the three v3.153 splits were reverted: Google reviews quotes and Facebook Meta
-Ads are one thought each, and a second title makes them read as two. When a
-section will not fit, use `slide-flow` — it runs onto an unheaded continuation
-page instead of clipping. AI assistants (v3.151) stayed split and MW has not
-objected; it is genuinely a different subject from back links.
+**A break is fine; an ANONYMOUS page is not.** Three attempts landed here.
+Splitting Facebook's Meta Ad card onto its own titled slide was wrong (it is one
+thought with the organic page) — it uses `slide-flow` and MW confirmed that
+break is right. Letting Google reviews' quotes flow onto an unheaded
+continuation page was also wrong — MW: "give the header to it too". So: use
+`slide-flow` when the overflow is a continuation of the same idea, and a titled
+slide when the overflowing part is its own idea. AI assistants (v3.151) stayed
+split and MW has not objected.
 
 **Do not shrink a global to fix one section.** The chart ceiling walked 300 to
 115 across two releases, a few pixels at a time, until trend lines were smears.

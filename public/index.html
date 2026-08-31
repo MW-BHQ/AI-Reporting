@@ -204,6 +204,7 @@
   .grid{display:grid;gap:14px;}
   .g-4{grid-template-columns:repeat(4,1fr);}
   .g-5{grid-template-columns:repeat(5,1fr);}
+  .g-6{grid-template-columns:repeat(6,1fr);}
   .g-3{grid-template-columns:repeat(3,1fr);}
   /* .g-2 existed only inside the print block, so on screen every two-up grid
      silently collapsed to a single column — the countries cards stacked full
@@ -957,12 +958,26 @@
      * better one than either clipping the content or renaming half of it.
      */
     .slide-flow{height:auto!important;max-height:none!important;overflow:visible!important;}
-    /* YouTube carries six scorecards above its chart and is the one section
-       that does not clear 190px. Scoped here rather than lowering the ceiling
-       for every chart in the deck to suit one slide. */
-    .chart-wrap:has(#repYtViews){max-height:130px;}
-    .slide-fill > .grid,.slide-fill > .card{flex:1 1 auto;}
-    .slide-fill > .grid{align-content:stretch;}
+    /* Google reviews stacks two charts and two rating tables on one page, so
+       its pair sits below the deck ceiling. Scoped to the two canvases rather
+       than lowering the ceiling for every chart to suit one slide. */
+    .chart-wrap:has(#rvMonth),.chart-wrap:has(#rvStack){max-height:165px;}
+    .slide-fill > .grid{flex:1 1 auto;align-content:stretch;}
+    /**
+     * THE SLACK GOES TO THE CHART, not evenly to everything.
+     *
+     * With every child growing, YouTube split its spare 200px three ways
+     * between a warning note, six scorecards and the chart — so the chart came
+     * out at 124px and still looked squeezed on a page that was technically
+     * full. A scorecard gains nothing from being taller. A trend line does.
+     */
+    .slide-fill > .card{flex:0 1 auto;}
+    .slide-fill > .card:has(.chart-wrap){flex:1 1 auto;}
+    /* And when the chart card is a direct child, sibling GRIDS stop growing
+       too — YouTube's six scorecards were still taking half the slack. Scoped
+       with `> .card` so Sessions overview, whose chart lives INSIDE its grid,
+       is untouched and still stretches. */
+    .slide-fill:has(> .card .chart-wrap) > .grid{flex:0 1 auto;}
     /**
      * AND THE CHART GROWS WITH THE CARD. Stretching the card alone just made a
      * taller box with the same 115px chart marooned at the top of it — filled
@@ -970,8 +985,13 @@
      * slack, which is what makes the page read as composed.
      */
     .slide-fill > .card,.slide-fill > .grid > .card{display:flex;flex-direction:column;}
-    .slide-fill .chart-wrap{flex:1 1 auto;height:auto!important;max-height:none!important;
-      min-height:130px;}
+    /* `flex:1 1 0` with a zeroed basis, not `1 1 auto`: with an auto basis the
+       chart starts at its authored 200-300px and the slide overflows, which is
+       what forced the per-slide caps that squeezed it flat. At zero basis it
+       takes exactly the space left over — never less than 120px, never enough
+       to push the page. */
+    .slide-fill .chart-wrap{flex:1 1 0;height:0!important;max-height:none!important;
+      min-height:120px;}
   }
   @media print{
     /* 13.333in x 7.5in is the standard 16:9 slide canvas. */
@@ -1100,6 +1120,7 @@
     .g-3{grid-template-columns:repeat(3,1fr)!important;}
     .g-4{grid-template-columns:repeat(4,1fr)!important;}
     .g-5{grid-template-columns:repeat(5,1fr)!important;}
+    .g-6{grid-template-columns:repeat(6,1fr)!important;}
     /**
      * THE AUTHORED HEIGHT WINS (MW: "the chart is overflow").
      *
@@ -1165,7 +1186,7 @@
     a{color:#1B2340!important;text-decoration:none!important;}
   }
 
-  @media(max-width:1080px){.g-5,.g-4{grid-template-columns:repeat(2,1fr);}.g-2-1,.g-3,.g-2{grid-template-columns:1fr;}}
+  @media(max-width:1080px){.g-6,.g-5,.g-4{grid-template-columns:repeat(2,1fr);}.g-2-1,.g-3,.g-2{grid-template-columns:1fr;}}
   @media(max-width:760px){
     .shell{flex-direction:column;}
     .rail{width:auto;height:auto;position:static;flex-direction:row;align-items:center;gap:14px;overflow-x:auto;}
@@ -3006,9 +3027,19 @@ function renderReport() {
         }).join('')}
         </tbody></table>
       </div>
-    </div>
-    ${(RVB.samples || []).some(Boolean) ? `<div class="card mt">
-      <div class="card-title">What they actually said \u00b7 one review per rating</div>
+    </div>` : '';
+
+  /**
+   * THE QUOTES GET A PAGE AND A HEADER (MW).
+   *
+   * v3.153 gave them their own slide and MW rejected it; v3.154 let the section
+   * flow onto an unheaded continuation page and MW rejected that too — "if you
+   * need to break the review quote, please give the header to it too". So: a
+   * break is fine, an ANONYMOUS page is not. A reader who lands on page two
+   * has to be told what they are looking at.
+   */
+  const reviewQuotesBody = (RVB && (RVB.samples || []).some(Boolean)) ? `<div class="card">
+      <div class="card-title">One review per rating, most recent with a comment</div>
       <table><tbody>
       ${RVB.samples.filter(Boolean).map(sm=>`<tr>
         <td style="width:74px;vertical-align:top;color:${sm.stars>=4?'#2E9E6F':(sm.stars===3?'#F2A93B':'#D9534F')};
@@ -3021,8 +3052,8 @@ function renderReport() {
       </tr>`).join('')}
       </tbody></table>
       <div class="note">The most recent review carrying a comment at each star level. Ratings without a
-      comment are counted in the mix above but cannot be quoted.</div>
-    </div>` : ''}` : '';
+      comment are counted in the mix on the previous page but cannot be quoted.</div>
+    </div>` : '';
 
   /**
    * Facebook: one page for all four hospitals, so the funnel on the left is
@@ -3405,7 +3436,10 @@ function renderReport() {
       : '';
     return `
     ${warn}
-    <div class="grid g-3" style="margin-bottom:14px">${cards.join('')}</div>
+    <!-- g-6: six scorecards in ONE row rather than two of three. The second
+         row was costing the Views-per-day chart half its height on a page that
+         is 13.3in wide and has the room to spare. -->
+    <div class="grid g-6" style="margin-bottom:14px">${cards.join('')}</div>
     <div class="card">
       <div class="card-title">Views per day</div>
       ${sr.length > 1
@@ -3529,9 +3563,10 @@ function renderReport() {
     ${aiAssistBody ? slide('AI assistants (LLMs)', aiAssistBody, false, sel) : ''}
     ${searchPagesBody}
     ${gbpDetailBody}
-    ${slide('Google reviews', reviewBody, false, false, 'gbp', false, true)}
+    ${slide('Google reviews', reviewBody, false, false, 'gbp')}
+    ${slide('Google reviews \u00b7 what they said', reviewQuotesBody, false, false, 'gbp', true)}
     ${slide('Facebook', facebookBody, false, false, 'facebook', false, true)}
-    ${slide('YouTube', ytBody, false, 'BHQ', 'youtube')}
+    ${slide('YouTube', ytBody, false, 'BHQ', 'youtube', true)}
     ${slide('YouTube \u00b7 Top videos', ytTopBody, false, 'BHQ', 'youtube')}
 
     <!-- ===== not yet reviewed by MW: below the agreed sequence ===== -->
@@ -6851,7 +6886,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.154.0';
+const CLIENT_BUILD = '3.155.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
