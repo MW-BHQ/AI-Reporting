@@ -380,6 +380,7 @@
   .mr-title{font-size:var(--text-2xl);font-weight:600;color:var(--ink);letter-spacing:-.025em;}
   .mr-sub{font-size:var(--text-base);font-weight:400;color:var(--violet);}
   .mr-scope{margin-left:auto;font-size:var(--text-2xs);color:var(--faint);}
+  .mr-range{display:none;}
   .mr-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;}
   /* Cards, not table cells divided by rules — the KPI row is the first thing
      read and the vertical hairlines in the original made it feel like a ledger. */
@@ -426,6 +427,42 @@
        and the panels lose their fill. */
     .mr-panel,.mr-kpi{background:#fff;break-inside:avoid;}
     .mr-grid{gap:10px;}
+    /**
+     * THE E-COMMERCE REPORT PRINTS ON A REAL PAGE, NOT A 16:9 SLIDE (MW: "same
+     * way we did with the monthly report, no need to squeeze to 16:9").
+     *
+     * It needs almost none of the deck's machinery, and the reason is worth
+     * recording: every chart on this page is ALREADY hand-built SVG — `logBars`
+     * and the donut both emit paths directly. There is no canvas anywhere, so
+     * none of the stretch, the white boxes or the print-time twin-building
+     * applies here. That is also why it has always exported cleanly.
+     *
+     * What it does need is the page size (set from JS per view, since `@page`
+     * cannot be conditional in CSS) and these two overrides.
+     */
+    /**
+     * A DOCUMENT PAGE IS WHITE. The deck's page tint is right for slides read on
+     * screen and wrong here — it printed as a grey band below the footer, where
+     * the report ends and the page does not. Scoped through `body.pp-a4`, which
+     * only this view sets, so the deck keeps its tint.
+     */
+    html:has(body.pp-a4),body.pp-a4,body.pp-a4 .main{background:#fff!important;}
+    .mr-range{display:block!important;margin-left:auto;font-size:10px;font-weight:600;
+      letter-spacing:.02em;color:var(--faint);white-space:nowrap;}
+    /**
+     * THE GRIDS ARE PINNED. A printed page is narrower than the window it was
+     * laid out in, so `@media(max-width:900px)` below fires during print and
+     * collapses both grids to one column — four panels stacked vertically, and a
+     * one-page report becomes three. Print inherits responsive media queries;
+     * anything that must hold on the page needs an explicit override.
+     */
+    .mr-kpis{grid-template-columns:repeat(4,1fr)!important;gap:8px;margin-bottom:12px;}
+    .mr-grid{grid-template-columns:1fr 1fr!important;}
+    /* The promo panel STAYS. It is an empty dashed box with instructions in it,
+       which by every other rule on this deck is screen furniture — but it is a
+       designed slot for campaign artwork before circulation, and MW asked for
+       the page as it looks, not for an edit nobody requested. */
+    .mr-foot{margin-top:12px;}
   }
   @media(max-width:900px){
     .mr-kpis{grid-template-columns:repeat(2,1fr);}
@@ -1487,6 +1524,8 @@
        SCREEN measure like a page, never to constrain the page itself. */
     body.print-prep .rail{display:none!important;}
     body.print-prep .main{width:12.493in!important;max-width:none!important;padding:0!important;}
+    /* A4 landscape less the 10mm margins. */
+    body.print-prep.pp-a4 .main{width:190mm!important;}
     body.print-prep{overflow:hidden!important;}
   }
   @media(max-width:1080px){.g-6,.g-5,.g-4{grid-template-columns:repeat(2,1fr);}.g-2-1,.g-3,.g-2{grid-template-columns:1fr;}}
@@ -1939,6 +1978,25 @@ const countryFlag = (name) => {
   const cc = COUNTRY_CC[String(name || '').trim().toLowerCase()];
   return cc ? `<span class="lflag">${ccFlag(cc)}</span>` : '';
 };
+/**
+ * "1 Aug 2026 - 31 Aug 2026" from the two date controls.
+ *
+ * Formatted by hand rather than with `toLocaleDateString`, which reads the
+ * reader's browser locale — the same deck printed on two machines would carry
+ * two different date formats. Top-level because both the monthly deck's slide
+ * headers and the e-commerce report's header need the identical string.
+ */
+const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function humanDate(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ''));
+  return m ? `${Number(m[3])} ${MONTH_ABBR[Number(m[2]) - 1]} ${m[1]}` : '';
+}
+function humanRange() {
+  try {
+    const f = humanDate(($('from') || {}).value), t = humanDate(($('to') || {}).value);
+    return f && t ? `${f} \u2013 ${t}` : '';
+  } catch (e) { return ''; }
+}
 const isNA = (v) => v === null || v === undefined;
 /**
  * FUNNEL BAR WIDTH (MW: "search bar scale doesn't make sense ... at least make
@@ -2575,20 +2633,7 @@ function renderReport() {
    *
    * Print only: on screen the range is already in the controls above the deck.
    */
-  const RANGE_LABEL = (() => {
-    // "1 Aug 2026 - 31 Aug 2026" (MW). Built by hand rather than with
-    // `toLocaleDateString`, whose output depends on the reader's browser locale
-    // — a deck printed in Bangkok and one printed elsewhere would not match.
-    const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const human = (v) => {
-      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ''));
-      return m ? `${Number(m[3])} ${MON[Number(m[2]) - 1]} ${m[1]}` : '';
-    };
-    try {
-      const f = human(($('from') || {}).value), t = human(($('to') || {}).value);
-      return f && t ? `${f} \u2013 ${t}` : '';
-    } catch (e) { return ''; }
-  })();
+  const RANGE_LABEL = humanRange();
   /**
    * The range and the logo are ONE flex child, not two. The slide header is
    * `justify-content:space-between`, so leaving them as siblings gave three
@@ -5901,6 +5946,8 @@ function renderEcomMonthly() {
       <div class="mr-head">
         <div class="mr-title">E-Commerce</div>
         <div class="mr-sub">${esc(d.monthLabel)} Performance</div>
+        <!-- Print only. On screen the range is in the controls directly above. -->
+        <div class="mr-range">${esc(humanRange())}</div>
       </div>
 
       <div class="mr-kpis">
@@ -7708,9 +7755,38 @@ function clearNativeSlides() {
   });
 }
 
+/**
+ * `@page` CANNOT BE CONDITIONAL IN CSS, so the page size is written from here.
+ *
+ * The monthly deck is a 13.333in x 7.5in slide canvas. The e-commerce report is
+ * one A4 page and MW does not want it squeezed into 16:9. A stylesheet appended
+ * last wins over the `@page` in the main sheet, and clearing it restores the
+ * slide size for every other view.
+ */
+const PAGE_A4_PORTRAIT = '@media print{@page{size:210mm 297mm;margin:10mm;}}';
+function setPrintPageSize() {
+  let st = document.getElementById('printPageSize');
+  if (!st) {
+    st = document.createElement('style');
+    st.id = 'printPageSize';
+    document.head.appendChild(st);
+  }
+  st.textContent = S.view === 'ecommonthly' ? PAGE_A4_PORTRAIT : '';
+  return S.view === 'ecommonthly';
+}
+
 function sizeForPrint() {
   const body = document.body;
   if (!body) return Promise.resolve();
+  const a4 = setPrintPageSize();
+  /**
+   * `print-prep` exists to make the on-screen box the same size as a printed
+   * SLIDE, so Chart.js draws its canvases at the right width. The e-commerce
+   * report has no canvas and is not a slide, so it gets the A4 content width
+   * instead — sizing it to 12.493in would lay it out for a page it will never
+   * be printed on.
+   */
+  body.classList.toggle('pp-a4', a4);
   body.classList.add('print-prep');
   return new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)))
     .then(() => { resizeChartsForPrint(); fitNativeSlides(); buildPrintSvgs();
@@ -7718,6 +7794,13 @@ function sizeForPrint() {
 }
 function clearPrintPrep() {
   document.body.classList.remove('print-prep');
+  document.body.classList.remove('pp-a4');
+  // Reset the page size too. `setPrintPageSize()` rewrites it before every
+  // print, so a stale value is harmless — but leaving an A4 rule sitting in the
+  // head after an e-commerce export is the kind of thing that looks like the
+  // cause of the next unrelated print bug.
+  var ps = document.getElementById('printPageSize');
+  if (ps) ps.textContent = '';
   clearNativeSlides();
   clearPrintSvgs();
   /**
@@ -7803,7 +7886,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.171.0';
+const CLIENT_BUILD = '3.172.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

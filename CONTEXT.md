@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.171.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.172.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,43 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.172.0 — the E-commerce Report exports as a real A4 page (MW: "same way we
+did with the monthly report, no need to squeeze to 16:9").**
+
+**IT NEEDED ALMOST NOTHING, AND THE REASON IS WORTH KNOWING: this page has no
+canvas.** `logBars` and the donut both emit SVG paths by hand. So none of the
+four releases of canvas trouble — the double-weight stretch, the white boxes, the
+print-time twin building — ever applied here, which is why it has always
+exported cleanly. Nothing was added for it.
+
+**`@page` CANNOT BE CONDITIONAL IN CSS**, so the size is written from JS per
+view: `setPrintPageSize()` appends a stylesheet with A4 portrait for
+`ecommonthly` and clears it for everything else, which restores the 13.333in x
+7.5in slide canvas. A sheet appended last wins over the `@page` in the main one.
+
+**PORTRAIT, NOT LANDSCAPE.** Landscape was tried first and took two pages: four
+panels at `break-inside:avoid` do not fit 190mm of height, so the bottom two
+moved and page two carried a third of the content. Portrait's 277mm takes the
+KPI row and both panel rows with room to spare. One page.
+
+**THE GRIDS HAD TO BE PINNED.** A4 content is 718px wide, so
+`@media(max-width:900px)` fires during print and collapses both grids to one
+column — four panels stacked, one page becoming three. Print inherits
+responsive media queries; this is the fourth time that has cost something.
+
+**A DOCUMENT PAGE IS WHITE.** The deck's page tint printed as a grey band below
+the footer, where the report ends and the sheet does not. Scoped through
+`body.pp-a4` so the deck keeps its tint.
+
+**`print-prep` sizes to A4 for this view, not to a slide.** Its whole job is to
+make the on-screen box match a printed one so Chart.js draws at the right width;
+laying this page out at 12.493in would be sizing it for a page it is never
+printed on.
+
+**The date range is now shared.** `humanRange()` is top level and both the deck's
+slide headers and this report's header call it — same string, one place.
+
 
 **v3.171.0 — Actions centres like every other page. And `js:comment-backtick`
 caught its fourth victim, mine.**
