@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.170.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.171.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,28 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.171.0 — Actions centres like every other page. And `js:comment-backtick`
+caught its fourth victim, mine.**
+
+MW: "this page content doesn't vertically align." Actions carried `slide-fill`,
+and fill slides are deliberately EXCLUDED from the centring spacers — the whole
+point of fill is that a chart eats the slack, so there is none left to split.
+Actions has no chart. Four fixed-height hospital rows, nothing that grows, so
+the slack simply piled up under the last one. Fill dropped; it centres now.
+
+**Rule of thumb worth keeping: `slide-fill` is for a slide with a CHART.** On a
+slide of fixed-height cards it does nothing but disable the centring.
+
+**AND THE BACKTICK, AGAIN.** The comment explaining the change was written
+inside the template literal and contained `slide-fill` in backticks, which
+terminated the string: "Unexpected identifier 'slide'", client dead, zero
+sections rendered. CONTEXT has warned about this since v3.146 and it still
+happened — the habit of quoting a class name in backticks is stronger than the
+memory of the rule. `boot.js` caught it in one run, which is the only reason it
+took a minute rather than an afternoon. **If a print-block comment has to name a
+class, write it bare.**
+
 
 **v3.170.0 — date stamp beside the logo and in human form; the stacked bar stops
 being squeezed and stops being rounded.**

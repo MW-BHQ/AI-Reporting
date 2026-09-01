@@ -4054,7 +4054,13 @@ function renderReport() {
     <!-- ================= MW's sequence ================= -->
     ${slide('Sessions overview', usersBody, true, 'BHQ', null, true)}
     ${slide('Who reaches us from outside Thailand', countryBody, false, true, null, true)}
-    ${slide('Actions \u00b7 what we want them to do', actionsBody, false, 'BHQ', null, true)}
+    <!-- NOT a slide-fill any more (MW: "this page content doesn't vertically
+         align"). Fill exists to hand slack to a chart, and this section has no
+         chart — four fixed-height hospital rows and nothing that grows. So the
+         slack simply piled up under the last row, and fill slides are excluded
+         from the centring spacers precisely because they are not supposed to
+         have any. Without it the page centres like every other section. -->
+    ${slide('Actions \u00b7 what we want them to do', actionsBody, false, 'BHQ')}
     ${apptBody ? slide('Appointments', apptBody, false, sel) : ''}
     ${slide('Sessions by language', langMatrixBody, false, 'BHQ')}
     ${slide('Actions by language', actionsLangBody, false, sel)}
@@ -7797,7 +7803,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.170.0';
+const CLIENT_BUILD = '3.171.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
