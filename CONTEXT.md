@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.172.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.173.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,34 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.173.0 — the E-commerce Report prints as a 16:9 slide after all, with the
+deck's padding and page tint.**
+
+MW: "no la, the padding, the bg color — can you make it 16:9?" v3.172 read "no
+need to squeeze to 16:9" as permission to change the sheet. It was not; it meant
+the CONTENT did not have to be compressed to fit. The page itself belongs to the
+deck.
+
+So the per-view `@page` is gone — one page size for everything, 13.333in x 7.5in
+with `margin:0`. `.mr` becomes a page box like a slide: 0.34/0.42/0.3in padding
+INSIDE the box, which is also what stops the left edge being clipped when the
+print dialog's own margins are set to None. Background transparent so the page
+tint shows behind the white cards, as everywhere else.
+
+**IT DOES NOT FIT UNAIDED, so it borrows `fitNativeSlides()`** rather than
+growing its own compression rules. Four panels at fixed height come to roughly
+820px against 659px of printable height; measured zoom on real data is 0.732. One
+mechanism now serves the two GBP-style slides and this report — the alternative
+was a third set of density overrides for one page.
+
+**A JUDGEMENT CALL RECORDED: two readings of one sentence.** "No need to squeeze
+to 16:9" could mean "do not use a 16:9 page" or "do not compress the content into
+one". I took the first and it cost a release. The tell was available: every other
+page in this product is a 16:9 slide, and MW's follow-up named padding and
+background before it named the aspect ratio — he was describing a page that
+should have looked like the others.
+
 
 **v3.172.0 — the E-commerce Report exports as a real A4 page (MW: "same way we
 did with the monthly report, no need to squeeze to 16:9").**

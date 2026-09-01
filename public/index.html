@@ -422,7 +422,7 @@
   .mr-foot{margin-top:18px;padding-top:11px;border-top:1px solid var(--line);
     font-size:10.5px;color:var(--faint);display:flex;justify-content:space-between;gap:10px;}
   @media print{
-    .mr{border:0;border-radius:0;padding:0;background:#fff;}
+    .mr{border:0;border-radius:0;}
     /* Tints can vanish on a mono printer, so the ghost bars keep their outline
        and the panels lose their fill. */
     .mr-panel,.mr-kpi{background:#fff;break-inside:avoid;}
@@ -441,12 +441,22 @@
      * cannot be conditional in CSS) and these two overrides.
      */
     /**
-     * A DOCUMENT PAGE IS WHITE. The deck's page tint is right for slides read on
-     * screen and wrong here — it printed as a grey band below the footer, where
-     * the report ends and the page does not. Scoped through `body.pp-a4`, which
-     * only this view sets, so the deck keeps its tint.
+     * 16:9, WITH THE DECK'S PAGE BOX (MW: "no la, the padding, the bg color —
+     * can you make it 16:9?").
+     *
+     * A4 portrait was the wrong read of "no need to squeeze to 16:9". This is
+     * the same sheet as every slide: same size, same 0.34/0.42/0.3in padding
+     * INSIDE the box so nothing is clipped when the print dialog's own margins
+     * are set to None, and the same page tint behind white cards. `@page` stays
+     * at the deck's 13.333in x 7.5in, so there is no per-view page size any
+     * more.
+     *
+     * It does not fit unaided — the four panels come to roughly 820px against
+     * 659px of printable height — so it borrows the `pn` slides' zoom-to-fit
+     * rather than having its own compression rules.
      */
-    html:has(body.pp-a4),body.pp-a4,body.pp-a4 .main{background:#fff!important;}
+    .mr{width:13.333in;box-sizing:border-box;
+      padding:0.34in 0.42in 0.3in;overflow:hidden;background:transparent;}
     .mr-range{display:block!important;margin-left:auto;font-size:10px;font-weight:600;
       letter-spacing:.02em;color:var(--faint);white-space:nowrap;}
     /**
@@ -1524,8 +1534,6 @@
        SCREEN measure like a page, never to constrain the page itself. */
     body.print-prep .rail{display:none!important;}
     body.print-prep .main{width:12.493in!important;max-width:none!important;padding:0!important;}
-    /* A4 landscape less the 10mm margins. */
-    body.print-prep.pp-a4 .main{width:190mm!important;}
     body.print-prep{overflow:hidden!important;}
   }
   @media(max-width:1080px){.g-6,.g-5,.g-4{grid-template-columns:repeat(2,1fr);}.g-2-1,.g-3,.g-2{grid-template-columns:1fr;}}
@@ -7723,7 +7731,13 @@ function clearPrintSvgs() {
 }
 
 function fitNativeSlides() {
-  document.querySelectorAll('.slide.pn').forEach((el) => {
+  /**
+   * `.mr` joins the list. The e-commerce report is one page of fixed-height
+   * panels that comes to more than a sheet, and it needs exactly what the `pn`
+   * slides need: measure the natural height at print width, zoom to fit, and
+   * enlarge the box by the same factor so the sheet is still filled.
+   */
+  document.querySelectorAll('.slide.pn, .mr').forEach((el) => {
     el.style.zoom = '';
     const cs = getComputedStyle(el);
     const pad = parseFloat(cs.paddingTop || 0) + parseFloat(cs.paddingBottom || 0);
@@ -7750,43 +7764,14 @@ function fitNativeSlides() {
   });
 }
 function clearNativeSlides() {
-  document.querySelectorAll('.slide.pn').forEach((el) => {
+  document.querySelectorAll('.slide.pn, .mr').forEach((el) => {
     el.style.zoom = ''; el.style.width = ''; el.style.height = ''; el.style.maxHeight = '';
   });
-}
-
-/**
- * `@page` CANNOT BE CONDITIONAL IN CSS, so the page size is written from here.
- *
- * The monthly deck is a 13.333in x 7.5in slide canvas. The e-commerce report is
- * one A4 page and MW does not want it squeezed into 16:9. A stylesheet appended
- * last wins over the `@page` in the main sheet, and clearing it restores the
- * slide size for every other view.
- */
-const PAGE_A4_PORTRAIT = '@media print{@page{size:210mm 297mm;margin:10mm;}}';
-function setPrintPageSize() {
-  let st = document.getElementById('printPageSize');
-  if (!st) {
-    st = document.createElement('style');
-    st.id = 'printPageSize';
-    document.head.appendChild(st);
-  }
-  st.textContent = S.view === 'ecommonthly' ? PAGE_A4_PORTRAIT : '';
-  return S.view === 'ecommonthly';
 }
 
 function sizeForPrint() {
   const body = document.body;
   if (!body) return Promise.resolve();
-  const a4 = setPrintPageSize();
-  /**
-   * `print-prep` exists to make the on-screen box the same size as a printed
-   * SLIDE, so Chart.js draws its canvases at the right width. The e-commerce
-   * report has no canvas and is not a slide, so it gets the A4 content width
-   * instead — sizing it to 12.493in would lay it out for a page it will never
-   * be printed on.
-   */
-  body.classList.toggle('pp-a4', a4);
   body.classList.add('print-prep');
   return new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)))
     .then(() => { resizeChartsForPrint(); fitNativeSlides(); buildPrintSvgs();
@@ -7794,13 +7779,7 @@ function sizeForPrint() {
 }
 function clearPrintPrep() {
   document.body.classList.remove('print-prep');
-  document.body.classList.remove('pp-a4');
-  // Reset the page size too. `setPrintPageSize()` rewrites it before every
-  // print, so a stale value is harmless — but leaving an A4 rule sitting in the
-  // head after an e-commerce export is the kind of thing that looks like the
-  // cause of the next unrelated print bug.
-  var ps = document.getElementById('printPageSize');
-  if (ps) ps.textContent = '';
+
   clearNativeSlides();
   clearPrintSvgs();
   /**
@@ -7886,7 +7865,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.172.0';
+const CLIENT_BUILD = '3.173.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
