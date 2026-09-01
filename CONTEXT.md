@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.168.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.169.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,32 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.169.0 — the date range is back, on every page. Sessions overview zoomed
+out. Rounded bars in the SVG twin.**
+
+**THE DATE RANGE, LEFT OF THE LOGO** (MW). It has been missing from the PDF
+since v3.150, when MW rejected the cover page and both mastheads went
+`display:none` — it sat in the backlog as an open item for fifteen releases.
+
+Hung off `logoImg` rather than off `slide()`, and that is the whole trick: the
+slide helper builds most headers but NOT all of them — the GBP detail pages, the
+two Search pages and the four Content pages each write their own — and every one
+of them ends with that same variable. One edit puts the stamp on all twenty-two
+headers, including any section added later, with nothing to remember. Print
+only; on screen the range is already in the controls.
+
+**SESSIONS OVERVIEW 80% -> 62%** (MW: "zoom out a little"). The grid's share of
+the page; the centring rule splits the rest above and below.
+
+**ROUNDED BARS IN THE TWIN.** Chart.js gives bars a `borderRadius` and the SVG
+was drawing square corners, so the printed bar chart read as a different
+component from the on-screen one. Radius clamped to half the bar's width and
+height so a thin bar cannot turn into a lozenge.
+
+**Verified:** 22 range stamps rendering "2026-08-01 -> 2026-08-31", no console
+errors, 0 clipping.
+
 
 **v3.168.0 — every printed chart is SVG now, not just the two. Point markers
 added.**
