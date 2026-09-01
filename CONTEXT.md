@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.169.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.170.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,36 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.170.0 — date stamp beside the logo and in human form; the stacked bar stops
+being squeezed and stops being rounded.**
+
+**THE DATE WAS SITTING IN THE MIDDLE OF THE HEADER.** The slide title is
+`justify-content:space-between`, so hanging the range next to the logo as a
+SIBLING gave the header three flex children and the space was split between all
+of them. Range and logo are one grouped child now and the pair sits together on
+the right, which is what MW asked for.
+
+**"1 Aug 2026 - 31 Aug 2026."** Formatted by hand rather than with
+`toLocaleDateString`: that reads the browser's locale, so the same deck printed
+on two machines would carry two different date formats.
+
+**THE SQUEEZE WAS `preserveAspectRatio="none"`.** The SVG twin is built while the
+page is at print WIDTH, but a `slide-fill` chart's HEIGHT is decided by the print
+layout, which the screen never has — so the twin was authored at the screen's
+250px box and then stretched into a much taller printed one. Nothing distorted on
+GBP or Google reviews, where the two boxes happen to match, which is why it
+passed there and failed here. `xMidYMid meet` now: the twin scales uniformly and
+centres, so a mismatch costs a little space rather than the shape.
+
+**AND THE ROUNDING WAS WRONG ON A STACK.** v3.169 took `borderRadius` from the
+dataset and applied it to every rectangle. On a stacked bar that rounds each
+block's own four corners, so the column reads as four loose tiles. The desktop
+chart does not look like that. Square, as MW said.
+
+**Verified:** range renders "1 Aug 2026 – 31 Aug 2026" on all headers, no console
+errors, 0 clipping.
+
 
 **v3.169.0 — the date range is back, on every page. Sessions overview zoomed
 out. Rounded bars in the SVG twin.**

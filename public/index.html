@@ -584,6 +584,7 @@
   .chart-svg{display:none;}
   /* The printed date stamp. Hidden on screen — the range is in the controls. */
   .slide-range{display:none;}
+  .slide-right{display:inline-flex;align-items:center;gap:12px;}
   .hidden{display:none!important;}
 
   /* ---------------- print / PDF: 16:9 presentation ---------------- */
@@ -1117,8 +1118,7 @@
     .chart-wrap canvas{display:none!important;}
     .chart-svg{display:block!important;width:100%;height:100%;}
     .slide-range{display:inline-block!important;font-size:9.5px;font-weight:600;
-      letter-spacing:.02em;color:var(--faint);margin-right:12px;white-space:nowrap;
-      vertical-align:middle;}
+      letter-spacing:.02em;color:var(--faint);white-space:nowrap;vertical-align:middle;}
     /**
      * VERTICALLY CENTRED ON EVERY PAGE (MW), WITH TWO FLEX SPACERS.
      *
@@ -2576,15 +2576,30 @@ function renderReport() {
    * Print only: on screen the range is already in the controls above the deck.
    */
   const RANGE_LABEL = (() => {
+    // "1 Aug 2026 - 31 Aug 2026" (MW). Built by hand rather than with
+    // `toLocaleDateString`, whose output depends on the reader's browser locale
+    // — a deck printed in Bangkok and one printed elsewhere would not match.
+    const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const human = (v) => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ''));
+      return m ? `${Number(m[3])} ${MON[Number(m[2]) - 1]} ${m[1]}` : '';
+    };
     try {
-      const f = ($('from') || {}).value, t = ($('to') || {}).value;
-      return f && t ? `${f} \u2192 ${t}` : '';
+      const f = human(($('from') || {}).value), t = human(($('to') || {}).value);
+      return f && t ? `${f} \u2013 ${t}` : '';
     } catch (e) { return ''; }
   })();
-  const logoImg = `<span class="slide-range">${esc(RANGE_LABEL)}</span><img
+  /**
+   * The range and the logo are ONE flex child, not two. The slide header is
+   * `justify-content:space-between`, so leaving them as siblings gave three
+   * items and pushed the date into the middle of the page (MW: "move the date
+   * to the left of the logo"). Grouped, the pair sits together at the right.
+   */
+  const logoImg = `<span class="slide-right"><span class="slide-range">${
+    esc(RANGE_LABEL)}</span><img
     class="slide-logo" src="/brand/${
     (HOSPITAL[sel] || HOSPITAL.BGH).file}" alt="${esc(sel)}"
-    onerror="this.style.display='none'">`;
+    onerror="this.style.display='none'"></span>`;
 
   /**
    * `allFour` marks a block that deliberately shows every hospital — a
@@ -7562,11 +7577,13 @@ function chartToSvg(chart, W, H) {
       stackBase[i] = base + (Number(v) || 0);
       const top = Math.min(y0, y1p), hh = Math.abs(y0 - y1p);
       if (!(hh > 0)) return;
-      // Chart.js rounds these; a square-cornered twin reads as a different chart.
-      const rr = Math.min(Number(d.borderRadius || 0), bw / 2, hh / 2);
+      /* SQUARE. v3.169 rounded every segment from the dataset's `borderRadius`
+         and MW was right that it looks wrong: on a STACK that puts a radius on
+         each block's own corners, so the bar reads as four loose tiles rather
+         than one column. The desktop chart does not look like that, and the
+         instruction was to match it. */
       out.push('<rect x="' + (xAt(i) - bw / 2).toFixed(1) + '" y="' + top.toFixed(1)
-        + '" width="' + bw.toFixed(1) + '" height="' + hh.toFixed(1) + '"'
-        + (rr > 0 ? ' rx="' + rr.toFixed(1) + '"' : '') + ' fill="'
+        + '" width="' + bw.toFixed(1) + '" height="' + hh.toFixed(1) + '" fill="'
         + svgEsc(d.backgroundColor || d.borderColor || '#999') + '"/>');
     });
   });
@@ -7627,7 +7644,7 @@ function chartToSvg(chart, W, H) {
     });
   }
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H
-    + '" width="100%" height="100%" preserveAspectRatio="none">' + out.join('') + '</svg>';
+    + '" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">' + out.join('') + '</svg>';
 }
 /** Build (or rebuild) an SVG twin beside every canvas on the `pn` slides. */
 function buildPrintSvgs() {
@@ -7780,7 +7797,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.169.0';
+const CLIENT_BUILD = '3.170.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
