@@ -380,7 +380,7 @@
   .mr-title{font-size:var(--text-2xl);font-weight:600;color:var(--ink);letter-spacing:-.025em;}
   .mr-sub{font-size:var(--text-base);font-weight:400;color:var(--violet);}
   .mr-scope{margin-left:auto;font-size:var(--text-2xs);color:var(--faint);}
-  .mr-range{display:none;}
+  .mr-brand{display:none;}
   .mr-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;}
   /* Cards, not table cells divided by rules — the KPI row is the first thing
      read and the vertical hairlines in the original made it feel like a ledger. */
@@ -457,8 +457,17 @@
      */
     .mr{width:13.333in;box-sizing:border-box;
       padding:0.34in 0.42in 0.3in;overflow:hidden;background:transparent;}
-    .mr-range{display:block!important;margin-left:auto;font-size:10px;font-weight:600;
-      letter-spacing:.02em;color:var(--faint);white-space:nowrap;}
+    /**
+     * The wordmark WITHOUT the HEADQUARTERS lockup (MW). The deck's slide
+     * headers carry the per-hospital mark, which for BGH is the BHQ logo with
+     * "HEADQUARTERS" under it; this report covers e-commerce across the group,
+     * so the plain Bangkok Hospital wordmark is the correct one — the same file
+     * the sidebar already uses.
+     */
+    .mr-brand{display:flex!important;align-items:center;gap:14px;margin-left:auto;}
+    .mr-range{font-size:10px;font-weight:600;letter-spacing:.02em;
+      color:var(--faint);white-space:nowrap;}
+    .mr-logo{width:150px;height:auto;flex:none;}
     /**
      * THE GRIDS ARE PINNED. A printed page is narrower than the window it was
      * laid out in, so `@media(max-width:900px)` below fires during print and
@@ -5954,8 +5963,16 @@ function renderEcomMonthly() {
       <div class="mr-head">
         <div class="mr-title">E-Commerce</div>
         <div class="mr-sub">${esc(d.monthLabel)} Performance</div>
-        <!-- Print only. On screen the range is in the controls directly above. -->
-        <div class="mr-range">${esc(humanRange())}</div>
+        <!-- Print only: on screen the range is in the controls directly above,
+             and the wordmark is already in the sidebar. Grouped as ONE flex
+             child so space-between in the header keeps the pair together on the
+             right instead of spreading them across the page — the same trap the
+             deck's slide headers hit in v3.170. -->
+        <div class="mr-brand">
+          <span class="mr-range">${esc(humanRange())}</span>
+          <img class="mr-logo" src="/brand/bh-wordmark.png" alt="Bangkok Hospital"
+               onerror="this.style.display='none'">
+        </div>
       </div>
 
       <div class="mr-kpis">
@@ -7865,7 +7882,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.173.0';
+const CLIENT_BUILD = '3.174.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

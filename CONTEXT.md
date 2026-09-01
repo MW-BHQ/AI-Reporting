@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.173.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.174.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,30 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.174.0 — Bangkok Hospital wordmark on the printed E-commerce Report.**
+
+Top right, beside the date range, at the deck's 150px logo width so the page
+reads as part of the same set.
+
+**`bh-wordmark.png`, NOT `hosp-bgh.svg`** (MW: "the logo without Headquarters
+text mark"). The deck's slide headers carry the per-hospital mark, and for BGH
+that file is the BHQ lockup with HEADQUARTERS under it. This report covers
+e-commerce across the group, so the plain Bangkok Hospital wordmark is the
+correct one — and it is the same file the sidebar already uses, so nothing new
+was added to `public/brand/`.
+
+Range and logo are ONE grouped flex child. As siblings, the header's
+space-between would have split the pair across the page — the same trap the
+deck's slide headers hit in v3.170.
+
+**`js:comment-backtick` FIRED AGAIN, on me, second time today.** The comment
+explaining the grouping named a CSS property in backticks inside the template
+literal and killed the client. The audit rule reported it by name this time
+("1 backtick in an HTML comment — ends the template literal"), which turned it
+into a ten-second fix. **The habit of quoting an identifier in backticks is
+stronger than the memory of the rule, so the rule is what has to catch it.**
+
 
 **v3.173.0 — the E-commerce Report prints as a 16:9 slide after all, with the
 deck's padding and page tint.**
