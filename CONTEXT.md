@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.167.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.168.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,34 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.168.0 — every printed chart is SVG now, not just the two. Point markers
+added.**
+
+MW: "works! but on All Time you forgot the dot on each month. Let's apply this
+trick to the rest of the graphs — YouTube, TikTok, anything else? No, keep the
+desktop version interactive, not fixed SVG."
+
+**THE DOTS.** A line dataset that sets `pointRadius` draws a marker at every
+value on screen; the twin drew the line and skipped them, so the printed
+Average-rating line lost its reading points. Circles now, filled with
+`pointBackgroundColor` where one is given and the line colour otherwise, with a
+white outline like Chart.js's, so a dot sitting on a bar still reads.
+
+**EXTENDED TO EVERY CHART.** `buildPrintSvgs()` no longer looks only at `.pn`
+slides and the print rule that hides the canvas is no longer scoped either — all
+six charts in the deck get a twin. Sessions overview's stacked bars, YouTube,
+TikTok, the two GBP areas, the two review charts.
+
+**THE SCREEN IS UNTOUCHED, WHICH IS THE POINT.** The swap happens inside
+`sizeForPrint()` and is undone on `afterprint`. `.chart-svg` is `display:none`
+outside print. The dashboard keeps its canvases, its tooltips and its hover —
+MW asked for that explicitly and it would have been easy to lose by "simplifying"
+to one renderer.
+
+**Verified:** 6 canvases, 6 twins, 22 point markers, no console errors, and after
+`clearPrintPrep()` zero SVGs remain with the canvas back to `display:block`.
+
 
 **v3.167.0 — the two problem pages print SVG charts instead of canvas. Both of
 MW's symptoms have the same cause and this removes it.**

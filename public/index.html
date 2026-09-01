@@ -1110,8 +1110,10 @@
     .slide.pn .chart-wrap{max-height:none!important;}
     .slide.pn tbody tr{display:table-row!important;}
     /* On these two slides the printed chart is the SVG twin, not the canvas. */
-    .slide.pn .chart-wrap canvas{display:none!important;}
-    .slide.pn .chart-svg{display:block!important;width:100%;height:100%;}
+    /* Every printed chart is the SVG twin. The SCREEN keeps the canvas, so the
+       dashboard stays interactive — MW: "keep the desktop version interactive". */
+    .chart-wrap canvas{display:none!important;}
+    .chart-svg{display:block!important;width:100%;height:100%;}
     /**
      * VERTICALLY CENTRED ON EVERY PAGE (MW), WITH TWO FLEX SPACERS.
      *
@@ -7553,6 +7555,22 @@ function chartToSvg(chart, W, H) {
     }
     out.push('<path d="' + path + '" fill="none" stroke="' + svgEsc(d.borderColor || '#666')
       + '" stroke-width="' + (d.borderWidth || 2) + '" stroke-linejoin="round"/>');
+    /**
+     * THE DOTS (MW: "on All Time you forgot the dot on each month").
+     * A line dataset that sets `pointRadius` draws a marker at every value on
+     * screen, and the SVG twin has to as well or the printed line loses the
+     * reading points. Filled with the point colour where one is given, falling
+     * back to the line's own colour, and outlined in white the way Chart.js
+     * does so a dot sitting on a bar still reads.
+     */
+    const pr = Number(d.pointRadius || 0);
+    if (pr > 0) {
+      const pf = svgEsc(d.pointBackgroundColor || d.borderColor || '#666');
+      pts.forEach((pt) => {
+        out.push('<circle cx="' + pt[0].toFixed(1) + '" cy="' + pt[1].toFixed(1)
+          + '" r="' + pr + '" fill="' + pf + '" stroke="#fff" stroke-width="1"/>');
+      });
+    }
   });
   // x labels, using the ticks Chart.js kept after its own auto-skip
   ((sc.x && sc.x.ticks) || []).forEach((t, k) => {
@@ -7586,7 +7604,7 @@ function chartToSvg(chart, W, H) {
 }
 /** Build (or rebuild) an SVG twin beside every canvas on the `pn` slides. */
 function buildPrintSvgs() {
-  document.querySelectorAll('.slide.pn .chart-wrap').forEach((wrap) => {
+  document.querySelectorAll('.chart-wrap').forEach((wrap) => {
     const cv = wrap.querySelector('canvas');
     if (!cv) return;
     const chart = (S.charts && S.charts[cv.id]) || (window.Chart && Chart.getChart && Chart.getChart(cv));
@@ -7604,7 +7622,7 @@ function buildPrintSvgs() {
   });
 }
 function clearPrintSvgs() {
-  document.querySelectorAll('.slide.pn .chart-svg').forEach((el) => el.remove());
+  document.querySelectorAll('.chart-svg').forEach((el) => el.remove());
 }
 
 function fitNativeSlides() {
@@ -7735,7 +7753,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.167.0';
+const CLIENT_BUILD = '3.168.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
