@@ -1951,6 +1951,16 @@ async function buildReport(from, to) {
     logJson("WARN", "youtube_failed", { error: String(e.message || e) });
     return null;
   });
+  /**
+   * Better AI, from the agentic assistant's own Sheet. Wrapped like YouTube:
+   * a sheet that is unshared, renamed or empty degrades that one section rather
+   * than failing the whole monthly pull. The reason is kept IN the payload, not
+   * only in the log, so the slide can say why it is empty.
+   */
+  jobs.betterAi = buildBetterAi(from, to).catch((e) => {
+    logJson("WARN", "betterai_failed", { error: String(e.message || e) });
+    return { available: false, error: String(e.message || e) };
+  });
   jobs.gbpRanks = buildGbpKeywords(from, to).catch((e) => {
     logJson("WARN", "gbp_keywords_failed", { error: String(e.message || e) });
     return null;
@@ -3415,6 +3425,7 @@ async function buildReport(from, to) {
     appointments,
     gbpRanks: data.gbpRanks || { unavailable: true },
     youtube: data.youtube || { available: false },
+    betterAi: data.betterAi || { available: false },
     tiktok,
     social,
     languages,
@@ -4285,6 +4296,164 @@ function monthWeekLabels(from, to) {
  * a hand-added Month column). Columns are read BY NAME — see `buildYouTube`.
  */
 const YT_SHEET_ID = process.env.YT_SHEET_ID || "1o0n44IioDyEvAlNt_Tf11SxD11mDpkzlfABbBSbJZus";
+
+const BETTERAI_SHEET_ID = process.env.BETTERAI_SHEET_ID || "1jOz2XYry-D28z_Eg6w3oIHao1c61OrGTa5jD7Hz21oQ";
+
+/**
+ * BETTER AI — the agentic assistant's conversion funnel, from its own Sheet.
+ *
+ * Two tabs, both daily, both read by HEADER NAME and never by position: the
+ * headers are Thai and the export has already grown from 15 columns to 23 in
+ * the tabs we do not use, so a positional read is a time bomb.
+ *   `สรุปรายวัน`      — one row per day, every counter (cols A-N).
+ *   `รายวันแยกภาษา`  — one row per day PER LANGUAGE (cols A-N).
+ *
+ * THE PERCENTAGE COLUMNS ARE IGNORED ON PURPOSE. Both tabs carry ready-made
+ * `%` columns, and they are computed over the SHEET's whole history. This report
+ * runs on a chosen window, so a borrowed percentage would disagree with the
+ * counts printed beside it. Every rate here is derived from the counts that
+ * survive the date filter.
+ *
+ * The funnel is Sessions -> advised -> appointment clicked -> appointment
+ * completed. The last step is expressed against CLICKS, not sessions, because
+ * that is the only one the assistant is actually being judged on: of the people
+ * it persuaded to start booking, how many finished.
+ */
+async function buildBetterAi(from, to) {
+  const T_DAILY = "สรุปรายวัน", T_LANG = "รายวันแยกภาษา";
+  let res;
+  try {
+    res = await sheetBatchGet(BETTERAI_SHEET_ID, [`'${T_DAILY}'!A1:N`, `'${T_LANG}'!A1:N`]);
+  } catch (e) {
+    return { available: false, error: String((e && e.message) || e) };
+  }
+  const vals = (i) => (res[i] && res[i].values) || [];
+  const daily = vals(0), lang = vals(1);
+  if (!daily.length) return { available: false, error: "no rows in " + T_DAILY };
+
+  const headOf = (rows) => (rows[0] || []).map((h) => String(h == null ? "" : h).trim());
+  const colOf = (head) => (name) => {
+    const want = String(name).trim();
+    const exact = head.indexOf(want);
+    if (exact >= 0) return exact;
+    // Trailing units and stray spaces creep into these headers; a prefix match
+    // recovers "Sessions " and "ได้รับคำแนะนำ (คน)" without matching anything else.
+    const pfx = head.findIndex((h) => h.startsWith(want));
+    return pfx >= 0 ? pfx : -1;
+  };
+  const n = (v) => {
+    if (typeof v === "number") return v;
+    const x = parseFloat(String(v == null ? "" : v).replace(/[, ]/g, ""));
+    return isFinite(x) ? x : 0;
+  };
+  /**
+   * A cell in this column has arrived as an ISO string, as a Thai-formatted
+   * date and as a Sheets serial, depending on how the tab was last edited.
+   * All three resolve here; anything else drops the row rather than being
+   * guessed at, because a mis-parsed date silently moves revenue between months.
+   */
+  const iso = (v) => {
+    if (v == null || v === "") return "";
+    if (typeof v === "number" && v > 20000 && v < 80000) {
+      const d = new Date(Date.UTC(1899, 11, 30) + v * 86400000);
+      return d.toISOString().slice(0, 10);
+    }
+    const s = String(v).trim();
+    let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s);
+    if (m) {
+      let y = +m[3]; if (y > 2400) y -= 543;
+      return `${y}-${String(+m[2]).padStart(2, "0")}-${String(+m[1]).padStart(2, "0")}`;
+    }
+    const t = Date.parse(s);
+    return isFinite(t) ? new Date(t).toISOString().slice(0, 10) : "";
+  };
+
+  const dH = headOf(daily), dC = colOf(dH);
+  const D = {
+    date: dC("วันที่"), sessions: dC("Sessions"), advice: dC("ได้รับคำแนะนำ"),
+    click: dC("กดนัดหมาย"), done: dC("นัดหมายสำเร็จ"),
+    rt: dC("นัด realtime"), nrt: dC("นัดไม่ realtime"),
+    doctor: dC("ดูโปรไฟล์แพทย์"), center: dC("ดูศูนย์รักษา"), pkg: dC("ดูแพ็กเกจ"),
+    article: dC("ดูบทความ"), cart: dC("เพิ่มลงตะกร้า"),
+  };
+  const missing = Object.keys(D).filter((k) => D[k] < 0);
+  if (missing.length) {
+    return { available: false,
+             error: `${T_DAILY} is missing column(s): ${missing.join(", ")} — headers seen: ${dH.join(" | ")}` };
+  }
+
+  const KEYS = ["sessions","advice","click","done","rt","nrt","doctor","center","pkg","article","cart"];
+  const totals = {}; KEYS.forEach((k) => { totals[k] = 0; });
+  const days = [];
+  let sheetFrom = "", sheetTo = "";
+  for (let r = 1; r < daily.length; r++) {
+    const row = daily[r] || [];
+    const d = iso(row[D.date]);
+    if (!d) continue;                            // the tab's own total rows
+    if (!sheetFrom || d < sheetFrom) sheetFrom = d;
+    if (!sheetTo || d > sheetTo) sheetTo = d;
+    if (d < from || d > to) continue;
+    const rec = { date: d };
+    KEYS.forEach((k) => { rec[k] = n(row[D[k]]); totals[k] += rec[k]; });
+    days.push(rec);
+  }
+  days.sort((a, b) => (a.date < b.date ? -1 : 1));
+
+  // ---- per language, same window, aggregated across its daily rows
+  const languages = [];
+  if (lang.length) {
+    const lH = headOf(lang), lC = colOf(lH);
+    const L = {
+      date: lC("วันที่"), code: lC("ภาษา"), sessions: lC("Sessions"),
+      advice: lC("ได้รับคำแนะนำ"), click: lC("กดนัดหมาย"), done: lC("นัดหมายสำเร็จ"),
+      doctor: lC("ดูโปรไฟล์แพทย์"), pkg: lC("ดูแพ็กเกจ"),
+    };
+    if (L.date >= 0 && L.code >= 0 && L.sessions >= 0) {
+      const by = new Map();
+      for (let r = 1; r < lang.length; r++) {
+        const row = lang[r] || [];
+        const d = iso(row[L.date]);
+        if (!d || d < from || d > to) continue;
+        const code = String(row[L.code] == null ? "" : row[L.code]).trim().toLowerCase();
+        if (!code) continue;
+        const cur = by.get(code) || { code, sessions: 0, advice: 0, click: 0, done: 0, doctor: 0, pkg: 0 };
+        ["sessions","advice","click","done","doctor","pkg"].forEach((k) => {
+          if (L[k] >= 0) cur[k] += n(row[L[k]]);
+        });
+        by.set(code, cur);
+      }
+      languages.push(...[...by.values()].sort((a, b) => b.sessions - a.sessions));
+    }
+  }
+
+  const rate = (a, b) => (b > 0 ? a / b : null);
+  /**
+   * `dayGaps` mirrors YouTube's: the number of days in the window the sheet has
+   * no row for. The tab is written by a scheduled job, and a job that stopped
+   * running produces a report that is simply smaller — with nothing to say so.
+   */
+  const spanDays = Math.round((Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / 86400000) + 1;
+  return {
+    available: true,
+    source: "agentic-sheet",
+    totals,
+    rates: {
+      advice: rate(totals.advice, totals.sessions),
+      click: rate(totals.click, totals.sessions),
+      done: rate(totals.done, totals.sessions),
+      close: rate(totals.done, totals.click),
+      realtime: rate(totals.rt, totals.rt + totals.nrt),
+    },
+    days,
+    languages,
+    coverage: { daysWithData: days.length, daysInRange: spanDays,
+                dayGaps: Math.max(0, spanDays - days.length),
+                sheetFrom, sheetTo },
+  };
+}
+
 
 
 /**

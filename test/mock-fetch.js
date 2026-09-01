@@ -664,6 +664,58 @@ global.fetch = async (url, opts = {}) => {
    */
   if (u.includes("sheets.googleapis.com")) {
     /**
+     * BETTER AI: the agentic assistant's own Sheet, two daily tabs.
+     *
+     * FOUR TRAPS, each from something this export actually does:
+     *   - Headers are THAI and the tab names are Thai, so the ranges arrive
+     *     percent-encoded. Matching the decoded name is the only readable way.
+     *   - The date column is a MIXED TYPE: an ISO string, a Sheets serial and a
+     *     d/m/yyyy Buddhist-era string all appear here, and all three must land
+     *     on the same day.
+     *   - A `รวม` total row with no parseable date must DROP OUT rather than be
+     *     summed alongside the days it totals.
+     *   - A row outside the window (2026-06-30) must count in neither the
+     *     totals nor the language split.
+     *
+     * The report window is 2026-07-01..2026-07-31, so only the July rows count:
+     * sessions 100+60+40 = 200, advised 70, clicks 24, completed 8. That makes
+     * close rate 8/24 and leaves 28 of 31 days missing, which `dayGaps` must
+     * report rather than hide.
+     */
+    if (u.includes(encodeURIComponent("\u0e2a\u0e23\u0e38\u0e1b\u0e23\u0e32\u0e22\u0e27\u0e31\u0e19"))) {
+      const dHead = ["\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48", "\u0e27\u0e31\u0e19", "\u0e40\u0e14\u0e37\u0e2d\u0e19", "Sessions",
+        "\u0e44\u0e14\u0e49\u0e23\u0e31\u0e1a\u0e04\u0e33\u0e41\u0e19\u0e30\u0e19\u0e33", "\u0e01\u0e14\u0e19\u0e31\u0e14\u0e2b\u0e21\u0e32\u0e22", "\u0e19\u0e31\u0e14\u0e2b\u0e21\u0e32\u0e22\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08",
+        "\u0e19\u0e31\u0e14 realtime", "\u0e19\u0e31\u0e14\u0e44\u0e21\u0e48 realtime", "\u0e14\u0e39\u0e42\u0e1b\u0e23\u0e44\u0e1f\u0e25\u0e4c\u0e41\u0e1e\u0e17\u0e22\u0e4c",
+        "\u0e14\u0e39\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e23\u0e31\u0e01\u0e29\u0e32", "\u0e14\u0e39\u0e41\u0e1e\u0e47\u0e01\u0e40\u0e01\u0e08", "\u0e14\u0e39\u0e1a\u0e17\u0e04\u0e27\u0e32\u0e21", "\u0e40\u0e1e\u0e34\u0e48\u0e21\u0e25\u0e07\u0e15\u0e30\u0e01\u0e23\u0e49\u0e32"];
+      const th = (d) => d;
+      const daily = [dHead,
+        // ISO string
+        ["2026-07-31", "\u0e2a\u0e38\u0e01\u0e23\u0e4c", "\u0e01.\u0e04. 2026", 100, 70, 12, 4, 3, 1, 20, 8, 6, 5, 2],
+        // Sheets serial for 2026-07-15
+        [46218, "\u0e1e\u0e38\u0e17", "\u0e01.\u0e04. 2026", 60, 0, 8, 3, 1, 2, 10, 4, 3, 2, 1],
+        // Buddhist-era d/m/yyyy for 2026-07-02
+        ["2/7/2569", "\u0e1e\u0e24\u0e2b\u0e31\u0e2a", "\u0e01.\u0e04. 2026", 40, 0, 4, 1, 1, 0, 6, 2, 1, 1, 0],
+        // outside the window — must not count
+        ["2026-06-30", "\u0e2d\u0e31\u0e07\u0e04\u0e32\u0e23", "\u0e21\u0e34.\u0e22. 2026", 999, 999, 999, 999, 0, 0, 0, 0, 0, 0, 0],
+        // total row with no date — must drop out
+        ["\u0e23\u0e27\u0e21", "", "", 1199, 1069, 1023, 1007, 5, 3, 36, 14, 10, 8, 3]];
+      const lHead = ["\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48", "\u0e20\u0e32\u0e29\u0e32", "Sessions", "\u0e44\u0e14\u0e49\u0e23\u0e31\u0e1a\u0e04\u0e33\u0e41\u0e19\u0e30\u0e19\u0e33",
+        "\u0e01\u0e14\u0e19\u0e31\u0e14\u0e2b\u0e21\u0e32\u0e22", "\u0e19\u0e31\u0e14\u0e2b\u0e21\u0e32\u0e22\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08", "\u0e19\u0e31\u0e14 realtime",
+        "\u0e19\u0e31\u0e14\u0e44\u0e21\u0e48 realtime", "\u0e14\u0e39\u0e42\u0e1b\u0e23\u0e44\u0e1f\u0e25\u0e4c\u0e41\u0e1e\u0e17\u0e22\u0e4c", "\u0e14\u0e39\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e23\u0e31\u0e01\u0e29\u0e32",
+        "\u0e14\u0e39\u0e41\u0e1e\u0e47\u0e01\u0e40\u0e01\u0e08", "\u0e14\u0e39\u0e1a\u0e17\u0e04\u0e27\u0e32\u0e21", "\u0e40\u0e1e\u0e34\u0e48\u0e21\u0e25\u0e07\u0e15\u0e30\u0e01\u0e23\u0e49\u0e32", "% \u0e19\u0e31\u0e14\u0e2b\u0e21\u0e32\u0e22"];
+      const langRows = [lHead,
+        ["2026-07-31", "th", 60, 40, 7, 2, 1, 1, 12, 5, 4, 3, 1, 0.033],
+        ["2026-07-31", "en", 40, 30, 5, 2, 2, 0, 8, 3, 2, 2, 1, 0.05],
+        ["2026-07-15", "th", 35, 0, 5, 2, 1, 1, 6, 2, 2, 1, 1, 0.057],
+        ["2026-07-15", "ar", 25, 0, 3, 1, 0, 1, 4, 2, 1, 1, 0, 0.04],
+        ["2026-07-02", "ja", 40, 0, 4, 1, 1, 0, 6, 2, 1, 1, 0, 0.025],
+        // outside the window
+        ["2026-06-30", "th", 999, 999, 999, 999, 0, 0, 0, 0, 0, 0, 0, 1]];
+      return jsonRes({ spreadsheetId: "mock-betterai",
+        valueRanges: [{ values: daily }, { values: langRows }] });
+    }
+
+    /**
      * Web appointments batchGet. Six aligned single-column ranges plus the
      * monthly amounts, in the order the server asks for them.
      *

@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.174.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.175.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,49 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.175.0 — new section: Better AI, after Chat Bubble.**
+
+The agentic assistant's conversion funnel, from its own Sheet
+(`BETTERAI_SHEET_ID`, default `1jOz2XY...21oQ`, shared to the compute service
+account). Two daily tabs, columns A-N only, as MW specified:
+`สรุปรายวัน` (one row per day) and `รายวันแยกภาษา` (one row per day per language).
+
+**THE PERCENTAGE COLUMNS ARE IGNORED ON PURPOSE.** Both tabs carry ready-made
+`%` columns and they are computed over the sheet's WHOLE HISTORY. This report
+runs on a chosen window, so a borrowed percentage would disagree with the counts
+printed next to it. Every rate on the slide is derived from the counts that
+survive the date filter.
+
+**THE LAST RATE IS AGAINST CLICKS, NOT SESSIONS.** "3.5% of sessions booked"
+tells nobody anything; "of the people it persuaded to start booking, a third
+finished" is what the assistant is accountable for, and it is the number that
+moves when the booking flow is fixed.
+
+**Columns read BY NAME, and the headers are Thai.** The unused tabs in this same
+workbook have already grown from 15 columns to 23, so a positional read is a
+time bomb. A missing column returns `available:false` WITH the header row it
+actually saw, so the failure names itself.
+
+**THE DATE COLUMN IS A MIXED TYPE** and all three forms had to be handled: an
+ISO string, a Sheets serial, and a Buddhist-era `d/m/yyyy`. Anything else drops
+the row rather than being guessed at. The mock fixture carries one of each, plus
+a `รวม` total row with no date that must drop out and an out-of-window row that
+must count in neither the totals nor the language split — so the parser is
+tested, not just exercised.
+
+**`dayGaps` follows YouTube's precedent.** The tab is written by a scheduled job,
+and a job that stopped running produces a report that is simply smaller with
+nothing to say so. The Conversations card reads "3 of 31 days have data".
+
+**TWO THINGS THE FUNNEL COMPONENT TAUGHT ME, BOTH BY LOOKING AT THE RENDER.**
+`.fn-bar` carries no colour of its own — every other funnel passes one in — and
+it needs to sit inside a `.fn-track`, which is what its percentage width resolves
+against. Missing both, it printed as an invisible box with a number floating at
+its right edge. Neither would have shown up in any test.
+
+Section slots after Chat Bubble; deck is 22 measured sections, 0 clipping.
+
 
 **v3.174.0 — Bangkok Hospital wordmark on the printed E-commerce Report.**
 

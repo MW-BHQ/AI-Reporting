@@ -3863,6 +3863,101 @@ function renderReport() {
    * YOUTUBE, two cards under Facebook (MW). One channel serves all four
    * hospitals, so this is BHQ-scoped — there is nothing to split per hospital.
    */
+  /**
+   * BETTER AI — the agentic assistant's conversion funnel (MW).
+   *
+   * ONE SLIDE, FOUR QUESTIONS: how many conversations, how many got a real
+   * recommendation, how many of those started booking, and how many finished.
+   * Everything else the sheet carries (centre views, packages, articles, cart)
+   * is engagement along the way and sits in one strip rather than competing
+   * with the funnel for attention.
+   *
+   * THE LAST RATE IS AGAINST CLICKS, NOT SESSIONS. "3.5% of sessions booked"
+   * flatters nothing and tells no one anything; "of the people it persuaded to
+   * start booking, a third finished" is the number the assistant is actually
+   * accountable for, and it is the one that moves when the booking flow is
+   * fixed.
+   *
+   * PERCENTAGES ARE DERIVED HERE, never read from the sheet's own `%` columns —
+   * those are computed over the sheet's whole history and would disagree with
+   * the counts printed beside them the moment a window is chosen.
+   */
+  const BAI = d.betterAi || {};
+  const betterAiBody = (() => {
+    if (!BAI.available) {
+      return `<div class="card"><div class="card-title">Better AI</div>
+        <div class="note">No data from the agentic assistant sheet.${
+          BAI.error ? ' ' + esc(String(BAI.error).slice(0, 240)) : ''}</div></div>`;
+    }
+    const T = BAI.totals || {}, R = BAI.rates || {};
+    const pct = (v) => (v === null || v === undefined ? '\u2014' : (Math.round(v * 1000) / 10) + '%');
+    const cov = BAI.coverage || {};
+    /* Funnel widths share the deck's perceptual scale, so the three stages read
+       long / mid / short instead of one bar and two stubs. */
+    const mx = Math.max(T.sessions || 1, 1);
+    /* `.fn-bar` carries no colour of its own — every other funnel on the deck
+       passes one in, and without it the bar prints as an invisible box with a
+       number floating at its right edge. Same three tints the Search and
+       Facebook funnels use, so the three stages read as the same component. */
+    /* Same structure as the Search and Facebook funnels — stage, label, then the
+       bar INSIDE a `.fn-track`. The track is what gives the bar something to be
+       a percentage of; without it the width resolved against the row and the bar
+       printed as an invisible box with a number at its right edge. */
+    const stage = (label, val, sub, w, bg, fg) => `<div class="fn-row">
+      <div class="fn-stage">${sub}</div>
+      <div class="fn-lab">${esc(label)}</div>
+      <div class="fn-track">
+        <div class="fn-bar" style="width:${w}%;background:${bg};color:${fg}">${num(val)}</div>
+      </div></div>`;
+    const engage = [
+      ['Doctor profiles', T.doctor], ['Centres', T.center], ['Packages', T.pkg],
+      ['Articles', T.article], ['Added to cart', T.cart],
+    ];
+    const langRows = (BAI.languages || []).slice(0, 8).map(l => {
+      const fl = LANG_FLAG[l.code] || '';
+      return `<tr>
+        <td class="strong">${fl ? `<span class="lflag">${fl}</span>` : ''}${esc((l.code || '').toUpperCase())}</td>
+        <td class="num">${num(l.sessions)}</td>
+        <td class="num">${num(l.click)}</td>
+        <td class="num strong">${num(l.done)}</td>
+        <td class="num">${l.click ? pct(l.done / l.click) : '\u2014'}</td></tr>`;
+    }).join('');
+    return `
+      <div class="grid g-5" style="margin-bottom:12px">
+        ${kpi('Conversations', num(T.sessions), cov.dayGaps
+            ? `${cov.daysWithData} of ${cov.daysInRange} days have data`
+            : `${cov.daysWithData} days`)}
+        ${kpi('Got a recommendation', num(T.advice), pct(R.advice) + ' of conversations')}
+        ${kpi('Started booking', num(T.click), pct(R.click) + ' of conversations')}
+        ${kpi('Appointments made', num(T.done), pct(R.close) + ' of those who started')}
+        ${kpi('Booked in real time', num(T.rt), R.realtime === null ? '\u2014'
+            : pct(R.realtime) + ' of appointments')}
+      </div>
+      <div class="grid g-2-1">
+        <div class="card">
+          <div class="card-title">From conversation to appointment</div>
+          ${stage('Conversations', T.sessions, '100%', 100, C.a, '#fff')}
+          ${stage('Got a recommendation', T.advice, pct(R.advice), fnW(T.advice, mx), C.b, '#fff')}
+          ${stage('Started booking', T.click, pct(R.click), fnW(T.click, mx), C.c, '#fff')}
+          ${stage('Appointment made', T.done, pct(R.done), fnW(T.done, mx), C.d, '#fff')}
+          <div class="chart-wrap" style="height:170px;margin-top:12px">
+            <canvas id="repBaiDays"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">By language</div>
+          ${langRows ? `<table><thead><tr>
+            <th>Language</th><th class="num">Conversations</th>
+            <th class="num">Started</th><th class="num">Made</th><th class="num">Finish rate</th>
+          </tr></thead><tbody>${langRows}</tbody></table>`
+            : '<div class="note">No per-language rows in this window.</div>'}
+          <div class="card-title" style="margin-top:14px">What they looked at</div>
+          <div class="grid g-5">
+            ${engage.map(([lab, v]) => `<div class="mini"><div class="lab">${esc(lab)}</div>
+              <div class="val">${num(v)}</div></div>`).join('')}
+          </div>
+        </div>
+      </div>`;
+  })();
   const YT = d.youtube || {};
   /**
    * SCORECARDS CARRY MoM AND YoY (v3.131.0), which is what the `Daily` tab of
@@ -4142,7 +4237,8 @@ function renderReport() {
     ${slide('TikTok', tkChannelBody, false, true, 'tiktok')}
     ${tkTopBody ? slide('TikTok \u00b7 Top performances', tkTopBody, false, true, 'tiktok') : ''}
     ${contentBody}
-    ${chatBody ? slide('Chat Bubble', chatBody, false, sel) : ''}`;
+    ${chatBody ? slide('Chat Bubble', chatBody, false, sel) : ''}
+    ${slide('Better AI', betterAiBody, false, 'BHQ')}`;
 
   // Charts must be drawn after the markup is in the DOM.
   if (U && U.months.length && window.Chart) {
@@ -4221,6 +4317,21 @@ function renderReport() {
       drawChart('repYtViews', YT.series.rows,
         [{ key:'v', label:'Views', color:C.b }]);
     }
+  }
+
+  /**
+   * Better AI: conversations against appointments started, per day.
+   *
+   * Two series on one axis on purpose — the point of the chart is the GAP
+   * between them, and a second axis would rescale the small series until the
+   * gap disappeared. Guarded on `days` rather than on `available`, because a
+   * sheet that answers but has no rows in the window must draw nothing instead
+   * of an empty axis.
+   */
+  if (BAI.available && (BAI.days || []).length && window.Chart) {
+    drawChart('repBaiDays', BAI.days.map(x => ({ d: x.date, s: x.sessions, c: x.click })),
+      [{ key:'s', label:'Conversations', color:C.a },
+       { key:'c', label:'Started booking', color:C.c }]);
   }
 
   document.querySelectorAll('[data-appttab]').forEach(el =>
@@ -7882,7 +7993,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.174.0';
+const CLIENT_BUILD = '3.175.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
