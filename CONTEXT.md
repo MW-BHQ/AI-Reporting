@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.175.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.176.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,32 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.176.0 — Better AI's headline card carries MoM instead of day coverage.**
+
+MW: "next month and forward will be full, so that metric is no use." Right — a
+day count that always reads "31 of 31" is furniture. Replaced with MoM on
+conversations.
+
+The previous window is summed in the SAME PASS over the tab. The whole sheet is
+already in memory, so a second date filter costs nothing, and it uses
+`comparisonWindows` so a 20-day range compares against 20 days rather than
+against a calendar month.
+
+**MoM is `null`, not 0, when the previous window has no rows.** "No basis for
+comparison" and "no change" are different statements, and the first month this
+section runs is entirely the former — `delta()` renders the em dash for it.
+
+**`coverage` stays in the payload and is deliberately unused on the card.** A
+scheduled job that stops writing to that tab is still worth being able to see
+from outside, even if the slide no longer shows it.
+
+**A NOTE FOR WHOEVER DEBUGS THIS NEXT: "Better AI" matches two slides.** The
+Actions section has key events called "Better AI start" and "Better AI result",
+so a probe that finds a slide by `textContent` lands on Actions, reads five
+cards that look plausible, and reports the wrong thing. Match on `.slide-title`.
+Cost two runs to notice.
+
 
 **v3.175.0 — new section: Better AI, after Chat Bubble.**
 

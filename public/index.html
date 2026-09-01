@@ -3891,7 +3891,12 @@ function renderReport() {
     }
     const T = BAI.totals || {}, R = BAI.rates || {};
     const pct = (v) => (v === null || v === undefined ? '\u2014' : (Math.round(v * 1000) / 10) + '%');
-    const cov = BAI.coverage || {};
+    /**
+     * `coverage` is still in the payload and deliberately unused on the card.
+     * MW: from next month the sheet is complete, so a day count would read
+     * "31 of 31" forever. It stays in the API because a scheduled job that
+     * stops is still worth being able to see from the outside.
+     */
     /* Funnel widths share the deck's perceptual scale, so the three stages read
        long / mid / short instead of one bar and two stubs. */
     const mx = Math.max(T.sessions || 1, 1);
@@ -3924,9 +3929,8 @@ function renderReport() {
     }).join('');
     return `
       <div class="grid g-5" style="margin-bottom:12px">
-        ${kpi('Conversations', num(T.sessions), cov.dayGaps
-            ? `${cov.daysWithData} of ${cov.daysInRange} days have data`
-            : `${cov.daysWithData} days`)}
+        ${kpi('Conversations', num(T.sessions),
+            `${delta((BAI.mom || {}).sessions, 'MoM \u2014 same length of window, one period back')} MoM`)}
         ${kpi('Got a recommendation', num(T.advice), pct(R.advice) + ' of conversations')}
         ${kpi('Started booking', num(T.click), pct(R.click) + ' of conversations')}
         ${kpi('Appointments made', num(T.done), pct(R.close) + ' of those who started')}
@@ -7993,7 +7997,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.175.0';
+const CLIENT_BUILD = '3.176.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

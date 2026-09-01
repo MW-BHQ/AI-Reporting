@@ -4386,6 +4386,17 @@ async function buildBetterAi(from, to) {
 
   const KEYS = ["sessions","advice","click","done","rt","nrt","doctor","center","pkg","article","cart"];
   const totals = {}; KEYS.forEach((k) => { totals[k] = 0; });
+  /**
+   * The PREVIOUS window is summed in the same pass. The whole tab is already in
+   * memory, so a second date filter is free — and MW wants MoM on the headline
+   * card now that the day-coverage note has served its purpose (from next month
+   * the sheet is complete, so "28 of 31 days" would always read 31 of 31).
+   *
+   * Same window LENGTH one period back, from `comparisonWindows`, so a 20-day
+   * range compares against 20 days rather than against a calendar month.
+   */
+  const cw = comparisonWindows(from, to);
+  const prevTotals = {}; KEYS.forEach((k) => { prevTotals[k] = 0; });
   const days = [];
   let sheetFrom = "", sheetTo = "";
   for (let r = 1; r < daily.length; r++) {
@@ -4394,6 +4405,9 @@ async function buildBetterAi(from, to) {
     if (!d) continue;                            // the tab's own total rows
     if (!sheetFrom || d < sheetFrom) sheetFrom = d;
     if (!sheetTo || d > sheetTo) sheetTo = d;
+    if (d >= cw.prev.from && d <= cw.prev.to) {
+      KEYS.forEach((k) => { prevTotals[k] += n(row[D[k]]); });
+    }
     if (d < from || d > to) continue;
     const rec = { date: d };
     KEYS.forEach((k) => { rec[k] = n(row[D[k]]); totals[k] += rec[k]; });
@@ -4448,6 +4462,17 @@ async function buildBetterAi(from, to) {
     },
     days,
     languages,
+    prevTotals,
+    /**
+     * MoM per counter. `null` rather than 0 when the previous window has none —
+     * "no basis for comparison" and "no change" are different statements, and
+     * the first month this section runs is entirely the former.
+     */
+    mom: KEYS.reduce((o, k) => {
+      o[k] = prevTotals[k] > 0 ? (totals[k] - prevTotals[k]) / prevTotals[k] : null;
+      return o;
+    }, {}),
+    prevWindow: cw.prev,
     coverage: { daysWithData: days.length, daysInRange: spanDays,
                 dayGaps: Math.max(0, spanDays - days.length),
                 sheetFrom, sheetTo },
