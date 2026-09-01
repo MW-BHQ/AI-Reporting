@@ -718,6 +718,41 @@ improves.
 
 ### Recent (August 2026)
 
+**v3.167.0 — the two problem pages print SVG charts instead of canvas. Both of
+MW's symptoms have the same cause and this removes it.**
+
+**WHY ONLY THOSE TWO PAGES GOT WHITE BOXES.** A canvas is a composited layer, and
+to place it Chrome cuts its rectangle out of the page background beneath. One
+chart per page and the hole lands under the chart; nobody sees it. GBP and Google
+reviews are the only slides with TWO charts, and with two the geometry goes wrong
+and one hole lands elsewhere — top-left, exactly where MW's white box is.
+
+**WHY THE LINES GOT THICKER IN THE PDF.** A canvas is a PICTURE. Chart.js paints
+it once at whatever width the window gave it, and the page can only stretch that
+picture afterwards. Text and tables re-flow to the sheet; a picture cannot. So
+lines, legend and tick labels all enlarged together while everything else stayed
+right.
+
+**ONE FIX FOR BOTH: do not print a canvas.** On these two slides, while printing
+only, each chart gets an SVG twin. SVG is shapes and text — it re-scales like the
+rest of the page, and it is not a layer, so nothing is cut out of anything.
+
+**`chartToSvg()` IS NOT A CHART LIBRARY, and that is the point.** It lays nothing
+out. Chart.js has already computed every pixel — point positions with their
+bezier control points, bar rectangles, tick placements, legend hit boxes — so this
+walks the LIVE chart instance and copies that geometry. It never independently
+decides where anything goes, so it cannot drift from what the screen shows.
+
+Every step is wrapped: if anything throws, the canvas is left exactly as it was
+and the page prints as it did yesterday. A stretched chart beats a broken one.
+
+**Verified:** four SVG twins across the two slides, eighteen paths, no console
+errors, both pages rendering at full card width with correct line weight.
+
+**STILL BUTTON-ONLY.** Like the v3.166 zoom fit, the swap is JavaScript and runs
+on the deck's print button, not on Ctrl+P. Same known gap, same follow-up.
+
+
 **v3.167.0 — the printed charts on GBP and Google reviews are SVG, not canvas.
 Both bugs on those pages are retired at the source.**
 
