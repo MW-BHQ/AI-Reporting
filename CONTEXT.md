@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.166.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.167.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,45 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.167.0 — the printed charts on GBP and Google reviews are SVG, not canvas.
+Both bugs on those pages are retired at the source.**
+
+MW asked for the SVG trick on those two pages and in print only. That is what
+this is.
+
+**WHY IT FIXES BOTH.** A `<canvas>` is a PICTURE, painted once at whatever width
+the window gave it. Printing can only stretch it, which is the double-weight
+lines; and Chrome has to give the layer a transparency group and cut a hole in
+the page background for it, which is the white box that misses its target on the
+only two slides carrying TWO canvases. SVG is shapes and text: it re-rasterises
+at the printed size like everything else, and needs no layer, so there is no
+hole to misplace. One change, both symptoms.
+
+**NOTHING IS RE-MODELLED.** `chartToSvg()` reads the geometry back off the LIVE
+Chart.js instance — `chart.scales` for the ranges and the ticks Chart.js already
+chose (including its own auto-skip on the x axis), `chart.data.datasets` for the
+series, colours, fills, tension and stacking. The twin FOLLOWS the chart instead
+of duplicating the decisions that made it, so a new series on these pages shows
+up in print without touching the renderer. Line, area, stacked bar and a
+secondary right-hand axis are all covered, which is all four charts on the two
+slides.
+
+**SCOPE IS DELIBERATELY NARROW.** `.slide.pn` only, print media only. On screen
+the twin is `display:none` and the canvas is untouched — Chart.js keeps its
+tooltips and hover everywhere. `buildPrintSvgs()` runs in `sizeForPrint()` and
+`clearPrintSvgs()` on `afterprint`.
+
+**SAME KNOWN GAP AS v3.166.** The twins are built in JavaScript, so they exist on
+the print BUTTON and not on Ctrl+P. On those routes the canvas prints as before.
+If MW keeps this, the next step is to make the twin part of the render rather
+than of the print handler — at which point the canvas could go entirely on these
+two slides and the gap closes.
+
+**Two cosmetic items left, both visible in the render and neither worth another
+release on their own:** the last x-axis label can overhang the plot edge (needs
+clamping), and the legend marks are plain circles against the canvas's
+filled-with-ring style.
 
 **v3.166.0 — GBP and Google reviews print at DESKTOP styling, fitted to the
 sheet with `zoom`. MW: "start from zero, print as it is on desktop."**

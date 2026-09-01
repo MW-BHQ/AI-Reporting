@@ -580,6 +580,8 @@
   /* `min-width:0` so a canvas can never hold its grid track open at a width the
      track does not have — see `clearPrintPrep`. */
   .chart-wrap{height:250px;min-width:0;}
+  /* The print-only SVG twin never shows on screen. */
+  .chart-svg{display:none;}
   .hidden{display:none!important;}
 
   /* ---------------- print / PDF: 16:9 presentation ---------------- */
@@ -1107,6 +1109,9 @@
     .slide.pn td,.slide.pn th{padding:9px 0!important;font-size:14px!important;}
     .slide.pn .chart-wrap{max-height:none!important;}
     .slide.pn tbody tr{display:table-row!important;}
+    /* On these two slides the printed chart is the SVG twin, not the canvas. */
+    .slide.pn .chart-wrap canvas{display:none!important;}
+    .slide.pn .chart-svg{display:block!important;width:100%;height:100%;}
     /**
      * VERTICALLY CENTRED ON EVERY PAGE (MW), WITH TWO FLEX SPACERS.
      *
@@ -7434,6 +7439,174 @@ function cjkFontsReady() {
 const PAGE_W_PX = 13.333 * 96;
 const PAGE_H_PX = 7.5 * 96 - 2;
 const PRINT_CONTENT_H = PAGE_H_PX - (0.34 + 0.3) * 96;
+/**
+ * ==== SVG TWINS FOR THE PRINTED CHARTS (v3.167.0) ====
+ *
+ * MW: "can you do the SVG trick only on these 2 pages and only on PDF."
+ *
+ * A `<canvas>` is a PICTURE. It is painted once at whatever width the window
+ * gave it, and printing can only stretch that picture — which is why the lines
+ * and legend came out at double weight, and why Chrome has to hand the layer a
+ * transparency group and cut a hole in the page background for it, the hole
+ * that lands in the wrong place on the only two slides carrying TWO canvases.
+ *
+ * SVG has neither problem. It is shapes and text, so it re-rasterises at the
+ * printed size like the rest of the deck, and it needs no layer, so there is no
+ * hole to misplace. One change retires both bugs on these pages.
+ *
+ * Nothing is re-modelled: the geometry is read back off the LIVE Chart.js
+ * instance — `chart.scales` for the axis ranges and the ticks Chart.js already
+ * chose, `chart.data.datasets` for the series, colours and fills. So the twin
+ * follows the chart rather than duplicating the decisions that made it, and a
+ * new series on these pages appears in print without touching this function.
+ */
+function svgEsc(t) {
+  return String(t == null ? '' : t)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+/** Cubic path through the points, matching Chart.js `tension`. */
+function svgSmooth(pts, tension) {
+  if (!pts.length) return '';
+  if (pts.length < 3 || !tension) {
+    return 'M' + pts.map((p) => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('L');
+  }
+  let d = 'M' + pts[0][0].toFixed(1) + ' ' + pts[0][1].toFixed(1);
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || pts[i + 1];
+    const c1x = p1[0] + (p2[0] - p0[0]) * tension / 3, c1y = p1[1] + (p2[1] - p0[1]) * tension / 3;
+    const c2x = p2[0] - (p3[0] - p1[0]) * tension / 3, c2y = p2[1] - (p3[1] - p1[1]) * tension / 3;
+    d += 'C' + c1x.toFixed(1) + ' ' + c1y.toFixed(1) + ',' + c2x.toFixed(1) + ' ' + c2y.toFixed(1)
+       + ',' + p2[0].toFixed(1) + ' ' + p2[1].toFixed(1);
+  }
+  return d;
+}
+function chartToSvg(chart, W, H) {
+  const ds = (chart.data && chart.data.datasets) || [];
+  const labels = (chart.data && chart.data.labels) || [];
+  if (!ds.length || !labels.length) return '';
+  const sc = chart.scales || {};
+  const hasY1 = !!sc.y1;
+  const FS = 10, LEG = 22;
+  const padL = 46, padR = hasY1 ? 46 : 14, padT = LEG + 10, padB = 26;
+  const pw = Math.max(10, W - padL - padR), ph = Math.max(10, H - padT - padB);
+  const anyBar = ds.some((d) => (d.type || chart.config.type) === 'bar');
+  const n = labels.length;
+  const xAt = (i) => anyBar
+    ? padL + (pw / n) * (i + 0.5)
+    : padL + (n > 1 ? (pw * i) / (n - 1) : pw / 2);
+  const yOf = (axis) => {
+    const s = sc[axis] || sc.y;
+    const min = s ? s.min : 0, max = s ? s.max : 1, span = (max - min) || 1;
+    return (v) => padT + ph - ((Number(v) || 0) - min) / span * ph;
+  };
+  const out = [];
+  out.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="none"/>');
+  // gridlines + left ticks, taken from the ticks Chart.js already picked
+  const yl = sc.y, y1 = sc.y1;
+  const yFn = yOf('y');
+  ((yl && yl.ticks) || []).forEach((t) => {
+    const y = yFn(t.value);
+    if (!isFinite(y)) return;
+    out.push('<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (padL + pw)
+      + '" y2="' + y.toFixed(1) + '" stroke="rgba(90,110,160,.09)" stroke-width="1"/>');
+    out.push('<text x="' + (padL - 6) + '" y="' + (y + 3.5).toFixed(1) + '" text-anchor="end" '
+      + 'font-family="Poppins,sans-serif" font-size="' + FS + '" fill="#A7B0C7">'
+      + svgEsc(t.label) + '</text>');
+  });
+  if (y1) {
+    const y1Fn = yOf('y1');
+    (y1.ticks || []).forEach((t) => {
+      const y = y1Fn(t.value);
+      if (!isFinite(y)) return;
+      out.push('<text x="' + (padL + pw + 6) + '" y="' + (y + 3.5).toFixed(1) + '" '
+        + 'font-family="Poppins,sans-serif" font-size="' + FS + '" fill="#A7B0C7">'
+        + svgEsc(t.label) + '</text>');
+    });
+  }
+  // stacked bars first, so lines sit on top exactly as Chart.js draws them
+  const bars = ds.filter((d) => (d.type || chart.config.type) === 'bar');
+  const stackBase = labels.map(() => 0);
+  bars.forEach((d) => {
+    const f = yOf(d.yAxisID || 'y');
+    const bw = (pw / n) * 0.62;
+    (d.data || []).forEach((v, i) => {
+      const base = sc.x && chart.options.scales && chart.options.scales.y
+        && chart.options.scales.y.stacked ? stackBase[i] : 0;
+      const y0 = f(base), y1p = f(base + (Number(v) || 0));
+      stackBase[i] = base + (Number(v) || 0);
+      const top = Math.min(y0, y1p), hh = Math.abs(y0 - y1p);
+      if (!(hh > 0)) return;
+      out.push('<rect x="' + (xAt(i) - bw / 2).toFixed(1) + '" y="' + top.toFixed(1)
+        + '" width="' + bw.toFixed(1) + '" height="' + hh.toFixed(1) + '" fill="'
+        + svgEsc(d.backgroundColor || d.borderColor || '#999') + '"/>');
+    });
+  });
+  ds.filter((d) => (d.type || chart.config.type) !== 'bar').forEach((d) => {
+    const f = yOf(d.yAxisID || 'y');
+    const pts = (d.data || []).map((v, i) => [xAt(i), f(v)]).filter((p) => isFinite(p[1]));
+    if (!pts.length) return;
+    const path = svgSmooth(pts, d.tension || 0);
+    if (d.fill) {
+      out.push('<path d="' + path + 'L' + pts[pts.length - 1][0].toFixed(1) + ' ' + (padT + ph)
+        + 'L' + pts[0][0].toFixed(1) + ' ' + (padT + ph) + 'Z" fill="'
+        + svgEsc(d.backgroundColor || 'none') + '" stroke="none"/>');
+    }
+    out.push('<path d="' + path + '" fill="none" stroke="' + svgEsc(d.borderColor || '#666')
+      + '" stroke-width="' + (d.borderWidth || 2) + '" stroke-linejoin="round"/>');
+  });
+  // x labels, using the ticks Chart.js kept after its own auto-skip
+  ((sc.x && sc.x.ticks) || []).forEach((t, k) => {
+    const i = (sc.x.getLabelForValue && sc.x.ticks[k] && typeof t.value === 'number') ? t.value : k;
+    const x = xAt(i);
+    if (!isFinite(x)) return;
+    out.push('<text x="' + x.toFixed(1) + '" y="' + (padT + ph + 16) + '" text-anchor="middle" '
+      + 'font-family="Poppins,sans-serif" font-size="' + FS + '" fill="#A7B0C7">'
+      + svgEsc(t.label) + '</text>');
+  });
+  // legend, centred, same point style as the canvas
+  const items = ds.map((d) => d.label).filter(Boolean);
+  if (items.length) {
+    const gap = 14, r = 3.5;
+    const widths = items.map((t) => 10 + String(t).length * (FS * 0.55));
+    let total = widths.reduce((a, b) => a + b, 0) + gap * (items.length - 1);
+    let x = Math.max(4, (W - total) / 2);
+    items.forEach((t, i) => {
+      const d = ds[i];
+      out.push('<circle cx="' + (x + r).toFixed(1) + '" cy="' + (LEG / 2) + '" r="' + r
+        + '" fill="' + svgEsc(d.backgroundColor || d.borderColor || '#999') + '" stroke="'
+        + svgEsc(d.borderColor || '#999') + '" stroke-width="1.5"/>');
+      out.push('<text x="' + (x + r * 2 + 4).toFixed(1) + '" y="' + (LEG / 2 + 3.5)
+        + '" font-family="Poppins,sans-serif" font-size="' + FS + '" fill="#4C5878">'
+        + svgEsc(t) + '</text>');
+      x += widths[i] + gap;
+    });
+  }
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H
+    + '" width="100%" height="100%" preserveAspectRatio="none">' + out.join('') + '</svg>';
+}
+/** Build (or rebuild) an SVG twin beside every canvas on the `pn` slides. */
+function buildPrintSvgs() {
+  document.querySelectorAll('.slide.pn .chart-wrap').forEach((wrap) => {
+    const cv = wrap.querySelector('canvas');
+    if (!cv) return;
+    const chart = (S.charts && S.charts[cv.id]) || (window.Chart && Chart.getChart && Chart.getChart(cv));
+    if (!chart) return;
+    const box = wrap.getBoundingClientRect();
+    let host = wrap.querySelector('.chart-svg');
+    if (!host) {
+      host = document.createElement('div');
+      host.className = 'chart-svg';
+      wrap.appendChild(host);
+    }
+    try {
+      host.innerHTML = chartToSvg(chart, Math.round(box.width) || 600, Math.round(box.height) || 200);
+    } catch (e) { host.innerHTML = ''; }
+  });
+}
+function clearPrintSvgs() {
+  document.querySelectorAll('.slide.pn .chart-svg').forEach((el) => el.remove());
+}
+
 function fitNativeSlides() {
   document.querySelectorAll('.slide.pn').forEach((el) => {
     el.style.zoom = '';
@@ -7472,12 +7645,13 @@ function sizeForPrint() {
   if (!body) return Promise.resolve();
   body.classList.add('print-prep');
   return new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)))
-    .then(() => { resizeChartsForPrint(); fitNativeSlides();
+    .then(() => { resizeChartsForPrint(); fitNativeSlides(); buildPrintSvgs();
                   return new Promise((r) => setTimeout(r, 150)); });
 }
 function clearPrintPrep() {
   document.body.classList.remove('print-prep');
   clearNativeSlides();
+  clearPrintSvgs();
   /**
    * The canvases are now sized for a PAGE, not for this window, and Chart.js
    * reads the container — so the resize has to wait for the class removal to be
@@ -7561,7 +7735,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.166.0';
+const CLIENT_BUILD = '3.167.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
