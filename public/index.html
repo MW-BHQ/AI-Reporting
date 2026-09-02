@@ -6037,8 +6037,48 @@ function renderBclub() {
   const co = d.cohorts;
   const cc = d.concentration;
 
+  const fn = d.funnel || [];
+  const fLab = fn.map(x => x.label.replace(/ \d{4}$/, ''));
+  const mLab = ms.map(m => m.label.replace(/ \d{4}$/, ''));
+  const fsc = d.funnelScope || {};
+  const stage = (title, key, colour, scopeNote) => `
+    <div>
+      <div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;margin-bottom:2px;">
+        <span style="font-size:12px;font-weight:600;color:${colour};">${esc(title)}</span>
+        ${scopeNote ? `<span class="pill" data-tip="${esc(scopeNote)}">B+</span>` : ''}
+      </div>
+      <div style="font-size:18px;font-weight:600;margin-bottom:4px;">${
+        fn.length && fn[fn.length-1][key] !== null ? cnt(fn[fn.length-1][key]) : '—'}</div>
+      <div style="height:120px;"><canvas id="bcStage_${key}"></canvas></div>
+    </div>`;
+
   $('viewRoot').innerHTML = `
-    <div class="grid g-4" style="margin-bottom:14px;">
+    <div class="card">
+      <div class="card-title">Revenue attribution</div>
+      <div style="height:330px;"><canvas id="bcCombo"></canvas></div>
+      <div class="note">Bars are members on the right axis, lines are baht on the left — paying members and
+      the revenue attributed to them, with the new-member subset of each. Every month the spreadsheet holds.</div>
+    </div>
+
+    <div class="card mt">
+      <div class="card-title">Google impressions &rsaquo; web traffic &rsaquo; Better Club registers &rsaquo; new paid members</div>
+      <div class="grid g-4">
+        ${stage('Google impressions', 'impressions', '#E8833A', fsc.impressions)}
+        ${stage('Total users', 'users', '#8B5CF6', fsc.users)}
+        ${stage('Better Club new registers', 'registers', '#2C5282', null)}
+        ${stage('New paid members', 'newPaidHns', '#34A853', null)}
+      </div>
+      <div class="note"><b>The first two stages are B+ — all 27 branches of the GA4 property and the whole
+      bangkokhospital.com domain.</b> They are not BHQ, and they are not the Better Club audience; they are the
+      top of the funnel the programme recruits from. The last two come from the hospital's monthly export.
+      ${fsc.note ? `<br>${esc(fsc.note)}` : ''}
+      ${fn.some(x => x.registers === null) ? `<br><b>New registers has no source connected</b>, so the third
+      stage is empty and the register-to-paid conversion cannot be computed here.` : ''}
+      ${fsc.impressions === null ? '<br>Search Console was unavailable this run — press Refresh to retry.' : ''}
+      ${fsc.users === null ? '<br>GA4 was unavailable this run — press Refresh to retry.' : ''}</div>
+    </div>
+
+    <div class="grid g-4" style="margin:14px 0;">
       <div class="stat"><div class="lab">Paying members</div><div class="val">${cnt(s.paidHns)}</div>
         <div class="sub2">${dlt(p ? chg(s.paidHns, p.paidHns) : null)} · ${esc(s.label)}</div></div>
       <div class="stat"><div class="lab">Revenue</div><div class="val">${num(s.revenue, {money:true})}</div>
@@ -6129,17 +6169,110 @@ function renderBclub() {
       rather than being typed in by hand.` : ''}</div>
     </div>`;
 
+  // MW's SS2, first on the page.
+  drawBclubCombo('bcCombo', mLab,
+    [{ label: 'Paying members', data: ms.map(m => m.paidHns), color: 'rgba(168,85,247,.55)' },
+     { label: 'New members',    data: ms.map(m => m.newHns),  color: 'rgba(168,85,247,.28)' }],
+    [{ label: 'Revenue attribution',   data: ms.map(m => Math.round(m.revenue)), color: '#4C6FFF' },
+     { label: 'Revenue from new members', data: ms.map(m => Math.round(m.newRev)), color: '#F5A623' }]);
+
+  // MW's SS1, the four funnel stages.
+  drawBclubStage('bcStage_impressions', fLab, fn.map(x => x.impressions), '#E8833A',
+    fsc.impressions ? 'No impressions in this window' : 'Search Console unavailable — press Refresh');
+  drawBclubStage('bcStage_users',       fLab, fn.map(x => x.users),       '#8B5CF6',
+    fsc.users ? 'No users in this window' : 'GA4 unavailable — press Refresh');
+  drawBclubStage('bcStage_registers',   fLab, fn.map(x => x.registers),   '#2C5282',
+    'No source connected yet');
+  drawBclubStage('bcStage_newPaidHns',  fLab, fn.map(x => x.newPaidHns),  '#34A853');
+
   drawChart('bcTrend', ms.map(m => ({ d: m.label.replace(/ \d{4}$/, ''), rev: Math.round(m.revenue), hns: m.paidHns })), [
     { key: 'rev', label: 'Revenue ฿', color: '#4C6FFF', axis: 'y' },
     { key: 'hns', label: 'Paying members', color: '#A855F7', axis: 'y1' },
   ]);
-  drawBars('bcSplit', ms.map(m => m.label.replace(/ \d{4}$/, '')), [
+  drawBars('bcSplit', mLab, [
     { label: 'Returning', data: ms.map(m => m.oldHns), color: '#A855F7' },
     { label: 'New', data: ms.map(m => m.newHns), color: '#34D399' },
-  ], { horizontal: false });
+  ], { horizontal: false, stacked: true });
 }
 
-/** `2026-07` -> `July 2026`, for cells the server did not pre-label. */
+/**
+ * MW'S REVENUE-ATTRIBUTION CHART (SS2), rebuilt: two bar series on the member
+ * axis and two line series on the baht axis.
+ *
+ * A DEDICATED FUNCTION RATHER THAN `drawChart` OR `drawBars`, because neither
+ * mixes types — this needs bars and lines in one canvas, on two axes, with the
+ * lines drawn ON TOP of the bars. Chart.js decides draw order by dataset order,
+ * so the lines are declared last on purpose.
+ */
+function drawBclubCombo(canvasId, labels, bars, lines) {
+  const el = document.getElementById(canvasId);
+  if (!el || !window.Chart) return;
+  if (el._chart) el._chart.destroy();
+  el._chart = new Chart(el.getContext('2d'), {
+    data: { labels, datasets: [
+      ...bars.map(b => ({ type:'bar', label:b.label, data:b.data, backgroundColor:b.color,
+        yAxisID:'members', borderRadius:3, barPercentage:0.88, categoryPercentage:0.7, order:2 })),
+      ...lines.map(l => ({ type:'line', label:l.label, data:l.data, borderColor:l.color,
+        backgroundColor:l.color+'22', yAxisID:'baht', tension:.35, borderWidth:2.4,
+        pointRadius:2.5, fill:false, order:1 })),
+    ]},
+    options: {
+      responsive:true, maintainAspectRatio:false, animation:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{
+        legend:{ labels:{ color:'#4C5878', font:cvFont(10), usePointStyle:true, boxWidth:cvBox(7) } },
+        tooltip:{ callbacks:{ label:(c)=> ` ${c.dataset.label}: ${c.dataset.yAxisID==='baht'
+          ? '฿'+Math.round(c.parsed.y).toLocaleString() : Math.round(c.parsed.y).toLocaleString()}` } },
+      },
+      scales:{
+        x:{ grid:{ display:false }, ticks:{ color:'#4C5878', font:cvFont(10), autoSkipPadding:6 } },
+        baht:{ position:'left', beginAtZero:true, grid:{ color:'#EEF1F8' },
+          title:{ display:true, text:'Revenue ฿', color:'#8A94AD', font:cvFont(9.5) },
+          ticks:{ color:'#8A94AD', font:cvFont(9),
+                  callback:(v)=> v>=1e6?(v/1e6)+'M' : v>=1e3?(v/1e3)+'K' : v } },
+        members:{ position:'right', beginAtZero:true, grid:{ display:false },
+          title:{ display:true, text:'Members', color:'#8A94AD', font:cvFont(9.5) },
+          ticks:{ color:'#8A94AD', font:cvFont(9),
+                  callback:(v)=> v>=1e3?(v/1e3)+'K':v } },
+      },
+    },
+  });
+}
+
+/**
+ * ONE FUNNEL PANEL (SS1). Four of these side by side, each a single line with
+ * its own scale, which is what makes the stage-to-stage drop legible — a shared
+ * axis would flatten 44M impressions and 514 members onto the same line.
+ */
+function drawBclubStage(canvasId, labels, data, color, emptyNote) {
+  const el = document.getElementById(canvasId);
+  if (!el || !window.Chart) return;
+  if (el._chart) el._chart.destroy();
+  const has = data.some(v => v !== null && v !== undefined);
+  if (!has) {
+    const box = el.parentElement;
+    if (box) box.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:11.5px;text-align:center;padding:0 10px;">${esc(emptyNote || 'No source connected yet')}</div>`;
+    return;
+  }
+  el._chart = new Chart(el.getContext('2d'), {
+    type:'line',
+    data:{ labels, datasets:[{ label:'', data, borderColor:color,
+      backgroundColor:color+'26', tension:.35, borderWidth:2.2, pointRadius:2, fill:true }] },
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false,
+      plugins:{ legend:{ display:false },
+        tooltip:{ callbacks:{ label:(c)=> ' '+Math.round(c.parsed.y).toLocaleString() } } },
+      scales:{
+        x:{ grid:{ display:false }, ticks:{ color:'#8A94AD', font:cvFont(8.5), autoSkipPadding:4 } },
+        y:{ beginAtZero:true, grid:{ color:'#EEF1F8' },
+            ticks:{ color:'#8A94AD', font:cvFont(8.5), maxTicksLimit:4,
+                    callback:(v)=> v>=1e6?(v/1e6)+'M' : v>=1e3?(v/1e3)+'K' : v } },
+      },
+    },
+  });
+}
+
+/** `2026-07` -> `July 2026`, for cells the person did not pre-label. */
 function bclubMonthLabel(key) {
   const m = /^(\d{4})-(\d{2})$/.exec(String(key || ''));
   if (!m) return String(key || '');
@@ -7845,6 +7978,24 @@ function drawBars(canvasId, labels, datasets, opts = {}) {
   if (!el || !window.Chart) return;
   if (el._chart) el._chart.destroy();
   const horizontal = opts.horizontal !== false;
+  /**
+   * THE VALUE AXIS FOLLOWS `indexAxis`, IT IS NOT ALWAYS `x`.
+   *
+   * This helper was written for horizontal bars, so the abbreviating tick
+   * callback was pinned to `x`. On a vertical chart `x` is the CATEGORY axis and
+   * Chart.js passes the callback an INDEX, so seven month labels rendered as
+   * 0 1 2 3 4 5 6 and the values lost their K/M suffix. The first vertical
+   * caller found it immediately; there had never been one before.
+   */
+  const valueAxis = {
+    beginAtZero: true, stacked: !!opts.stacked, grid:{ color:'#EEF1F8' },
+    ticks:{ color:'#8A94AD', font:cvFont(9), autoSkipPadding:10,
+            callback:(v)=> v>=1e6?(v/1e6)+'M' : v>=1e3?(v/1e3)+'K' : v },
+  };
+  const catAxis = {
+    stacked: !!opts.stacked, grid:{ display:false },
+    ticks:{ color:'#4C5878', font:cvFont(10), autoSkipPadding:6 },
+  };
   el._chart = new Chart(el.getContext('2d'), {
     type: 'bar',
     data: { labels, datasets: datasets.map(ds => ({
@@ -7860,12 +8011,7 @@ function drawBars(canvasId, labels, datasets, opts = {}) {
           labels: { color:'#4C5878', font:cvFont(10), usePointStyle:true, boxWidth:cvBox(7) } },
         tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${c.parsed[horizontal?'x':'y'].toLocaleString()}` } },
       },
-      scales: {
-        x: { beginAtZero: true, grid:{ color:'#EEF1F8' },
-             ticks:{ color:'#8A94AD', font:cvFont(9), autoSkipPadding:10,
-                     callback:(v)=> v>=1e6?(v/1e6)+'M' : v>=1e3?(v/1e3)+'K' : v } },
-        y: { grid:{ display:false }, ticks:{ color:'#4C5878', font:cvFont(10), autoSkipPadding:6 } },
-      },
+      scales: horizontal ? { x: valueAxis, y: catAxis } : { x: catAxis, y: valueAxis },
     },
   });
 }
@@ -8385,7 +8531,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.186.0';
+const CLIENT_BUILD = '3.187.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

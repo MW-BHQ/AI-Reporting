@@ -465,6 +465,23 @@ function bclubFixture() {
       top10: { members: 292, revenue: 51000000, share: 51000000 / 102542865 },
       median: 12400, repeatFromPrev: 1802 / 2647, keptCount: 1802, prevBase: 2647,
     },
+    /**
+     * The funnel panel, with the two group-level stages present and `registers`
+     * null throughout — which is the real state until a registration feed
+     * exists, and the branch that renders "No source connected yet".
+     */
+    funnel: months.map((m, i) => ({
+      month: m.month, label: m.label,
+      impressions: [70100000, 65600000, 70900000, 48700000, 44500000][i],
+      users: [926200, 785400, 858200, 922700, 866800][i],
+      registers: null,
+      newPaidHns: m.newHns,
+    })),
+    funnelScope: {
+      impressions: "B+ (all 27 branches, whole domain)",
+      users: "B+ (all 27 branches)",
+      note: "Impressions and users are group-level, not BHQ. Better Club figures come from the hospital's monthly export.",
+    },
     detailNote: "1,204 member-months carry no HN_ID (imported before HN was retained).",
     registerSource: null,
   };
@@ -1282,11 +1299,27 @@ setTimeout(() => {
         if (/\b18\.2%\s*conversion|registrations?\s*:\s*[\d,]/i.test(body)) {
           return fail("better club", "a register-to-paid figure was rendered without a source"), finish();
         }
+        /**
+         * MW'S TWO LOOKER PANELS MUST COME FIRST (MW: "my LS references are
+         * important, put those two first before yours"). Asserted by ORDER in
+         * the markup, not merely by presence — a correct card in the wrong place
+         * is the thing being fixed here.
+         */
+        const iCombo = h.indexOf('Revenue attribution');
+        const iFunnel = h.indexOf('Better Club registers');
+        const iMine = h.indexOf('Do new members come back');
+        if (iCombo < 0 || iFunnel < 0) return fail("better club", "an LS panel is missing"), finish();
+        if (!(iCombo < iFunnel && iFunnel < iMine)) {
+          return fail("better club", `LS panels out of order: combo ${iCombo}, funnel ${iFunnel}, cohorts ${iMine}`), finish();
+        }
+        // The group-level stages must be marked B+, never labelled BHQ.
+        if (!/B\+/.test(h)) return fail("better club", "group-level stages are not marked B+"), finish();
+        if (!/group-level/.test(body)) return fail("better club", "the B+ vs BHQ note is gone"), finish();
         // Shading must not carry meaning: the reported month is marked by a pill.
         if (!/reported above/.test(body)) return fail("better club", "the reported-month pill is gone"), finish();
         // The small-sample caveat must travel with ARPU_New.
         if (!/small-sample/i.test(body)) return fail("better club", "the ARPU_New caveat is gone"), finish();
-        ok("better club", `${rows} rows, cohorts + concentration, pending month named`);
+        ok("better club", `LS panels first, ${rows} rows, cohorts + concentration, pending named`);
         finish();
         }, 300);
       }, 60);

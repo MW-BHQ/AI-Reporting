@@ -761,9 +761,15 @@ global.fetch = async (url, opts = {}) => {
         // A Date, as the first version of the normaliser wrote it.
         [new Date(Date.UTC(2026, 4, 1)), "May 2026", 4, 40000, 1, 5000, 3, 35000, 1, 3000,
          99999, 99999, 99999, 9.99, 9.99, "2026-09-02"],
-        ["2026-06","June 2026", 5, 50000, 2, 12000, 3, 38000, 1, 4000,
-         99999, 99999, 99999, 9.99, 9.99, "2026-09-02"],
-        ["2026-07","July 2026", 6, 66000, 2, 16000, 4, 50000, 2, 9000,
+        // COMMA-FORMATTED STRINGS, which is what the values endpoint actually
+        // returns once a sheet has a thousands separator on it. Raw numbers here
+        // are why the comma bug shipped: 514 new members and 48 returning were
+        // right on screen while 2,923 members and ฿102.5M were both 0.
+        ["2026-06","June 2026", "5", "50,000", "2", "12,000", "3", "38,000", "1", "4,000",
+         "99,999", "99,999", "99,999", 9.99, 9.99, "2026-09-02"],
+        // A cell typed as text with a currency mark, which survives even an
+        // UNFORMATTED_VALUE request.
+        ["2026-07","July 2026", 6, "฿66,000", 2, "16,000", 4, "50,000", 2, "9,000",
          99999, 99999, 99999, 9.99, 9.99, "2026-09-02"],
         ["", "note: rebuilt by hand", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
         [],
@@ -774,7 +780,7 @@ global.fetch = async (url, opts = {}) => {
         ["2026-05","aaa2",  5000, "New", ""],
         ["2026-05","aaa3", 20000, "Old", "Y"],
         ["2026-05","",      5000, "Old", ""],          // pre-scrubbed: revenue only
-        ["2026-06","bbb1",  8000, "New", ""],
+        ["2026-06","bbb1",  "8,000", "New", ""],
         ["2026-06","bbb2",  4000, "New", ""],
         ["2026-06","aaa1", 30000, "Old", ""],
         ["2026-06","aaa3",  4000, "Old", "Y"],
@@ -782,7 +788,7 @@ global.fetch = async (url, opts = {}) => {
         ["2026-07","bbb1",  6000, "Old", ""],          // June cohort returns
         ["2026-07","ccc1", 10000, "New", "Y"],
         ["2026-07","ccc2",  6000, "New", ""],
-        ["2026-07","aaa1", 40000, "Old", ""],
+        ["2026-07","aaa1", "40,000", "Old", ""],
         ["2026-07","aaa3",  3000, "Old", "Y"],
         ["2026-07","aaa2",  1000, "Old", ""],
         [],

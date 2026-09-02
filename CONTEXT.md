@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.186.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.187.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -718,6 +718,75 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.187.0 — Better Club: the comma bug, and MW's Looker panels put first.**
+
+MW: "from the SS, many things went wrong, and my LS references are important,
+put those two first before yours."
+
+**EVERY FIGURE AT OR ABOVE A THOUSAND WAS ZERO.** The Sheets `values` endpoint
+returns FORMATTED_VALUE by default, so a cell holding 2923 arrives as the STRING
+`"2,923"` once the sheet has a thousands separator on it. `Number("2,923")` is
+NaN, which the global `n()` floors to 0. On screen: 514 new members and 48
+returning were correct, 2,923 paying members and ฿102.5M were both 0 — because
+514 and 48 have no comma. **The failure was sorted by magnitude, which is the
+most misleading shape a bug can have: the small numbers vouch for the big ones.**
+
+Two fixes, deliberately both: `sheetBatchGet` gained an opt-in
+`{ unformatted: true }` that asks for raw values, and `bnum()` parses tolerantly
+(commas, ฿, spaces, parenthesised negatives) for the cell that is typed as text
+and comes back a string anyway. The unformatted mode is OPT-IN, not the default:
+the YouTube, GBP, appointments and Better AI readers parse display strings on
+purpose — Thai dates, Buddhist-era years, `รวม` total rows — and flipping them
+to raw values would turn their date columns into serials. `monthKeyCell` gained a
+serial branch for the same reason.
+
+**THE FIXTURE WAS CLEANER THAN REALITY, WHICH IS WHY 18 ASSERTIONS PASSED.** The
+mock returned raw numbers, so nothing exercised the parse. It now ships
+`"50,000"` and `"฿66,000"`; reverting to `n()` fails `bclub revenue parsed` and
+`bclub arpu derived`, verified by planting the regression. **A fixture that is
+tidier than the upstream tests the code against a world that does not exist.**
+
+**`drawBars` COULD NOT DRAW A VERTICAL BAR.** Its abbreviating tick callback was
+pinned to the `x` scale, which is correct only for horizontal bars; on a vertical
+chart `x` is the CATEGORY axis and Chart.js hands the callback an index, so seven
+month labels rendered as `0 1 2 3 4 5 6`. The value/category scale configs now
+follow `indexAxis`, and `opts.stacked` was added so new-vs-returning stacks to
+the paid total. Better Club was the helper's first vertical caller in its life.
+
+**MW'S TWO LOOKER PANELS NOW LEAD THE SECTION, ahead of anything of ours.**
+`drawBclubCombo` rebuilds the revenue-attribution chart (SS2) — two bar series on
+a member axis, two line series on a baht axis, lines declared last so they draw
+on top. `drawBclubStage` rebuilds the four-panel funnel (SS1), each stage on its
+own scale because a shared axis flattens 44M impressions and 514 members onto one
+line. Boot asserts the ORDER in the markup, not merely presence: a correct card
+in the wrong place is the thing being fixed.
+
+**THE FIRST TWO FUNNEL STAGES ARE B+, NOT BHQ,** and the payload says so in
+`funnelScope` rather than leaving the client to label them. Impressions are the
+whole `sc-domain:bangkokhospital.com` domain and users are all 27 branches of the
+property; the Better Club figures beside them come from the hospital's export.
+The client renders the server's wording rather than restating it, so there is one
+place that distinction lives.
+
+**`gscQueryPage` FLATTENS ITS DIMENSIONS onto the row**, so a date-dimension row
+carries `date` and not the API's raw `keys` array. Reading `keys` returned null
+for every month while still reporting the source as available — an empty chart
+with no error. A month the upstream genuinely lacks stays `null` rather than
+becoming 0, because a zero draws a real-looking trough.
+
+Member counts are exact (`2,923`), never `num()`'s `2.9K`: a headcount an
+executive quotes has to reconcile against the hospital's own export. Caught by
+the new boot render.
+
+**STILL OPEN — the January cohort reads 0.00% across all six later months** while
+February through June sit between 7% and 20%. Exactly zero six times over is not
+a plausible retention curve, and the month-on-month repeat rate of 38.9% shows
+HN_IDs do link across months, so this is not general breakage. Unverified: needs
+one January `HN_ID` traced by hand through `Rev_Attribution`. Do not assume the
+figure is real.
+
+264 assertions across the four layers, print-overflow 22 sections 0 clipping.
 
 **v3.186.0 — Better Club: membership revenue, and whether the members we win come back.**
 

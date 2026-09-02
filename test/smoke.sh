@@ -320,6 +320,26 @@ expect_field "bclub drops notes" "$BCLUB" "d.months.length===3?'ok':undefined"
 # RATES ARE RECOMPUTED, NEVER READ. The fixture's ARPU columns all say 99999 and
 # its share columns all say 9.99; if either reaches the payload the sheet's stale
 # values are being trusted over the counts printed beside them.
+# COMMA-FORMATTED CELLS MUST PARSE. The fixture ships "฿66,000" because that is
+# what the Sheets values endpoint returns; Number() gives NaN, which the global
+# n() floors to 0. This is the assertion that would have stopped v3.186.0.
+expect_field "bclub revenue parsed" "$BCLUB" "d.selected.revenue===66000?'ok':undefined"
+expect_field "bclub big count"     "$BCLUB" "d.months.find(m=>m.month==='2026-06').revenue===50000?'ok':undefined"
+# The funnel panel must exist with one entry per month, impressions/users pulled
+# group-level and registers explicitly null until a feed exists.
+expect_field "bclub funnel rows"   "$BCLUB" "d.funnel.length===d.months.length?'ok':undefined"
+expect_field "bclub funnel newhns" "$BCLUB" "d.funnel.every(f=>f.newPaidHns===d.months.find(m=>m.month===f.month).newHns)?'ok':undefined"
+expect_field "bclub no registers"  "$BCLUB" "d.funnel.every(f=>f.registers===null)?'ok':undefined"
+# Search Console rows are FLATTENED by gscQueryPage, so a date-dimension row
+# carries `date`, not the API's raw `keys` array. Reading `keys` returned null
+# for every month while still reporting the source as available.
+expect_field "bclub impressions"   "$BCLUB" "d.funnel.some(f=>f.impressions>0)?'ok':undefined"
+expect_field "bclub users"         "$BCLUB" "d.funnel.some(f=>f.users>0)?'ok':undefined"
+# A month the upstream has no data for stays null rather than becoming 0 — a
+# zero would draw a real-looking trough on the funnel panel.
+expect_field "bclub gap is null"   "$BCLUB" "d.funnel.some(f=>f.impressions===null)?'ok':undefined"
+# Group-level scope must be declared so the client cannot label it BHQ.
+expect_field "bclub scope named"   "$BCLUB" "d.funnelScope.note.indexOf('group-level')>-1?'ok':undefined"
 expect_field "bclub arpu derived" "$BCLUB" "Math.abs(d.selected.arpu-11000)<1?'ok':undefined"
 expect_field "bclub share derived" "$BCLUB" "Math.abs(d.selected.newHnShare-(2/6))<0.001?'ok':undefined"
 # Old counts fall out of the sheet, but must reconcile against new + old = paid.

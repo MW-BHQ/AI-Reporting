@@ -101,10 +101,25 @@ async function sheetsToken() {
 }
 
 /** batchGet several ranges in one request. Missing tabs are skipped, not fatal. */
-async function sheetBatchGet(spreadsheetId, ranges) {
+/**
+ * `opts.unformatted` asks the API for RAW cell values instead of display text.
+ *
+ * WHY IT MATTERS: the values endpoint returns FORMATTED_VALUE by default, so a
+ * cell holding 2923 arrives as the STRING "2,923" once the sheet has a thousands
+ * separator on it. `Number("2,923")` is NaN, which the global `n()` floors to 0 —
+ * so every figure at or above a thousand silently became zero while everything
+ * below it stayed correct. Better Club shipped that way: 514 new members and 48
+ * returning were right, 2,923 paying members and ฿102.5M were both 0.
+ *
+ * Left OPT-IN rather than made the default: the existing callers parse display
+ * strings on purpose (Thai dates, Buddhist-era years, `รวม` total rows), and
+ * flipping them to raw values would turn their date columns into serials.
+ */
+async function sheetBatchGet(spreadsheetId, ranges, opts = {}) {
   const token = await sheetsToken();
   const qs = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join("&");
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchGet?${qs}&majorDimension=ROWS`;
+  const render = opts.unformatted ? "&valueRenderOption=UNFORMATTED_VALUE" : "";
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchGet?${qs}&majorDimension=ROWS${render}`;
   const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -7490,10 +7505,42 @@ app.get("/api/google-ads", requireTab("gads"), async (req, res) => {
 
 // ---------------------------------------------------------- /api/better-club
 
-/** `2026-07` as written, or a Date recovered in the script's own zone. */
+/**
+ * A sheet cell to a number, tolerating every way this one has arrived.
+ *
+ * BELT AND BRACES BESIDE `unformatted: true`. The raw-value request is the fix;
+ * this is here because a single cell typed as text (`'2,923`, or pasted with a
+ * ฿) comes back as a string even in UNFORMATTED_VALUE mode, and the global
+ * `n()` would floor it to 0 rather than fail. A silent zero in a revenue column
+ * is the worst outcome available — it looks like a real figure.
+ */
+function bnum(v) {
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  if (v == null || v === "") return 0;
+  const raw = String(v).trim();
+  const neg = /^\(.*\)$/.test(raw);
+  const cleaned = raw.replace(/[฿,\s()]/g, "");
+  if (!/\d/.test(cleaned)) return 0;
+  const x = Number(cleaned);
+  if (!Number.isFinite(x)) return 0;
+  return neg ? -x : x;
+}
+
+/**
+ * `2026-07` as written, a Date, or a Sheets serial.
+ *
+ * The serial branch exists because `unformatted: true` turns any cell the sheet
+ * thinks is a date into a number — so a hand-edited MonthYear that Sheets
+ * coerced to a date would arrive as 46204 rather than as text and drop the whole
+ * month silently.
+ */
 function monthKeyCell(v) {
   if (v instanceof Date) {
     return `${v.getUTCFullYear()}-${String(v.getUTCMonth() + 1).padStart(2, "0")}`;
+  }
+  if (typeof v === "number" && v > 20000 && v < 80000) {
+    const d = new Date(Date.UTC(1899, 11, 30) + v * 86400000);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
   }
   const m = /^(\d{4})-(\d{2})/.exec(String(v == null ? "" : v).trim());
   return m ? `${m[1]}-${m[2]}` : "";
@@ -7547,7 +7594,7 @@ async function buildBetterClub(from, to) {
     res = await sheetBatchGet(BCLUB_SHEET_ID, [
       `'${BCLUB_SUMMARY_TAB}'!A1:P`,
       `'${BCLUB_DETAIL_TAB}'!A1:E`,
-    ]);
+    ], { unformatted: true });
   } catch (e) {
     const msg = String((e && e.message) || e);
     return {
@@ -7587,7 +7634,7 @@ async function buildBetterClub(from, to) {
     const row = summary[r] || [];
     const key = monthKeyCell(row[SC.MonthYear]);
     if (!key) continue;                                  // blank or a stray note row
-    const g = (c) => (SC[c] === -1 ? 0 : n(row[SC[c]]));
+    const g = (c) => (SC[c] === -1 ? 0 : bnum(row[SC[c]]));
     const paidHns = g("PaidHNs"), revenue = g("Revenue");
     const newHns = g("NewPaidHNs"), newRev = g("RevFromNewPaidHNs");
     const oldHns = SC.OldPaidHNs === -1 ? paidHns - newHns : g("OldPaidHNs");
@@ -7644,7 +7691,7 @@ async function buildBetterClub(from, to) {
         const key = monthKeyCell(row[D.month]);
         if (!key) continue;
         const id = String(row[D.id] == null ? "" : row[D.id]).trim();
-        const rev = D.rev === -1 ? 0 : n(row[D.rev]);
+        const rev = D.rev === -1 ? 0 : bnum(row[D.rev]);
         if (key === selKey) selRevs.push(rev);
         // A blank HN_ID means that row came from an export with HN already
         // stripped. It still counts toward revenue, but it cannot be tracked
@@ -7724,12 +7771,67 @@ async function buildBetterClub(from, to) {
     detailNote = `${BCLUB_DETAIL_TAB} is empty — cohorts and concentration unavailable.`;
   }
 
+  /**
+   * THE FUNNEL PANELS FROM MW'S LOOKER REPORT (SS1):
+   * Google Impressions -> Total users -> Better Club new registers -> new paid HNs.
+   *
+   * Pulled over the SHEET'S OWN SPAN, not the selected range, because the panel
+   * is a seven-month trend — the same reason the tables below show every month.
+   *
+   * BOTH OF THESE ARE B+ / GROUP LEVEL, all 27 branches of the GA4 property and
+   * the whole `sc-domain:bangkokhospital.com` domain. They are NOT BHQ, and the
+   * payload says so in `scope` so the client cannot label them as the four
+   * hospitals. Conflating the two is the single easiest way to make this report
+   * wrong, and it is wrong in a direction nobody notices.
+   *
+   * Each is wrapped: a Search Console or GA4 failure must leave the sheet-based
+   * cards standing rather than take the tab down, exactly as YouTube and Better
+   * AI are wrapped in runJobs.
+   */
+  const seriesFrom = `${months[0].month}-01`;
+  const lastKey = months[months.length - 1].month;
+  const [ly, lm] = lastKey.split("-").map(Number);
+  const seriesTo = new Date(Date.UTC(ly, lm, 0)).toISOString().slice(0, 10);
+
+  const byMonth = (rows, dateOf, valueOf) => {
+    const m = new Map();
+    for (const r of rows) {
+      const k = String(dateOf(r) || "").slice(0, 7);
+      if (!k) continue;
+      m.set(k, (m.get(k) || 0) + bnum(valueOf(r)));
+    }
+    return m;
+  };
+
+  const [impr, users] = await Promise.all([
+    gscQuery(["date"], seriesFrom, seriesTo, { noBranchFilter: true })
+      .then((rows) => byMonth(rows, (r) => r.date, (r) => r.impressions))
+      .catch((e) => { logJson("WARNING", "bclub_gsc_unavailable", { error: String(e.message || e) }); return null; }),
+    ga4RunReport({ dimensions: ["date"], metrics: ["totalUsers"], from: seriesFrom, to: seriesTo })
+      .then((rows) => byMonth(rows, (r) => ga4Date(r.date), (r) => r.totalUsers))
+      .catch((e) => { logJson("WARNING", "bclub_ga4_unavailable", { error: String(e.message || e) }); return null; }),
+  ]);
+
+  const funnel = months.map((m) => ({
+    month: m.month, label: m.label,
+    impressions: impr ? (impr.get(m.month) ?? null) : null,
+    users: users ? (users.get(m.month) ?? null) : null,
+    registers: null,            // no source — see registerSource below
+    newPaidHns: m.newHns,
+  }));
+
   return {
     available: true,
     sheetId: BCLUB_SHEET_ID,
     range: { from, to },
     months, selected, prev, pending,
     cohorts, concentration, detailNote,
+    funnel,
+    funnelScope: {
+      impressions: impr ? "B+ (all 27 branches, whole domain)" : null,
+      users: users ? "B+ (all 27 branches)" : null,
+      note: "Impressions and users are group-level, not BHQ. Better Club figures come from the hospital's monthly export.",
+    },
     /**
      * The register-to-paid conversion is DELIBERATELY ABSENT. It is the most
      * useful figure this section could carry — new paid members over Better Club
