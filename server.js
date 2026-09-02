@@ -42,41 +42,6 @@ const WINDSOR_BASE = "https://connectors.windsor.ai";
 
 // GA4: Bangkok Hospital (Group) property.
 const GA4_ACCOUNT = process.env.GA4_ACCOUNT || "484633959";
-/**
- * PER-BRAND GA4 PROPERTY OVERRIDE.
- *
- * MW found the Looker Studio deck reading property 314404119 ("Bangkok Hospital
- * Headquarters") while this dashboard read 484633959 (the BDMS group property,
- * 27 branches). Different property means different streams, different tagging
- * and — this is what produced the zero revenue — a different e-commerce
- * configuration. That single fact accounts for the views gap, the action gaps
- * and the missing revenue at once, which no amount of metric-tuning was going
- * to close.
- *
- * MW's instruction: BGH from the HQ property, the other three from the group.
- *
- * OFF BY DEFAULT, and deliberately so. I cannot reach GA4 from the build
- * environment — the egress proxy answers `host_not_allowed` — so I cannot check
- * one figure of this against the real property. Shipping it live-by-default
- * would be changing every BGH number on the deck on the strength of reasoning
- * alone, which is how this project has been burned before. Set
- * `GA4_PROPERTY_BY_BRAND=BGH=314404119` when the service account has Viewer on
- * that property, and compare.
- *
- * Format: `BGH=314404119,BIH=123456` — brand key, equals, property id.
- */
-const GA4_PROPERTY_BY_BRAND = Object.fromEntries(
-  String(process.env.GA4_PROPERTY_BY_BRAND || "")
-    .split(",").map((s) => s.trim()).filter(Boolean)
-    .map((pair) => {
-      const [k, v] = pair.split("=").map((x) => String(x || "").trim());
-      return [k.toUpperCase(), v];
-    })
-    .filter(([k, v]) => k && /^\d+$/.test(v || "")));
-/** The property a brand's figures should come from. */
-const ga4PropertyFor = (brandKey) => GA4_PROPERTY_BY_BRAND[String(brandKey || "").toUpperCase()] || GA4_ACCOUNT;
-/** True when any brand is served by a property other than the default. */
-const GA4_SPLIT_PROPERTIES = Object.keys(GA4_PROPERTY_BY_BRAND).length > 0;
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
@@ -259,22 +224,18 @@ function ga4Release() {
 }
 
 function ga4RunReport(opts) {
-  const { dimensions, metrics, from, to, dimensionFilter, limit = 100000, orderBy,
-          property = GA4_ACCOUNT } = opts;
+  const { dimensions, metrics, from, to, dimensionFilter, limit = 100000, orderBy } = opts;
   /**
    * `orderBy` is part of the memo key. Left out, two requests differing only in
    * sort order would share one cached promise and the second would silently get
    * the first one's ordering.
    */
   return memoUpstream(
-    // The property is part of the memo key. Without it a second property's
-    // request would be served the first one's cached rows — the same class of
-    // silent-wrong-data the version-keyed GCS cache exists to prevent.
-    `ga4|${property}|${from}|${to}|${limit}|${dimensions.join(",")}|${metrics.join(",")}|${JSON.stringify(dimensionFilter || null)}|${orderBy || ""}`,
-    () => ga4RunReportGated({ dimensions, metrics, from, to, dimensionFilter, limit, orderBy, property }));
+    `ga4|${from}|${to}|${limit}|${dimensions.join(",")}|${metrics.join(",")}|${JSON.stringify(dimensionFilter || null)}|${orderBy || ""}`,
+    () => ga4RunReportGated({ dimensions, metrics, from, to, dimensionFilter, limit, orderBy }));
 }
 
-async function ga4RunReportGated({ dimensions, metrics, from, to, dimensionFilter, limit, orderBy, property }) {
+async function ga4RunReportGated({ dimensions, metrics, from, to, dimensionFilter, limit, orderBy }) {
   /**
    * The Data API caps a request at 10 metrics and 9 dimensions, exactly as
    * Windsor did. This guard used to live in ga4Fields(), which every Windsor
@@ -290,13 +251,13 @@ async function ga4RunReportGated({ dimensions, metrics, from, to, dimensionFilte
   }
   await ga4Slot();
   try {
-    return await ga4RunReportInner({ dimensions, metrics, from, to, dimensionFilter, limit, orderBy, property });
+    return await ga4RunReportInner({ dimensions, metrics, from, to, dimensionFilter, limit, orderBy });
   } finally {
     ga4Release();
   }
 }
 
-async function ga4RunReportInner({ dimensions, metrics, from, to, dimensionFilter, limit, orderBy, property = GA4_ACCOUNT }) {
+async function ga4RunReportInner({ dimensions, metrics, from, to, dimensionFilter, limit, orderBy }) {
   const token = await ga4Token();
   const body = {
     dateRanges: [{ startDate: from, endDate: to }],
@@ -313,7 +274,7 @@ async function ga4RunReportInner({ dimensions, metrics, from, to, dimensionFilte
    */
   if (orderBy) body.orderBys = [{ metric: { metricName: orderBy }, desc: true }];
 
-  const res = await fetch(`${GA4_API_BASE}/properties/${property}:runReport`, {
+  const res = await fetch(`${GA4_API_BASE}/properties/${GA4_ACCOUNT}:runReport`, {
     method: "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -334,7 +295,7 @@ async function ga4RunReportInner({ dimensions, metrics, from, to, dimensionFilte
     return o;
   });
   if (rows.length >= limit) {
-    logJson("WARNING", "ga4_report_truncated", { limit, dimensions, metrics, from, to, property });
+    logJson("WARNING", "ga4_report_truncated", { limit, dimensions, metrics, from, to });
   }
   return rows;
 }
@@ -470,7 +431,6 @@ async function ga4Compat(windsorDims, windsorMetrics, from, to, opts = {}) {
   });
   const rows = await ga4RunReport({
     dimensions: dims, metrics: mets, from, to,
-    property: opts.property,
     dimensionFilter: opts.noBranchFilter ? opts.dimensionFilter
       : withBranch(opts.dimensionFilter, opts.segments),
   });
@@ -1121,7 +1081,7 @@ function ga4JoinKey(windsorDims, row, fromGa4) {
  * zeros and is logged, because a missing key-event count must not take down a
  * whole tab.
  */
-async function ga4KeyEvents(windsorDims, from, to, segments, property) {
+async function ga4KeyEvents(windsorDims, from, to, segments) {
   const empty = { total: 0, byKey: new Map(), byName: new Map(), byKeyEvent: new Map(), rows: [], failed: false };
   for (const d of windsorDims) {
     if (!GA4_DIM_MAP[d]) throw new Error(`ga4KeyEvents: no Data API mapping for dimension "${d}"`);
@@ -1155,7 +1115,7 @@ async function ga4KeyEvents(windsorDims, from, to, segments, property) {
        * hospital has been reading all along.
        */
       metrics: ["eventCount"],
-      from, to, property,
+      from, to,
       // MUST be branch-filtered too. Without this, session metrics cover the
       // four branches and key events cover all 27 — every rate on the dashboard
       // silently inflates, and the merge hides it because unmatched keys are
@@ -1711,9 +1671,6 @@ async function buildOverview(from, to) {
     unavailable: Object.keys(errors),
     errors,
     ga4Property: GA4_ACCOUNT,
-    // Which property served which brand, so a mismatch is answerable from the
-    // payload instead of by reading the deploy config.
-    ga4PropertyByBrand: GA4_SPLIT_PROPERTIES ? GA4_PROPERTY_BY_BRAND : null,
     syncedAt: new Date().toISOString(),
   };
 }
@@ -1894,34 +1851,6 @@ async function buildReport(from, to) {
    * round trip, but it read as two different requests.)
    */
   jobs.langKeyEventsPrev = ga4KeyEvents(["landing_page"], cwr.prev.from, cwr.prev.to);
-  /**
-   * THE SAME TWO PULLS AGAIN, ON BGH'S OWN PROPERTY (MW: "let's do the BGH only
-   * first, the rest use the group one").
-   *
-   * The language matrix and the Actions-by-language grid come from ONE
-   * landing-page pull bucketed by path, so they cannot be split per brand by
-   * filtering — the split has to be a second request against the other
-   * property. BGH rows are then taken from this pull and the other three from
-   * the group one.
-   *
-   * Skipped entirely unless `GA4_PROPERTY_BY_BRAND` names a property for BGH,
-   * so by default this costs nothing and changes nothing.
-   *
-   * A CONSEQUENCE MW SHOULD KNOW: the BHQ combined column becomes BGH from one
-   * property plus three hospitals from another. That is what "BGH only first"
-   * asks for, and it is defensible while the two properties are being
-   * reconciled — but it is a mixed total, and it should not stay mixed forever.
-   */
-  const BGH_PROP = ga4PropertyFor("BGH");
-  const bghSplit = BGH_PROP !== GA4_ACCOUNT;
-  if (bghSplit) {
-    jobs.langSessionsBgh = ga4Compat(["landing_page"],
-      ["sessions", "screen_page_views", "purchase_revenue"], from, to, { property: BGH_PROP });
-    jobs.langKeyEventsBgh = ga4KeyEvents(["landing_page"], from, to, undefined, BGH_PROP);
-    jobs.langKeyEventsBghPrev = ga4KeyEvents(["landing_page"], cwr.prev.from, cwr.prev.to, undefined, BGH_PROP);
-    jobs.langSessionsBghPrev = ga4Compat(["landing_page"], ["sessions"], cwr.prev.from, cwr.prev.to,
-      { property: BGH_PROP });
-  }
   // Keyed by source, so the Facebook actions carry MoM for one group-wide
   // request rather than four per-brand ones.
   jobs.srcKeyEventsPrev = ga4KeyEvents(["session_manual_source"], cwr.prev.from, cwr.prev.to);
@@ -3218,25 +3147,15 @@ async function buildReport(from, to) {
   };
   const langCell = {};
   for (const b of BRANDS) { langCell[b.key] = {}; for (const l of Object.keys(LOCALES)) langCell[b.key][l] = { sessions: 0, prev: 0 }; }
-  const fillLang = (rows, field, only) => {
+  const fillLang = (rows, field) => {
     for (const r of (rows || [])) {
       const bk = brandForPath(r.landing_page); if (!bk) continue;
-      if (only === "BGH" && bk !== "BGH") continue;
-      if (only === "!BGH" && bk === "BGH") continue;
       const lc = localeFromPath(r.landing_page); if (!lc || !langCell[bk][lc]) continue;
       langCell[bk][lc][field] += n(r.sessions);
     }
   };
-  /**
-   * `only` restricts a pass to one brand, so the BGH-property rows fill BGH's
-   * cells and the group rows fill the rest. Without it the two pulls would both
-   * write to BGH and double it — the single most likely way this change goes
-   * wrong, so the filter is on the writer rather than on the caller.
-   */
-  fillLang(data.langSessions, "sessions", data.langSessionsBgh ? "!BGH" : null);
-  fillLang(data.langSessionsPrev, "prev", data.langSessionsBghPrev ? "!BGH" : null);
-  if (data.langSessionsBgh) fillLang(data.langSessionsBgh, "sessions", "BGH");
-  if (data.langSessionsBghPrev) fillLang(data.langSessionsBghPrev, "prev", "BGH");
+  fillLang(data.langSessions, "sessions");
+  fillLang(data.langSessionsPrev, "prev");
 
   // Column order taken from the LS deck rather than the LOCALES declaration,
   // so the two can be read side by side during the changeover.
@@ -3266,36 +3185,26 @@ async function buildReport(from, to) {
   for (const k of [...BRAND_KEYS, "BHQ"]) {
     ALB[k] = {}; for (const l of Object.keys(LOCALES)) ALB[k][l] = albBlank();
   }
-  const fillAlb = (rows, only) => {
-    for (const r of (rows || [])) {
-      const bk = brandForPath(r.landing_page); if (!bk) continue;
-      if (only === "BGH" && bk !== "BGH") continue;
-      if (only === "!BGH" && bk === "BGH") continue;
-      const lc = localeFromPath(r.landing_page); if (!lc || !ALB[bk][lc]) continue;
-      for (const target of [ALB[bk][lc], ALB.BHQ[lc]]) {
-        target.views += n(r.screen_page_views);
-        target.sessions += n(r.sessions);
-        target.revenue += n(r.purchase_revenue);
-      }
+  for (const r of (data.langSessions || [])) {
+    const bk = brandForPath(r.landing_page); if (!bk) continue;
+    const lc = localeFromPath(r.landing_page); if (!lc || !ALB[bk][lc]) continue;
+    for (const target of [ALB[bk][lc], ALB.BHQ[lc]]) {
+      target.views += n(r.screen_page_views);
+      target.sessions += n(r.sessions);
+      target.revenue += n(r.purchase_revenue);
     }
-  };
-  fillAlb(data.langSessions, data.langSessionsBgh ? "!BGH" : null);
-  if (data.langSessionsBgh) fillAlb(data.langSessionsBgh, "BGH");
-  const fillEvents = (src, field, only) => {
+  }
+  const fillEvents = (src, field) => {
     for (const r of ((src && src.rows) || [])) {
       const bk = brandForPath(r.key); if (!bk) continue;
-      if (only === "BGH" && bk !== "BGH") continue;
-      if (only === "!BGH" && bk === "BGH") continue;
       const lc = localeFromPath(r.key); if (!lc || !ALB[bk][lc]) continue;
       for (const target of [ALB[bk][lc], ALB.BHQ[lc]]) {
         target[field][r.eventName] = (target[field][r.eventName] || 0) + r.value;
       }
     }
   };
-  fillEvents(data.langKeyEvents, "events", data.langKeyEventsBgh ? "!BGH" : null);
-  fillEvents(data.langKeyEventsPrev, "prevEvents", data.langKeyEventsBghPrev ? "!BGH" : null);
-  if (data.langKeyEventsBgh) fillEvents(data.langKeyEventsBgh, "events", "BGH");
-  if (data.langKeyEventsBghPrev) fillEvents(data.langKeyEventsBghPrev, "prevEvents", "BGH");
+  fillEvents(data.langKeyEvents, "events");
+  fillEvents(data.langKeyEventsPrev, "prevEvents");
   /**
    * Channels per hospital with MoM — the LS "Where do they find us" page.
    * Top five by sessions, matching the deck.
@@ -3542,11 +3451,6 @@ async function buildReport(from, to) {
     gbpRanks: data.gbpRanks || { unavailable: true },
     youtube: data.youtube || { available: false },
     betterAi: data.betterAi || { available: false },
-    // Which GA4 property served this payload, and any per-brand override, so
-    // "which account is this reading?" is answerable from the response rather
-    // than from the deploy config.
-    ga4Property: GA4_ACCOUNT,
-    ga4PropertyByBrand: GA4_SPLIT_PROPERTIES ? GA4_PROPERTY_BY_BRAND : null,
     tiktok,
     social,
     languages,

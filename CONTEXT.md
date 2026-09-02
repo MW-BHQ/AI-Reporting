@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.178.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.179.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -718,51 +718,48 @@ improves.
 
 ### Recent (August 2026)
 
-**v3.178.0 — BGH can read its OWN GA4 property. Off until switched on.**
+**v3.179.0 — v3.178 REVERTED. One GA4 property again, and that is the right
+answer.**
 
-MW found it: the Looker Studio deck reads property **314404119** ("Bangkok
-Hospital Headquarters") while this dashboard reads **484633959** (the BDMS group
-property, 27 branches). Different property means different streams, different
-tagging and a different e-commerce configuration — which accounts for the views
-gap, every action gap AND the zero revenue at once. Three symptoms, one cause,
-and none of the metric work would have closed any of them.
+MW is having the e-commerce events sent to the group property (484633959)
+instead. Once they are there, one property serves the whole deck, no split is
+needed, and every figure on every page comes from the same account. That is
+strictly better than anything I was about to build.
 
-**`GA4_PROPERTY_BY_BRAND=BGH=314404119`** is the whole switch. Format is
-`BRAND=propertyId`, comma-separated.
+**WHAT I HAD WRONG, AND IT IS WORTH KEEPING.** v3.178 split by BRAND — BGH from
+314404119, the rest from the group. MW then explained the actual arrangement:
+314404119 is BGH-only, 484633959 is all 27 branches, most events are configured
+on the GROUP property, and only the E-COMMERCE events had to be set on BGH's.
+So the split was on the wrong AXIS. Routing BGH's pulls to 314404119 would have
+moved sessions, `find_doctors`, `appointments` and `contact_us` onto a property
+where those events are barely configured — trading a wrong revenue figure for
+four wrong traffic figures.
 
-**OFF BY DEFAULT, DELIBERATELY.** GA4 is unreachable from the build environment
-— the egress proxy answers `host_not_allowed` on `analyticsdata.googleapis.com`
-— so not one figure of this could be checked against the real property here.
-Shipping it live-by-default would be changing every BGH number on the deck on
-reasoning alone.
+**AND I HAD BEEN TOLD MOST OF THIS BEFORE.** On 24 Aug MW laid out both options
+and I recommended the group property with path filtering, because the four
+branch properties do not name events consistently (BIH has
+`appointment_starts`, BHT has both that AND `appointments`, WSH has
+`doctor_profile` where the group has `click_doctor_profile`). That reasoning was
+right and still is. I proposed the thing I had already argued against, because I
+was reading the symptom in front of me instead of the history.
 
-**THE PROPERTY IS PART OF THE MEMO KEY.** Without that, the second property's
-request would be served the first's cached rows: same dimensions, same dates,
-different account, and the wrong answer would look completely normal. Same class
-of bug the version-keyed GCS cache exists to prevent.
+**WHAT SURVIVES.** Nothing. The per-request `property` argument and the
+property-in-the-memo-key went out with the revert — deliberately, because
+plumbing kept "for later" is plumbing nobody remembers is there.
 
-**THE SPLIT HAD TO BE A SECOND REQUEST, not a filter.** The language matrix and
-the Actions-by-language grid both come from ONE landing-page pull bucketed by
-path, so there is nothing to filter on — a per-brand property means pulling the
-same report twice and taking BGH's rows from one and the rest from the other.
-Four extra requests, only when the override is set.
-
-**THE MOST LIKELY WAY THIS GOES WRONG IS DOUBLE-COUNTING**, so the brand filter
-lives on the WRITER (`fillLang`/`fillAlb`/`fillEvents` take an `only` argument)
-rather than on the caller. Verified against the mock with the override on: BGH
-reads 700, not 1400.
-
-**A CONSEQUENCE MW SHOULD KNOW: the BHQ combined column becomes BGH from one
-property plus three hospitals from another.** That is what "BGH only first"
-asks for and it is defensible while the two are being reconciled, but it is a
-mixed total and should not stay mixed.
-
-`/api/report` now reports `ga4Property` and `ga4PropertyByBrand`, so which
-account served a payload is answerable from the response.
-
-**STILL OPEN, and possibly moot once the property is switched:** revenue by
-language, the item-scoped metrics (`itemViews`/`addToCarts` vs event counts),
-and un-prefixed locale paths being dropped.
+**WHAT REMAINS GENUINELY OPEN**, and none of it is about properties:
+ - Revenue, item views and add-to-carts will fix themselves when the events land
+   on the group property. Nothing to do here until then.
+ - `itemViews` and `addToCarts` are ITEM-scoped metrics, not event counts. One
+   `view_item` carrying three products is 1 event and 3 item views, so those two
+   columns will still be close-but-not-equal to LS even after the events move.
+   That one is ours to fix.
+ - Un-prefixed locale paths are DROPPED. `localeFromPath` needs an explicit
+   `/th/`, `/en/` segment, so a page with no prefix is discarded entirely. This
+   is why Thai and English views were short (794.0K vs 817,370 and 214.0K vs
+   216,677) while every prefixed language matched to the digit. Also the likely
+   cause of the Find doctors / Appointments / Contact us gaps, since those
+   events were on the group property all along.
 
 
 **v3.177.0 — the key-event pull uses `eventCount`, not `keyEvents`. Every action
