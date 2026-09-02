@@ -900,10 +900,35 @@ const LOCALES = {
  * Language from a URL locale segment. This is the only reliable method:
  * EN/DE/VN/ID share Latin script and cannot be separated by characters alone.
  */
-function localeFromPath(url) {
-  if (!url) return null;
-  const m = String(url).match(/\/(th|en|zh|ja|ar|de|my|vn|vi|km|id)(?:\/|$|\?)/i);
-  if (!m) return null;
+/**
+ * THE SITE'S DEFAULT LANGUAGE, for URLs that carry no locale segment.
+ *
+ * bangkokhospital.com serves Thai with no prefix — `/bangkok/package/...` is a
+ * Thai page, `/th/bangkok/package/...` is the same page reached through the
+ * explicit prefix. Both are Thai and both must count as Thai.
+ */
+const DEFAULT_LOCALE = (process.env.DEFAULT_LOCALE || "th").toLowerCase();
+
+/**
+ * The locale a URL belongs to.
+ *
+ * `orDefault` is the fix for MW's Thai and English shortfall. Returning `null`
+ * for an un-prefixed path meant the row was DISCARDED — 23,000 Thai page views
+ * and 2,700 English simply left the report (794.0K against Looker Studio's
+ * 817,370), while every explicitly prefixed language matched to the digit. That
+ * pattern — some languages exact, two of them short — was the whole clue, and it
+ * pointed here rather than at any metric.
+ *
+ * It is a PARAMETER and not the default behaviour on purpose. A page-level
+ * caller listing URLs by locale should still be able to say honestly "this URL
+ * carries no locale", and a Search Console query has no path at all to fall back
+ * from. Only the callers that BUCKET traffic into a language pass it, because
+ * for them the alternative to a default is throwing the traffic away.
+ */
+function localeFromPath(url, orDefault) {
+  if (!url) return orDefault ? DEFAULT_LOCALE : null;
+  const m = String(url).match(/\/(th|en|zh|ja|ar|de|my|vn|vi|km|id)(?:\/|$|\?|#)/i);
+  if (!m) return orDefault ? DEFAULT_LOCALE : null;
   const code = m[1].toLowerCase();
   return code === "vi" ? "vn" : code;
 }
@@ -2099,13 +2124,13 @@ async function buildReport(from, to) {
     byLang[l].impressions += n(r.impressions); byLang[l].clicks += n(r.clicks);
   }
   for (const r of (data.langSessions || [])) {
-    const l = localeFromPath(r.landing_page); if (!l || !byLang[l]) continue;
+    const l = localeFromPath(r.landing_page, true); if (!l || !byLang[l]) continue;
     byLang[l].sessions += n(r.sessions);
   }
   const keLang = data.langKeyEvents;
   if (keLang && keLang.rows) {
     for (const r of keLang.rows) {
-      const l = localeFromPath(r.key); if (!l || !byLang[l]) continue;
+      const l = localeFromPath(r.key, true); if (!l || !byLang[l]) continue;
       byLang[l].keyEvents += r.value;
     }
   }
@@ -3150,7 +3175,7 @@ async function buildReport(from, to) {
   const fillLang = (rows, field) => {
     for (const r of (rows || [])) {
       const bk = brandForPath(r.landing_page); if (!bk) continue;
-      const lc = localeFromPath(r.landing_page); if (!lc || !langCell[bk][lc]) continue;
+      const lc = localeFromPath(r.landing_page, true); if (!lc || !langCell[bk][lc]) continue;
       langCell[bk][lc][field] += n(r.sessions);
     }
   };
@@ -3187,7 +3212,7 @@ async function buildReport(from, to) {
   }
   for (const r of (data.langSessions || [])) {
     const bk = brandForPath(r.landing_page); if (!bk) continue;
-    const lc = localeFromPath(r.landing_page); if (!lc || !ALB[bk][lc]) continue;
+    const lc = localeFromPath(r.landing_page, true); if (!lc || !ALB[bk][lc]) continue;
     for (const target of [ALB[bk][lc], ALB.BHQ[lc]]) {
       target.views += n(r.screen_page_views);
       target.sessions += n(r.sessions);
@@ -3197,7 +3222,7 @@ async function buildReport(from, to) {
   const fillEvents = (src, field) => {
     for (const r of ((src && src.rows) || [])) {
       const bk = brandForPath(r.key); if (!bk) continue;
-      const lc = localeFromPath(r.key); if (!lc || !ALB[bk][lc]) continue;
+      const lc = localeFromPath(r.key, true); if (!lc || !ALB[bk][lc]) continue;
       for (const target of [ALB[bk][lc], ALB.BHQ[lc]]) {
         target[field][r.eventName] = (target[field][r.eventName] || 0) + r.value;
       }

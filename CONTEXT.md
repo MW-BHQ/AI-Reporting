@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.179.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.180.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,34 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.180.0 — un-prefixed URLs count as Thai. The Thai and English shortfall.**
+
+`localeFromPath` required an explicit `/th/`, `/en/` segment and returned `null`
+without one — and a `null` locale meant the row was **DISCARDED**. bangkokhospital
+.com serves Thai with no prefix, so `/bangkok/package/...` was leaving the report
+entirely: 23,000 Thai page views and 2,700 English, against Looker Studio's
+817,370 and 216,677.
+
+**THE CLUE WAS THE SHAPE OF THE ERROR, not its size.** Japanese matched 82,492 to
+82,492 and Arabic 71,185 to 71,185, while only Thai and English were short. Two
+languages wrong and six exact is not a metric problem — it is the two languages
+that have un-prefixed pages. I spent two turns on metrics before reading that.
+
+**`orDefault` IS A PARAMETER, NOT THE NEW DEFAULT.** Only the five callers that
+BUCKET traffic into a language pass it, because for them the alternative to a
+default is throwing the traffic away. A page-level listing should still be able
+to say honestly "this URL carries no locale", and a Search Console query has no
+path to fall back from. `DEFAULT_LOCALE` env overrides it if the site's default
+ever changes.
+
+Also added `#` to the locale pattern's terminator set — `/en#section` was not
+matching.
+
+**STILL OPEN: `itemViews` and `addToCarts`.** Ours to fix, no tagging needed —
+they are metrics we can request. But they will read 0 until the e-commerce events
+reach the group property, so they come AFTER that, not before.
+
 
 **v3.179.0 — v3.178 REVERTED. One GA4 property again, and that is the right
 answer.**
