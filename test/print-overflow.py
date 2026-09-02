@@ -62,6 +62,41 @@ with sync_playwright() as p:
                   [...g.classList].filter(c=>/^g-/.test(c)).join('') + ':' +
                   getComputedStyle(g).gridTemplateColumns.split(' ').length))].join(' ')
         }))""")
+    # ---------------------------------------------------------- Better Club
+    #
+    # A SECOND VIEW, MEASURED THE SAME WAY. Better Club prints as its own deck
+    # and shipped broken once already: its chart boxes were inline heights, so
+    # the print rules could not resize them, and its canvases sat outside a
+    # `.chart-wrap` — which print hides without building the SVG twin that
+    # replaces it, so every chart printed blank. Both are invisible on screen.
+    pg.emulate_media(media="screen")
+    pg.evaluate("()=>{const n=[...document.querySelectorAll('.nav-item')]"
+                ".find(x=>x.dataset.view==='bclub'); n&&n.click();}")
+    pg.wait_for_timeout(600)
+    pg.evaluate("()=>{const b=document.querySelector('[data-load=\"bclub\"]'); b&&b.click();}")
+    pg.wait_for_timeout(6000)
+    pg.emulate_media(media="print")
+    pg.evaluate("()=>{try{resizeChartsForPrint();fitNativeSlides();buildPrintSvgs()}catch(e){}}")
+    pg.wait_for_timeout(800)
+
+    bc = pg.evaluate("""() => {
+      const slides = [...document.querySelectorAll('#viewRoot .slide')];
+      return {
+        slides: slides.map(s => ({
+          title: ((s.querySelector('.slide-title')||{}).textContent||'')
+                   .trim().replace(/\\s+/g,' ').slice(0,44),
+          over: s.scrollHeight - s.clientHeight,
+          flow: s.classList.contains('slide-flow'),
+          logo: !!s.querySelector('.slide-logo'),
+          range: !!s.querySelector('.slide-range'),
+        })),
+        canvases: document.querySelectorAll('#viewRoot canvas').length,
+        loose: [...document.querySelectorAll('#viewRoot canvas')]
+                 .filter(c => !c.closest('.chart-wrap')).length,
+        twins: [...document.querySelectorAll('#viewRoot .chart-svg')]
+                 .filter(t => (t.innerHTML||'').length > 200).length,
+      };
+    }""")
     browser.close()
 
 bad = [r for r in rows if r["over"] > 2]
@@ -69,4 +104,24 @@ for r in rows:
     flag = f"CLIP {r['over']}px" if r["over"] > 2 else "ok"
     print(f"{r['title'][:40]:<42}{flag:<14}{r['cols']}")
 print(f"\n{len(rows)} sections, {len(bad)} clipping at {WIDTH}px")
-sys.exit(1 if bad else 0)
+
+print("\nBetter Club")
+bcbad = []
+for r in bc["slides"]:
+    hdr = ("logo+range" if (r["logo"] and r["range"]) else "NO HEADER BITS")
+    clip = f"CLIP {r['over']}px" if (r["over"] > 2 and not r["flow"]) else "ok"
+    if clip != "ok" or hdr != "logo+range":
+        bcbad.append(r["title"])
+    print(f"  {r['title'][:44]:<46}{clip:<14}{hdr}")
+
+# Every chart box must be a `.chart-wrap` with a built twin, or it prints blank.
+if bc["loose"]:
+    bcbad.append(f"{bc['loose']} canvas(es) outside .chart-wrap")
+    print(f"  !! {bc['loose']} canvas(es) outside a .chart-wrap — those print blank")
+if bc["twins"] < bc["canvases"]:
+    bcbad.append(f"{bc['canvases'] - bc['twins']} twin(s) missing")
+    print(f"  !! {bc['canvases']} canvases but only {bc['twins']} SVG twins with content")
+print(f"\n{len(bc['slides'])} Better Club slides, {bc['twins']}/{bc['canvases']} twins, "
+      f"{len(bcbad)} problem(s)")
+
+sys.exit(1 if (bad or bcbad) else 0)

@@ -1319,11 +1319,23 @@ setTimeout(() => {
           return fail("better club", "a missing register month did not say so"), finish();
         }
         /**
-         * PRINT-ONLY LABELS. The plugin must be attached and gated: on screen
-         * PRINTING is false, so nothing is drawn and the tooltip is unduplicated.
+         * PRINTED CHARTS ARE THE SVG TWIN, NOT THE CANVAS — print hides every
+         * canvas. So the final-point labels have to be opted into in the chart
+         * options and drawn by `chartToSvg`; a canvas plugin was invisible in
+         * the export. Both halves of that contract are asserted here.
          */
-        if (typeof dom.window.lastPointLabels === 'undefined' && !/lastPointLabels/.test(SRC)) {
-          return fail("better club", "the print label plugin is missing"), finish();
+        if (!/lastPointLabels:\s*\{\s*enabled:\s*true/.test(SRC)) {
+          return fail("better club", "no chart opts into the printed value labels"), finish();
+        }
+        if (!/plugins\.lastPointLabels/.test(SRC)) {
+          return fail("better club", "chartToSvg does not read the label flag"), finish();
+        }
+        // Every Better Club chart box must be a .chart-wrap, or print hides the
+        // canvas and never builds a twin to replace it.
+        const wraps = r ? r.querySelectorAll('.chart-wrap canvas').length : 0;
+        const loose = r ? [...r.querySelectorAll('canvas')].filter(c => !c.closest('.chart-wrap')).length : 0;
+        if (!wraps || loose) {
+          return fail("better club", `${loose} canvas(es) outside a .chart-wrap — those print blank`), finish();
         }
         /**
          * MW'S TWO LOOKER PANELS MUST COME FIRST (MW: "my LS references are

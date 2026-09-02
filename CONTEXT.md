@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.188.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.189.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -718,6 +718,72 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.189.0 — Better Club prints as a deck; four bugs in the shared print path.**
+
+MW: "pdf now pretty broken, apply all style from monthly report please; the
+header, logo, date range seperator."
+
+Better Club printed as one long scroll: charts jammed into the top-left of page
+one, most of a page blank beneath them, cards spilling across breaks with no
+header, no logo and no date stamp. It is now five slides, each with the deck's
+shell and each exactly one page.
+
+**`slide()` LIVED INSIDE `renderReport`, so every other view printed unstyled.**
+Hoisted to `slideShell()` at module scope rather than copied, so the two decks
+cannot drift. The report keeps its own wrapper for per-hospital logos and
+platform marks; `slideShell` is the same markup and the same class contract for
+views that need one header and the group wordmark.
+
+**PRINTED CHARTS ARE SVG TWINS. PRINT HIDES EVERY CANVAS.** `.chart-wrap
+canvas{display:none!important}` — the export shows the `.chart-svg` that
+`buildPrintSvgs()` builds beside it. Better Club's boxes were inline-height divs
+OUTSIDE `.chart-wrap`, which is why the first PDF showed a tiny chart rather than
+none: the canvas escaped the hiding rule. Moving them into `.chart-wrap` hid the
+canvas correctly and nothing replaced it, because no twin was being built for a
+box that had not been one. **The v3.188.0 canvas plugin for the final-point
+labels was therefore invisible in the export by construction** — it drew into the
+one surface print never rasters. The labels now live in `chartToSvg`, opt-in via
+`options.plugins.lastPointLabels`, so the report's forty charts are unchanged.
+
+**THREE BUGS IN `chartToSvg` ITSELF, all in code the report deck shares:**
+
+  1. **Grouped bars were drawn on top of each other.** Every bar chart in the
+     deck happens to be stacked, so the non-stacked path had never run: two
+     grouped series shared an x and a baseline, and the shorter read as a band
+     across the taller. Bars now split the band when `y.stacked` is unset.
+  2. **`null` was plotted as zero.** `Number(null) || 0` put an absent month on
+     the baseline, so the registers line dived to zero in the month whose figure
+     simply had not been entered. That is the exact trough the server keeps
+     `null` to avoid, undone one layer down. The twin now breaks the line at a
+     gap, one path per run of real values, as Chart.js does.
+  3. **A bar's own fill was used as label ink** — illegible on a pale
+     translucent purple. Bars take the body ink; lines keep their series colour.
+
+**`print-prep` SIZES WIDTH, NOT HEIGHT.** It makes the live layout as wide as a
+page so Chart.js draws the bitmap at print width, but says nothing about height —
+so the canvas was drawn 330px tall and met a 190px box on the sheet, where
+`.chart-wrap canvas{height:auto;max-height:100%}` letterboxed it to nothing and
+the chart printed blank. Every Better Club chart height is now declared TWICE, in
+`@media print` and under `body.print-prep`, which makes the print resize a no-op
+rather than a rescale. `max-height` is overridden too: the deck-wide 190px
+ceiling is right for a chart sharing a page with tables, and wrong where the
+chart IS the page.
+
+**THE HEIGHTS ARE MEASURED, NOT GUESSED.** 5.9in/4.1in looked right at 1400px
+and clipped by 32px and 10px once the harness measured them at 900px. Now
+5.4in/3.6in/3.5in.
+
+**`test/print-overflow.py` NOW COVERS BETTER CLUB TOO** — slide count, header
+bits present, clipping, and that every canvas sits in a `.chart-wrap` with a
+twin that has content. It caught both clipping slides before release. Every
+failure above is invisible on screen, which is why the harness has to look.
+
+Scope pills are honest per slide: the funnel slide carries none, because its four
+stages have two different scopes and each is badged individually.
+
+268 assertions across the four layers; 22 report sections + 5 Better Club slides,
+0 clipping at 900px.
 
 **v3.188.0 — Better Club: printed value labels, a register source, counts before rates.**
 

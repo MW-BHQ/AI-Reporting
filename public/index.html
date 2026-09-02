@@ -1612,6 +1612,46 @@
     body.print-prep .main{width:12.493in!important;max-width:none!important;padding:0!important;}
     body.print-prep{overflow:hidden!important;}
   }
+  /**
+   * BETTER CLUB CHART BOXES.
+   *
+   * Classes rather than inline heights, because an inline height beats a class
+   * and the print rules could never override it.
+   *
+   * THE SAME HEIGHT IS DECLARED TWICE, and both are load-bearing:
+   *   · `@media print` sizes the box on the sheet;
+   *   · `body.print-prep` sizes it on SCREEN, where Chart.js can still see it.
+   * `print-prep` makes the live layout as WIDE as a page so the bitmap is drawn
+   * at print width — but it says nothing about height, so the canvas was drawn
+   * 330px tall and then met a 190px box on the sheet. With `.chart-wrap
+   * canvas{height:auto;max-height:100%}` that letterboxes to nothing, which is
+   * why the printed chart came out blank. Declaring both makes the resize a
+   * no-op rather than a rescale.
+   *
+   * `max-height` is overridden too: the deck-wide `.chart-wrap{max-height:190px}`
+   * is a ceiling for a chart that shares a page with tables. On these slides the
+   * chart IS the page.
+   */
+  .bc-hero{height:330px;}
+  .bc-stage{height:120px;}
+  .bc-mid{height:230px;}
+/*
+   * THE HEIGHTS ARE MEASURED, NOT GUESSED. 5.9in and 4.1in were an eyeball at
+   * 1400px and clipped by 32px and 10px once `test/print-overflow.py` measured
+   * them at 900px — the narrow width the harness uses on purpose, because a
+   * collapsing grid is what pushes a section over. The card padding, the note
+   * and the slide header all come out of the 7.5in sheet before the chart does.
+   */
+  @media print{
+    .bc-hero{height:5.4in!important;max-height:none!important;}
+    .bc-stage{height:3.5in!important;max-height:none!important;}
+    .bc-mid{height:3.6in!important;max-height:none!important;}
+  }
+  @media screen{
+    body.print-prep .bc-hero{height:5.4in!important;max-height:none!important;}
+    body.print-prep .bc-stage{height:3.5in!important;max-height:none!important;}
+    body.print-prep .bc-mid{height:3.6in!important;max-height:none!important;}
+  }
   @media(max-width:1080px){.g-6,.g-5,.g-4{grid-template-columns:repeat(2,1fr);}.g-2-1,.g-3,.g-2{grid-template-columns:1fr;}}
   @media(max-width:760px){
     .shell{flex-direction:column;}
@@ -2083,6 +2123,39 @@ function humanDate(v) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ''));
   return m ? `${Number(m[3])} ${MONTH_ABBR[Number(m[2]) - 1]} ${m[1]}` : '';
 }
+/**
+ * THE PRINTED SLIDE SHELL, SHARED (v3.189.0).
+ *
+ * The monthly report grew its own `slide()` inside `renderReport`, so every
+ * other view printed as one long scroll: Better Club came out with the charts
+ * jammed into the top-left of page one, most of a page blank under them, and
+ * the cards spilling across page breaks with no header, no logo and no date
+ * stamp. MW: "pdf now pretty broken, apply all style from monthly report".
+ *
+ * Hoisted here rather than copied, so the two decks cannot drift. The report's
+ * own helper still wraps its per-hospital logo and platform marks; this is the
+ * same markup and the same class contract for views that need one header and
+ * the group wordmark.
+ *
+ *   `first` — no page break before it (the first slide of a deck).
+ *   `scope` — the pill. Always a pill, never text in the title (MW's rule).
+ *   `fill`  — stretch cards to the full printed page. Only for slides whose
+ *             direct children are grids of cards.
+ *   `flow`  — let the section run onto a second page instead of clipping. A
+ *             break is acceptable; an anonymous continuation page is not, so a
+ *             flowed section must carry its own header.
+ */
+function slideShell(title, body, { first, scope, fill, flow, logo } = {}) {
+  if (!body) return '';
+  const pill = scope ? ` <span class="all-four">${esc(scope)}</span>` : '';
+  const right = `<span class="slide-right"><span class="slide-range">${esc(humanRange())}</span><img
+    class="slide-logo" src="/brand/${esc(logo || 'bh-wordmark.png')}" alt=""
+    onerror="this.style.display='none'"></span>`;
+  return `<div class="slide${first ? '' : ' slide-break'}${fill ? ' slide-fill' : ''}${flow ? ' slide-flow' : ''}">
+    <div class="slide-title"><span>${esc(title)}${pill}</span>${right}</div>
+    ${body}</div>`;
+}
+
 function humanRange() {
   try {
     const f = humanDate(($('from') || {}).value), t = humanDate(($('to') || {}).value);
@@ -6059,19 +6132,33 @@ function renderBclub() {
       <div style="font-size:18px;font-weight:600;">${
         last && last[key] !== null && last[key] !== undefined ? cnt(last[key]) : '—'}</div>
       <div style="font-size:11px;color:var(--muted);min-height:15px;margin-bottom:2px;">${sub || ''}</div>
-      <div style="height:120px;"><canvas id="bcStage_${key}"></canvas></div>
+      <div class="chart-wrap bc-stage"><canvas id="bcStage_${key}"></canvas></div>
     </div>`;
 
-  $('viewRoot').innerHTML = `
+  /**
+   * SLIDES, NOT A SCROLL (MW: "pdf now pretty broken, apply all style from
+   * monthly report please; the header, logo, date range seperator").
+   *
+   * Every block is a `slideShell`, so each gets the deck's header — title,
+   * scope pill, date stamp and wordmark — and each occupies exactly one printed
+   * page. Chart boxes use `.chart-wrap` rather than an inline height, which is
+   * what lets the print and mobile rules resize them; an inline height beats a
+   * class and was why the printed charts stayed at their screen size.
+   *
+   * SCOPE PILLS ARE HONEST PER SLIDE. The funnel slide carries no single pill
+   * because its four stages have two different scopes — the first two are B+ and
+   * the last two are the club — and each stage is badged individually. Putting
+   * one pill on that header would claim a scope for stages that do not share it.
+   */
+  const combos = `
     <div class="card">
-      <div class="card-title">Revenue attribution</div>
-      <div style="height:330px;"><canvas id="bcCombo"></canvas></div>
+      <div class="chart-wrap bc-hero"><canvas id="bcCombo"></canvas></div>
       <div class="note">Bars are members on the right axis, lines are baht on the left — paying members and
       the revenue attributed to them, with the new-member subset of each. Every month the spreadsheet holds.</div>
-    </div>
+    </div>`;
 
-    <div class="card mt">
-      <div class="card-title">Google impressions &rsaquo; web traffic &rsaquo; Better Club registers &rsaquo; new paid members</div>
+  const funnelBody = `
+    <div class="card">
       <div class="grid g-4">
         ${stage('Google impressions', 'impressions', '#E8833A', fsc.impressions)}
         ${stage('Total users', 'users', '#8B5CF6', fsc.users)}
@@ -6092,17 +6179,15 @@ function renderBclub() {
       ${fsc.note ? `<br>${esc(fsc.note)}` : ''}
       ${d.registerSource
         ? `<br>New registers comes from the <b>${esc(d.registerSource)}</b>, which the monthly normaliser never
-           overwrites. Register-to-paid conversion is shown under the fourth stage.`
+           overwrites.`
         : `<br><b>New registers has no source connected</b>, so the third stage is empty and register-to-paid
-           cannot be computed. ${esc(d.registerNote || '')} To connect it, add a tab named <b>Registers</b> to the
-           Better Club spreadsheet with two columns — <b>MonthYear</b> (as <code>2026-07</code>) and
-           <b>NewRegisters</b> — then press Refresh. The normaliser leaves that tab alone, so the figures survive
-           every monthly import.`}
+           cannot be computed. ${esc(d.registerNote || '')}`}
       ${fsc.impressions === null ? '<br>Search Console was unavailable this run — press Refresh to retry.' : ''}
       ${fsc.users === null ? '<br>GA4 was unavailable this run — press Refresh to retry.' : ''}</div>
-    </div>
+    </div>`;
 
-    <div class="grid g-4" style="margin:14px 0;">
+  const monthBody = `
+    <div class="grid g-4">
       <div class="stat"><div class="lab">Paying members</div><div class="val">${cnt(s.paidHns)}</div>
         <div class="sub2">${dlt(p ? chg(s.paidHns, p.paidHns) : null)} · ${esc(s.label)}</div></div>
       <div class="stat"><div class="lab">Revenue</div><div class="val">${num(s.revenue, {money:true})}</div>
@@ -6112,31 +6197,26 @@ function renderBclub() {
       <div class="stat"><div class="lab">Revenue from new members</div><div class="val">${num(s.newRev, {money:true})}</div>
         <div class="sub2">${dlt(p ? chg(s.newRev, p.newRev) : null)} · ${pct(s.newRevShare)} of revenue</div></div>
     </div>
-
-    ${d.pending.length ? `<div class="note" style="margin-bottom:12px;">
+    ${d.pending.length ? `<div class="note">
       <b>Not loaded yet:</b> ${d.pending.map(m => esc(bclubMonthLabel(m))).join(', ')}.
       The figures above describe <b>${esc(s.label)}</b>, the latest month the spreadsheet has.
       Import the monthly export and run <b>Better Club &gt; Normalize inserted tab</b> to add it.</div>` : ''}
-
-    <div class="grid g-2-1">
+    <div class="grid g-2-1 mt">
       <div class="card">
         <div class="card-title">Members and revenue by month</div>
-        <div style="height:260px;"><canvas id="bcTrend"></canvas></div>
-        <div class="note">Every month in the spreadsheet, not just the selected range — a membership
-        programme only reads as a trend. Revenue on the left axis, members on the right.</div>
+        <div class="chart-wrap bc-mid"><canvas id="bcTrend"></canvas></div>
       </div>
       <div class="card">
         <div class="card-title">New vs returning members</div>
-        <div style="height:260px;"><canvas id="bcSplit"></canvas></div>
-        <div class="note">New members are those whose first ever visit fell in that month.</div>
+        <div class="chart-wrap bc-mid"><canvas id="bcSplit"></canvas></div>
       </div>
-    </div>
+    </div>`;
 
-    ${co ? `<div class="card mt">
-      <div class="card-title">Do new members come back?</div>
+  const cohortBody = co ? `
+    <div class="card">
       <table class="roomy"><thead><tr>
         <th>First paid in</th><th class="num">New members</th>
-        ${co.months.slice(1).map(m => `<th class="num">${esc(bclubMonthLabel(m).replace(/ \\d{4}$/, ''))}</th>`).join('')}
+        ${co.months.slice(1).map(m => `<th class="num">${esc(bclubMonthLabel(m).replace(/ \d{4}$/, ''))}</th>`).join('')}
       </tr></thead><tbody>
       ${co.rows.map(r => `<tr>
         <td class="strong">${esc(r.label)}</td>
@@ -6145,15 +6225,14 @@ function renderBclub() {
       </tr>`).join('')}
       </tbody></table>
       <div class="note">Read a row left to right: how many of the members who first paid that month paid
-      again in each later month, with the share alongside. Tracked by an irreversible key derived from the HN, so a member is
-      followed across months without this service ever seeing who they are.
+      again in each later month, with the share alongside. Tracked by an irreversible key derived from the HN,
+      so a member is followed across months without this service ever seeing who they are.
       ${d.detailNote ? `<br>${esc(d.detailNote)}` : ''}</div>
-    </div>` : `<div class="card mt"><div class="card-title">Do new members come back?</div>
-      <div class="state"><div class="big">Cohorts unavailable</div>
-      <div style="max-width:470px;font-size:12.5px;color:var(--muted);">${esc(d.detailNote || 'The per-member tab could not be read.')}</div></div></div>`}
+    </div>` : `<div class="card"><div class="state"><div class="big">Cohorts unavailable</div>
+      <div style="max-width:470px;font-size:12.5px;color:var(--muted);">${esc(d.detailNote || 'The per-member tab could not be read.')}</div></div></div>`;
 
-    <div class="card mt">
-      <div class="card-title">Who the revenue actually comes from — ${esc(s.label)}</div>
+  const concBody = `
+    <div class="card">
       ${cc && cc.top10 ? `<div class="grid g-4" style="margin-bottom:12px;">
         <div class="stat"><div class="lab">Top 1% of members</div><div class="val">${pct(cc.top1.share)}</div>
           <div class="sub2">${cnt(cc.top1.members)} members · ${num(cc.top1.revenue, {money:true})}</div></div>
@@ -6186,12 +6265,15 @@ function renderBclub() {
       <div class="note"><b>Per new member is shown with its member count for a reason.</b> It ran
       ${num(ms[0].arpuNew, {money:true})} in ${esc(ms[0].label)} and ${num(ms.reduce((a,b)=>(b.arpuNew||0)>(a.arpuNew||0)?b:a).arpuNew, {money:true})}
       at its peak while the overall figure barely moved — with a few hundred new members a month, a handful of large
-      bills swings that average, so treat a jump as small-sample movement until a second month repeats it.
-      ${d.registerSource === null ? `<br><br><b>Registration-to-paid conversion is not shown.</b> It is the figure worth
-      having — new paying members over Better Club new registrations — but the registration count has no source in this
-      dashboard: it is not a GA4 key event and it is not in this spreadsheet. It will appear here once that feed exists,
-      rather than being typed in by hand.` : ''}</div>
+      bills swings that average, so treat a jump as small-sample movement until a second month repeats it.</div>
     </div>`;
+
+  $('viewRoot').innerHTML = `
+    ${slideShell('Revenue attribution', combos, { first: true, scope: 'Better Club' })}
+    ${slideShell('Google impressions \u203a web traffic \u203a Better Club registers \u203a new paid members', funnelBody, {})}
+    ${slideShell(`Better Club \u00b7 ${s.label}`, monthBody, { scope: 'Better Club' })}
+    ${slideShell('Do new members come back?', cohortBody, { scope: 'Better Club' })}
+    ${slideShell('Who the revenue comes from', concBody, { scope: 'Better Club', flow: true })}`;
 
   // MW's SS2, first on the page.
   drawBclubCombo('bcCombo', mLab,
@@ -6233,12 +6315,20 @@ function drawBclubCombo(canvasId, labels, bars, lines) {
   if (!el || !window.Chart) return;
   if (el._chart) el._chart.destroy();
   el._chart = new Chart(el.getContext('2d'), {
-    plugins: [lastPointLabels],
     data: { labels, datasets: [
+      /**
+       * THE AXES ARE `y` AND `y1`, NOT DESCRIPTIVE NAMES.
+       *
+       * `chartToSvg` — which builds the twin that actually prints — reads
+       * `sc.y` for gridlines and left ticks and `sc.y1` for the right-hand
+       * ticks and padding. With `baht`/`members` it found neither and drew a
+       * chart with no axes at all. Conforming to the contract beats teaching
+       * the twin about a third naming scheme.
+       */
       ...bars.map(b => ({ type:'bar', label:b.label, data:b.data, backgroundColor:b.color,
-        yAxisID:'members', borderRadius:3, barPercentage:0.88, categoryPercentage:0.7, order:2 })),
+        yAxisID:'y1', borderRadius:3, barPercentage:0.88, categoryPercentage:0.7, order:2 })),
       ...lines.map(l => ({ type:'line', label:l.label, data:l.data, borderColor:l.color,
-        backgroundColor:l.color+'22', yAxisID:'baht', tension:.35, borderWidth:2.4,
+        backgroundColor:l.color+'22', yAxisID:'y', tension:.35, borderWidth:2.4,
         pointRadius:2.5, fill:false, order:1 })),
     ]},
     options: {
@@ -6246,16 +6336,18 @@ function drawBclubCombo(canvasId, labels, bars, lines) {
       interaction:{ mode:'index', intersect:false },
       plugins:{
         legend:{ labels:{ color:'#4C5878', font:cvFont(10), usePointStyle:true, boxWidth:cvBox(7) } },
-        tooltip:{ callbacks:{ label:(c)=> ` ${c.dataset.label}: ${c.dataset.yAxisID==='baht'
+        tooltip:{ callbacks:{ label:(c)=> ` ${c.dataset.label}: ${c.dataset.yAxisID==='y'
           ? '฿'+Math.round(c.parsed.y).toLocaleString() : Math.round(c.parsed.y).toLocaleString()}` } },
+        // Read by chartToSvg, not by a canvas plugin — see there.
+        lastPointLabels:{ enabled:true, money:['y'] },
       },
       scales:{
         x:{ grid:{ display:false }, ticks:{ color:'#4C5878', font:cvFont(10), autoSkipPadding:6 } },
-        baht:{ position:'left', beginAtZero:true, grid:{ color:'#EEF1F8' },
+        y:{ position:'left', beginAtZero:true, grid:{ color:'#EEF1F8' },
           title:{ display:true, text:'Revenue ฿', color:'#8A94AD', font:cvFont(9.5) },
           ticks:{ color:'#8A94AD', font:cvFont(9),
                   callback:(v)=> v>=1e6?(v/1e6)+'M' : v>=1e3?(v/1e3)+'K' : v } },
-        members:{ position:'right', beginAtZero:true, grid:{ display:false },
+        y1:{ position:'right', beginAtZero:true, grid:{ display:false },
           title:{ display:true, text:'Members', color:'#8A94AD', font:cvFont(9.5) },
           ticks:{ color:'#8A94AD', font:cvFont(9),
                   callback:(v)=> v>=1e3?(v/1e3)+'K':v } },
@@ -6281,13 +6373,13 @@ function drawBclubStage(canvasId, labels, data, color, emptyNote) {
   }
   el._chart = new Chart(el.getContext('2d'), {
     type:'line',
-    plugins:[lastPointLabels],
     data:{ labels, datasets:[{ label:'', data, borderColor:color,
       backgroundColor:color+'26', tension:.35, borderWidth:2.2, pointRadius:2, fill:true }] },
     options:{
       responsive:true, maintainAspectRatio:false, animation:false,
       plugins:{ legend:{ display:false },
-        tooltip:{ callbacks:{ label:(c)=> ' '+Math.round(c.parsed.y).toLocaleString() } } },
+        tooltip:{ callbacks:{ label:(c)=> ' '+Math.round(c.parsed.y).toLocaleString() } },
+        lastPointLabels:{ enabled:true } },
       scales:{
         x:{ grid:{ display:false }, ticks:{ color:'#8A94AD', font:cvFont(8.5), autoSkipPadding:4 } },
         y:{ beginAtZero:true, grid:{ color:'#EEF1F8' },
@@ -7883,73 +7975,6 @@ function renderAudit() {
  */
 // Draws each bar's value at its end, so nobody has to hover. Values that
 // would collide with the chart edge move inside the bar in white.
-/**
- * PRINT-ONLY VALUE LABELS ON THE FINAL DATA POINT (MW: "on the pdf version can
- * you show the last dot tooltip like the SS1?").
- *
- * On screen the tooltip answers this — hover July and you get all four series.
- * A PDF has no hover, so the newest month's figures were the one thing a printed
- * copy could not tell you, which is the figure a reader wants first.
- *
- * WHY A PLUGIN AND NOT A TOOLTIP. Chart.js tooltips are drawn in an overlay
- * that is positioned on interaction; there is no supported way to pin one open
- * for print, and forcing `setActiveElements` leaves an element Chrome captures
- * at the wrong offset. Drawing the labels ourselves in `afterDatasetsDraw` puts
- * them in the canvas bitmap, which is what actually gets rastered.
- *
- * GATED ON `PRINTING`, set by the print handlers below before they resize. On
- * screen the labels would collide with the tooltip they duplicate.
- */
-let PRINTING = false;
-
-const lastPointLabels = {
-  id: 'lastPointLabels',
-  afterDatasetsDraw(chart) {
-    if (!PRINTING) return;
-    const { ctx, chartArea } = chart;
-    const placed = [];
-    chart.data.datasets.forEach((ds, di) => {
-      const meta = chart.getDatasetMeta(di);
-      if (meta.hidden || !meta.data || !meta.data.length) return;
-      // The LAST POINT THAT HAS A VALUE, not the last slot: a series whose
-      // newest month has not landed yet would otherwise be labelled on empty air.
-      let i = ds.data.length - 1;
-      while (i >= 0 && (ds.data[i] === null || ds.data[i] === undefined)) i--;
-      if (i < 0) return;
-      const el = meta.data[i];
-      if (!el) return;
-      const money = meta.yAxisID === 'baht';
-      const v = Number(ds.data[i]);
-      const txt = (money ? '฿' : '') + Math.round(v).toLocaleString();
-      ctx.save();
-      ctx.font = '600 11px Poppins, sans-serif';
-      const w = ctx.measureText(txt).width;
-      // Right-align inside the plot when the point sits near the edge, which the
-      // newest month always does.
-      const fitsRight = el.x + 10 + w < chartArea.right - 2;
-      let x = fitsRight ? el.x + 10 : el.x - 10;
-      let y = el.y - 9;
-      // Nudge off any label already drawn at this spot rather than overprinting.
-      for (let guard = 0; guard < 6; guard++) {
-        if (!placed.some(pt => Math.abs(pt.x - x) < w && Math.abs(pt.y - y) < 13)) break;
-        y -= 14;
-      }
-      if (y < chartArea.top + 10) y = el.y + 16;
-      placed.push({ x, y });
-      const colour = (meta.type === 'bar' ? '#4C5878' : (ds.borderColor || '#4C5878'));
-      // A pill behind the text, so a label over a bar or a grid line stays legible.
-      ctx.fillStyle = 'rgba(255,255,255,.86)';
-      const px = fitsRight ? x - 4 : x - w - 4;
-      ctx.fillRect(px, y - 11, w + 8, 15);
-      ctx.fillStyle = colour;
-      ctx.textAlign = fitsRight ? 'left' : 'right';
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillText(txt, x, y);
-      ctx.restore();
-    });
-  },
-};
-
 const barValueLabels = {
   id: 'barValueLabels',
   afterDatasetsDraw(chart) {
@@ -8205,7 +8230,6 @@ $('printBtn').addEventListener('click', () => {
  * width. Guarded per chart so one dead instance cannot block the rest.
  */
 function resizeChartsForPrint() {
-  PRINTING = true;
   document.querySelectorAll('canvas').forEach(cv => {
     const ch = cv._chart || (window.Chart && window.Chart.getChart && window.Chart.getChart(cv));
     if (!ch || typeof ch.resize !== 'function') return;
@@ -8213,18 +8237,6 @@ function resizeChartsForPrint() {
   });
 }
 window.addEventListener('beforeprint', resizeChartsForPrint);
-/**
- * Back to screen behaviour once the dialog closes, otherwise the pinned labels
- * stay on the page and sit under the live tooltip.
- */
-window.addEventListener('afterprint', () => {
-  PRINTING = false;
-  document.querySelectorAll('canvas').forEach(cv => {
-    const ch = cv._chart || (window.Chart && window.Chart.getChart && window.Chart.getChart(cv));
-    if (!ch || typeof ch.update !== 'function') return;
-    try { ch.update('none'); } catch (e) { /* a chart that cannot redraw keeps its labels */ }
-  });
-});
 /**
  * AND AGAIN once the print layout is actually applied. `beforeprint` fires
  * BEFORE Chrome relayouts, so the resize above measures screen dimensions and
@@ -8400,12 +8412,26 @@ function chartToSvg(chart, W, H) {
   // stacked bars first, so lines sit on top exactly as Chart.js draws them
   const bars = ds.filter((d) => (d.type || chart.config.type) === 'bar');
   const stackBase = labels.map(() => 0);
-  bars.forEach((d) => {
+  /**
+   * GROUPED BARS SIT SIDE BY SIDE; ONLY STACKED ONES SHARE AN X.
+   *
+   * The twin drew every bar dataset at the same x and from the same baseline,
+   * which is right for a stack and wrong for a group — two grouped series came
+   * out as one bar drawn over another, so the shorter one read as a band across
+   * the taller. Every bar chart in the deck happened to be stacked, so nothing
+   * had exercised the other case.
+   */
+  const stacked = !!(chart.options.scales && chart.options.scales.y
+    && chart.options.scales.y.stacked);
+  const barN = Math.max(1, bars.length);
+  bars.forEach((d, bi) => {
     const f = yOf(d.yAxisID || 'y');
-    const bw = (pw / n) * 0.62;
+    const band = (pw / n) * 0.62;
+    const bw = stacked ? band : band / barN;
+    const off = stacked ? 0 : (bi - (barN - 1) / 2) * bw;
     (d.data || []).forEach((v, i) => {
-      const base = sc.x && chart.options.scales && chart.options.scales.y
-        && chart.options.scales.y.stacked ? stackBase[i] : 0;
+      if (v === null || v === undefined) return;   // absent, not zero
+      const base = stacked ? stackBase[i] : 0;
       const y0 = f(base), y1p = f(base + (Number(v) || 0));
       stackBase[i] = base + (Number(v) || 0);
       const top = Math.min(y0, y1p), hh = Math.abs(y0 - y1p);
@@ -8415,39 +8441,66 @@ function chartToSvg(chart, W, H) {
          each block's own corners, so the bar reads as four loose tiles rather
          than one column. The desktop chart does not look like that, and the
          instruction was to match it. */
-      out.push('<rect x="' + (xAt(i) - bw / 2).toFixed(1) + '" y="' + top.toFixed(1)
+      out.push('<rect x="' + (xAt(i) - bw / 2 + off).toFixed(1) + '" y="' + top.toFixed(1)
         + '" width="' + bw.toFixed(1) + '" height="' + hh.toFixed(1) + '" fill="'
         + svgEsc(d.backgroundColor || d.borderColor || '#999') + '"/>');
     });
   });
   ds.filter((d) => (d.type || chart.config.type) !== 'bar').forEach((d) => {
     const f = yOf(d.yAxisID || 'y');
-    const pts = (d.data || []).map((v, i) => [xAt(i), f(v)]).filter((p) => isFinite(p[1]));
-    if (!pts.length) return;
-    const path = svgSmooth(pts, d.tension || 0);
-    if (d.fill) {
-      out.push('<path d="' + path + 'L' + pts[pts.length - 1][0].toFixed(1) + ' ' + (padT + ph)
-        + 'L' + pts[0][0].toFixed(1) + ' ' + (padT + ph) + 'Z" fill="'
-        + svgEsc(d.backgroundColor || 'none') + '" stroke="none"/>');
-    }
-    out.push('<path d="' + path + '" fill="none" stroke="' + svgEsc(d.borderColor || '#666')
-      + '" stroke-width="' + (d.borderWidth || 2) + '" stroke-linejoin="round"/>');
     /**
-     * THE DOTS (MW: "on All Time you forgot the dot on each month").
-     * A line dataset that sets `pointRadius` draws a marker at every value on
-     * screen, and the SVG twin has to as well or the printed line loses the
-     * reading points. Filled with the point colour where one is given, falling
-     * back to the line's own colour, and outlined in white the way Chart.js
-     * does so a dot sitting on a bar still reads.
+     * A MISSING VALUE IS A GAP, NOT A ZERO.
+     *
+     * `f(null)` coerced through `Number(null) || 0`, so an absent month was
+     * plotted on the baseline and the line dived to it — the printed Better Club
+     * funnel showed registers collapsing to zero in the month whose figure had
+     * simply not been entered yet. The server is careful to keep those null for
+     * exactly this reason, and the twin was undoing it. Chart.js breaks the line
+     * at a null; so does this now, by drawing one path per run of real values.
      */
-    const pr = Number(d.pointRadius || 0);
-    if (pr > 0) {
-      const pf = svgEsc(d.pointBackgroundColor || d.borderColor || '#666');
-      pts.forEach((pt) => {
-        out.push('<circle cx="' + pt[0].toFixed(1) + '" cy="' + pt[1].toFixed(1)
-          + '" r="' + pr + '" fill="' + pf + '" stroke="#fff" stroke-width="1"/>');
-      });
-    }
+    const runs = [];
+    let run = [];
+    (d.data || []).forEach((v, i) => {
+      if (v === null || v === undefined || !isFinite(Number(v))) {
+        if (run.length) { runs.push(run); run = []; }
+        return;
+      }
+      const y = f(v);
+      if (!isFinite(y)) { if (run.length) { runs.push(run); run = []; } return; }
+      run.push([xAt(i), y]);
+    });
+    if (run.length) runs.push(run);
+    if (!runs.length) return;
+
+    runs.forEach((pts) => {
+      const path = svgSmooth(pts, d.tension || 0);
+      // A single surviving point has no path to stroke; its dot still draws below.
+      if (pts.length > 1) {
+        if (d.fill) {
+          out.push('<path d="' + path + 'L' + pts[pts.length - 1][0].toFixed(1) + ' ' + (padT + ph)
+            + 'L' + pts[0][0].toFixed(1) + ' ' + (padT + ph) + 'Z" fill="'
+            + svgEsc(d.backgroundColor || 'none') + '" stroke="none"/>');
+        }
+        out.push('<path d="' + path + '" fill="none" stroke="' + svgEsc(d.borderColor || '#666')
+          + '" stroke-width="' + (d.borderWidth || 2) + '" stroke-linejoin="round"/>');
+      }
+      /**
+       * THE DOTS (MW: "on All Time you forgot the dot on each month").
+       * A line dataset that sets `pointRadius` draws a marker at every value on
+       * screen, and the SVG twin has to as well or the printed line loses the
+       * reading points. Filled with the point colour where one is given, falling
+       * back to the line's own colour, and outlined in white the way Chart.js
+       * does so a dot sitting on a bar still reads.
+       */
+      const pr = Number(d.pointRadius || 0);
+      if (pr > 0) {
+        const pf = svgEsc(d.pointBackgroundColor || d.borderColor || '#666');
+        pts.forEach((pt) => {
+          out.push('<circle cx="' + pt[0].toFixed(1) + '" cy="' + pt[1].toFixed(1)
+            + '" r="' + pr + '" fill="' + pf + '" stroke="#fff" stroke-width="1"/>');
+        });
+      }
+    });
   });
   // x labels, using the ticks Chart.js kept after its own auto-skip
   ((sc.x && sc.x.ticks) || []).forEach((t, k) => {
@@ -8474,6 +8527,60 @@ function chartToSvg(chart, W, H) {
         + '" font-family="Poppins,sans-serif" font-size="' + FS + '" fill="#4C5878">'
         + svgEsc(t) + '</text>');
       x += widths[i] + gap;
+    });
+  }
+  /**
+   * VALUE LABELS ON THE FINAL DATA POINT (MW: "on the pdf version can you show
+   * the last dot tooltip like the SS1?").
+   *
+   * HERE AND NOT IN A CANVAS PLUGIN. On screen the tooltip answers this; a PDF
+   * has no hover, so the newest month's figures were the one thing a printed
+   * copy could not tell you. The first attempt drew them with an
+   * `afterDatasetsDraw` plugin — which was invisible in the export, because
+   * print hides every canvas and prints this twin instead.
+   *
+   * OPT-IN via `options.plugins.lastPointLabels`, so the report deck's forty
+   * charts are unchanged; `money` names the axes whose values take a ฿.
+   */
+  const lpl = (chart.options && chart.options.plugins && chart.options.plugins.lastPointLabels) || null;
+  if (lpl && lpl.enabled) {
+    const money = lpl.money || [];
+    const placed = [];
+    ds.forEach((d) => {
+      const data = d.data || [];
+      // The last point THAT HAS A VALUE, not the last slot: a series whose
+      // newest month has not landed would be labelled on empty air.
+      let i = data.length - 1;
+      while (i >= 0 && (data[i] === null || data[i] === undefined)) i--;
+      if (i < 0) return;
+      const axis = d.yAxisID || 'y';
+      const y = yOf(axis)(data[i]);
+      // A grouped bar is drawn off the band centre, so its label follows it.
+      const isBar = (d.type || chart.config.type) === 'bar';
+      const bi = isBar ? bars.indexOf(d) : -1;
+      const bandW = (pw / n) * 0.62;
+      const shift = (isBar && !stacked && barN > 1)
+        ? (bi - (barN - 1) / 2) * (bandW / barN) : 0;
+      const x = xAt(i) + shift;
+      if (!isFinite(x) || !isFinite(y)) return;
+      const txt = (money.indexOf(axis) > -1 ? '฿' : '') + Math.round(Number(data[i])).toLocaleString();
+      const w = 6 + String(txt).length * (FS * 0.58);
+      const right = x + 8 + w < padL + pw;
+      let ty = y - 6;
+      // Nudge off any label already placed rather than overprinting it.
+      for (let g = 0; g < 6 && placed.some((q) => Math.abs(q.y - ty) < FS + 3); g++) ty -= FS + 4;
+      if (ty < padT + FS) ty = y + FS + 6;
+      placed.push({ y: ty });
+      const bx = right ? x + 8 : x - 8 - w;
+      out.push('<rect x="' + bx.toFixed(1) + '" y="' + (ty - FS).toFixed(1)
+        + '" width="' + w.toFixed(1) + '" height="' + (FS + 5)
+        + '" rx="3" fill="#fff" fill-opacity=".86"/>');
+      out.push('<text x="' + (bx + w / 2).toFixed(1) + '" y="' + (ty + 1).toFixed(1)
+        + '" text-anchor="middle" font-family="Poppins,sans-serif" font-size="' + FS
+        + '" font-weight="600" fill="'
+        + svgEsc(((d.type || chart.config.type) === 'bar'
+            ? '#4C5878' : (d.borderColor || '#4C5878')))
+        + '">' + svgEsc(txt) + '</text>');
     });
   }
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H
@@ -8637,7 +8744,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.188.0';
+const CLIENT_BUILD = '3.189.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
