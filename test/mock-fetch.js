@@ -753,6 +753,17 @@ global.fetch = async (url, opts = {}) => {
      * The report window is 2026-07-01..2026-07-31, so `selected` must be
      * 2026-07 with 2026-06 as `prev`, and `pending` must be empty.
      */
+    if (u.includes(encodeURIComponent("Registers"))) {
+      return jsonRes({ spreadsheetId: "mock-bclub", valueRanges: [{ values: [
+        ["MonthYear", "NewRegisters", "Source", "Note"],
+        ["2026-05", 20, "CRM export", ""],
+        ["2026-06", 25, "CRM export", ""],
+        // Blank on purpose: a month in the tab with no figure must stay null,
+        // not become 0 and compute an infinite conversion.
+        ["2026-07", "", "", "not received yet"],
+      ] }] });
+    }
+
     if (u.includes(encodeURIComponent("Summary")) && u.includes(encodeURIComponent("Rev_Attribution"))) {
       const summary = [
         ["MonthYear","Month","PaidHNs","Revenue","NewPaidHNs","RevFromNewPaidHNs","OldPaidHNs",

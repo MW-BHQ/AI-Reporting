@@ -329,7 +329,17 @@ expect_field "bclub big count"     "$BCLUB" "d.months.find(m=>m.month==='2026-06
 # group-level and registers explicitly null until a feed exists.
 expect_field "bclub funnel rows"   "$BCLUB" "d.funnel.length===d.months.length?'ok':undefined"
 expect_field "bclub funnel newhns" "$BCLUB" "d.funnel.every(f=>f.newPaidHns===d.months.find(m=>m.month===f.month).newHns)?'ok':undefined"
-expect_field "bclub no registers"  "$BCLUB" "d.funnel.every(f=>f.registers===null)?'ok':undefined"
+# THE REGISTERS TAB. Fetched separately, because values:batchGet fails the whole
+# request with a 400 if any range names a tab that does not exist and this tab is
+# optional by design.
+expect_field "bclub reg source"    "$BCLUB" "d.registerSource?'ok':undefined"
+expect_field "bclub reg value"     "$BCLUB" "d.funnel.find(f=>f.month==='2026-06').registers===25?'ok':undefined"
+# A month present in the tab but BLANK stays null. As 0 it would draw a trough on
+# the funnel and divide into an infinite conversion.
+expect_field "bclub reg blank"     "$BCLUB" "d.funnel.find(f=>f.month==='2026-07').registers===null?'ok':undefined"
+expect_field "bclub reg no conv"   "$BCLUB" "d.funnel.find(f=>f.month==='2026-07').registerToPaid===null?'ok':undefined"
+# June: 2 new paying members against 25 registers.
+expect_field "bclub conversion"    "$BCLUB" "Math.abs(d.funnel.find(f=>f.month==='2026-06').registerToPaid-(2/25))<0.0001?'ok':undefined"
 # Search Console rows are FLATTENED by gscQueryPage, so a date-dimension row
 # carries `date`, not the API's raw `keys` array. Reading `keys` returned null
 # for every month while still reporting the source as available.
@@ -356,8 +366,9 @@ expect_field "bclub cohort fwd"  "$BCLUB" "d.cohorts.rows.every(r=>r.retained.ev
 # rows, so member count must match that month's paid total.
 expect_field "bclub conc month"  "$BCLUB" "d.concentration.month==='2026-07'?'ok':undefined"
 expect_field "bclub conc share"  "$BCLUB" "d.concentration.top10.share>0&&d.concentration.top10.share<=1?'ok':undefined"
-# Registration-to-paid has no source, and must stay absent rather than be faked.
-expect_field "bclub no register" "$BCLUB" "d.registerSource===null?'ok':undefined"
+# Registration-to-paid is computed ONLY from the Registers tab. With no tab the
+# source is null and the stage stays empty; it is never filled from elsewhere.
+expect_field "bclub reg named"   "$BCLUB" "d.registerSource==='Registers tab'?'ok':undefined"
 
 ECOM="/api/ecommerce?from=$FROM&to=$TO"
 # PACKAGES ARE GROUPED BY NAME, NOT BY SKU (MW). The master re-codes a package

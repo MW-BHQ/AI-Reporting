@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.187.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.188.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -718,6 +718,53 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.188.0 — Better Club: printed value labels, a register source, counts before rates.**
+
+MW: "on the pdf version can you show the last dot tooltip like the SS1? / how can
+i make the 3rd block in the SS2 works? / SS3, switch the bold, actual is more
+understandable than percentage here."
+
+**PRINT-ONLY LABELS ON THE FINAL DATA POINT.** On screen the tooltip answers
+"what were July's four figures"; a PDF has no hover, so the newest month's
+numbers were the one thing a printed copy could not tell you — and they are the
+first thing a reader looks for. `lastPointLabels` draws them in
+`afterDatasetsDraw`, gated on a `PRINTING` flag the print handlers set.
+
+**WHY A PLUGIN AND NOT A PINNED TOOLTIP.** Chart.js tooltips live in an overlay
+positioned on interaction; there is no supported way to hold one open for print,
+and `setActiveElements` leaves an element Chrome captures at the wrong offset.
+Drawing into the canvas puts the labels in the bitmap, which is what actually
+gets rastered. Each label finds the last point THAT HAS A VALUE rather than the
+last slot, nudges off any label already placed, and sits on a translucent pill so
+it stays legible over a bar or a grid line. Verified in Chromium under
+`emulate_media("print")`: the combo canvas changes and the labels appear.
+
+**THE REGISTER STAGE HAS A SOURCE NOW — its own tab, deliberately.** It cannot
+live in `Summary`, because `rebuildSummary_` clears and rewrites that tab on
+every import: a hand-entered column there would be wiped the next time a month
+was loaded, silently, which is worse than never having had it. So `Registers`
+(`MonthYear`, `NewRegisters`, `Source`, `Note`) is created and pre-filled by the
+Apps Script and then never written to again, and is listed as reserved so the
+importer cannot mistake it for a PII source and delete it.
+
+**FETCHED IN A SEPARATE CALL.** `values:batchGet` fails the WHOLE request with a
+400 if any range names a tab that does not exist, and this tab is optional — so
+folding it in with `Summary` and `Rev_Attribution` would have taken the entire
+section down for anyone who had not created it yet.
+
+A month in the tab but BLANK stays `null`, never 0: as a zero it would draw a
+real-looking trough on the funnel and divide into an infinite conversion. And
+because the sign-up figure is entered by hand and arrives AFTER the revenue
+export, the conversion shows for the newest month that HAS one, labelled with
+that month — pinning it to the last column would leave the panel blank for most
+of every month, which reads as broken rather than as pending.
+
+**COUNTS TAKE THE BOLD, RATES GO MUTED (MW).** In the cohort table the concrete
+fact is that 50 people came back; the percentage is context for it. Same switch
+applied to the returning-after-two-years cell.
+
+268 assertions across the four layers.
 
 **v3.187.0 — Better Club: the comma bug, and MW's Looker panels put first.**
 

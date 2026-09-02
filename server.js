@@ -4393,6 +4393,20 @@ const BETTERAI_SHEET_ID = process.env.BETTERAI_SHEET_ID || "1jOz2XYry-D28z_Eg6w3
 const BCLUB_SHEET_ID = process.env.BCLUB_SHEET_ID || "1DPUqMUo9q4MVd5tqryWFGKhI9MSVsyWdjBF0Un62zfs";
 const BCLUB_SUMMARY_TAB = "Summary";
 const BCLUB_DETAIL_TAB = "Rev_Attribution";
+/**
+ * The registration count, in its OWN tab that the normaliser never writes.
+ *
+ * It cannot live in `Summary`: `rebuildSummary_` clears and rewrites that tab on
+ * every import, so a hand-entered column there would be silently wiped the next
+ * time a month was loaded — a number that disappears without an error is worse
+ * than one that was never there.
+ *
+ * Two columns, `MonthYear` and `NewRegisters`, read by header name. Fetched in a
+ * SEPARATE call from the other two because `values:batchGet` fails the WHOLE
+ * request with a 400 if any range names a tab that does not exist, and this tab
+ * is optional by design.
+ */
+const BCLUB_REGISTER_TAB = "Registers";
 
 /**
  * BETTER AI — the agentic assistant's conversion funnel, from its own Sheet.
@@ -7608,6 +7622,15 @@ async function buildBetterClub(from, to) {
     };
   }
 
+  /**
+   * The register tab is optional, so a missing tab must degrade to "no source"
+   * rather than take the section down. Deliberately not folded into the
+   * batchGet above: one bad range fails all of them.
+   */
+  const registers = await sheetBatchGet(BCLUB_SHEET_ID, [`'${BCLUB_REGISTER_TAB}'!A1:B`], { unformatted: true })
+    .then((r) => (r[0] && r[0].values) || [])
+    .catch(() => null);
+
   const vals = (i) => (res[i] && res[i].values) || [];
   const summary = vals(0), detail = vals(1);
   if (summary.length < 2) {
@@ -7812,13 +7835,50 @@ async function buildBetterClub(from, to) {
       .catch((e) => { logJson("WARNING", "bclub_ga4_unavailable", { error: String(e.message || e) }); return null; }),
   ]);
 
-  const funnel = months.map((m) => ({
-    month: m.month, label: m.label,
-    impressions: impr ? (impr.get(m.month) ?? null) : null,
-    users: users ? (users.get(m.month) ?? null) : null,
-    registers: null,            // no source — see registerSource below
-    newPaidHns: m.newHns,
-  }));
+  /**
+   * Registers, if the tab exists and has a readable header. A month present in
+   * the tab but blank stays null rather than becoming 0: a zero would draw a
+   * trough on the funnel and compute a 0% conversion, both of which look like
+   * findings.
+   */
+  let regBy = null, registerSource = null, registerNote = null;
+  if (registers === null) {
+    registerNote = `No "${BCLUB_REGISTER_TAB}" tab in the spreadsheet yet.`;
+  } else if (registers.length < 2) {
+    registerNote = `The "${BCLUB_REGISTER_TAB}" tab is empty.`;
+  } else {
+    const rHead = registers[0].map((h) => String(h == null ? "" : h).trim());
+    const rMonth = rHead.findIndex((h) => /^month/i.test(h));
+    const rCount = rHead.findIndex((h) => /register/i.test(h));
+    if (rMonth === -1 || rCount === -1) {
+      registerNote = `The "${BCLUB_REGISTER_TAB}" tab needs a MonthYear column and a NewRegisters column — headers seen: ${rHead.join(" | ")}`;
+    } else {
+      regBy = new Map();
+      for (let r = 1; r < registers.length; r++) {
+        const row = registers[r] || [];
+        const key = monthKeyCell(row[rMonth]);
+        const raw = row[rCount];
+        if (!key || raw === "" || raw == null) continue;
+        regBy.set(key, bnum(raw));
+      }
+      if (regBy.size) registerSource = `${BCLUB_REGISTER_TAB} tab`;
+      else registerNote = `The "${BCLUB_REGISTER_TAB}" tab has no readable month rows yet.`;
+    }
+  }
+
+  const funnel = months.map((m) => {
+    const reg = regBy ? (regBy.get(m.month) ?? null) : null;
+    return {
+      month: m.month, label: m.label,
+      impressions: impr ? (impr.get(m.month) ?? null) : null,
+      users: users ? (users.get(m.month) ?? null) : null,
+      registers: reg,
+      newPaidHns: m.newHns,
+      // The conversion MW's Looker report leads on: of the people who joined
+      // Better Club that month, the share who became paying members.
+      registerToPaid: reg > 0 ? m.newHns / reg : null,
+    };
+  });
 
   return {
     available: true,
@@ -7833,14 +7893,12 @@ async function buildBetterClub(from, to) {
       note: "Impressions and users are group-level, not BHQ. Better Club figures come from the hospital's monthly export.",
     },
     /**
-     * The register-to-paid conversion is DELIBERATELY ABSENT. It is the most
-     * useful figure this section could carry — new paid members over Better Club
-     * new registrations, which ran 3.6% in March against 18.2% in July — but the
-     * registration count has no source in this service: it is not a GA4 key
-     * event and it is not in this spreadsheet. Publishing it would mean typing
-     * numbers in by hand, so the section reports what it can source and says so.
+     * Register-to-paid is the figure MW's Looker report leads on — 3.6% in March
+     * against 18.2% in July. It is computed ONLY from a real source: the
+     * optional `Registers` tab. With no tab, `registerSource` is null and the
+     * stage renders empty, rather than a number being typed in to fill the gap.
      */
-    registerSource: null,
+    registerSource, registerNote,
   };
 }
 

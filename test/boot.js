@@ -474,16 +474,21 @@ function bclubFixture() {
       month: m.month, label: m.label,
       impressions: [70100000, 65600000, 70900000, 48700000, 44500000][i],
       users: [926200, 785400, 858200, 922700, 866800][i],
-      registers: null,
+      // Registers present for the earlier months and ABSENT for the newest,
+      // which is the normal state — the sign-up figure arrives after the
+      // revenue export. Exercises both the populated stage and the null cell.
+      registers: [1991, 1573, 1759, 2594, null][i],
       newPaidHns: m.newHns,
+      registerToPaid: [258/1991, 250/1573, 64/1759, 189/2594, null][i],
     })),
+    registerSource: "Registers tab",
+    registerNote: null,
     funnelScope: {
       impressions: "B+ (all 27 branches, whole domain)",
       users: "B+ (all 27 branches)",
       note: "Impressions and users are group-level, not BHQ. Better Club figures come from the hospital's monthly export.",
     },
     detailNote: "1,204 member-months carry no HN_ID (imported before HN was retained).",
-    registerSource: null,
   };
 }
 
@@ -1294,10 +1299,31 @@ setTimeout(() => {
         // A month in range that the sheet does not have must be NAMED, not
         // silently shown as zeros beside a full chart.
         if (!/August 2026/.test(body)) return fail("better club", "a pending month was not named"), finish();
-        // Registration conversion has no source and must stay absent.
-        if (!/not shown/i.test(body)) return fail("better club", "the missing-register note is gone");
-        if (/\b18\.2%\s*conversion|registrations?\s*:\s*[\d,]/i.test(body)) {
-          return fail("better club", "a register-to-paid figure was rendered without a source"), finish();
+        /**
+         * With a register source connected the conversion must be COMPUTED and
+         * shown; with none it must stay absent. The fixture supplies a source,
+         * so this asserts the computed branch.
+         */
+        if (!/of registers converted/.test(body)) {
+          return fail("better club", "register-to-paid conversion did not render"), finish();
+        }
+        // The newest month has no register figure, so the count must read as an
+        // em dash rather than as 0.
+        // The newest month has no register figure, so the conversion must fall
+        // back to the newest month that HAS one and be labelled with it.
+        if (!/converted in Jun/.test(body)) {
+          return fail("better club", "conversion did not fall back to the newest month with a figure"), finish();
+        }
+        // And the register stage must say the figure is pending, not show a bare dash.
+        if (!/not entered yet/.test(body)) {
+          return fail("better club", "a missing register month did not say so"), finish();
+        }
+        /**
+         * PRINT-ONLY LABELS. The plugin must be attached and gated: on screen
+         * PRINTING is false, so nothing is drawn and the tooltip is unduplicated.
+         */
+        if (typeof dom.window.lastPointLabels === 'undefined' && !/lastPointLabels/.test(SRC)) {
+          return fail("better club", "the print label plugin is missing"), finish();
         }
         /**
          * MW'S TWO LOOKER PANELS MUST COME FIRST (MW: "my LS references are
