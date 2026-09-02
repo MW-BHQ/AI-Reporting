@@ -426,10 +426,31 @@
   /* Once an image is in, the box stops being a placeholder: no dash, no padding,
      and it sizes to the artwork instead of holding a 210px hole. */
   .mr-promo-box.has-img{border:0;padding:0;min-height:0;cursor:default;background:none;}
-  .mr-promo-box img{max-width:100%;max-height:260px;display:block;border-radius:9px;}
-  .mr-promo-clear{position:absolute;top:6px;right:6px;border:1px solid var(--line);
-    background:#fff;border-radius:7px;font-size:10px;padding:2px 7px;cursor:pointer;
-    color:var(--ink-2);}
+  /**
+   * UP TO THREE IMAGES (MW).
+   *
+   * The layout is driven by the COUNT, not by auto-fit: three equal columns in
+   * a quarter-slide panel gives 110px thumbnails nobody can read, so one image
+   * fills the panel, two sit side by side, and three put the first across the
+   * top with the other two beneath it. That keeps the lead image legible, which
+   * is the one the campaign is actually about.
+   */
+  .mr-promo-grid{display:grid;gap:8px;width:100%;}
+  .mr-promo-grid:empty{display:none;}
+  .mr-promo-grid.n1{grid-template-columns:1fr;}
+  .mr-promo-grid.n2,.mr-promo-grid.n3{grid-template-columns:1fr 1fr;}
+  .mr-promo-grid.n3 > :first-child{grid-column:1 / -1;}
+  .mr-promo-tile{position:relative;display:flex;align-items:center;justify-content:center;
+    background:var(--bg);border-radius:9px;overflow:hidden;min-height:0;}
+  .mr-promo-box img{max-width:100%;max-height:250px;display:block;border-radius:9px;}
+  .mr-promo-grid.n2 img,.mr-promo-grid.n3 img{max-height:150px;}
+  .mr-promo-add{border:1.5px dashed var(--line);border-radius:9px;min-height:56px;
+    display:flex;align-items:center;justify-content:center;font-size:10.5px;
+    color:var(--faint);cursor:pointer;background:#fff;}
+  .mr-promo-add:hover{border-color:var(--violet);color:var(--violet);}
+  .mr-promo-clear{position:absolute;top:5px;right:5px;border:1px solid var(--line);
+    background:rgba(255,255,255,.92);border-radius:7px;font-size:10px;
+    line-height:1;padding:3px 6px;cursor:pointer;color:var(--ink-2);}
   .mr-foot{margin-top:18px;padding-top:11px;border-top:1px solid var(--line);
     font-size:10.5px;color:var(--faint);display:flex;justify-content:space-between;gap:10px;}
   @media print{
@@ -498,6 +519,9 @@
        the slot rather than a silent gap. */
     .mr-promo-box img{max-height:none!important;max-width:100%!important;}
     .mr-promo-box.has-img{max-width:none!important;}
+    /* The add tile is furniture; the sheet shows artwork or an empty slot. */
+    .mr-promo-add{display:none!important;}
+    .mr-promo-grid.n2 img,.mr-promo-grid.n3 img{max-height:none!important;}
   }
   @media(max-width:900px){
     .mr-kpis{grid-template-columns:repeat(2,1fr);}
@@ -6167,10 +6191,9 @@ function renderEcomMonthly() {
             artwork or nothing, never the furniture around it.
           -->
           <div class="mr-promo-box" id="promoBox">
-            <input type="file" id="promoFile" accept="image/*" class="no-print" hidden>
-            <img id="promoImg" alt="Campaign creative" hidden>
-            <span class="mr-promo-hint no-print">Drop the campaign artwork here, or click to choose a file.<br>It prints with the report; it is not saved after a reload.</span>
-            <button type="button" class="mr-promo-clear no-print" id="promoClear" hidden>Remove</button>
+            <input type="file" id="promoFile" accept="image/*" multiple class="no-print" hidden>
+            <div class="mr-promo-grid" id="promoGrid"></div>
+            <span class="mr-promo-hint no-print" id="promoHint">Drop the campaign artwork here, or click to choose files.<br>Up to three images. They print with the report; they are not saved after a reload.</span>
           </div>
         </div>
       </div>
@@ -6201,48 +6224,80 @@ function renderEcomMonthly() {
  * opening the dialog, so a data URL is in the raster with nothing extra to do.
  */
 function wirePromoSlot() {
-  const box = $('promoBox'), file = $('promoFile'), img = $('promoImg'), clear = $('promoClear');
-  if (!box || !file || !img) return;
+  const box = $('promoBox'), file = $('promoFile'), grid = $('promoGrid'), hint = $('promoHint');
+  if (!box || !file || !grid) return;
+  const MAX = 3;
 
-  const apply = (url) => {
-    S.promoImage = url || null;
-    if (url) {
-      img.src = url; img.hidden = false;
-      box.classList.add('has-img');
-      if (clear) clear.hidden = false;
-    } else {
-      img.removeAttribute('src'); img.hidden = true;
-      box.classList.remove('has-img');
-      if (clear) clear.hidden = true;
+  /**
+   * Redraw from the array. Cheap enough to rebuild every time, and rebuilding
+   * is what keeps the remove buttons bound to the right INDEX — wiring them
+   * once and mutating around them is how a remove ends up deleting the wrong
+   * picture after another is added.
+   */
+  const draw = () => {
+    const imgs = (S.promoImages || []).slice(0, MAX);
+    S.promoImages = imgs;
+    grid.className = 'mr-promo-grid' + (imgs.length ? ' n' + imgs.length : '');
+    grid.innerHTML = imgs.map((src, i) => `<div class="mr-promo-tile">
+        <img src="${src}" alt="Campaign creative ${i + 1}">
+        <button type="button" class="mr-promo-clear no-print" data-drop="${i}">Remove</button>
+      </div>`).join('')
+      + (imgs.length && imgs.length < MAX
+        ? '<div class="mr-promo-add no-print" data-add="1">+ Add another</div>' : '');
+    box.classList.toggle('has-img', imgs.length > 0);
+    if (hint) hint.hidden = imgs.length > 0;
+    grid.querySelectorAll('[data-drop]').forEach((btn) => btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const i = Number(btn.dataset.drop);
+      S.promoImages.splice(i, 1);
       file.value = '';
-    }
-  };
-  const take = (f) => {
-    if (!f || !/^image\//.test(f.type || '')) return;
-    const r = new FileReader();
-    r.onload = () => apply(String(r.result || ''));
-    r.readAsDataURL(f);
+      draw();
+    }));
+    const add = grid.querySelector('[data-add]');
+    if (add) add.addEventListener('click', (e) => { e.stopPropagation(); file.click(); });
   };
 
-  apply(S.promoImage);                       // survive a re-render
+  /**
+   * Takes as many as there is room for and SAYS SO about the rest. Dropping five
+   * files and quietly getting three looks like a bug, so the status line names
+   * how many were ignored.
+   */
+  const take = (list) => {
+    const files = [...(list || [])].filter((f) => f && /^image\//.test(f.type || ''));
+    if (!files.length) return;
+    const room = MAX - (S.promoImages || []).length;
+    if (room <= 0) { setStatus('warn', `Three images is the maximum — remove one first`); return; }
+    const use = files.slice(0, room);
+    if (files.length > room) setStatus('warn', `Only ${room} more image(s) fit; ${files.length - room} ignored`);
+    let pending = use.length;
+    use.forEach((f) => {
+      const r = new FileReader();
+      r.onload = () => {
+        S.promoImages = (S.promoImages || []).concat(String(r.result || ''));
+        if (--pending === 0) draw(); else draw();
+      };
+      r.onerror = () => { if (--pending === 0) draw(); };
+      r.readAsDataURL(f);
+    });
+  };
+
+  if (!Array.isArray(S.promoImages)) S.promoImages = [];
+  draw();                                    // survive a re-render
 
   box.addEventListener('click', (e) => {
-    if (e.target === clear) return;
-    if (!S.promoImage) file.click();
+    if (e.target.closest('.mr-promo-clear') || e.target.closest('.mr-promo-add')) return;
+    if (!(S.promoImages || []).length) file.click();
   });
-  file.addEventListener('change', () => take(file.files && file.files[0]));
-  if (clear) clear.addEventListener('click', (e) => { e.stopPropagation(); apply(null); });
+  file.addEventListener('change', () => take(file.files));
 
-  // Drag and drop. `dragover` must be prevented or the browser navigates to the
-  // file instead of handing it over.
+  // dragover must be prevented or the browser navigates to the dropped file.
   ['dragenter', 'dragover'].forEach((ev) => box.addEventListener(ev, (e) => {
     e.preventDefault(); box.classList.add('is-over');
   }));
   ['dragleave', 'dragend'].forEach((ev) => box.addEventListener(ev, () => box.classList.remove('is-over')));
   box.addEventListener('drop', (e) => {
     e.preventDefault(); box.classList.remove('is-over');
-    const dt = e.dataTransfer;
-    take(dt && dt.files && dt.files[0]);
+    take(e.dataTransfer && e.dataTransfer.files);
   });
 }
 
@@ -8116,7 +8171,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.183.0';
+const CLIENT_BUILD = '3.184.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

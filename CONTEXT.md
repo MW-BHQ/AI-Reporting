@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.183.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.184.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,31 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.184.0 — the Campaign creative slot takes up to three images.**
+
+**LAYOUT IS DRIVEN BY THE COUNT, not by `auto-fit`.** Three equal columns in a
+quarter-slide panel gives 110px thumbnails nobody can read. So one image fills
+the panel, two sit side by side, and three put the FIRST across the top with the
+other two beneath — the lead image stays legible, which is the one the campaign
+is actually about.
+
+**THE GRID IS REBUILT ON EVERY CHANGE, deliberately.** Binding the remove
+buttons once and mutating the array around them is how a remove ends up
+deleting the wrong picture after another is added: the handler closes over an
+index that no longer means what it did. Rebuilding is cheap and cannot drift.
+
+**OVERFLOW IS REPORTED, NOT SWALLOWED.** Drop five files and you get three plus
+a status line saying two were ignored. Silently taking a subset looks like a
+bug, and the reader has no way to tell which three they got.
+
+Add tile and remove buttons are `no-print`; the sheet shows artwork or an empty
+slot, never the furniture. Still in memory, still not saved across a reload.
+
+**Verified:** one image gives `n1` with an add tile, three give `n3` with none
+and the hint hidden, removing the middle one leaves two and relabels to `n2`, no
+console errors, 0 clipping.
+
 
 **v3.183.0 — the Campaign creative box actually takes an image.**
 
