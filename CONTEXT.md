@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.177.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.178.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,53 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.178.0 — BGH can read its OWN GA4 property. Off until switched on.**
+
+MW found it: the Looker Studio deck reads property **314404119** ("Bangkok
+Hospital Headquarters") while this dashboard reads **484633959** (the BDMS group
+property, 27 branches). Different property means different streams, different
+tagging and a different e-commerce configuration — which accounts for the views
+gap, every action gap AND the zero revenue at once. Three symptoms, one cause,
+and none of the metric work would have closed any of them.
+
+**`GA4_PROPERTY_BY_BRAND=BGH=314404119`** is the whole switch. Format is
+`BRAND=propertyId`, comma-separated.
+
+**OFF BY DEFAULT, DELIBERATELY.** GA4 is unreachable from the build environment
+— the egress proxy answers `host_not_allowed` on `analyticsdata.googleapis.com`
+— so not one figure of this could be checked against the real property here.
+Shipping it live-by-default would be changing every BGH number on the deck on
+reasoning alone.
+
+**THE PROPERTY IS PART OF THE MEMO KEY.** Without that, the second property's
+request would be served the first's cached rows: same dimensions, same dates,
+different account, and the wrong answer would look completely normal. Same class
+of bug the version-keyed GCS cache exists to prevent.
+
+**THE SPLIT HAD TO BE A SECOND REQUEST, not a filter.** The language matrix and
+the Actions-by-language grid both come from ONE landing-page pull bucketed by
+path, so there is nothing to filter on — a per-brand property means pulling the
+same report twice and taking BGH's rows from one and the rest from the other.
+Four extra requests, only when the override is set.
+
+**THE MOST LIKELY WAY THIS GOES WRONG IS DOUBLE-COUNTING**, so the brand filter
+lives on the WRITER (`fillLang`/`fillAlb`/`fillEvents` take an `only` argument)
+rather than on the caller. Verified against the mock with the override on: BGH
+reads 700, not 1400.
+
+**A CONSEQUENCE MW SHOULD KNOW: the BHQ combined column becomes BGH from one
+property plus three hospitals from another.** That is what "BGH only first"
+asks for and it is defensible while the two are being reconciled, but it is a
+mixed total and should not stay mixed.
+
+`/api/report` now reports `ga4Property` and `ga4PropertyByBrand`, so which
+account served a payload is answerable from the response.
+
+**STILL OPEN, and possibly moot once the property is switched:** revenue by
+language, the item-scoped metrics (`itemViews`/`addToCarts` vs event counts),
+and un-prefixed locale paths being dropped.
+
 
 **v3.177.0 — the key-event pull uses `eventCount`, not `keyEvents`. Every action
 figure on the deck was low.**
