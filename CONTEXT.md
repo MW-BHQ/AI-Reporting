@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.182.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.183.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,38 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.183.0 — the Campaign creative box actually takes an image.**
+
+MW: "after export to PDF we cannot paste images on the pdf using Preview. can
+you make it uploadable, or other way to solve this problem?"
+
+The box was an INSTRUCTION TO DO SOMETHING THE READER COULD NOT DO. It said
+"drop the campaign artwork in here before circulating" and was a static div;
+macOS Preview will not paste an image into a Chrome-generated PDF, so the
+artwork had nowhere to go and the slot has been decorative since it shipped.
+
+The picture has to be in the PAGE before the export, so the box now takes a
+drop or a click, holds the file as a data URL, and prints with the report.
+`printWhenImagesReady` already waits on every image in the document, so a data
+URL needs nothing extra to make the raster.
+
+**IN MEMORY, NOT localStorage.** A campaign image is comfortably past the 5MB
+quota and a quota failure here would be SILENT — the picture would simply not
+come back and nobody would know why. It survives a re-render (the slot is
+re-wired and the image re-applied every time the view draws) and it does not
+survive a reload. The hint says so rather than letting the reader discover it
+after closing the tab.
+
+**Empty still prints as an empty dashed slot**, deliberately. A report
+circulated without artwork should show that the slot exists, not close the gap
+as if there had never been one.
+
+**`js:comment-backtick`, FOURTH TIME TODAY.** The markup comment named
+`no-print` in backticks inside the template literal. Caught by `boot.js` in one
+run, again. Four in one session with the rule written down twice: **the rule is
+not the fix, the test is.** Do not remove that audit.
+
 
 **v3.182.0 — the rating mix IS the last six months, matching the chart above it.**
 

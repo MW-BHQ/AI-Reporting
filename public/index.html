@@ -418,7 +418,18 @@
   .mr-donut-key b{margin-left:auto;padding-left:14px;color:var(--ink);font-variant-numeric:tabular-nums;}
   .mr-promo-box{border:1.5px dashed var(--line);border-radius:11px;min-height:210px;
     display:flex;align-items:center;justify-content:center;text-align:center;padding:22px;
-    color:var(--faint);font-size:11.5px;max-width:340px;margin:0 auto;background:var(--card,#fff);}
+    color:var(--faint);font-size:11.5px;max-width:340px;margin:0 auto;background:var(--card,#fff);
+    position:relative;cursor:pointer;transition:border-color .12s,background .12s;}
+  .mr-promo-box:hover{border-color:var(--violet);}
+  /* Dragover feedback, so a drop that is about to work looks like it. */
+  .mr-promo-box.is-over{border-color:var(--violet);background:rgba(108,92,231,.06);}
+  /* Once an image is in, the box stops being a placeholder: no dash, no padding,
+     and it sizes to the artwork instead of holding a 210px hole. */
+  .mr-promo-box.has-img{border:0;padding:0;min-height:0;cursor:default;background:none;}
+  .mr-promo-box img{max-width:100%;max-height:260px;display:block;border-radius:9px;}
+  .mr-promo-clear{position:absolute;top:6px;right:6px;border:1px solid var(--line);
+    background:#fff;border-radius:7px;font-size:10px;padding:2px 7px;cursor:pointer;
+    color:var(--ink-2);}
   .mr-foot{margin-top:18px;padding-top:11px;border-top:1px solid var(--line);
     font-size:10.5px;color:var(--faint);display:flex;justify-content:space-between;gap:10px;}
   @media print{
@@ -482,6 +493,11 @@
        designed slot for campaign artwork before circulation, and MW asked for
        the page as it looks, not for an edit nobody requested. */
     .mr-foot{margin-top:12px;}
+    /* The artwork prints as large as the panel allows; the empty placeholder
+       keeps its dashed box so a report circulated without artwork still shows
+       the slot rather than a silent gap. */
+    .mr-promo-box img{max-height:none!important;max-width:100%!important;}
+    .mr-promo-box.has-img{max-width:none!important;}
   }
   @media(max-width:900px){
     .mr-kpis{grid-template-columns:repeat(2,1fr);}
@@ -6140,13 +6156,94 @@ function renderEcomMonthly() {
         </div>
         <div class="mr-panel mr-promo">
           <div class="mr-panel-t">Campaign creative</div>
-          <div class="mr-promo-box">Promotional image — drop the campaign artwork in here before circulating</div>
+          <!--
+            A REAL DROP TARGET, because the PDF is not editable (MW).
+            The box used to be an instruction to do something the reader then
+            could not do: macOS Preview will not paste an image into a Chrome
+            PDF, so the artwork had nowhere to go. The picture has to be in the
+            page BEFORE the export, so this accepts a drop or a click, holds the
+            file as a data URL, and prints with it.
+            no-print on the hint and the remove button: the sheet shows the
+            artwork or nothing, never the furniture around it.
+          -->
+          <div class="mr-promo-box" id="promoBox">
+            <input type="file" id="promoFile" accept="image/*" class="no-print" hidden>
+            <img id="promoImg" alt="Campaign creative" hidden>
+            <span class="mr-promo-hint no-print">Drop the campaign artwork here, or click to choose a file.<br>It prints with the report; it is not saved after a reload.</span>
+            <button type="button" class="mr-promo-clear no-print" id="promoClear" hidden>Remove</button>
+          </div>
         </div>
       </div>
 
       <div class="mr-foot"><span>Digital Marketing Report · Bangkok Hospital</span>
         <span>Generated ${esc(dayMonYear(new Date()))}</span></div>
     </div>`;
+  wirePromoSlot();
+}
+
+/**
+ * THE CAMPAIGN CREATIVE SLOT (MW: "after export to PDF we cannot paste images
+ * on the pdf using Preview. can you make it uploadable").
+ *
+ * The box used to be an instruction to do something the reader then could not
+ * do — macOS Preview will not paste an image into a Chrome-generated PDF, so
+ * the artwork had nowhere to go. The picture has to be in the PAGE before the
+ * export, so the box now takes a drop or a click.
+ *
+ * HELD AS A DATA URL IN MEMORY, not in localStorage. A campaign image is
+ * comfortably past the 5MB quota, and a quota failure here would be a silent
+ * one — the picture would simply not come back and nobody would know why. It
+ * survives a re-render (the picker is re-wired and the image re-applied every
+ * time the view is drawn) and it does not survive a reload, which is the honest
+ * trade and is stated in the hint.
+ *
+ * `printWhenImagesReady` already waits on every image in the document before
+ * opening the dialog, so a data URL is in the raster with nothing extra to do.
+ */
+function wirePromoSlot() {
+  const box = $('promoBox'), file = $('promoFile'), img = $('promoImg'), clear = $('promoClear');
+  if (!box || !file || !img) return;
+
+  const apply = (url) => {
+    S.promoImage = url || null;
+    if (url) {
+      img.src = url; img.hidden = false;
+      box.classList.add('has-img');
+      if (clear) clear.hidden = false;
+    } else {
+      img.removeAttribute('src'); img.hidden = true;
+      box.classList.remove('has-img');
+      if (clear) clear.hidden = true;
+      file.value = '';
+    }
+  };
+  const take = (f) => {
+    if (!f || !/^image\//.test(f.type || '')) return;
+    const r = new FileReader();
+    r.onload = () => apply(String(r.result || ''));
+    r.readAsDataURL(f);
+  };
+
+  apply(S.promoImage);                       // survive a re-render
+
+  box.addEventListener('click', (e) => {
+    if (e.target === clear) return;
+    if (!S.promoImage) file.click();
+  });
+  file.addEventListener('change', () => take(file.files && file.files[0]));
+  if (clear) clear.addEventListener('click', (e) => { e.stopPropagation(); apply(null); });
+
+  // Drag and drop. `dragover` must be prevented or the browser navigates to the
+  // file instead of handing it over.
+  ['dragenter', 'dragover'].forEach((ev) => box.addEventListener(ev, (e) => {
+    e.preventDefault(); box.classList.add('is-over');
+  }));
+  ['dragleave', 'dragend'].forEach((ev) => box.addEventListener(ev, () => box.classList.remove('is-over')));
+  box.addEventListener('drop', (e) => {
+    e.preventDefault(); box.classList.remove('is-over');
+    const dt = e.dataTransfer;
+    take(dt && dt.files && dt.files[0]);
+  });
 }
 
 function renderEcomChurn() {
@@ -8019,7 +8116,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.182.0';
+const CLIENT_BUILD = '3.183.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
