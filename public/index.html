@@ -3541,7 +3541,16 @@ function renderReport() {
           ${RVB.lifetime ? num(RVB.lifetime.total) : '\u2014'} reviews</div>
         <div class="card-title">Last 6 months</div>
         <div class="chart-wrap" style="height:210px"><canvas id="rvStack"></canvas></div>
-        <div class="card-title tight">Rating mix \u00b7 as at ${esc(niceDate(d.range.to))}</div>
+        <!-- "as of", not "as at" (MW). And the COUNT is in the heading, because
+             this mix is not the lifetime split and cannot be: Google publishes a
+             lifetime total and a lifetime average, but not a lifetime star
+             breakdown. It is every review Google has returned to us, which is
+             far more than the six months the chart above shows — naming the
+             number is what stops the reader assuming either. No footnote; the
+             heading carries it. -->
+        <div class="card-title tight">Rating mix \u00b7 ${
+          num([1,2,3,4,5].reduce((a2,k)=>a2+((RVB.mixToDate||{})[k]||0),0))
+          } reviews as of ${esc(niceDate(d.range.to))}</div>
         <table><tbody>
         ${[5,4,3,2,1].map(st=>{
           const tot = [1,2,3,4,5].reduce((a2,k)=>a2+((RVB.mixToDate||{})[k]||0),0);
@@ -7997,7 +8006,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.180.0';
+const CLIENT_BUILD = '3.181.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

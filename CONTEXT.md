@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.180.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.181.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,32 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.181.0 — "as of" not "as at", and the rating mix names its own scope.**
+
+MW: "change the mix to all time not 6 months, and the word as at > as of."
+
+The wording is done. The scope needed a correction rather than a change, and it
+is worth writing down: **the mix was never six months.** The chart above it is
+six months, which is what makes it read that way; the mix is every review the
+GBP pull returns, currently YEAR TO DATE — 3,313 reviews against a lifetime
+8.9K.
+
+**A TRUE LIFETIME MIX IS NOT AVAILABLE.** Google publishes a lifetime total and
+a lifetime average (`review_total_count`, `review_average_rating_total`) but
+NOT a lifetime star breakdown. The only way to a star split is counting
+individual reviews, so the mix can only ever cover the reviews the connector
+hands back.
+
+So the heading now carries the count: "Rating mix · 3,313 reviews as of 31 Aug
+2026". No footnote — MW's standing rule — the number in the heading is what
+stops a reader assuming either six months or lifetime.
+
+**TO GET CLOSER TO ALL-TIME** the review pull's `ytdFrom` would widen to two or
+three years. One line, but it multiplies the Windsor response and neither
+Windsor nor GA4 is reachable from the build environment, so it wants MW's
+confirmation and a look at the response size rather than a quiet change.
+
 
 **v3.180.0 — un-prefixed URLs count as Thai. The Thai and English shortfall.**
 
