@@ -1089,7 +1089,32 @@ async function ga4KeyEvents(windsorDims, from, to, segments) {
   try {
     const raw = await ga4RunReport({
       dimensions: [...windsorDims.map((d) => GA4_DIM_MAP[d]), "eventName"],
-      metrics: ["keyEvents"],
+      /**
+       * `eventCount`, NOT `keyEvents` — MW's GA4 Events screen settled this.
+       *
+       * TWO REASONS, and the first is a silent zero:
+       *   1. `purchase` IS NOT FLAGGED as a key event in the property (its star
+       *      is grey while the other eight are filled). `keyEvents` only counts
+       *      an event that carries the flag, so the Purchase column and every
+       *      total containing it were reading 0 — a real number replaced by a
+       *      plausible one.
+       *   2. THE KEY-EVENT FLAG IS NOT RETROACTIVE. An event accrues to
+       *      `keyEvents` only from the day it was marked, so any event flagged
+       *      part-way through a window is undercounted for the earlier days,
+       *      by an amount that depends on the configuration date rather than on
+       *      anything in the data. `eventCount` has no such dependency.
+       *
+       * This is what put the War Room below the Looker Studio deck on every
+       * action column while VIEWS matched to the digit — views come from a
+       * different metric, so they were never affected. MW's own question
+       * ("or you have been using a different event than the LS?") was the
+       * right one; it was the metric rather than the event names.
+       *
+       * `eventCount` counts every occurrence, so three taps of Find doctors
+       * count three times. That is what LS reports and therefore what the
+       * hospital has been reading all along.
+       */
+      metrics: ["eventCount"],
       from, to,
       // MUST be branch-filtered too. Without this, session metrics cover the
       // four branches and key events cover all 27 — every rate on the dashboard
@@ -1099,7 +1124,7 @@ async function ga4KeyEvents(windsorDims, from, to, segments) {
     });
     const out = { total: 0, byKey: new Map(), byName: new Map(), byKeyEvent: new Map(), rows: [], failed: false };
     for (const r of raw) {
-      const v = n(r.keyEvents);
+      const v = n(r.eventCount);
       const k = ga4JoinKey(windsorDims, r, true);
       out.total += v;
       out.byKey.set(k, (out.byKey.get(k) || 0) + v);

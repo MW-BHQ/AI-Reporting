@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.176.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.177.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,50 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.177.0 — the key-event pull uses `eventCount`, not `keyEvents`. Every action
+figure on the deck was low.**
+
+MW compared Actions by language against the Looker Studio deck and every action
+column was short while VIEWS matched to the digit. I went looking for dropped
+rows and truncation. MW asked the better question — "or you have been using a
+different event than the LS?" — and then sent the GA4 Events screen, which
+settled it. The event NAMES were right. The METRIC was wrong.
+
+**REASON ONE, A SILENT ZERO: `purchase` is not flagged as a key event.** Its
+star is grey in the property while the other eight are filled. `keyEvents` only
+counts an event carrying the flag, so the Purchase column — and every total
+containing it — was reading 0. Not an error, not a gap: a real number replaced
+by a plausible one, which is this project's signature failure.
+
+**REASON TWO: THE KEY-EVENT FLAG IS NOT RETROACTIVE.** An event accrues to
+`keyEvents` only from the day it was marked. Any event flagged part-way through
+a window is undercounted for the earlier days by an amount that depends on a
+CONFIGURATION DATE rather than on anything in the data. That is why every
+language was low by a DIFFERENT fraction — each event has its own flag date and
+each language its own event mix. `eventCount` has no such dependency.
+
+Views were never affected because they come from a different metric, which is
+exactly the clue that should have pointed at the metric rather than at the rows.
+
+**WHAT MOVED.** One line in `ga4KeyEvents`, but it feeds Actions by language,
+the Actions page, the Overview funnel's BOFU stage, the per-language Search
+pages and the channel table. Figures will RISE. `eventCount` counts every
+occurrence, so three taps of Find doctors count three times — which is what LS
+reports and therefore what the hospital has been reading all along.
+
+**THE LESSON, AND IT IS NOT A SMALL ONE: I diagnosed the shape of the gap and
+not its cause.** "Rows are being dropped" fitted the totals and had two
+plausible mechanisms behind it, and I was ready to paginate a query that was
+never truncated. What actually distinguished the hypotheses was sitting in the
+data the whole time — views matching perfectly while actions did not — and the
+person with the GA4 console open resolved it in one question. **When one metric
+in a pull is wrong and its neighbour is right, suspect the metric.**
+
+**STILL OPEN: revenue by language reads 0** where LS shows THB 1.32m Thai and
+THB 3.17m English. Separate cause — that comes from `purchase_revenue` on
+`landing_page`, not from this pull. Next.
+
 
 **v3.176.0 — Better AI's headline card carries MoM instead of day coverage.**
 
