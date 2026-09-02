@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.184.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.185.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,32 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.185.0 — the Campaign creative block keeps its size; artwork fits inside it.**
+
+MW: "keep the block size, 3.183 it expanded to the image size and crop the
+overflow."
+
+v3.183 dropped `min-height` the moment an image arrived, so the box grew to
+whatever was dropped in and the panel cropped the overflow. **The slide's
+geometry was being decided by whichever file someone happened to pick.** The
+footprint is fixed now and the artwork is fitted into it.
+
+**THE REAL FIX WAS `height`, NOT `min-height`.** With only a minimum the box's
+height stays INDEFINITE, so `height:100%` on the artwork resolved to `auto` and
+every image fell back to its intrinsic size — a 2000px-tall test file produced a
+3400px box, and three of them 6808px. A percentage height needs something
+definite to be a percentage of. Measured after: empty 340x210, one tall image
+340x210, three mixed 340x210.
+
+**`object-fit:contain`, not `cover`.** Cropping to fill would hide whatever the
+designer put at the edges, and a campaign image with the offer in a corner would
+lose the offer.
+
+**THE ADD TILE FLOATS instead of taking a grid cell.** As a cell it shrank the
+images on screen and then vanished in print, so the printed layout would not be
+the one that was arranged.
+
 
 **v3.184.0 — the Campaign creative slot takes up to three images.**
 

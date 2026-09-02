@@ -416,7 +416,13 @@
   .mr-donut-key div{display:flex;align-items:center;gap:8px;margin-bottom:6px;white-space:nowrap;}
   .mr-donut-key i{width:10px;height:10px;border-radius:3px;flex:none;}
   .mr-donut-key b{margin-left:auto;padding-left:14px;color:var(--ink);font-variant-numeric:tabular-nums;}
-  .mr-promo-box{border:1.5px dashed var(--line);border-radius:11px;min-height:210px;
+  /**
+   * A DEFINITE HEIGHT, not a minimum. `min-height` alone leaves the box's height
+   * INDEFINITE, so the `height:100%` on the artwork resolved to `auto` and every
+   * image fell back to its intrinsic size — a 2000px-tall file made a 3400px
+   * box. Percentage heights need something definite to be a percentage of.
+   */
+  .mr-promo-box{border:1.5px dashed var(--line);border-radius:11px;height:210px;
     display:flex;align-items:center;justify-content:center;text-align:center;padding:22px;
     color:var(--faint);font-size:11.5px;max-width:340px;margin:0 auto;background:var(--card,#fff);
     position:relative;cursor:pointer;transition:border-color .12s,background .12s;}
@@ -425,7 +431,14 @@
   .mr-promo-box.is-over{border-color:var(--violet);background:rgba(108,92,231,.06);}
   /* Once an image is in, the box stops being a placeholder: no dash, no padding,
      and it sizes to the artwork instead of holding a 210px hole. */
-  .mr-promo-box.has-img{border:0;padding:0;min-height:0;cursor:default;background:none;}
+  /**
+   * THE BLOCK KEEPS ITS SIZE (MW). v3.183 dropped `min-height` when an image
+   * arrived, so the box grew to whatever was dropped in and the panel around it
+   * cropped the overflow — the slide's geometry was being decided by the file
+   * someone happened to pick. The footprint is now fixed and the artwork is
+   * fitted INSIDE it.
+   */
+  .mr-promo-box.has-img{border:0;padding:0;cursor:default;background:none;}
   /**
    * UP TO THREE IMAGES (MW).
    *
@@ -435,18 +448,32 @@
    * top with the other two beneath it. That keeps the lead image legible, which
    * is the one the campaign is actually about.
    */
-  .mr-promo-grid{display:grid;gap:8px;width:100%;}
+  /* Stretches to the box rather than to its contents, and every row is an equal
+     fraction of it, so the grid's height comes from the BOX. */
+  .mr-promo-grid{display:grid;gap:8px;width:100%;flex:1 1 auto;align-self:stretch;
+    min-height:0;grid-auto-rows:1fr;}
   .mr-promo-grid:empty{display:none;}
   .mr-promo-grid.n1{grid-template-columns:1fr;}
   .mr-promo-grid.n2,.mr-promo-grid.n3{grid-template-columns:1fr 1fr;}
   .mr-promo-grid.n3 > :first-child{grid-column:1 / -1;}
   .mr-promo-tile{position:relative;display:flex;align-items:center;justify-content:center;
     background:var(--bg);border-radius:9px;overflow:hidden;min-height:0;}
-  .mr-promo-box img{max-width:100%;max-height:250px;display:block;border-radius:9px;}
-  .mr-promo-grid.n2 img,.mr-promo-grid.n3 img{max-height:150px;}
-  .mr-promo-add{border:1.5px dashed var(--line);border-radius:9px;min-height:56px;
-    display:flex;align-items:center;justify-content:center;font-size:10.5px;
-    color:var(--faint);cursor:pointer;background:#fff;}
+  /**
+   * `contain`, not `cover`: the whole artwork has to be visible. Cropping to
+   * fill would hide whatever the designer put at the edges, and a campaign
+   * image with its offer in the corner would lose the offer.
+   */
+  .mr-promo-box img{width:100%;height:100%;max-width:100%;max-height:100%;
+    object-fit:contain;display:block;border-radius:9px;}
+  /**
+   * The add tile FLOATS rather than taking a grid cell. As a cell it would
+   * shrink the images on screen and then vanish in print, so the printed layout
+   * would not match the one that was arranged.
+   */
+  .mr-promo-add{position:absolute;bottom:6px;right:6px;z-index:2;
+    border:1px solid var(--line);border-radius:7px;padding:3px 8px;
+    display:flex;align-items:center;font-size:10px;line-height:1;
+    color:var(--ink-2);cursor:pointer;background:rgba(255,255,255,.92);}
   .mr-promo-add:hover{border-color:var(--violet);color:var(--violet);}
   .mr-promo-clear{position:absolute;top:5px;right:5px;border:1px solid var(--line);
     background:rgba(255,255,255,.92);border-radius:7px;font-size:10px;
@@ -517,11 +544,11 @@
     /* The artwork prints as large as the panel allows; the empty placeholder
        keeps its dashed box so a report circulated without artwork still shows
        the slot rather than a silent gap. */
-    .mr-promo-box img{max-height:none!important;max-width:100%!important;}
-    .mr-promo-box.has-img{max-width:none!important;}
+    /* Same fixed footprint in print, so what was arranged on screen is what
+       comes out. `object-fit:contain` does the fitting either way. */
+    .mr-promo-box.has-img{max-width:340px!important;}
     /* The add tile is furniture; the sheet shows artwork or an empty slot. */
     .mr-promo-add{display:none!important;}
-    .mr-promo-grid.n2 img,.mr-promo-grid.n3 img{max-height:none!important;}
   }
   @media(max-width:900px){
     .mr-kpis{grid-template-columns:repeat(2,1fr);}
@@ -8171,7 +8198,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.184.0';
+const CLIENT_BUILD = '3.185.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
