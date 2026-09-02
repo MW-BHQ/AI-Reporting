@@ -3541,27 +3541,40 @@ function renderReport() {
           ${RVB.lifetime ? num(RVB.lifetime.total) : '\u2014'} reviews</div>
         <div class="card-title">Last 6 months</div>
         <div class="chart-wrap" style="height:210px"><canvas id="rvStack"></canvas></div>
-        <!-- "as of", not "as at" (MW). And the COUNT is in the heading, because
-             this mix is not the lifetime split and cannot be: Google publishes a
-             lifetime total and a lifetime average, but not a lifetime star
-             breakdown. It is every review Google has returned to us, which is
-             far more than the six months the chart above shows — naming the
-             number is what stops the reader assuming either. No footnote; the
-             heading carries it. -->
-        <div class="card-title tight">Rating mix \u00b7 ${
-          num([1,2,3,4,5].reduce((a2,k)=>a2+((RVB.mixToDate||{})[k]||0),0))
-          } reviews as of ${esc(niceDate(d.range.to))}</div>
+        <!--
+          THE MIX MATCHES THE CHART ABOVE IT: the last six months (MW).
+          A lifetime split is not on offer — Google publishes a lifetime total
+          and a lifetime average but no lifetime star breakdown — so the honest
+          choices were "every review the connector returned", which was year to
+          date and agreed with nothing on the page, or the same six months the
+          bars already show. The second is the one a reader can check with their
+          eyes, which is why it makes more sense.
+
+          slice(-6) is the identical expression the rvStack chart uses, so the
+          two cannot drift apart.
+        -->
+        ${(() => {
+          const mm6 = (RVB.monthly || []).slice(-6);
+          const mix6 = mm6.reduce((acc, m) => {
+            for (const st of [1,2,3,4,5]) acc[st] += m['s'+st] || 0;
+            return acc;
+          }, {1:0,2:0,3:0,4:0,5:0});
+          const tot6 = [1,2,3,4,5].reduce((a2,k) => a2 + mix6[k], 0);
+          return `
+        <div class="card-title tight">Rating mix \u00b7 last 6 months${
+          tot6 ? ` \u00b7 ${num(tot6)} reviews` : ''}</div>
         <table><tbody>
         ${[5,4,3,2,1].map(st=>{
-          const tot = [1,2,3,4,5].reduce((a2,k)=>a2+((RVB.mixToDate||{})[k]||0),0);
-          const v = (RVB.mixToDate||{})[st] || 0;
+          const tot = tot6;
+          const v = mix6[st] || 0;
           const pct = tot ? (v/tot)*100 : 0;
           return `<tr><td class="strong" style="width:52px">${st}\u2605</td>
             <td><div style="background:var(--line);border-radius:6px;height:9px">
               <div style="width:${pct}%;background:${st>=4?'#2E9E6F':(st===3?'#F2A93B':'#D9534F')};height:9px;border-radius:6px"></div>
             </div></td><td class="num" style="width:52px">${num(v)}</td></tr>`;
         }).join('')}
-        </tbody></table>
+        </tbody></table>`;
+        })()}
       </div>
     </div>` : '';
 
@@ -8006,7 +8019,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.181.0';
+const CLIENT_BUILD = '3.182.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.181.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.182.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -717,6 +717,30 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.182.0 — the rating mix IS the last six months, matching the chart above it.**
+
+MW asked what changed in v3.181 and then answered his own question better than I
+had: "make it last 6 months will make more sense."
+
+He is right, and the reason is worth keeping. A lifetime split is not on offer —
+Google publishes a lifetime total and a lifetime average but no lifetime star
+breakdown — so the honest options were "every review the connector returned",
+which was year to date and agreed with NOTHING else on the page, or the same six
+months the bars directly above already show. The second is the one a reader can
+check with their own eyes. Labelling a mismatched scope accurately (v3.181) was
+the lesser fix; making the scopes match is the real one.
+
+The mix is now summed from `RVB.monthly.slice(-6)` — the identical expression
+the `rvStack` chart uses, so the table and the bars cannot drift apart. Heading
+reads "Rating mix · last 6 months · 3.4K reviews".
+
+**`js:comment-backtick` FIRED FOR THE THIRD TIME TODAY, same author, same
+mistake.** The comment explaining the slice quoted two identifiers in backticks
+inside the template literal. Caught by `boot.js` in one run. Three times in one
+session is not bad luck — **when writing a comment inside a template literal,
+name identifiers bare.**
+
 
 **v3.181.0 — "as of" not "as at", and the rating mix names its own scope.**
 
