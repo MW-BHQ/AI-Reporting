@@ -12,15 +12,16 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.185.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.186.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
 
 **Tabs now.** Overview · **Monthly Reports (BGH / BIH / BHT / WSH)** ·
 Google Profile · Campaigns · Pages · Meta Ads (Benchmarks, Audiences, Tagging
-audit) · Google Ads (Overview) · E-commerce (Overview, Report, Centers,
-Channels, ROAS, Churn, Migration) · Topic Explorer · Users.
+audit) · Google Ads (Overview) · **Better Club (Overview)** · E-commerce
+(Overview, Report, Centers, Channels, ROAS, Churn, Migration) · Topic
+Explorer · Users.
 
 **Monthly Reports is where the current work is.** It replaces a Looker Studio
 deck, is one nav section with a tab per hospital, and prints to 16:9 slides.
@@ -717,6 +718,81 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.186.0 — Better Club: membership revenue, and whether the members we win come back.**
+
+MW: "we will receive Final-Better Club Customer July 2026.xlsx ... help us with
+appsscript similar to e-commerce report; insert the xlsx > run appsscript >
+normalize and tag necessary info > delete the insert tab (it contains PII) ...
+after that we will add another tab in the War Room."
+
+A new section between Google Ads and E-commerce, reading the normalised sheet
+`1DPUqMUo9q4MVd5tqryWFGKhI9MSVsyWdjBF0Un62zfs` (`BCLUB_SHEET_ID`), tabs
+`Summary` and `Rev_Attribution`. The normaliser itself lives in the spreadsheet,
+not this repo — `BetterClub_Normalize.gs`, given to MW separately.
+
+**NO PII REACHES THIS SERVICE, BY CONSTRUCTION.** The monthly export lists every
+member by name, email, phone and HN. The Apps Script reads those columns, writes
+none of them, and DELETES the imported tab on success. `HN_ID` is a salted
+SHA-256 digest of the HN: stable across months so cohorts work, not reversible.
+The salt (`CFG.HN_SALT`) must never change once months are loaded — every digest
+would change and repeat members would silently start looking new.
+
+**`MonthYear` IS TEXT (`2026-07`), NOT A DATE.** Sheets stores dates as
+timezone-less serials, so a Date on the 1st at midnight lands in the previous
+month whenever the writer's zone is behind the spreadsheet's. The first load
+shifted all seven months back by one and displayed January 2026 as December
+2025 — with `Summary` still correct, because the script re-derived the month
+from the underlying instant. Only the stored value was wrong, which is why the
+display was the only place it showed. `monthKeyCell` still tolerates a Date so a
+hand-edited row cannot take the section down, and a smoke assertion pins
+`selected.month === '2026-07'` for a July range.
+
+**A SUBTOTAL GUARD DISCARDED SIX REAL CUSTOMERS.** The first normaliser
+prefix-matched `total|sum|รวม` across *every* column, including Name and Email.
+Thai names romanise to Sumalee, Sumitra, Sumon, Sumate; `sumalee@…` too. July
+reported 2,917 members and ฿102,476,990 against the true 2,923 and
+฿102,542,865 — ฿65,875 thrown away for being named Sum-something. The guard is
+now exact-match and only reads the mapped label columns. **A cheap-looking
+cleanup heuristic run over a name field will delete people.**
+
+**RATES ARE RECOMPUTED FROM THE COUNTS, NEVER READ FROM `Summary`.** That tab
+carries ready-made ARPU and share columns. Trusting them would let a stale row
+print a percentage that disagrees with the figures beside it. The fixture's ARPU
+columns all say 99999 and its share columns 9.99; two assertions fail if either
+reaches the payload.
+
+**THE WHOLE SERIES RENDERS, NOT JUST THE SELECTED RANGE.** Seven monthly points
+is the entire dataset and a membership programme is only legible as a trend —
+"2,923 paying members" says nothing without the 2,202 it grew from. The date
+range picks which month the headline cards and concentration figures describe;
+it does not clip the chart. Months in range that the sheet does not have yet get
+a named note rather than a headline of zeros beside a full chart, which reads as
+a broken tab rather than a month not yet imported.
+
+**COHORT RETENTION IS WHY THE TAB EXISTS.** Acquisition is already visible in two
+other places; whether an acquired member returns is visible nowhere. Rows read
+left to right: of the members who first paid that month, the share who paid
+again in each later month. Rows with a blank `HN_ID` (imported before HN was
+retained) count toward revenue but are excluded from cohorts — treating one as a
+member would make it look like a huge customer who never came back.
+
+**REVENUE CONCENTRATION SITS BESIDE ARPU** for the reported month: top 1%, top
+10%, and the median against the mean. `ARPU_New` ran ฿18,154 in January and
+฿45,070 in June while overall ARPU barely moved, and June had 189 new members
+against July's 514. It is always printed WITH its member count, because without
+it an executive reads small-sample movement as a step change.
+
+**REGISTRATION-TO-PAID CONVERSION IS DELIBERATELY ABSENT.** It is the best figure
+this section could carry — new paying members over Better Club new registrations,
+3.6% in March against 18.2% in July — but the registration count has no source
+here: not a GA4 key event, not in this spreadsheet. `registerSource: null` with a
+note in the UI saying why, and an assertion keeping it null. Typing the numbers
+in by hand would put unsourced figures in front of executives.
+
+Shading carries no meaning in the cohort table or the monthly table; the month
+the cards describe is marked with a `reported above` pill instead. 17 smoke
+assertions, full suite green.
 
 **v3.185.0 — the Campaign creative block keeps its size; artwork fits inside it.**
 

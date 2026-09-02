@@ -789,6 +789,7 @@ const TABS = [
   { id: "topics",    label: "Topic Explorer" },
   { id: "audiences", label: "Audiences" },
   { id: "gads",      label: "Google Ads" },
+  { id: "bclub",     label: "Better Club" },
   { id: "ecom",      label: "E-commerce" },
   { id: "ecomcentre",label: "E-commerce · Centres" },
   { id: "ecompackages", label: "E-commerce · Packages" },
@@ -4350,6 +4351,35 @@ const YT_SHEET_ID = process.env.YT_SHEET_ID || "1o0n44IioDyEvAlNt_Tf11SxD11mDpkz
 const BETTERAI_SHEET_ID = process.env.BETTERAI_SHEET_ID || "1jOz2XYry-D28z_Eg6w3oIHao1c61OrGTa5jD7Hz21oQ";
 
 /**
+ * BETTER CLUB — membership revenue attribution, from its own Sheet.
+ *
+ * The hospital sends one xlsx a month listing every Better Club member matched
+ * to an HN, with that member's revenue for the month and two flags: first visit
+ * this month, and returning after a two-year gap. An Apps Script in the
+ * spreadsheet normalises it (`BetterClub_Normalize.gs`) and DELETES the imported
+ * tab, because the raw export carries names, emails and phone numbers.
+ *
+ * Two tabs are read here, both BY HEADER NAME:
+ *   `Summary`         — one row per month, every figure the headline cards need.
+ *   `Rev_Attribution` — one row per member-month, needed only for cohorts.
+ *
+ * NO PII REACHES THIS SERVICE. `HN_ID` is a salted SHA-256 digest of the
+ * hospital number written by the Apps Script; it is stable across months, so
+ * cohort retention works, and it is not reversible to an HN. Name, email and
+ * phone are never written to the sheet at all.
+ *
+ * `MonthYear` is TEXT in `yyyy-MM` form, not a date. Sheets stores dates as
+ * timezone-less serials, so a Date on the 1st at midnight lands in the previous
+ * month whenever the writer's timezone is behind the spreadsheet's — the first
+ * load shifted all seven months back by one and displayed January as December
+ * 2025. Text cannot drift. `monthKeyCell` below still tolerates a Date so a
+ * hand-edited row does not take the section down.
+ */
+const BCLUB_SHEET_ID = process.env.BCLUB_SHEET_ID || "1DPUqMUo9q4MVd5tqryWFGKhI9MSVsyWdjBF0Un62zfs";
+const BCLUB_SUMMARY_TAB = "Summary";
+const BCLUB_DETAIL_TAB = "Rev_Attribution";
+
+/**
  * BETTER AI — the agentic assistant's conversion funnel, from its own Sheet.
  *
  * Two tabs, both daily, both read by HEADER NAME and never by position: the
@@ -7455,6 +7485,273 @@ app.get("/api/google-ads", requireTab("gads"), async (req, res) => {
   } catch (err) {
     logJson("ERROR", "gads_failed", { error: String(err.message || err) });
     res.status(500).json({ error: err.message || "Google Ads failed" });
+  }
+});
+
+// ---------------------------------------------------------- /api/better-club
+
+/** `2026-07` as written, or a Date recovered in the script's own zone. */
+function monthKeyCell(v) {
+  if (v instanceof Date) {
+    return `${v.getUTCFullYear()}-${String(v.getUTCMonth() + 1).padStart(2, "0")}`;
+  }
+  const m = /^(\d{4})-(\d{2})/.exec(String(v == null ? "" : v).trim());
+  return m ? `${m[1]}-${m[2]}` : "";
+}
+
+const bclubLabel = (key) => {
+  const m = /^(\d{4})-(\d{2})$/.exec(key);
+  return m ? `${MONTH_NAMES[+m[2] - 1]} ${m[1]}` : key;
+};
+
+/** The month keys a date range touches, oldest first. */
+function monthsBetween(from, to) {
+  const out = [];
+  let [y, m] = from.slice(0, 7).split("-").map(Number);
+  const [ty, tm] = to.slice(0, 7).split("-").map(Number);
+  for (let i = 0; i < 36 && (y < ty || (y === ty && m <= tm)); i++) {
+    out.push(`${y}-${String(m).padStart(2, "0")}`);
+    if (++m > 12) { m = 1; y++; }
+  }
+  return out;
+}
+
+/**
+ * BETTER CLUB.
+ *
+ * THE WHOLE SERIES IS RETURNED, not just the selected range. Seven monthly
+ * points is the entire dataset, and a membership programme is only legible as a
+ * trend — a single month's "2,923 paid members" says nothing without the 2,202
+ * it grew from. The selected range picks out which month the headline cards and
+ * the concentration figures describe; it does not clip the chart.
+ *
+ * TWO THINGS ARE DERIVED HERE RATHER THAN READ FROM `Summary`, because the sheet
+ * cannot know them:
+ *
+ *  · COHORT RETENTION. Of the members who first paid in month M, how many paid
+ *    again in each later month. This needs the per-member tab, and it is the one
+ *    question the programme exists to answer: acquisition is already visible,
+ *    whereas whether acquired members come back is not.
+ *  · REVENUE CONCENTRATION. What share of a month's revenue the top 1% and top
+ *    10% of members account for. ARPU alone hides this, and it matters: at high
+ *    concentration a handful of large bills move the average, so an ARPU
+ *    movement is noise rather than a trend.
+ *
+ * `ARPU_New` is reported WITH its member count for exactly that reason. It ran
+ * ฿18,154 in January and ฿45,070 in June against a stable overall ARPU, and June
+ * had only 189 new members — small-sample movement, not a step change.
+ */
+async function buildBetterClub(from, to) {
+  let res;
+  try {
+    res = await sheetBatchGet(BCLUB_SHEET_ID, [
+      `'${BCLUB_SUMMARY_TAB}'!A1:P`,
+      `'${BCLUB_DETAIL_TAB}'!A1:E`,
+    ]);
+  } catch (e) {
+    const msg = String((e && e.message) || e);
+    return {
+      available: false,
+      error: msg,
+      fix: msg.includes("403")
+        ? "Share the Better Club spreadsheet with the Cloud Run service account (Viewer)."
+        : msg.includes("404")
+          ? `Spreadsheet not found — check BCLUB_SHEET_ID and that tabs named "${BCLUB_SUMMARY_TAB}" and "${BCLUB_DETAIL_TAB}" exist.`
+          : "See the error text above.",
+    };
+  }
+
+  const vals = (i) => (res[i] && res[i].values) || [];
+  const summary = vals(0), detail = vals(1);
+  if (summary.length < 2) {
+    return { available: false, error: `no rows in ${BCLUB_SUMMARY_TAB} — run "Better Club > Rebuild Summary" in the spreadsheet` };
+  }
+
+  // Columns by name. The normaliser has already changed this tab's column count
+  // once, and a positional read would return the wrong figure rather than fail.
+  const sHead = summary[0].map((h) => String(h == null ? "" : h).trim());
+  const at = (name) => sHead.indexOf(name);
+  const NEED = ["MonthYear", "PaidHNs", "Revenue", "NewPaidHNs", "RevFromNewPaidHNs"];
+  const missing = NEED.filter((c) => at(c) === -1);
+  if (missing.length) {
+    return { available: false,
+             error: `${BCLUB_SUMMARY_TAB} is missing column(s): ${missing.join(", ")} — headers seen: ${sHead.join(" | ")}` };
+  }
+  const SC = {};
+  ["MonthYear","PaidHNs","Revenue","NewPaidHNs","RevFromNewPaidHNs","OldPaidHNs",
+   "RevFromOldPaidHNs","Returned2Y","RevFromReturned2Y","ARPU","ARPU_New","ARPU_Old",
+  ].forEach((c) => { SC[c] = at(c); });
+
+  const months = [];
+  for (let r = 1; r < summary.length; r++) {
+    const row = summary[r] || [];
+    const key = monthKeyCell(row[SC.MonthYear]);
+    if (!key) continue;                                  // blank or a stray note row
+    const g = (c) => (SC[c] === -1 ? 0 : n(row[SC[c]]));
+    const paidHns = g("PaidHNs"), revenue = g("Revenue");
+    const newHns = g("NewPaidHNs"), newRev = g("RevFromNewPaidHNs");
+    const oldHns = SC.OldPaidHNs === -1 ? paidHns - newHns : g("OldPaidHNs");
+    const oldRev = SC.RevFromOldPaidHNs === -1 ? revenue - newRev : g("RevFromOldPaidHNs");
+    months.push({
+      month: key, label: bclubLabel(key),
+      paidHns, revenue, newHns, newRev, oldHns, oldRev,
+      ret2y: g("Returned2Y"), ret2yRev: g("RevFromReturned2Y"),
+      // Rates are recomputed from the counts rather than read from the sheet, so
+      // a stale Summary row cannot print a percentage that disagrees with the
+      // numbers beside it.
+      arpu: paidHns ? revenue / paidHns : null,
+      arpuNew: newHns ? newRev / newHns : null,
+      arpuOld: oldHns ? oldRev / oldHns : null,
+      newHnShare: paidHns ? newHns / paidHns : null,
+      newRevShare: revenue ? newRev / revenue : null,
+    });
+  }
+  if (!months.length) return { available: false, error: `no readable month rows in ${BCLUB_SUMMARY_TAB}` };
+  months.sort((a, b) => (a.month < b.month ? -1 : 1));
+
+  /**
+   * WHICH MONTH THE CARDS DESCRIBE. The latest month the range touches that the
+   * sheet actually has. A range ending mid-month before the export has arrived
+   * would otherwise show a headline of zeros beside a chart full of data, which
+   * reads as a broken tab rather than as a month not yet loaded.
+   */
+  const inRange = monthsBetween(from, to);
+  const have = new Set(months.map((m) => m.month));
+  const wanted = inRange.filter((k) => have.has(k));
+  const selKey = wanted.length ? wanted[wanted.length - 1] : months[months.length - 1].month;
+  const selIdx = months.findIndex((m) => m.month === selKey);
+  const selected = months[selIdx];
+  const prev = selIdx > 0 ? months[selIdx - 1] : null;
+  const pending = inRange.filter((k) => !have.has(k));
+
+  // ---- per-member detail: cohorts and concentration
+  let cohorts = null, concentration = null, detailNote = null;
+  if (detail.length > 1) {
+    const dHead = detail[0].map((h) => String(h == null ? "" : h).trim());
+    const dAt = (name) => dHead.indexOf(name);
+    const D = { month: dAt("MonthYear"), id: dAt("HN_ID"), rev: dAt("Revenue"), seg: dAt("Segment") };
+    if (D.month === -1 || D.id === -1) {
+      detailNote = `${BCLUB_DETAIL_TAB} is missing MonthYear or HN_ID — cohorts unavailable.`;
+    } else {
+      const paidIn = new Map();      // month -> Set of HN_ID
+      const newIn = new Map();       // month -> Set of HN_ID first paying that month
+      const revIn = new Map();       // month -> Map of HN_ID -> revenue
+      const selRevs = [];
+      let blankId = 0;
+
+      for (let r = 1; r < detail.length; r++) {
+        const row = detail[r] || [];
+        const key = monthKeyCell(row[D.month]);
+        if (!key) continue;
+        const id = String(row[D.id] == null ? "" : row[D.id]).trim();
+        const rev = D.rev === -1 ? 0 : n(row[D.rev]);
+        if (key === selKey) selRevs.push(rev);
+        // A blank HN_ID means that row came from an export with HN already
+        // stripped. It still counts toward revenue, but it cannot be tracked
+        // across months, so it is excluded from cohorts rather than treated as
+        // one enormous member who never returns.
+        if (!id) { blankId++; continue; }
+        if (!paidIn.has(key)) { paidIn.set(key, new Set()); revIn.set(key, new Map()); }
+        paidIn.get(key).add(id);
+        revIn.get(key).set(id, (revIn.get(key).get(id) || 0) + rev);
+        if (String(row[D.seg] == null ? "" : row[D.seg]).trim().toLowerCase() === "new") {
+          if (!newIn.has(key)) newIn.set(key, new Set());
+          newIn.get(key).add(id);
+        }
+      }
+
+      const keys = months.map((m) => m.month).filter((k) => paidIn.has(k));
+      if (keys.length) {
+        cohorts = {
+          months: keys,
+          labels: keys.map(bclubLabel),
+          rows: keys.map((ck) => {
+            const cohort = newIn.get(ck) || new Set();
+            const later = keys.filter((k) => k > ck);
+            return {
+              cohort: ck, label: bclubLabel(ck), size: cohort.size,
+              retained: later.map((k) => {
+                const paid = paidIn.get(k) || new Set();
+                const revMap = revIn.get(k) || new Map();
+                let count = 0, revenue = 0;
+                cohort.forEach((id) => {
+                  if (paid.has(id)) { count++; revenue += revMap.get(id) || 0; }
+                });
+                return { month: k, count, revenue, rate: cohort.size ? count / cohort.size : null };
+              }),
+            };
+          }).filter((r) => r.size > 0),
+        };
+        if (!cohorts.rows.length) cohorts = null;
+
+        /**
+         * MONTH-ON-MONTH REPEAT RATE, separate from cohorts: of everyone who
+         * paid last month, how many paid again this month. Cohorts answer "do
+         * the members we acquired stick"; this answers "is the paying base
+         * holding", which is the figure that moves revenue next month.
+         */
+        const prevKey = prev && prev.month;
+        if (prevKey && paidIn.has(prevKey) && paidIn.has(selKey)) {
+          const before = paidIn.get(prevKey), now = paidIn.get(selKey);
+          let kept = 0;
+          before.forEach((id) => { if (now.has(id)) kept++; });
+          concentration = { repeatFromPrev: before.size ? kept / before.size : null,
+                            keptCount: kept, prevBase: before.size };
+        }
+      }
+
+      // Revenue concentration in the selected month.
+      if (selRevs.length) {
+        const sorted = selRevs.slice().sort((a, b) => b - a);
+        const total = sorted.reduce((a, b) => a + b, 0);
+        const shareOfTop = (frac) => {
+          const k = Math.max(1, Math.round(sorted.length * frac));
+          const s = sorted.slice(0, k).reduce((a, b) => a + b, 0);
+          return { members: k, revenue: s, share: total ? s / total : null };
+        };
+        concentration = {
+          ...(concentration || {}),
+          month: selKey, members: sorted.length, revenue: total,
+          top1: shareOfTop(0.01), top10: shareOfTop(0.10),
+          median: sorted[Math.floor(sorted.length / 2)] || 0,
+        };
+      }
+      if (blankId) {
+        detailNote = `${num0(blankId)} member-months carry no HN_ID (imported before HN was retained) — those are in the revenue totals but not in the cohort table.`;
+      }
+    }
+  } else {
+    detailNote = `${BCLUB_DETAIL_TAB} is empty — cohorts and concentration unavailable.`;
+  }
+
+  return {
+    available: true,
+    sheetId: BCLUB_SHEET_ID,
+    range: { from, to },
+    months, selected, prev, pending,
+    cohorts, concentration, detailNote,
+    /**
+     * The register-to-paid conversion is DELIBERATELY ABSENT. It is the most
+     * useful figure this section could carry — new paid members over Better Club
+     * new registrations, which ran 3.6% in March against 18.2% in July — but the
+     * registration count has no source in this service: it is not a GA4 key
+     * event and it is not in this spreadsheet. Publishing it would mean typing
+     * numbers in by hand, so the section reports what it can source and says so.
+     */
+    registerSource: null,
+  };
+}
+
+app.get("/api/better-club", requireTab("bclub"), async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  try {
+    const out = await withCache(`bclub:${from}:${to}`, req.query.refresh === "1",
+      () => buildBetterClub(from, to));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "bclub_failed", { error: String(err.message || err) });
+    res.status(500).json({ error: err.message || "Better Club failed" });
   }
 });
 

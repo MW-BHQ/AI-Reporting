@@ -1715,6 +1715,13 @@
       </div>
 
       <div class="nav-sep"></div>
+      <div class="nav-group">Better Club</div>
+      <div class="nav-item sub" data-view="bclub">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.2l5.9-.9z"/></svg>
+        Overview
+      </div>
+
+      <div class="nav-sep"></div>
       <div class="nav-group">E-commerce</div>
       <div class="nav-item sub" data-view="ecom">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h2l2.2 10.2a2 2 0 002 1.6h7.1a2 2 0 002-1.55L21 8H7"/><circle cx="10.5" cy="20" r="1.2"/><circle cx="18" cy="20" r="1.2"/></svg>
@@ -1839,6 +1846,7 @@ const S = {
   ecommon: null, ecommonKey: null, ecommonLoading: false, ecommonError: null,
   ecomroas: null, ecomroasKey: null, ecomroasLoading: false, ecomroasError: null,
   gads: null, gadsKey: null, gadsLoading: false, gadsError: null,
+  bclub: null, bclubKey: null, bclubLoading: false, bclubError: null,
   page: null, pageKey: null, pageLoading: false, pageError: null, pageUrl: '',
   audiencesLoading: false, audiencesError: null,
   me: null, users: null, usersLoading: false, usersError: null,
@@ -2246,6 +2254,7 @@ const TITLES = {
   pages: ['Pages', 'How one page performs — paste the URL you want to look at'],
   gads: ['Google Ads', 'Spend, campaigns and accounts — newly connected, so start by looking'],
   audiences: ['Audiences', 'Meta audience sets ranked by cost per first-degree result'],
+  bclub: ['Better Club', 'Membership revenue, and whether the members we win come back'],
   ecom: ['E-commerce', 'Package sales across every online sales channel'],
   ecomcentre: ['E-commerce · Centers', 'Which centers sell, and through which channel'],
   ecompackages: ['E-commerce · Packages', 'Every product, grouped by name — promo re-codes count once'],
@@ -2326,6 +2335,17 @@ async function loadGads(refresh = false) {
   S.gads = await res.json(); S.gadsKey = key;
   setStatus('ok', S.gads.cached ? `cached ${S.gads.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
   return S.gads;
+}
+
+async function loadBclub(refresh = false) {
+  const key = `${$('from').value}|${$('to').value}`;
+  if (!refresh && S.bclubKey === key && S.bclub) return S.bclub;
+  setStatus('busy', 'reading the Better Club sheet…');
+  const res = await fetch(`/api/better-club?from=${$('from').value}&to=${$('to').value}${refresh?'&refresh=1':''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,220)}`);
+  S.bclub = await res.json(); S.bclubKey = key;
+  setStatus('ok', S.bclub.cached ? `cached ${S.bclub.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.bclub;
 }
 
 async function loadEcomRoas(refresh = false) {
@@ -2536,6 +2556,7 @@ $('loadBtn').addEventListener('click', async () => {
     else if (S.view === 'ecommonthly') { S.ecommonError = null; await loadEcomMonthly(true); }
     else if (S.view === 'ecomroas') { S.ecomroasError = null; await loadEcomRoas(true); }
     else if (S.view === 'gads') { S.gadsError = null; await loadGads(true); }
+    else if (S.view === 'bclub') { S.bclubError = null; await loadBclub(true); }
     else if (S.view === 'pages') { S.pageError = null; await loadPage(true); }
     else if (S.view === 'users') { S.users = null; await loadUsers(); }
     else if (S.view === 'topics' && S.topicTerm) { await loadTopic(S.topicTerm); }
@@ -2603,6 +2624,7 @@ function render() {
   else if (S.view === 'ecommonthly') renderEcomMonthly();
   else if (S.view === 'ecomroas') renderEcomRoas();
   else if (S.view === 'gads') renderGads();
+  else if (S.view === 'bclub') renderBclub();
   else if (S.view === 'report') renderReport();
   else if (S.view === 'pages') renderPages();
   else if (S.view === 'users') renderUsers();
@@ -5216,6 +5238,7 @@ function renderUsers() {
   const GROUPS = [
     { name: 'Reporting', ids: ['overview','campaigns','gbp','topics'] },
     { name: 'Meta Ads', ids: ['benchmark','audiences','audit'] },
+    { name: 'Better Club', ids: ['bclub'] },
     { name: 'E-commerce', ids: ['ecom','ecomcentre','ecompackages','ecomchannels','ecomroas','ecommonthly','ecomchurn','ecommigration'] },
   ];
   const grouped = GROUPS.map(g => ({ ...g, items: g.ids.map(id => tabs.find(t => t.id === id)).filter(Boolean) }));
@@ -5622,6 +5645,7 @@ const VIEW_LOADERS = {
   ecommonthly:   { load: () => loadEcomMonthly(),   err: 'ecommonError',   busy: 'ecommonLoading',   what: 'the monthly report' },
   pages:         { load: () => loadPage(),          err: 'pageError',      busy: 'pageLoading',      what: 'page performance' },
   gads:          { load: () => loadGads(),          err: 'gadsError',      busy: 'gadsLoading',      what: 'Google Ads' },
+  bclub:         { load: () => loadBclub(),         err: 'bclubError',     busy: 'bclubLoading',     what: 'the Better Club sheet' },
   ecomroas:      { load: () => loadEcomRoas(),      err: 'ecomroasError',  busy: 'ecomroasLoading',  what: 'marketplace ad performance' },
   users:         { load: () => loadUsers(),         err: 'usersError',     busy: 'usersLoading',     what: 'the access list' },
 };
@@ -5958,6 +5982,169 @@ function renderGads() {
     if (!kids) return;
     row.classList.toggle('open', !kids.classList.toggle('hidden'));
   }));
+}
+
+/**
+ * BETTER CLUB.
+ *
+ * FOUR CARDS, THEN THE QUESTION NOBODY ELSE ANSWERS. The headline figures —
+ * paying members, revenue, new members, revenue from them — are the ones MW's
+ * Looker slides already carry, so they lead, and every one gets a MoM chip
+ * because a single month's count is not a finding.
+ *
+ * The cohort triangle is the reason this tab exists. Acquisition is already
+ * visible in two other places; whether an acquired member comes back is visible
+ * nowhere. Read down a column and you see how each month's intake decayed.
+ *
+ * ARPU_New IS ALWAYS PRINTED BESIDE ITS MEMBER COUNT. It swung from ฿18.2K in
+ * January to ฿45.1K in June while overall ARPU barely moved, and June had 189
+ * new members against 514 in July — a handful of large bills, not a trend. The
+ * count is what stops an executive reading the spike as one.
+ */
+function renderBclub() {
+  const d = S.bclub;
+  if (S.bclubError) { const m = S.bclubError; $('viewRoot').innerHTML = errorState(m); S.bclubError = null; return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('bclub', 'Reads the normalised Better Club sheet — one row per member per month, carrying no names, emails or phone numbers.'); return; }
+  if (!d.available) {
+    $('viewRoot').innerHTML = errorState(`Better Club sheet unavailable — ${esc(d.error || 'unknown error')}${d.fix ? `<br><br>${esc(d.fix)}` : ''}`);
+    return;
+  }
+
+  const s = d.selected, p = d.prev, ms = d.months;
+  const chg = (a, b) => (b > 0 ? (a - b) / b : null);
+  /**
+   * MEMBER COUNTS ARE EXACT, NEVER ABBREVIATED. `num()` folds anything over a
+   * thousand to "2.9K", which is right for impressions and wrong for a
+   * headcount — 2,923 paying members is a figure an executive will quote and
+   * reconcile against the hospital's own export, and "2.9K" cannot be
+   * reconciled against anything. Revenue keeps the abbreviation, where the
+   * magnitude is the point.
+   */
+  const cnt = (v) => (v === null || v === undefined || Number.isNaN(v)) ? '—' : Math.round(v).toLocaleString();
+  const dlt = (v) => v === null || v === undefined
+    ? '<span class="dlt none" data-tip="No earlier month in the sheet to compare against">—</span>'
+    : `<span class="dlt ${v>0.005?'up':(v<-0.005?'down':'flat')}" data-tip="MoM — against ${esc(p ? p.label : 'the previous month')}">${changeText(v, Math.abs(v)>=1?0:1)}</span>`;
+
+  const cohortCell = (r, mk) => {
+    const hit = r.retained.find(x => x.month === mk);
+    if (!hit) return '<td class="num" style="color:var(--faint);">—</td>';
+    // Shading is deliberately absent: MW's standing rule is that shading must
+    // not carry meaning on an executive view. The rate is the figure.
+    return `<td class="num" data-tip="${esc(`${cnt(hit.count)} of ${cnt(r.size)} came back in ${bclubMonthLabel(mk)} · ${num(hit.revenue,{money:true})}`)}">
+      <b>${pct(hit.rate)}</b><span style="color:var(--faint);font-size:10.5px;"> ${cnt(hit.count)}</span></td>`;
+  };
+
+  const co = d.cohorts;
+  const cc = d.concentration;
+
+  $('viewRoot').innerHTML = `
+    <div class="grid g-4" style="margin-bottom:14px;">
+      <div class="stat"><div class="lab">Paying members</div><div class="val">${cnt(s.paidHns)}</div>
+        <div class="sub2">${dlt(p ? chg(s.paidHns, p.paidHns) : null)} · ${esc(s.label)}</div></div>
+      <div class="stat"><div class="lab">Revenue</div><div class="val">${num(s.revenue, {money:true})}</div>
+        <div class="sub2">${dlt(p ? chg(s.revenue, p.revenue) : null)} · ${num(s.arpu, {money:true})} per member</div></div>
+      <div class="stat"><div class="lab">New members</div><div class="val">${cnt(s.newHns)}</div>
+        <div class="sub2">${dlt(p ? chg(s.newHns, p.newHns) : null)} · ${pct(s.newHnShare)} of members</div></div>
+      <div class="stat"><div class="lab">Revenue from new members</div><div class="val">${num(s.newRev, {money:true})}</div>
+        <div class="sub2">${dlt(p ? chg(s.newRev, p.newRev) : null)} · ${pct(s.newRevShare)} of revenue</div></div>
+    </div>
+
+    ${d.pending.length ? `<div class="note" style="margin-bottom:12px;">
+      <b>Not loaded yet:</b> ${d.pending.map(m => esc(bclubMonthLabel(m))).join(', ')}.
+      The figures above describe <b>${esc(s.label)}</b>, the latest month the spreadsheet has.
+      Import the monthly export and run <b>Better Club &gt; Normalize inserted tab</b> to add it.</div>` : ''}
+
+    <div class="grid g-2-1">
+      <div class="card">
+        <div class="card-title">Members and revenue by month</div>
+        <div style="height:260px;"><canvas id="bcTrend"></canvas></div>
+        <div class="note">Every month in the spreadsheet, not just the selected range — a membership
+        programme only reads as a trend. Revenue on the left axis, members on the right.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">New vs returning members</div>
+        <div style="height:260px;"><canvas id="bcSplit"></canvas></div>
+        <div class="note">New members are those whose first ever visit fell in that month.</div>
+      </div>
+    </div>
+
+    ${co ? `<div class="card mt">
+      <div class="card-title">Do new members come back?</div>
+      <table class="roomy"><thead><tr>
+        <th>First paid in</th><th class="num">New members</th>
+        ${co.months.slice(1).map(m => `<th class="num">${esc(bclubMonthLabel(m).replace(/ \\d{4}$/, ''))}</th>`).join('')}
+      </tr></thead><tbody>
+      ${co.rows.map(r => `<tr>
+        <td class="strong">${esc(r.label)}</td>
+        <td class="num strong">${cnt(r.size)}</td>
+        ${co.months.slice(1).map(mk => (mk <= r.cohort ? '<td></td>' : cohortCell(r, mk))).join('')}
+      </tr>`).join('')}
+      </tbody></table>
+      <div class="note">Read a row left to right: of the members who first paid that month, the share who
+      paid again in each later month. Tracked by an irreversible key derived from the HN, so a member is
+      followed across months without this service ever seeing who they are.
+      ${d.detailNote ? `<br>${esc(d.detailNote)}` : ''}</div>
+    </div>` : `<div class="card mt"><div class="card-title">Do new members come back?</div>
+      <div class="state"><div class="big">Cohorts unavailable</div>
+      <div style="max-width:470px;font-size:12.5px;color:var(--muted);">${esc(d.detailNote || 'The per-member tab could not be read.')}</div></div></div>`}
+
+    <div class="card mt">
+      <div class="card-title">Who the revenue actually comes from — ${esc(s.label)}</div>
+      ${cc && cc.top10 ? `<div class="grid g-4" style="margin-bottom:12px;">
+        <div class="stat"><div class="lab">Top 1% of members</div><div class="val">${pct(cc.top1.share)}</div>
+          <div class="sub2">${cnt(cc.top1.members)} members · ${num(cc.top1.revenue, {money:true})}</div></div>
+        <div class="stat"><div class="lab">Top 10% of members</div><div class="val">${pct(cc.top10.share)}</div>
+          <div class="sub2">${cnt(cc.top10.members)} members · ${num(cc.top10.revenue, {money:true})}</div></div>
+        <div class="stat"><div class="lab">Median member</div><div class="val">${num(cc.median, {money:true})}</div>
+          <div class="sub2">against ${num(s.arpu, {money:true})} mean</div></div>
+        <div class="stat"><div class="lab">Paid again from last month</div><div class="val">${pct(cc.repeatFromPrev)}</div>
+          <div class="sub2">${cc.keptCount === undefined ? '—' : `${cnt(cc.keptCount)} of ${cnt(cc.prevBase)}`}</div></div>
+      </div>` : ''}
+      <table class="roomy sortable"><thead><tr>
+        <th>Month</th><th class="num">Members</th><th class="num">Revenue ฿</th>
+        <th class="num">New</th><th class="num">Revenue from new ฿</th>
+        <th class="num">Per member ฿</th><th class="num">Per new member ฿</th><th class="num">Per returning member ฿</th>
+        <th class="num">Back after 2 years</th>
+      </tr></thead><tbody>
+      ${ms.slice().reverse().map(m => `<tr>
+        <td class="strong">${esc(m.label)}${m.month === s.month
+          ? ' <span class="pill" data-tip="The cards at the top of this page describe this month">reported above</span>' : ''}</td>
+        <td class="num">${cnt(m.paidHns)}</td>
+        <td class="num strong">${cnt(m.revenue)}</td>
+        <td class="num">${cnt(m.newHns)}</td>
+        <td class="num">${cnt(m.newRev)}</td>
+        <td class="num">${cnt(m.arpu)}</td>
+        <td class="num">${cnt(m.arpuNew)}<span style="color:var(--faint);font-size:10.5px;"> /${cnt(m.newHns)}</span></td>
+        <td class="num">${cnt(m.arpuOld)}</td>
+        <td class="num">${cnt(m.ret2y)}<span style="color:var(--faint);font-size:10.5px;"> ${num(m.ret2yRev, {money:true})}</span></td>
+      </tr>`).join('')}
+      </tbody></table>
+      <div class="note"><b>Per new member is shown with its member count for a reason.</b> It ran
+      ${num(ms[0].arpuNew, {money:true})} in ${esc(ms[0].label)} and ${num(ms.reduce((a,b)=>(b.arpuNew||0)>(a.arpuNew||0)?b:a).arpuNew, {money:true})}
+      at its peak while the overall figure barely moved — with a few hundred new members a month, a handful of large
+      bills swings that average, so treat a jump as small-sample movement until a second month repeats it.
+      ${d.registerSource === null ? `<br><br><b>Registration-to-paid conversion is not shown.</b> It is the figure worth
+      having — new paying members over Better Club new registrations — but the registration count has no source in this
+      dashboard: it is not a GA4 key event and it is not in this spreadsheet. It will appear here once that feed exists,
+      rather than being typed in by hand.` : ''}</div>
+    </div>`;
+
+  drawChart('bcTrend', ms.map(m => ({ d: m.label.replace(/ \d{4}$/, ''), rev: Math.round(m.revenue), hns: m.paidHns })), [
+    { key: 'rev', label: 'Revenue ฿', color: '#4C6FFF', axis: 'y' },
+    { key: 'hns', label: 'Paying members', color: '#A855F7', axis: 'y1' },
+  ]);
+  drawBars('bcSplit', ms.map(m => m.label.replace(/ \d{4}$/, '')), [
+    { label: 'Returning', data: ms.map(m => m.oldHns), color: '#A855F7' },
+    { label: 'New', data: ms.map(m => m.newHns), color: '#34D399' },
+  ], { horizontal: false });
+}
+
+/** `2026-07` -> `July 2026`, for cells the server did not pre-label. */
+function bclubMonthLabel(key) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(key || ''));
+  if (!m) return String(key || '');
+  return ['January','February','March','April','May','June','July','August',
+          'September','October','November','December'][+m[2] - 1] + ' ' + m[1];
 }
 
 function renderEcomRoas() {
@@ -8198,7 +8385,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.185.0';
+const CLIENT_BUILD = '3.186.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

@@ -734,6 +734,64 @@ global.fetch = async (url, opts = {}) => {
      * that must not be averaged in.
      */
     /**
+     * BETTER CLUB: the two normalised tabs, `Summary` and `Rev_Attribution`.
+     *
+     * FIVE TRAPS, each from something this pipeline actually did:
+     *   - `MonthYear` is TEXT (`2026-06`), which is the whole point of the
+     *     format. One row is deliberately a DATE object, as the first version of
+     *     the Apps Script wrote it, and must still resolve to the right month
+     *     rather than dropping out or landing a month early.
+     *   - `Summary` carries ready-made ARPU and share columns that are NOT read:
+     *     every rate is recomputed from the counts, so a stale row cannot print
+     *     a percentage that disagrees with the figures beside it.
+     *   - A blank `HN_ID` (a pre-scrubbed import) must count toward revenue but
+     *     be excluded from cohorts, not treated as one member who never returns.
+     *   - The same HN_ID appears in June and July, so cohort retention has
+     *     something real to find: of June's 2 new members, 1 comes back.
+     *   - A trailing blank row and a stray note row must both drop out.
+     *
+     * The report window is 2026-07-01..2026-07-31, so `selected` must be
+     * 2026-07 with 2026-06 as `prev`, and `pending` must be empty.
+     */
+    if (u.includes(encodeURIComponent("Summary")) && u.includes(encodeURIComponent("Rev_Attribution"))) {
+      const summary = [
+        ["MonthYear","Month","PaidHNs","Revenue","NewPaidHNs","RevFromNewPaidHNs","OldPaidHNs",
+         "RevFromOldPaidHNs","Returned2Y","RevFromReturned2Y","ARPU","ARPU_New","ARPU_Old",
+         "NewHNShare","NewRevShare","UpdatedAt"],
+        // A Date, as the first version of the normaliser wrote it.
+        [new Date(Date.UTC(2026, 4, 1)), "May 2026", 4, 40000, 1, 5000, 3, 35000, 1, 3000,
+         99999, 99999, 99999, 9.99, 9.99, "2026-09-02"],
+        ["2026-06","June 2026", 5, 50000, 2, 12000, 3, 38000, 1, 4000,
+         99999, 99999, 99999, 9.99, 9.99, "2026-09-02"],
+        ["2026-07","July 2026", 6, 66000, 2, 16000, 4, 50000, 2, 9000,
+         99999, 99999, 99999, 9.99, 9.99, "2026-09-02"],
+        ["", "note: rebuilt by hand", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+        [],
+      ];
+      const detail = [
+        ["MonthYear","HN_ID","Revenue","Segment","Returned2Y"],
+        ["2026-05","aaa1", 10000, "Old", ""],
+        ["2026-05","aaa2",  5000, "New", ""],
+        ["2026-05","aaa3", 20000, "Old", "Y"],
+        ["2026-05","",      5000, "Old", ""],          // pre-scrubbed: revenue only
+        ["2026-06","bbb1",  8000, "New", ""],
+        ["2026-06","bbb2",  4000, "New", ""],
+        ["2026-06","aaa1", 30000, "Old", ""],
+        ["2026-06","aaa3",  4000, "Old", "Y"],
+        ["2026-06","aaa2",  4000, "Old", ""],
+        ["2026-07","bbb1",  6000, "Old", ""],          // June cohort returns
+        ["2026-07","ccc1", 10000, "New", "Y"],
+        ["2026-07","ccc2",  6000, "New", ""],
+        ["2026-07","aaa1", 40000, "Old", ""],
+        ["2026-07","aaa3",  3000, "Old", "Y"],
+        ["2026-07","aaa2",  1000, "Old", ""],
+        [],
+      ];
+      return jsonRes({ spreadsheetId: "mock-bclub",
+        valueRanges: [{ values: summary }, { values: detail }] });
+    }
+
+    /**
      * YouTube: the two-tab sheet MW maintains — Studio's DATE view in `Daily`
      * and its CONTENT view in `Videos`. Headers and column order are copied from
      * the real file; the values are small and distinctive so the three windows

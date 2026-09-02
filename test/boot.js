@@ -405,6 +405,71 @@ function reportFixture() {
     unit: "sessions",
   };
 }
+/**
+ * A COMPLETE `/api/better-club` PAYLOAD.
+ *
+ * Added with the tab itself: `renderBclub` would otherwise never be EXECUTED by
+ * the suite, and the report fixture below exists precisely because parsing a
+ * template is not running it. Five client-render bugs shipped before that rule
+ * was enforced.
+ *
+ * Deliberately awkward in the ways the real payload is:
+ *   - `pending` is NON-EMPTY, so the "not loaded yet" note is exercised. A range
+ *     ending in a month the hospital has not sent yet is the normal state for
+ *     the first three weeks of every month, not an edge case.
+ *   - `arpuNew` swings 18,154 -> 45,070 across the series while `arpu` barely
+ *     moves, which is the real January-to-June pattern the member-count caveat
+ *     exists to explain.
+ *   - `ret2y` is ZERO in one month, so an absent count must be distinguishable
+ *     from a missing one.
+ *   - One cohort row has a 0% return rate and one has none of a given month, so
+ *     both the "nobody came back" and the "no cell here" branches render.
+ *   - `detailNote` is present, as it is whenever any month predates HN capture.
+ */
+function bclubFixture() {
+  const M = (month, label, paidHns, revenue, newHns, newRev, ret2y, ret2yRev) => {
+    const oldHns = paidHns - newHns, oldRev = revenue - newRev;
+    return { month, label, paidHns, revenue, newHns, newRev, oldHns, oldRev, ret2y, ret2yRev,
+      arpu: revenue / paidHns, arpuNew: newHns ? newRev / newHns : null,
+      arpuOld: oldHns ? oldRev / oldHns : null,
+      newHnShare: newHns / paidHns, newRevShare: newRev / revenue };
+  };
+  const months = [
+    M("2026-01", "January 2026", 2202, 63217598, 258, 4683765, 83, 1660075),
+    M("2026-02", "February 2026", 1883, 59472636, 250, 8785735, 0, 0),
+    M("2026-03", "March 2026", 2299, 66832248, 64, 1570829, 19, 363514),
+    M("2026-06", "June 2026", 2647, 94477862, 189, 8518173, 33, 3339101),
+    M("2026-07", "July 2026", 2923, 102542865, 514, 14701172, 48, 1210221),
+  ];
+  const keys = months.map((m) => m.month);
+  return {
+    cached: false, cacheAgeSec: 0, available: true,
+    sheetId: "boot-fixture", range: { from: "2026-07-01", to: "2026-08-31" },
+    months, selected: months[4], prev: months[3],
+    pending: ["2026-08"],
+    cohorts: {
+      months: keys, labels: months.map((m) => m.label),
+      rows: [
+        { cohort: "2026-01", label: "January 2026", size: 258, retained: [
+          { month: "2026-02", count: 61, revenue: 1900000, rate: 61 / 258 },
+          { month: "2026-03", count: 0,  revenue: 0,       rate: 0 },
+          { month: "2026-06", count: 40, revenue: 1200000, rate: 40 / 258 },
+          { month: "2026-07", count: 38, revenue: 1150000, rate: 38 / 258 }] },
+        { cohort: "2026-06", label: "June 2026", size: 189, retained: [
+          { month: "2026-07", count: 52, revenue: 2100000, rate: 52 / 189 }] },
+      ],
+    },
+    concentration: {
+      month: "2026-07", members: 2923, revenue: 102542865,
+      top1: { members: 29, revenue: 18000000, share: 18000000 / 102542865 },
+      top10: { members: 292, revenue: 51000000, share: 51000000 / 102542865 },
+      median: 12400, repeatFromPrev: 1802 / 2647, keptCount: 1802, prevBase: 2647,
+    },
+    detailNote: "1,204 member-months carry no HN_ID (imported before HN was retained).",
+    registerSource: null,
+  };
+}
+
 const ok = (n, d) => console.log(`  ok   ${n.padEnd(30)} ${d || ""}`);
 const fail = (n, d) => { failures++; console.log(`  FAIL ${n.padEnd(30)} ${d}`); };
 
@@ -438,11 +503,13 @@ const dom = new JSDOM(html, {
      */
     const REPORT = reportFixture();
     const OVERVIEW = overviewFixture();
+    const BCLUB = bclubFixture();
     w.fetch = (url) => {
       const u = String(url || "");
       const body = u.includes("/api/report") ? REPORT
-        : u.includes("/api/overview") ? OVERVIEW : {
-        tabs: ["overview", "report"], allTabs: [], admins: [], defaultTabs: [],
+        : u.includes("/api/overview") ? OVERVIEW
+        : u.includes("/api/better-club") ? BCLUB : {
+        tabs: ["overview", "report", "bclub"], allTabs: [], admins: [], defaultTabs: [],
         version: "test", isAdmin: false, users: [],
       };
       return Promise.resolve({
@@ -1157,7 +1224,72 @@ setTimeout(() => {
           ? fail("youtube", "the removed apiError card is rendering again")
           : ok("youtube", "2 slides, MoM+YoY opposite signs, day-gap warned, absent metric named");
       })();
-      finish();
+
+      /**
+       * BETTER CLUB RENDERS FOR REAL.
+       *
+       * Deferred behind the report assertions for the same reason the report is
+       * deferred behind Overview: clicking replaces `#viewRoot` in a microtask,
+       * so an unsequenced check reads the wrong tab's markup and blames this one.
+       */
+      const bc = d.querySelector('.nav-item[data-view="bclub"]');
+      if (!bc) { fail("better club nav", "no item between Google Ads and E-commerce"); return finish(); }
+      errors.length = 0;
+      bc.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      /**
+       * The tab opens on a Load prompt rather than fetching on arrival, the same
+       * as Google Ads and E-commerce — the sheet read is not free and the tab is
+       * not the landing page. So the button has to be CLICKED here; asserting
+       * straight after the nav click would read the prompt and pass on markup
+       * that never touched the payload.
+       */
+      setTimeout(() => {
+        const btn = d.querySelector('[data-load="bclub"]');
+        if (!btn) { fail("better club", "no Load button on the prompt"); return finish(); }
+        btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+        setTimeout(() => {
+        const r = d.getElementById("viewRoot");
+        const h = r ? r.innerHTML : "";
+        const body = h.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+        if (errors.length) return fail("better club", errors.slice(0, 2).join(" | ")), finish();
+        /**
+         * Only the ERROR state disqualifies. "Chart unavailable" is the chart
+         * helper's own fallback and is UNAVOIDABLE here — Chart.js is a CDN
+         * script JSDOM does not load — so a blanket /unavailable/ match fails
+         * every run regardless of the tab being correct.
+         */
+        if (/Something went wrong|sheet unavailable/i.test(body)) {
+          return fail("better club", body.slice(0, 140)), finish();
+        }
+        /**
+         * THE DATA REACHED THE MARKUP. A rendered-but-empty section passes a
+         * length check, so these name figures that only appear if the payload
+         * was actually read.
+         */
+        if (!/2,923/.test(body)) return fail("better club", "the paying-member count did not render"), finish();
+        if (!/102\.54M/.test(body)) return fail("better club", "revenue did not render in millions"), finish();
+        // MoM chips must resolve to a direction, not to the null dash.
+        if (!/\bup\b/.test(h)) return fail("better club", "no MoM direction rendered"), finish();
+        // The cohort table is the reason the tab exists; four cohort months and
+        // two rows must survive the triangle's own-month exclusion.
+        const rows = r ? r.querySelectorAll("table tbody tr").length : 0;
+        if (rows < 7) return fail("better club", `only ${rows} table rows`), finish();
+        // A month in range that the sheet does not have must be NAMED, not
+        // silently shown as zeros beside a full chart.
+        if (!/August 2026/.test(body)) return fail("better club", "a pending month was not named"), finish();
+        // Registration conversion has no source and must stay absent.
+        if (!/not shown/i.test(body)) return fail("better club", "the missing-register note is gone");
+        if (/\b18\.2%\s*conversion|registrations?\s*:\s*[\d,]/i.test(body)) {
+          return fail("better club", "a register-to-paid figure was rendered without a source"), finish();
+        }
+        // Shading must not carry meaning: the reported month is marked by a pill.
+        if (!/reported above/.test(body)) return fail("better club", "the reported-month pill is gone"), finish();
+        // The small-sample caveat must travel with ARPU_New.
+        if (!/small-sample/i.test(body)) return fail("better club", "the ARPU_New caveat is gone"), finish();
+        ok("better club", `${rows} rows, cohorts + concentration, pending month named`);
+        finish();
+        }, 300);
+      }, 60);
     }, 500);
   }
   }, 1);

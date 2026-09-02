@@ -77,6 +77,7 @@ check "ecom churn"   GET "/api/ecommerce/churn?from=$FROM&to=$TO"
 check "ecom monthly" GET "/api/ecommerce/monthly?to=$TO"
 check "ecom roas"    GET "/api/ecommerce/roas?from=$FROM&to=$TO"
 check "report"       GET "/api/report?from=$FROM&to=$TO"
+check "better club"  GET "/api/better-club?from=$FROM&to=$TO"
 
 # Monthly Reports had NO smoke coverage until v3.100.0 — the GCS stub answered
 # every read with the access list, so /api/report returned the users array with
@@ -302,6 +303,42 @@ expect_field "gads uncoded ok"  "$GADS" "d.campaigns.some(c=>c.code===null)?'ok'
 expect_field "gads adgroups"    "$GADS" "d.campaigns.every(c=>Array.isArray(c.groups))?'ok':undefined"
 expect_field "gads group sum"   "$GADS" "d.campaigns.every(c=>!c.groups.length||Math.abs(c.groups.reduce((a,g)=>a+g.spend,0)-c.spend)<1)?'ok':undefined"
 # Google Ads must reach the Campaign tab through the shared platform registry.
+# ---- Better Club -----------------------------------------------------------
+BCLUB="/api/better-club?from=$FROM&to=$TO"
+expect_field "bclub available"   "$BCLUB" "d.available?'ok':undefined"
+# THE MONTH THE CARDS DESCRIBE. A July range must land on July, not on the last
+# row of the sheet and not a month early — the first build wrote MonthYear as a
+# Date and shifted every month back by one, displaying January as December 2025.
+expect_field "bclub selected"    "$BCLUB" "d.selected.month==='2026-07'?'ok':undefined"
+expect_field "bclub prev"        "$BCLUB" "d.prev.month==='2026-06'?'ok':undefined"
+expect_field "bclub no pending"  "$BCLUB" "d.pending.length===0?'ok':undefined"
+# A Date in MonthYear must still resolve to its own month rather than dropping
+# out or landing in April, so all three fixture months must be present.
+expect_field "bclub date row"    "$BCLUB" "d.months.map(m=>m.month).join(',')==='2026-05,2026-06,2026-07'?'ok':undefined"
+# The note row and the trailing blank row must not become months.
+expect_field "bclub drops notes" "$BCLUB" "d.months.length===3?'ok':undefined"
+# RATES ARE RECOMPUTED, NEVER READ. The fixture's ARPU columns all say 99999 and
+# its share columns all say 9.99; if either reaches the payload the sheet's stale
+# values are being trusted over the counts printed beside them.
+expect_field "bclub arpu derived" "$BCLUB" "Math.abs(d.selected.arpu-11000)<1?'ok':undefined"
+expect_field "bclub share derived" "$BCLUB" "Math.abs(d.selected.newHnShare-(2/6))<0.001?'ok':undefined"
+# Old counts fall out of the sheet, but must reconcile against new + old = paid.
+expect_field "bclub splits sum"  "$BCLUB" "d.months.every(m=>m.newHns+m.oldHns===m.paidHns)?'ok':undefined"
+expect_field "bclub rev splits"  "$BCLUB" "d.months.every(m=>Math.abs(m.newRev+m.oldRev-m.revenue)<1)?'ok':undefined"
+# COHORTS. Of June's two new members (bbb1, bbb2) exactly one pays again in
+# July, so the June row must report 2 and a 50% July rate. A blank HN_ID row
+# must not become a cohort member.
+expect_field "bclub cohort size" "$BCLUB" "d.cohorts.rows.find(r=>r.cohort==='2026-06').size===2?'ok':undefined"
+expect_field "bclub cohort rate" "$BCLUB" "Math.abs(d.cohorts.rows.find(r=>r.cohort==='2026-06').retained.find(x=>x.month==='2026-07').rate-0.5)<0.001?'ok':undefined"
+# A cohort is never reported against its own month or an earlier one.
+expect_field "bclub cohort fwd"  "$BCLUB" "d.cohorts.rows.every(r=>r.retained.every(x=>x.month>r.cohort))?'ok':undefined"
+# CONCENTRATION is computed over the selected month only, including the blank-id
+# rows, so member count must match that month's paid total.
+expect_field "bclub conc month"  "$BCLUB" "d.concentration.month==='2026-07'?'ok':undefined"
+expect_field "bclub conc share"  "$BCLUB" "d.concentration.top10.share>0&&d.concentration.top10.share<=1?'ok':undefined"
+# Registration-to-paid has no source, and must stay absent rather than be faked.
+expect_field "bclub no register" "$BCLUB" "d.registerSource===null?'ok':undefined"
+
 ECOM="/api/ecommerce?from=$FROM&to=$TO"
 # PACKAGES ARE GROUPED BY NAME, NOT BY SKU (MW). The master re-codes a package
 # every promo cycle (0101-2604, 0101-2608), so grouping by SKU would split one
