@@ -1339,9 +1339,21 @@ setTimeout(() => {
         // two rows must survive the triangle's own-month exclusion.
         const rows = r ? r.querySelectorAll("table tbody tr").length : 0;
         if (rows < 7) return fail("better club", `only ${rows} table rows`), finish();
-        // A month in range that the sheet does not have must be NAMED, not
-        // silently shown as zeros beside a full chart.
-        if (!/August 2026/.test(body)) return fail("better club", "a pending month was not named"), finish();
+        /**
+         * A month in range the sheet does not have must still be NAMED — but on
+         * SCREEN only. It is an instruction to whoever maintains the
+         * spreadsheet, and MW had it removed from the printed deck where an
+         * executive can do nothing with it.
+         */
+        const pend = r ? r.querySelector('.note.bc-note-screen') : null;
+        if (!pend || pend.textContent.indexOf('August 2026') === -1) {
+          return fail("better club", "a pending month was not named on screen"), finish();
+        }
+        // The MoM chip replaced the paragraph that explained the chips.
+        if (!/>MoM</.test(h)) return fail("better club", "the MoM chip is missing"), finish();
+        if (/percentages are month on month/.test(body)) {
+          return fail("better club", "the MoM prose note is back"), finish();
+        }
         /**
          * With a register source connected the conversion must be COMPUTED and
          * shown; with none it must stay absent. The fixture supplies a source,
@@ -1461,7 +1473,8 @@ setTimeout(() => {
          */
         const wantOrder = ['Google impressions', 'Total users', 'Better Club new registers',
                            'New paid members',
-                           'Members', 'Have become patients', 'Half visit within', 'Joined in'];
+                           'Total', 'Have become patients', 'Median time to first visit',
+                           'New Registers'];
         if (labs.length !== 8) {
           return fail("better club", `${labs.length} score cards on page one, expected 8`), finish();
         }
@@ -1471,13 +1484,7 @@ setTimeout(() => {
               `score card ${k + 1} is "${labs[k]}", expected "${wantOrder[k]}"`), finish();
           }
         }
-        /**
-         * A PDF HAS NO TOOLTIP, so page two has to say in words that the chips
-         * are month-on-month figures and which month they compare against.
-         */
-        if (!/month on month/.test(body) || !/against June 2026/.test(body)) {
-          return fail("better club", "page two does not explain the MoM chips"), finish();
-        }
+
         /**
          * THE REGISTERS STAGE COMES FROM THE ROSTER, which is the whole point of
          * the User ID work — the stage was empty because nothing here knew when
@@ -1491,7 +1498,7 @@ setTimeout(() => {
          * block with in the first section"), so they must appear before the
          * cohort table rather than on a slide of their own.
          */
-        const iCards = h.indexOf('Half visit within');
+        const iCards = h.indexOf('Median time to first visit');
         const iJoined = h.indexOf('who joined each month');
         if (iCards < 0 || !(iCards < iJoined)) {
           return fail("better club", "the roster cards are not on the funnel slide"), finish();

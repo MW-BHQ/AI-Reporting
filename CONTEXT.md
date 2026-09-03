@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.194.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.195.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -718,6 +718,49 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.195.0 — header un-clipped, sparklines actually visible, MoM as a chip.**
+
+MW: "the header is clipped / roll back heading to the way is was / you just keep
+this mute [funnel line] / sparkline didnt come / MEMBERS 51,166 all current to
+be Total 51,166 Members / remove ', ever' / it still dont get Half visit within
+/ Joined in July > New Registers / remove [both page-two notes] / just put small
+chip of (MoM)."
+
+**THE QUIET TITLE STYLE WAS APPLIED TOO WIDELY AND THEN SQUEEZED TOO FAR.** A
+deck-style title carries a scope pill and a 150px wordmark; 1.5rem cannot hold
+either, so the header clipped. Only the FUNNEL line is quiet now — one line of
+plain text, no pill, which does fit a short box — and the two deck titles are
+back to uppercase violet at 2.4rem.
+
+**0.30in SPARKLINES WERE INVISIBLE.** A 29px box minus the card's own padding
+leaves almost no plot area, so "sparkline didnt come" was accurate: they were
+rendering and there was nothing to see. 0.55in reads as a shape and costs 24px
+of the page, which the chart could afford at 51%.
+
+**A CHIP, NOT A PARAGRAPH.** The prose under page two's cards is replaced by a
+small `MoM` pill beside each figure. The pill is already how scope is shown on
+page one, so the deck had an existing way to label a number and this uses it
+rather than inventing an explanation.
+
+**THE "NOT LOADED YET" NOTE MOVED OFF THE PAGE, NOT OUT OF THE PRODUCT.**
+"August is not loaded, run Normalize inserted tab" is an instruction for whoever
+maintains the spreadsheet; an executive reading the PDF can do nothing with it.
+It is screen-only via `.bc-note-screen`, and `boot.js` now asserts it appears on
+screen rather than anywhere.
+
+Card wording: `Total / 51,166 / Members`; `, ever` dropped; `Half visit within ·
+1 month · of joining · average 4.8, long tail` became `Median time to first
+visit · 1 month · after joining`, with the mean left to the tooltip because it
+was the thing causing the confusion; `Joined in July` is `New Registers`.
+
+**FOUR ASSERTIONS HAD TO BE UPDATED OR DELETED, and all four were correct for
+the design they were written against** — the card-order labels, the
+renamed-card lookup, the pending-month check and the MoM-prose check. Tests that
+pin copy will churn with copy; that is the cost of pinning it, and the
+alternative is a deck that silently loses its labels.
+
+275 assertions; page one 700px of 718px with the chart at 51%, 0 clipping.
 
 **v3.194.0 — grouped score-card rows with sparklines; short money; THB not ฿.**
 

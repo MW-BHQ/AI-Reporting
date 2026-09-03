@@ -1636,6 +1636,14 @@
    * up the full-page height that `.slide` takes in print, or each would still
    * claim a sheet of its own.
    */
+  /**
+   * OPERATIONAL NOTES BELONG ON SCREEN, NOT IN THE DECK. "August is not loaded
+   * yet, run Normalize inserted tab" is for whoever maintains the sheet; an
+   * executive reading the PDF can do nothing with it. MW asked for it off page
+   * two, so it goes off the PAGE rather than out of the product.
+   */
+  @media print{ .bc-note-screen{display:none!important;} }
+
   .slide-title.quiet {
     text-transform:none; font-weight:500; letter-spacing:.01em;
     color:var(--muted); min-height:2.6rem;
@@ -1713,9 +1721,8 @@
     .bc-pg1a .card{padding:8px 10px!important;}
     .bc-pg1b .card{padding:10px 12px!important;}
     .bc-pg1b .stat{padding:8px 10px!important;}
-    .bc-pg1a .slide-title, .bc-pg1b .slide-title{
-      min-height:1.5rem!important;margin-bottom:6px!important;
-    }
+    .bc-pg1a .slide-title{min-height:2.4rem!important;margin-bottom:4px!important;}
+    .bc-pg1b .slide-title.quiet{min-height:1.4rem!important;margin-bottom:4px!important;}
     /* The explanatory notes are for the screen. On a two-page export they are
        the difference between two pages and three. */
     /* Page one's notes are screen furniture. Page TWO keeps its note: it is
@@ -1730,8 +1737,10 @@
      * the funnel trend is worth having.
      */
     /* Sparklines are back, at TREND size — tall enough to read a shape, not to
-       read a value. That is all they are for here. */
-    .bc-stage{height:0.30in!important;max-height:none!important;}
+       read a value. 0.30in was too small to see at all — MW: "sparkline didnt
+       come" — because a 29px box minus the card's own padding leaves almost no
+       plot. 0.55in reads as a shape and costs 24px of the page. */
+    .bc-stage{height:0.55in!important;max-height:none!important;}
   }
   @media screen{
     body.print-prep .bc-hero{height:3.6in!important;max-height:none!important;}
@@ -1742,10 +1751,10 @@
     body.print-prep .bc-pg1a .card{padding:8px 10px!important;}
     body.print-prep .bc-pg1b .card{padding:10px 12px!important;}
     body.print-prep .bc-pg1b .stat{padding:8px 10px!important;}
-    body.print-prep .bc-pg1a .slide-title,
-    body.print-prep .bc-pg1b .slide-title{min-height:1.5rem!important;margin-bottom:6px!important;}
+    body.print-prep .bc-pg1a .slide-title{min-height:2.4rem!important;margin-bottom:4px!important;}
+    body.print-prep .bc-pg1b .slide-title.quiet{min-height:1.4rem!important;margin-bottom:4px!important;}
     body.print-prep .bc-pg1a .note, body.print-prep .bc-pg1b .note{display:none!important;}
-    body.print-prep .bc-stage{height:0.30in!important;max-height:none!important;}
+    body.print-prep .bc-stage{height:0.55in!important;max-height:none!important;}
   }
   @media(max-width:1080px){.g-6,.g-5,.g-4{grid-template-columns:repeat(2,1fr);}.g-2-1,.g-3,.g-2{grid-template-columns:1fr;}}
   @media(max-width:760px){
@@ -6198,9 +6207,17 @@ function renderBclub() {
    */
   const thb = (v) => (v === null || v === undefined) ? '—'
     : String(num(v, { money: true })).replace(/^฿/, '');
+  /**
+   * THE CHIP CARRIES THE WORD "MoM", because a PDF has no tooltip.
+   *
+   * The first attempt explained it in a paragraph under the cards; MW wanted it
+   * on the figure itself, which is also how scope is shown on page one — so the
+   * deck already had a way to label a number and this now uses it.
+   */
   const dlt = (v) => v === null || v === undefined
     ? '<span class="dlt none" data-tip="No earlier month in the sheet to compare against">—</span>'
-    : `<span class="dlt ${v>0.005?'up':(v<-0.005?'down':'flat')}" data-tip="MoM — against ${esc(p ? p.label : 'the previous month')}">${changeText(v, Math.abs(v)>=1?0:1)}</span>`;
+    : `<span class="dlt ${v>0.005?'up':(v<-0.005?'down':'flat')}" data-tip="Month on month — against ${esc(p ? p.label : 'the previous month')}">${changeText(v, Math.abs(v)>=1?0:1)}</span>`
+      + ` <span class="pill" data-tip="Month on month${p ? ` — against ${esc(p.label)}` : ''}">MoM</span>`;
 
   const cohortCell = (r, mk) => {
     const hit = r.retained.find(x => x.month === mk);
@@ -6315,19 +6332,17 @@ function renderBclub() {
           '#34A853', null, 'newPaidHns')}
       </div>
       ${mst ? `<div class="grid g-4 mt">
-        ${scoreCard('Members', cnt(mst.live),
-          mst.tombstoned ? `${cnt(mst.tombstoned)} no longer on the roster` : 'all current')}
+        ${scoreCard('Total', cnt(mst.live), 'Members')}
         ${scoreCard('Have become patients', cnt(mst.everPaid),
-          `${pct(mst.everPaidShare)} of all members, ever`)}
-        ${scoreCard('Half visit within',
+          `${pct(mst.everPaidShare)} of all members`)}
+        ${scoreCard('Median time to first visit',
           mst.medianMonthsToFirst === null ? '—'
-            : mst.medianMonthsToFirst === 0 ? 'the same month'
+            : mst.medianMonthsToFirst === 0 ? 'same month'
             : `${cnt(mst.medianMonthsToFirst)} month${mst.medianMonthsToFirst === 1 ? '' : 's'}`,
-          `${mst.medianMonthsToFirst === 0 ? 'they join' : 'of joining'}${
-            mst.meanMonthsToFirst === null ? '' : ` · average ${mst.meanMonthsToFirst.toFixed(1)}, long tail`}`)}
-        ${scoreCard(`Joined in ${esc(s.label.replace(/ \d{4}$/, ''))}`,
-          thisMonth ? cnt(thisMonth.joined) : '—',
-          thisMonth ? `${cnt(thisMonth.converted)} have become patients` : 'not in the roster yet')}
+          'after joining')}
+        ${scoreCard('New Registers', thisMonth ? cnt(thisMonth.joined) : '—',
+          thisMonth ? `${esc(s.label.replace(/ \d{4}$/, ''))} · ${cnt(thisMonth.converted)} became patients`
+                    : 'not in the roster yet')}
       </div>` : ''}
       ${(fsc.impressions === null || fsc.users === null || !d.registerSource) ? `<div class="note">
         ${!d.registerSource ? `<b>New registers has no source.</b> ${esc(d.registerNote || '')}` : ''}
@@ -6338,7 +6353,7 @@ function renderBclub() {
   const monthBody = `
     <div class="grid g-4">
       <div class="stat"><div class="lab">Paying members</div><div class="val">${cnt(s.paidHns)}</div>
-        <div class="sub2">${dlt(p ? chg(s.paidHns, p.paidHns) : null)} · ${esc(s.label)}</div></div>
+        <div class="sub2">${dlt(p ? chg(s.paidHns, p.paidHns) : null)}</div></div>
       <div class="stat"><div class="lab">Revenue (THB)</div><div class="val">${thb(s.revenue)}</div>
         <div class="sub2">${dlt(p ? chg(s.revenue, p.revenue) : null)} · ${thb(s.arpu)} per member</div></div>
       <div class="stat"><div class="lab">New members</div><div class="val">${cnt(s.newHns)}</div>
@@ -6346,13 +6361,10 @@ function renderBclub() {
       <div class="stat"><div class="lab">Revenue from new members (THB)</div><div class="val">${thb(s.newRev)}</div>
         <div class="sub2">${dlt(p ? chg(s.newRev, p.newRev) : null)} · ${pct(s.newRevShare)} of revenue</div></div>
     </div>
-    <div class="note">
-      <b>The green and red percentages are month on month${p ? `, against ${esc(p.label)}` : ''}.</b>
-      ${p ? `Everything else describes ${esc(s.label)} on its own.` : ''}</div>
-    ${d.pending.length ? `<div class="note">
+    ${d.pending.length ? `<div class="note bc-note-screen">
       <b>Not loaded yet:</b> ${d.pending.map(m => esc(bclubMonthLabel(m))).join(', ')}.
-      The figures above describe <b>${esc(s.label)}</b>, the latest month the spreadsheet has.
-      Import the monthly export and run <b>Better Club &gt; Normalize inserted tab</b> to add it.</div>` : ''}
+      The figures above describe <b>${esc(s.label)}</b>, the latest month the spreadsheet has.</div>` : ''}
+
     <div class="grid g-2-1 mt">
       <div class="card">
         <div class="card-title">Members and revenue by month</div>
@@ -6466,11 +6478,11 @@ function renderBclub() {
 
   $('viewRoot').innerHTML = `
     ${slideShell('Revenue attribution', combos,
-      { first: true, scope: 'Better Club', cls: 'quiet bc-pg1a' })}
+      { first: true, scope: 'Better Club', cls: 'bc-pg1a' })}
     ${slideShell('Google impressions \u203a web traffic \u203a Better Club registers \u203a new paid members',
       funnelBody, { cls: 'quiet bc-pg1b' })}
     ${slideShell(`Better Club \u00b7 ${s.label}`, monthBody,
-      { scope: 'Better Club', cls: 'quiet bc-pg2' })}
+      { scope: 'Better Club', cls: 'bc-pg2' })}
     ${slideShell('Who the revenue comes from', concBody,
       { scope: 'Better Club', flow: true, cls: 'quiet bc-screen-only' })}
     ${memberBody ? slideShell('Who joins, and how long until they visit', memberBody,
@@ -9048,7 +9060,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.194.0';
+const CLIENT_BUILD = '3.195.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
