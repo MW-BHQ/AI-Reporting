@@ -1701,7 +1701,7 @@
      * 696px of a 718px sheet with the chart at 59% of the available height,
      * which is the "bigger than half" MW asked for, with slack left over.
      */
-    .bc-hero{height:4.0in!important;max-height:none!important;}
+    .bc-hero{height:3.6in!important;max-height:none!important;}
     .bc-mid{height:3.6in!important;max-height:none!important;}
     /**
      * EVERY PIXEL BELOW WAS NEEDED. With the deck's default padding the chart
@@ -1729,10 +1729,12 @@
      * chart clears 55%. They stay on SCREEN, where there is no page to fit and
      * the funnel trend is worth having.
      */
-    .bc-pg1b .bc-stage{display:none!important;}
+    /* Sparklines are back, at TREND size — tall enough to read a shape, not to
+       read a value. That is all they are for here. */
+    .bc-stage{height:0.30in!important;max-height:none!important;}
   }
   @media screen{
-    body.print-prep .bc-hero{height:4.0in!important;max-height:none!important;}
+    body.print-prep .bc-hero{height:3.6in!important;max-height:none!important;}
     body.print-prep .bc-mid{height:3.6in!important;max-height:none!important;}
     body.print-prep .slide.bc-pg1a, body.print-prep .slide.bc-pg1b{
       padding-top:0!important;padding-bottom:0!important;
@@ -1743,7 +1745,7 @@
     body.print-prep .bc-pg1a .slide-title,
     body.print-prep .bc-pg1b .slide-title{min-height:1.5rem!important;margin-bottom:6px!important;}
     body.print-prep .bc-pg1a .note, body.print-prep .bc-pg1b .note{display:none!important;}
-    body.print-prep .bc-pg1b .bc-stage{display:none!important;}
+    body.print-prep .bc-stage{height:0.30in!important;max-height:none!important;}
   }
   @media(max-width:1080px){.g-6,.g-5,.g-4{grid-template-columns:repeat(2,1fr);}.g-2-1,.g-3,.g-2{grid-template-columns:1fr;}}
   @media(max-width:760px){
@@ -6187,6 +6189,15 @@ function renderBclub() {
    * magnitude is the point.
    */
   const cnt = (v) => (v === null || v === undefined || Number.isNaN(v)) ? '—' : Math.round(v).toLocaleString();
+  /**
+   * MONEY CARRIES ITS UNIT IN THE LABEL, NOT AS A GLYPH (MW: "always use
+   * Revenue (THB) not ฿, it's really hard to read"). The baht sign sits low and
+   * narrow, and at card-value weight it reads as part of the first digit —
+   * `฿102.54M` looks like a number with a smudge. So the value is bare and the
+   * label says THB.
+   */
+  const thb = (v) => (v === null || v === undefined) ? '—'
+    : String(num(v, { money: true })).replace(/^฿/, '');
   const dlt = (v) => v === null || v === undefined
     ? '<span class="dlt none" data-tip="No earlier month in the sheet to compare against">—</span>'
     : `<span class="dlt ${v>0.005?'up':(v<-0.005?'down':'flat')}" data-tip="MoM — against ${esc(p ? p.label : 'the previous month')}">${changeText(v, Math.abs(v)>=1?0:1)}</span>`;
@@ -6255,7 +6266,8 @@ function renderBclub() {
     <div class="card">
       <div class="chart-wrap bc-hero"><canvas id="bcCombo"></canvas></div>
       <div class="note">Bars are members on the right axis, lines are baht on the left — paying members and
-      the revenue attributed to them, with the new-member subset of each. Every month the spreadsheet holds.</div>
+      the revenue attributed to them, with the new-member subset of each. All figures in THB. Every month
+      the spreadsheet holds.</div>
     </div>`;
 
   const scoreCard = (title, value, sub, colour, scopeNote, key) => `
@@ -6270,6 +6282,18 @@ function renderBclub() {
   const stageVal = (key) => (last && last[key] !== null && last[key] !== undefined)
     ? cnt(last[key]) : '—';
 
+  /**
+   * BACK TO TWO GROUPED ROWS — the four funnel stages, then the four roster
+   * cards (MW: "use the original layout (SS2), you just show sparkline for
+   * trend").
+   *
+   * WHY THE GROUPING IS WHAT MAKES THE SPARKLINES AFFORDABLE. A grid row
+   * stretches to its tallest cell, so in the mixed 4x2 order — impressions,
+   * users, members, patients / registers, paid, visit-within, joined — the four
+   * cards that HAVE a trend sat in both rows, and adding a sparkline grew both.
+   * Grouped, only the funnel row grows, which is half the cost for the same
+   * information.
+   */
   const funnelBody = `
     <div class="card">
       <div class="grid g-4">
@@ -6277,10 +6301,6 @@ function renderBclub() {
           '#E8833A', fsc.impressions, 'impressions')}
         ${scoreCard('Total users', stageVal('users'), '',
           '#8B5CF6', fsc.users, 'users')}
-        ${mst ? scoreCard('Members', cnt(mst.live),
-          mst.tombstoned ? `${cnt(mst.tombstoned)} no longer on the roster` : 'all current') : ''}
-        ${mst ? scoreCard('Have become patients', cnt(mst.everPaid),
-          `${pct(mst.everPaidShare)} of all members, ever`) : ''}
         ${scoreCard('Better Club new registers', stageVal('registers'),
           !d.registerSource ? 'awaiting a source'
             : (last && last.registers === null)
@@ -6293,16 +6313,22 @@ function renderBclub() {
                 lastConv.month === (last && last.month) ? '' : ` in ${esc(lastConv.label.replace(/ \d{4}$/, ''))}`}`
             : '',
           '#34A853', null, 'newPaidHns')}
-        ${mst ? scoreCard('Half visit within',
+      </div>
+      ${mst ? `<div class="grid g-4 mt">
+        ${scoreCard('Members', cnt(mst.live),
+          mst.tombstoned ? `${cnt(mst.tombstoned)} no longer on the roster` : 'all current')}
+        ${scoreCard('Have become patients', cnt(mst.everPaid),
+          `${pct(mst.everPaidShare)} of all members, ever`)}
+        ${scoreCard('Half visit within',
           mst.medianMonthsToFirst === null ? '—'
             : mst.medianMonthsToFirst === 0 ? 'the same month'
             : `${cnt(mst.medianMonthsToFirst)} month${mst.medianMonthsToFirst === 1 ? '' : 's'}`,
           `${mst.medianMonthsToFirst === 0 ? 'they join' : 'of joining'}${
-            mst.meanMonthsToFirst === null ? '' : ` · average ${mst.meanMonthsToFirst.toFixed(1)}, long tail`}`) : ''}
-        ${mst ? scoreCard(`Joined in ${esc(s.label.replace(/ \d{4}$/, ''))}`,
+            mst.meanMonthsToFirst === null ? '' : ` · average ${mst.meanMonthsToFirst.toFixed(1)}, long tail`}`)}
+        ${scoreCard(`Joined in ${esc(s.label.replace(/ \d{4}$/, ''))}`,
           thisMonth ? cnt(thisMonth.joined) : '—',
-          thisMonth ? `${cnt(thisMonth.converted)} have become patients` : 'not in the roster yet') : ''}
-      </div>
+          thisMonth ? `${cnt(thisMonth.converted)} have become patients` : 'not in the roster yet')}
+      </div>` : ''}
       ${(fsc.impressions === null || fsc.users === null || !d.registerSource) ? `<div class="note">
         ${!d.registerSource ? `<b>New registers has no source.</b> ${esc(d.registerNote || '')}` : ''}
         ${fsc.impressions === null ? 'Search Console was unavailable this run — press Refresh to retry.' : ''}
@@ -6313,11 +6339,11 @@ function renderBclub() {
     <div class="grid g-4">
       <div class="stat"><div class="lab">Paying members</div><div class="val">${cnt(s.paidHns)}</div>
         <div class="sub2">${dlt(p ? chg(s.paidHns, p.paidHns) : null)} · ${esc(s.label)}</div></div>
-      <div class="stat"><div class="lab">Revenue</div><div class="val">${num(s.revenue, {money:true})}</div>
-        <div class="sub2">${dlt(p ? chg(s.revenue, p.revenue) : null)} · ${num(s.arpu, {money:true})} per member</div></div>
+      <div class="stat"><div class="lab">Revenue (THB)</div><div class="val">${thb(s.revenue)}</div>
+        <div class="sub2">${dlt(p ? chg(s.revenue, p.revenue) : null)} · ${thb(s.arpu)} per member</div></div>
       <div class="stat"><div class="lab">New members</div><div class="val">${cnt(s.newHns)}</div>
         <div class="sub2">${dlt(p ? chg(s.newHns, p.newHns) : null)} · ${pct(s.newHnShare)} of members</div></div>
-      <div class="stat"><div class="lab">Revenue from new members</div><div class="val">${num(s.newRev, {money:true})}</div>
+      <div class="stat"><div class="lab">Revenue from new members (THB)</div><div class="val">${thb(s.newRev)}</div>
         <div class="sub2">${dlt(p ? chg(s.newRev, p.newRev) : null)} · ${pct(s.newRevShare)} of revenue</div></div>
     </div>
     <div class="note">
@@ -6361,7 +6387,7 @@ function renderBclub() {
       <div class="card-title">Of the people who joined each month, how many became patients</div>
       <table class="roomy"><thead><tr>
         <th>Joined in</th><th class="num">Registered</th><th class="num">Became patients</th>
-        <th class="num">CR%</th><th class="num">Revenue since ฿</th><th class="num">Per patient ฿</th>
+        <th class="num">CR%</th><th class="num">Revenue since (THB)</th><th class="num">Per patient (THB)</th>
       </tr></thead><tbody>
       ${mst.byMonth.slice().reverse().map(r => `<tr>
         <td class="strong">${esc(bclubMonthLabel(r.month))}</td>
@@ -6404,18 +6430,19 @@ function renderBclub() {
     <div class="card">
       ${cc && cc.top10 ? `<div class="grid g-4" style="margin-bottom:12px;">
         <div class="stat"><div class="lab">Top 1% of members</div><div class="val">${pct(cc.top1.share)}</div>
-          <div class="sub2">${cnt(cc.top1.members)} members · ${num(cc.top1.revenue, {money:true})}</div></div>
+          <div class="sub2">${cnt(cc.top1.members)} members · ${thb(cc.top1.revenue)} THB</div></div>
         <div class="stat"><div class="lab">Top 10% of members</div><div class="val">${pct(cc.top10.share)}</div>
-          <div class="sub2">${cnt(cc.top10.members)} members · ${num(cc.top10.revenue, {money:true})}</div></div>
-        <div class="stat"><div class="lab">Median member</div><div class="val">${num(cc.median, {money:true})}</div>
-          <div class="sub2">against ${num(s.arpu, {money:true})} mean</div></div>
+          <div class="sub2">${cnt(cc.top10.members)} members · ${thb(cc.top10.revenue)} THB</div></div>
+        <div class="stat"><div class="lab">Median member (THB)</div><div class="val">${thb(cc.median)}</div>
+          <div class="sub2">against ${thb(s.arpu)} mean</div></div>
         <div class="stat"><div class="lab">Paid again from last month</div><div class="val">${pct(cc.repeatFromPrev)}</div>
           <div class="sub2">${cc.keptCount === undefined ? '—' : `${cnt(cc.keptCount)} of ${cnt(cc.prevBase)}`}</div></div>
       </div>` : ''}
       <table class="roomy sortable"><thead><tr>
-        <th>Month</th><th class="num">Members</th><th class="num">Revenue ฿</th>
-        <th class="num">New</th><th class="num">Revenue from new ฿</th>
-        <th class="num">Per member ฿</th><th class="num">Per new member ฿</th><th class="num">Per returning member ฿</th>
+        <th>Month</th><th class="num">Members</th><th class="num">Revenue (THB)</th>
+        <th class="num">New</th><th class="num">Revenue from new (THB)</th>
+        <th class="num">Per member (THB)</th><th class="num">Per new member (THB)</th>
+        <th class="num">Per returning member (THB)</th>
         <th class="num">Back after 2 years</th>
       </tr></thead><tbody>
       ${ms.slice().reverse().map(m => `<tr>
@@ -6428,11 +6455,11 @@ function renderBclub() {
         <td class="num">${cnt(m.arpu)}</td>
         <td class="num">${cnt(m.arpuNew)}<span style="color:var(--faint);font-size:10.5px;"> /${cnt(m.newHns)}</span></td>
         <td class="num">${cnt(m.arpuOld)}</td>
-        <td class="num"><b>${cnt(m.ret2y)}</b><span style="color:var(--faint);font-size:10.5px;"> ${num(m.ret2yRev, {money:true})}</span></td>
+        <td class="num"><b>${cnt(m.ret2y)}</b><span style="color:var(--faint);font-size:10.5px;"> ${thb(m.ret2yRev)}</span></td>
       </tr>`).join('')}
       </tbody></table>
       <div class="note"><b>Per new member is shown with its member count for a reason.</b> It ran
-      ${num(ms[0].arpuNew, {money:true})} in ${esc(ms[0].label)} and ${num(ms.reduce((a,b)=>(b.arpuNew||0)>(a.arpuNew||0)?b:a).arpuNew, {money:true})}
+      ${thb(ms[0].arpuNew)} THB in ${esc(ms[0].label)} and ${thb(ms.reduce((a,b)=>(b.arpuNew||0)>(a.arpuNew||0)?b:a).arpuNew)} THB
       at its peak while the overall figure barely moved — with a few hundred new members a month, a handful of large
       bills swings that average, so treat a jump as small-sample movement until a second month repeats it.</div>
     </div>`;
@@ -6477,7 +6504,7 @@ function renderBclub() {
   drawBclubStage('bcStage_newPaidHns',  fLab, fn.map(x => x.newPaidHns),  '#34A853');
 
   drawChart('bcTrend', ms.map(m => ({ d: m.label.replace(/ \d{4}$/, ''), rev: Math.round(m.revenue), hns: m.paidHns })), [
-    { key: 'rev', label: 'Revenue ฿', color: '#4C6FFF', axis: 'y' },
+    { key: 'rev', label: 'Revenue (THB)', color: '#4C6FFF', axis: 'y' },
     { key: 'hns', label: 'Paying members', color: '#A855F7', axis: 'y1' },
   ]);
   drawBars('bcSplit', mLab, [
@@ -6522,8 +6549,7 @@ const bcPointLabels = {
         const el = meta.data[i];
         if (!el) return;
         const n = Math.round(Number(v));
-        const txt = (isMoney ? '฿' : '') + (Math.abs(n) >= 1e6 ? (n / 1e6).toFixed(1) + 'M'
-          : Math.abs(n) >= 1e4 ? Math.round(n / 1e3) + 'K' : n.toLocaleString());
+        const txt = isMoney ? bcShortMoney(n) : n.toLocaleString();
         const w = ctx.measureText(txt).width;
         let y = el.y - 6;
         for (let g = 0; g < 6 && placed.some((q) => Math.abs(q.x - el.x) < w
@@ -6568,15 +6594,15 @@ function drawBclubCombo(canvasId, labels, bars, lines) {
       interaction:{ mode:'index', intersect:false },
       plugins:{
         legend:{ labels:{ color:'#4C5878', font:cvFont(10), usePointStyle:true, boxWidth:cvBox(7) } },
-        tooltip:{ callbacks:{ label:(c)=> ` ${c.dataset.label}: ${c.dataset.yAxisID==='y'
-          ? '฿'+Math.round(c.parsed.y).toLocaleString() : Math.round(c.parsed.y).toLocaleString()}` } },
+        tooltip:{ callbacks:{ label:(c)=> ` ${c.dataset.label}: ${
+          Math.round(c.parsed.y).toLocaleString()}${c.dataset.yAxisID==='y' ? ' THB' : ''}` } },
         // Read by chartToSvg, not by a canvas plugin — see there.
         lastPointLabels:{ enabled:true, all:true, money:['y'] },
       },
       scales:{
         x:{ grid:{ display:false }, ticks:{ color:'#4C5878', font:cvFont(10), autoSkipPadding:6 } },
         y:{ position:'left', beginAtZero:true, grid:{ color:'#EEF1F8' },
-          title:{ display:true, text:'Revenue ฿', color:'#8A94AD', font:cvFont(9.5) },
+          title:{ display:true, text:'Revenue (THB)', color:'#8A94AD', font:cvFont(9.5) },
           ticks:{ color:'#8A94AD', font:cvFont(9),
                   callback:(v)=> v>=1e6?(v/1e6)+'M' : v>=1e3?(v/1e3)+'K' : v } },
         y1:{ position:'right', beginAtZero:true, grid:{ display:false },
@@ -6620,6 +6646,19 @@ function drawBclubStage(canvasId, labels, data, color, emptyNote) {
       },
     },
   });
+}
+
+/**
+ * `102542865` -> `102.5M`. One place, so the canvas plugin and the printed SVG
+ * twin cannot format the same number two ways.
+ */
+function bcShortMoney(v) {
+  const n = Math.round(Number(v) || 0);
+  const a = Math.abs(n);
+  if (a >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (a >= 1e4) return Math.round(n / 1e3) + 'K';
+  if (a >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
+  return n.toLocaleString();
 }
 
 /**
@@ -8814,7 +8853,15 @@ function chartToSvg(chart, W, H) {
         ? (bi - (barN - 1) / 2) * (bandW / barN) : 0;
       const x = xAt(i) + shift;
       if (!isFinite(x) || !isFinite(y)) return;
-      const txt = (money.indexOf(axis) > -1 ? '฿' : '') + Math.round(Number(data[i])).toLocaleString();
+      /**
+       * SHORT FORM FOR MONEY (MW: "use short version for money 102.5M on data
+       * lables"). `฿102,542,865` is 11 glyphs of precision nobody reads off a
+       * chart, and it collided with its neighbours. The `M` suffix also does
+       * the work the ฿ was doing: it tells money apart from a member count
+       * without a symbol that renders badly at this size.
+       */
+      const raw = Math.round(Number(data[i]));
+      const txt = (money.indexOf(axis) > -1) ? bcShortMoney(raw) : raw.toLocaleString();
       const w = 6 + String(txt).length * (FS * 0.58);
       const right = x + 8 + w < padL + pw;
       let ty = y - 6;
@@ -9001,7 +9048,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.193.0';
+const CLIENT_BUILD = '3.194.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.193.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.194.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -718,6 +718,43 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.194.0 — grouped score-card rows with sparklines; short money; THB not ฿.**
+
+MW: "if you can do this dimension then, use the original layout (SS2), you just
+show sparkline for trend / please use short version for money 102.5M on data
+lables / for score cards, always use Revenue (THB) not ฿, it's really hard to
+read."
+
+**THE GROUPING IS WHAT MAKES THE SPARKLINES AFFORDABLE.** A grid row stretches
+to its tallest cell, so in the mixed 4x2 order the four cards that HAVE a trend
+sat in both rows and a sparkline grew both. Grouped — funnel row, then roster row
+— only the funnel row grows, which is half the cost for the same information.
+This is why the original layout was right and the compact one was not.
+
+**ONE MONEY FORMATTER, `bcShortMoney`.** `฿102,542,865` is eleven glyphs of
+precision nobody reads off a chart, and the labels collided. `102.5M` also does
+the ฿'s job: the M suffix tells money from a member count without a symbol that
+renders badly at label size. The canvas plugin and the SVG twin both call it, so
+the same number cannot be formatted two ways on screen and on paper. FULL
+precision moved to the tooltip, which is on demand and has room.
+
+**MONEY CARRIES ITS UNIT IN THE LABEL, NOT AS A GLYPH.** `Revenue (THB)`, not
+`Revenue ฿`. The baht sign sits low and narrow, and at card-value weight it
+reads as part of the first digit — `฿102.54M` looks like a number with a smudge.
+`boot.js` fails if any ฿ reaches the rendered Better Club markup.
+
+**THE SWEEP READS ~17px LOW AND THAT MATTERS.** It measures before the SVG twins
+are built; the harness measures after. 4.0in looked like 720px in the sweep and
+737px in the harness. Every committed height is now the HARNESS number with
+slack on top, and the sweep is only used to narrow the range. 3.6in with 0.30in
+sparklines: page one 695px of 718px, chart 51% of the page — still over half.
+
+Two assertions had to be UPDATED rather than kept: the card-order check encoded
+the compact 4x2 order, and the sparkline count moved from zero-in-print to four.
+Both were correct for the design they were written against.
+
+275 assertions; page one 695px of 718px with the chart at 51%, 0 clipping.
 
 **v3.193.0 — the revenue chart takes the page; score cards become one 4x2 block.**
 

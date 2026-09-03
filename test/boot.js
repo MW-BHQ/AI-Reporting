@@ -1426,6 +1426,22 @@ setTimeout(() => {
         if (!r.querySelector('.slide-title.quiet')) {
           return fail("better club", "slide titles are not using the quiet style"), finish();
         }
+        /**
+         * MONEY IS SHORT-FORM AND UNPREFIXED. The full `฿102,542,865` is what
+         * MW asked to be rid of, on the labels and on the cards both.
+         */
+        if (/฿/.test(body)) return fail("better club", "a baht glyph is still rendered"), finish();
+        if (!/Revenue \(THB\)/.test(body)) {
+          return fail("better club", "money columns do not name their unit"), finish();
+        }
+        if (!/function bcShortMoney/.test(SRC)) {
+          return fail("better club", "there is no single money formatter"), finish();
+        }
+        // Sparklines belong to the funnel row only — four charts, not eight.
+        const sparks = r ? r.querySelectorAll('.slide.bc-pg1b .bc-stage').length : 0;
+        if (sparks !== 4) {
+          return fail("better club", `${sparks} sparklines on page one, expected 4`), finish();
+        }
         // Data labels on the revenue chart, on screen and in the twin.
         if (!/lastPointLabels:\{ enabled:true, all:true/.test(SRC)) {
           return fail("better club", "the revenue chart does not label every point"), finish();
@@ -1438,8 +1454,14 @@ setTimeout(() => {
          */
         const labs = r ? [...r.querySelectorAll('.slide.bc-pg1b .stat .lab')]
           .map(e => e.textContent.replace(/\s+/g, ' ').trim()) : [];
-        const wantOrder = ['Google impressions', 'Total users', 'Members', 'Have become patients',
-                           'Better Club new registers', 'New paid members', 'Half visit within', 'Joined in'];
+        /**
+         * GROUPED ROWS, funnel then roster (MW reverted to this so the
+         * sparklines cost one row instead of two — a grid row stretches to its
+         * tallest cell, so trend charts spread across a mixed order grow both).
+         */
+        const wantOrder = ['Google impressions', 'Total users', 'Better Club new registers',
+                           'New paid members',
+                           'Members', 'Have become patients', 'Half visit within', 'Joined in'];
         if (labs.length !== 8) {
           return fail("better club", `${labs.length} score cards on page one, expected 8`), finish();
         }
