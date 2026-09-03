@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.195.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.196.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -718,6 +718,36 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.196.0 — sparklines lose their axes; the monthly chart gains data labels.**
+
+MW: "sparkline is very tiny, increase the graph high to the max possible / show
+data label on Members and revenue by month too."
+
+**THE HEIGHT WAS NEVER THE MAIN PROBLEM.** The month names and the y ticks were
+eating roughly 30px of a 53px box, leaving about 20px of actual line. The stage
+charts are now TRUE sparklines — `display:false` on both scales — which hands
+the line the whole box and is a bigger gain than any height change could buy.
+Nothing is lost: all four span the same seven months, those months are labelled
+on the full-size chart directly above, and the value that matters is already
+drawn on the last point. The box also grew to 0.65in, the largest the page
+budget allows beside a chart that has to stay over half, so the drawn line went
+from about 20px to about 60px.
+
+**THE PRINTED TWIN IGNORED `display:false`.** `chartToSvg` read `sc.y.ticks`
+straight off the live chart and rendered them whatever the scale said, so the
+first attempt printed with its axes intact and looked completely unchanged —
+the box was taller and the line was not. Chart.js honours the flag on screen and
+the twin has to as well, or the two surfaces disagree about what a chart is. A
+`shown()` guard now gates the gridlines, both y axes and the x labels.
+
+**`drawChart` GAINED AN OPT-IN `labels` FLAG.** The report deck has eleven of
+these charts and labelling all of them would bury every one, so it is per-chart.
+The flag drives `bcPointLabels` on the canvas and `lastPointLabels` in the twin
+from one place, which is the same arrangement the revenue chart already uses —
+the two surfaces cannot format a number two different ways.
+
+275 assertions; page one 709px of 718px with the chart at 51%, 0 clipping.
 
 **v3.195.0 — header un-clipped, sparklines actually visible, MoM as a chip.**
 

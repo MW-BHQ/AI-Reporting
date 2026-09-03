@@ -1739,8 +1739,10 @@
     /* Sparklines are back, at TREND size — tall enough to read a shape, not to
        read a value. 0.30in was too small to see at all — MW: "sparkline didnt
        come" — because a 29px box minus the card's own padding leaves almost no
-       plot. 0.55in reads as a shape and costs 24px of the page. */
-    .bc-stage{height:0.55in!important;max-height:none!important;}
+       plot. 0.65in is the largest the page budget allows beside a chart that
+       has to stay over half; combined with dropping the sparkline's own axes it
+       takes the drawn line from about 20px to about 60px. */
+    .bc-stage{height:0.65in!important;max-height:none!important;}
   }
   @media screen{
     body.print-prep .bc-hero{height:3.6in!important;max-height:none!important;}
@@ -1754,7 +1756,7 @@
     body.print-prep .bc-pg1a .slide-title{min-height:2.4rem!important;margin-bottom:4px!important;}
     body.print-prep .bc-pg1b .slide-title.quiet{min-height:1.4rem!important;margin-bottom:4px!important;}
     body.print-prep .bc-pg1a .note, body.print-prep .bc-pg1b .note{display:none!important;}
-    body.print-prep .bc-stage{height:0.55in!important;max-height:none!important;}
+    body.print-prep .bc-stage{height:0.65in!important;max-height:none!important;}
   }
   @media(max-width:1080px){.g-6,.g-5,.g-4{grid-template-columns:repeat(2,1fr);}.g-2-1,.g-3,.g-2{grid-template-columns:1fr;}}
   @media(max-width:760px){
@@ -6518,7 +6520,7 @@ function renderBclub() {
   drawChart('bcTrend', ms.map(m => ({ d: m.label.replace(/ \d{4}$/, ''), rev: Math.round(m.revenue), hns: m.paidHns })), [
     { key: 'rev', label: 'Revenue (THB)', color: '#4C6FFF', axis: 'y' },
     { key: 'hns', label: 'Paying members', color: '#A855F7', axis: 'y1' },
-  ]);
+  ], { labels: true, money: ['y'] });
   drawBars('bcSplit', mLab, [
     { label: 'Returning', data: ms.map(m => m.oldHns), color: '#A855F7' },
     { label: 'New', data: ms.map(m => m.newHns), color: '#34D399' },
@@ -6650,12 +6652,24 @@ function drawBclubStage(canvasId, labels, data, color, emptyNote) {
       plugins:{ legend:{ display:false },
         tooltip:{ callbacks:{ label:(c)=> ' '+Math.round(c.parsed.y).toLocaleString() } },
         lastPointLabels:{ enabled:true } },
+      /**
+       * A TRUE SPARKLINE: NO AXES AT ALL.
+       *
+       * MW: "sparkline is very tiny, increase the graph high to the max
+       * possible." The height was never the whole problem — the month names and
+       * the y ticks were eating roughly 30px of a 53px box, leaving ~20px of
+       * actual line. Dropping them hands the line the entire box, which is a
+       * bigger gain than any height change could buy.
+       *
+       * Nothing is lost: all four sparklines span the same seven months, and
+       * those months are already labelled on the full-size chart directly
+       * above. The value that matters is drawn on the last point.
+       */
       scales:{
-        x:{ grid:{ display:false }, ticks:{ color:'#8A94AD', font:cvFont(8.5), autoSkipPadding:4 } },
-        y:{ beginAtZero:true, grid:{ color:'#EEF1F8' },
-            ticks:{ color:'#8A94AD', font:cvFont(8.5), maxTicksLimit:4,
-                    callback:(v)=> v>=1e6?(v/1e6)+'M' : v>=1e3?(v/1e3)+'K' : v } },
+        x:{ display:false, grid:{ display:false } },
+        y:{ display:false, beginAtZero:true, grid:{ display:false } },
       },
+      layout:{ padding:{ top:10, right:34, bottom:2, left:2 } },
     },
   });
 }
@@ -8426,13 +8440,21 @@ function drawBars(canvasId, labels, datasets, opts = {}) {
   });
 }
 
-function drawChart(canvasId, rows, series) {
+/**
+ * `opts.labels` opts a chart into point value labels (MW: "show data label on
+ * Members and revenue by month too"). OPT-IN, because the report deck has
+ * eleven of these and labelling all of them would bury every one — and the same
+ * flag drives the canvas plugin on screen and `chartToSvg` in the printed twin,
+ * so the two surfaces cannot format the same number differently.
+ */
+function drawChart(canvasId, rows, series, opts = {}) {
   const el = document.getElementById(canvasId);
   if (!el) return;
   try {
     if (typeof Chart === 'undefined') throw new Error('chart library unavailable');
     S.charts[canvasId] = new Chart(el, {
       type: 'line',
+      plugins: opts.labels ? [bcPointLabels] : [],
       data: {
         labels: rows.map(r => r.d),
         datasets: series.map(s => ({
@@ -8453,6 +8475,7 @@ function drawChart(canvasId, rows, series) {
             const wd = new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' });
             return `${d} \u00b7 ${wd}`;
           } } },
+          ...(opts.labels ? { lastPointLabels: { enabled: true, all: true, money: opts.money || [] } } : {}),
         },
         scales: {
           x: { ticks:{ color:'#A7B0C7', font:cvFont(10), maxRotation:0, autoSkip:true, autoSkipPadding:12, maxTicksLimit:8 }, grid:{ color:'rgba(90,110,160,.09)' } },
@@ -8679,8 +8702,18 @@ function chartToSvg(chart, W, H) {
   };
   const out = [];
   out.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="none"/>');
-  // gridlines + left ticks, taken from the ticks Chart.js already picked
-  const yl = sc.y, y1 = sc.y1;
+  /**
+   * A SCALE WITH `display:false` DRAWS NOTHING.
+   *
+   * The twin read `sc.y.ticks` straight off the live chart and rendered them
+   * whatever the scale's own `display` said — so the funnel sparklines, set to
+   * `display:false` precisely so the line could have the whole box, printed
+   * with their month names and y ticks intact and looked unchanged. Chart.js
+   * honours the flag on screen; the twin has to as well or the two surfaces
+   * disagree about what a chart looks like.
+   */
+  const shown = (a) => !!a && a.options && a.options.display === false ? null : a;
+  const yl = shown(sc.y), y1 = shown(sc.y1);
   const yFn = yOf('y');
   ((yl && yl.ticks) || []).forEach((t) => {
     const y = yFn(t.value);
@@ -8794,8 +8827,9 @@ function chartToSvg(chart, W, H) {
       }
     });
   });
-  // x labels, using the ticks Chart.js kept after its own auto-skip
-  ((sc.x && sc.x.ticks) || []).forEach((t, k) => {
+  // x labels, using the ticks Chart.js kept after its own auto-skip.
+  // Skipped entirely when the scale is hidden — see `shown` above.
+  ((shown(sc.x) && sc.x.ticks) || []).forEach((t, k) => {
     const i = (sc.x.getLabelForValue && sc.x.ticks[k] && typeof t.value === 'number') ? t.value : k;
     const x = xAt(i);
     if (!isFinite(x)) return;
@@ -9060,7 +9094,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.195.0';
+const CLIENT_BUILD = '3.196.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

@@ -1449,6 +1449,19 @@ setTimeout(() => {
         if (!/function bcShortMoney/.test(SRC)) {
           return fail("better club", "there is no single money formatter"), finish();
         }
+        /**
+         * THE SPARKLINES ARE AXIS-FREE, and the printed twin has to honour that
+         * too. It read `sc.y.ticks` straight off the live chart and ignored the
+         * scale's own `display:false`, so the month names and y ticks printed
+         * anyway and the sparklines looked unchanged however tall the box got.
+         */
+        if (!/const shown = \(a\) =>/.test(SRC)) {
+          return fail("better club", "chartToSvg does not honour a hidden scale"), finish();
+        }
+        // The monthly chart opts into point labels; the report deck's do not.
+        if (!/\{ labels: true, money: \['y'\] \}/.test(SRC)) {
+          return fail("better club", "the monthly chart has no data labels"), finish();
+        }
         // Sparklines belong to the funnel row only — four charts, not eight.
         const sparks = r ? r.querySelectorAll('.slide.bc-pg1b .bc-stage').length : 0;
         if (sparks !== 4) {
