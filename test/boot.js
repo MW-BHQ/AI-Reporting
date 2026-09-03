@@ -736,6 +736,33 @@ setTimeout(() => {
       const slides = root ? root.querySelectorAll(".slide, .lang-page").length : 0;
       slides >= 8 ? ok("report slides", `${slides} sections`)
                   : fail("report slides", `only ${slides} rendered`);
+
+      /**
+       * EVERY SECTION COVER MUST HAVE A SECTION BEHIND IT.
+       *
+       * `slide()` returns '' for an empty body, so any section can vanish when
+       * its upstream has nothing — and an ungated cover then prints a full-bleed
+       * title page introducing nothing. The fixture caught exactly that: a
+       * YouTube cover with no YouTube pages, because `ytBody` was empty.
+       *
+       * The two SEO covers at the tail are the deliberate exception. They
+       * introduce work that lives outside this dashboard, so they close the deck
+       * back to back with no section between them (MW asked for both).
+       */
+      const deck = root ? [...root.querySelectorAll(".slide")] : [];
+      const covers = deck.filter((sl) => sl.classList.contains("cover"));
+      const orphans = deck.filter((sl, i) =>
+        sl.classList.contains("cover")
+        && i < deck.length - 3
+        && deck[i + 1] && deck[i + 1].classList.contains("cover"))
+        .map((sl) => (sl.querySelector(".cover-title") || {}).textContent.trim());
+      orphans.length
+        ? fail("report covers", `cover with no section: ${orphans.join(", ")}`)
+        : ok("report covers", `${covers.length} covers, none orphaned`);
+      // The first slide introduces the deck; the last two close it.
+      deck[0] && deck[0].classList.contains("cover")
+        ? ok("report cover first", (deck[0].querySelector(".cover-title") || {}).textContent.trim())
+        : fail("report cover first", "the deck does not open on a cover");
       /**
        * A slide count alone cannot tell a rendered block from one that fell
        * through to its "unavailable" branch — the section still exists, just

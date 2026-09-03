@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.199.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.200.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -718,6 +718,35 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.200.0 — covers for the remaining six sections, and every cover gated on its section.**
+
+MW: "you forgot Facebook, Youtube, Google Ads, Popular Content, Chat Bubble,
+Better AI."
+
+Six more covers. `cover_JUNE.pdf` only carried eight, so these are new titles on
+the same template — the helper takes a string, so there was nothing to design.
+`Search Ads` gets a cover reading **Google Ads**, which is MW's name for it.
+
+**A COVER WITH NO SECTION BEHIND IT IS WORSE THAN NO COVER, and the fixture
+proved it immediately.** `slide()` returns '' for an empty body, so any section
+vanishes when its upstream has nothing — and the first pass printed a full-bleed
+`YouTube` title page followed straight by the `Google Ads` cover, because
+`ytBody` was empty in the browser mock. Every cover is now gated on its own body,
+which took the deck from 12 covers to 11 in that fixture.
+
+The two SEO covers at the tail are the deliberate exception: they introduce work
+outside this dashboard, so they close the deck back to back with no section
+between them. `boot.js` allows exactly that by only flagging a
+cover-followed-by-cover more than three slides from the end.
+
+**THE ORPHAN CHECK WAS VERIFIED BY PLANTING ONE.** Un-gating the YouTube cover
+did NOT fail the test, because `boot.js`'s fixture has YouTube data where the
+browser mock does not — so the guard looked green on a bug it could not see.
+Planting a genuinely orphaned cover made it fail as intended. **A guard that has
+never failed is a guess**, and which fixture you use decides whether it can.
+
+277 assertions.
 
 **v3.199.0 — section covers in the printed decks.**
 

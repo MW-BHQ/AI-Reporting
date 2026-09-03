@@ -4617,7 +4617,7 @@ function renderReport() {
    */
   $('viewRoot').innerHTML = `
     <!-- ================= MW's sequence ================= -->
-    ${coverSlide('Website Performance')}
+    ${usersBody ? coverSlide('Website Performance') : ''}
     ${slide('Sessions overview', usersBody, true, 'BHQ', null, true)}
     ${slide('Who reaches us from outside Thailand', countryBody, false, true, null, true)}
     <!-- NOT a slide-fill any more (MW: "this page content doesn't vertically
@@ -4634,22 +4634,25 @@ function renderReport() {
     ${referralBody ? slide('Referral \u00b7 Back Links', referralBody, false, sel) : ''}
     ${aiAssistBody ? slide('AI assistants (LLMs)', aiAssistBody, false, sel) : ''}
     ${searchPagesBody}
-    ${coverSlide('Google Business Profile')}
-    ${gbpDetailBody}
-    ${coverSlide('Google Map Review')}
+    ${gbpDetailBody ? coverSlide('Google Business Profile') + gbpDetailBody : ''}
+    ${reviewBody ? coverSlide('Google Map Review') : ''}
     ${slide('Google reviews', reviewBody, false, false, 'gbp').replace('class="slide ', 'class="slide pn ')}
     ${slide('Google reviews \u00b7 what they said', reviewQuotesBody, false, false, 'gbp', true)}
+    ${facebookBody ? coverSlide('Facebook') : ''}
     ${slide('Facebook', facebookBody, false, false, 'facebook', false, true)}
+    ${ytBody ? coverSlide('YouTube') : ''}
     ${slide('YouTube', ytBody, false, 'BHQ', 'youtube', true)}
     ${slide('YouTube \u00b7 Top videos', ytTopBody, false, 'BHQ', 'youtube')}
 
     <!-- ===== not yet reviewed by MW: below the agreed sequence ===== -->
+    ${searchAdsBody ? coverSlide('Google Ads') : ''}
     ${slide('Search Ads', searchAdsBody, false, sel, 'google_ads')}
-    ${coverSlide('TikTok Report')}
+    ${tkChannelBody ? coverSlide('TikTok Report') : ''}
     ${slide('TikTok', tkChannelBody, false, true, 'tiktok')}
     ${tkTopBody ? slide('TikTok \u00b7 Top performances', tkTopBody, false, true, 'tiktok') : ''}
-    ${contentBody}
-    ${chatBody ? slide('Chat Bubble', chatBody, false, sel) : ''}
+    ${contentBody ? coverSlide('Popular Content') + contentBody : ''}
+    ${chatBody ? coverSlide('Chat Bubble') + slide('Chat Bubble', chatBody, false, sel) : ''}
+    ${betterAiBody ? coverSlide('Better AI') : ''}
     ${slide('Better AI', betterAiBody, false, 'BHQ')}
 
     <!-- The last two covers close the deck (MW: "these last two you just put
@@ -9272,7 +9275,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.199.0';
+const CLIENT_BUILD = '3.200.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
