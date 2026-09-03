@@ -98,8 +98,11 @@ with sync_playwright() as p:
           flow: s.classList.contains('slide-flow'),
           logo: !!s.querySelector('.slide-logo'),
           range: !!s.querySelector('.slide-range'),
+          cover: s.classList.contains('cover'),
         })),
-        printed: slides.filter(s => getComputedStyle(s).display !== 'none').length,
+        printed: slides.filter(s => getComputedStyle(s).display !== 'none'
+                                 && !s.classList.contains('cover')).length,
+        covers: slides.filter(s => s.classList.contains('cover')).length,
         // The two halves of page one, measured against a 7.5in sheet less its
         // 2px. 2.6in/1.5in came to 846px here and silently became a third page.
         pageOne: slides.filter(s => s.classList.contains('bc-pg1a')
@@ -128,6 +131,10 @@ print(f"\n{len(rows)} sections, {len(bad)} clipping at {WIDTH}px")
 print("\nBetter Club")
 bcbad = []
 for r in bc["slides"]:
+    # A cover has no slide header by design — it IS the header.
+    if r.get("cover"):
+        print(f"  {r['title'][:44]:<46}{'ok':<14}cover")
+        continue
     hdr = ("logo+range" if (r["logo"] and r["range"]) else "NO HEADER BITS")
     clip = f"CLIP {r['over']}px" if (r["over"] > 2 and not r["flow"]) else "ok"
     if clip != "ok" or hdr != "logo+range":
@@ -136,9 +143,16 @@ for r in bc["slides"]:
 
 # THE EXPORT IS TWO PAGES. Three slides print — the pair that shares page one
 # and the month — and the pair has to FIT the sheet or it becomes three.
+# The section cover is printed too, but it is not one of the two content pages
+# the budget is about — counted separately or it reads as a regression.
 if bc["printed"] != 3:
-    bcbad.append(f"{bc['printed']} slides print, expected 3")
-    print(f"  !! {bc['printed']} slides would print, expected 3")
+    bcbad.append(f"{bc['printed']} content slides print, expected 3")
+    print(f"  !! {bc['printed']} content slides would print, expected 3")
+if bc["covers"] != 1:
+    bcbad.append(f"{bc['covers']} covers, expected 1")
+    print(f"  !! {bc['covers']} covers, expected 1")
+else:
+    print("  1 section cover, print-only  ok")
 SHEET = 718   # 7.5in at 96dpi, less the 2px the slide gives back
 if bc["pageOne"] > SHEET:
     bcbad.append(f"page one is {round(bc['pageOne'])}px over a {SHEET}px sheet")

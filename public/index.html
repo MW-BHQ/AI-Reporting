@@ -1665,6 +1665,54 @@
    */
   @media print{ .bc-note-screen{display:none!important;} }
 
+  /**
+   * SECTION COVERS. Hidden on screen entirely — a full-bleed title card is
+   * navigation furniture for a printed deck and pure noise in a dashboard
+   * someone is clicking through.
+   *
+   * Measurements come from MW's own artwork: the title sits at 26% down the
+   * page and 12.6% in from the left, which is where it lands on every page of
+   * `cover_JUNE.pdf`.
+   */
+  .slide.cover{display:none;}
+  @media print{
+    .slide.cover{
+      display:block!important;position:relative;overflow:hidden;
+      width:13.333in!important;height:7.5in!important;
+      min-height:0!important;max-height:7.5in!important;
+      padding:0!important;margin:0!important;border:0!important;background:none!important;
+      break-before:page;page-break-before:always;
+      break-after:page;page-break-after:always;break-inside:avoid;
+    }
+    /* First cover in the deck must not push a blank sheet ahead of itself. */
+    .slide.cover:first-child{break-before:auto;page-break-before:auto;}
+    /* The e-commerce report is one `.mr` page, not a deck; it has to start on
+       the sheet after its cover rather than sharing it. */
+    .slide.cover + .mr{break-before:page;page-break-before:always;}
+    .cover-bg{
+      position:absolute;inset:0;width:100%;height:100%;
+      object-fit:cover;display:block;
+    }
+    /**
+     * MEASURED OFF MW'S OWN ARTWORK, not eyeballed. Rasterising page 4 of
+     * `cover_JUNE.pdf` and finding the ink puts the first title line at 33.8%
+     * down and 12.6% in, with a 21px cap height on a 405px page — which is a
+     * 52px Poppins at 720px, and a 52px line step, so line-height 1.0.
+     */
+    .cover-text{position:absolute;left:12.6%;top:33.0%;right:30%;}
+    .cover-title{
+      font-family:Poppins,sans-serif;font-weight:700;font-size:52px;line-height:1.02;
+      color:#0F2E7A;margin:0 0 16px;letter-spacing:-.01em;text-transform:none;
+    }
+    .cover-sub{
+      font-family:Poppins,sans-serif;font-weight:600;font-size:19px;
+      color:#111318;margin:0 0 6px;
+    }
+    .cover-month{
+      font-family:Poppins,sans-serif;font-weight:600;font-size:19px;color:#4C7DF0;
+    }
+  }
+
   .slide-title.quiet {
     text-transform:none; font-weight:500; letter-spacing:.01em;
     color:var(--muted); min-height:2.6rem;
@@ -2282,6 +2330,50 @@ function slideShell(title, body, { first, scope, fill, flow, logo, cls } = {}) {
   return `<div class="slide${first ? '' : ' slide-break'}${fill ? ' slide-fill' : ''}${flow ? ' slide-flow' : ''}${cls ? ' ' + cls : ''}">
     <div class="slide-title${/\bquiet\b/.test(cls || '') ? ' quiet' : ''}"><span>${esc(title)}${pill}</span>${right}</div>
     ${body}</div>`;
+}
+
+/**
+ * A SECTION COVER, PRINT ONLY (MW: "for PDF version i want these covers to add
+ * between sections").
+ *
+ * The background is the artwork lifted straight out of MW's `cover_JUNE.pdf` —
+ * a 1280x720 JPEG, exactly the 16:9 of the page box, so it full-bleeds with no
+ * scaling. Rebuilding that blurred cross in CSS gradients would have been an
+ * approximation of a brand asset; extracting it is the same pixels.
+ *
+ * `@page` margin is already 0, so the image reaches all four edges.
+ *
+ * THE MONTH IS DERIVED, never typed. MW: "done forget the month that's
+ * dynamic" — it comes from the report's own date range, so a cover cannot go
+ * stale against the deck it introduces.
+ */
+function coverSlide(title) {
+  if (!title) return '';
+  const lines = String(title).split('\n');
+  return `<div class="slide cover">
+    <img class="cover-bg" src="/brand/cover-bg.jpg" alt="" onerror="this.style.display='none'">
+    <div class="cover-text">
+      <h1 class="cover-title">${lines.map(esc).join('<br>')}</h1>
+      <div class="cover-sub">Digital Marketing</div>
+      <div class="cover-month">${esc(coverMonth())}</div>
+    </div>
+  </div>`;
+}
+
+/**
+ * `June 2026` from the selected range. A range inside one month names that
+ * month; a wider one names both ends, because a cover claiming "June" over a
+ * June-to-August deck would be quietly wrong.
+ */
+function coverMonth() {
+  const f = ($('from') || {}).value, t = ($('to') || {}).value;
+  if (!f || !t) return '';
+  const MN = ['January','February','March','April','May','June','July',
+              'August','September','October','November','December'];
+  const [fy, fm] = f.split('-').map(Number), [ty, tm] = t.split('-').map(Number);
+  if (fy === ty && fm === tm) return `${MN[fm - 1]} ${fy}`;
+  if (fy === ty) return `${MN[fm - 1]} \u2013 ${MN[tm - 1]} ${fy}`;
+  return `${MN[fm - 1]} ${fy} \u2013 ${MN[tm - 1]} ${ty}`;
 }
 
 function humanRange() {
@@ -4525,6 +4617,7 @@ function renderReport() {
    */
   $('viewRoot').innerHTML = `
     <!-- ================= MW's sequence ================= -->
+    ${coverSlide('Website Performance')}
     ${slide('Sessions overview', usersBody, true, 'BHQ', null, true)}
     ${slide('Who reaches us from outside Thailand', countryBody, false, true, null, true)}
     <!-- NOT a slide-fill any more (MW: "this page content doesn't vertically
@@ -4541,7 +4634,9 @@ function renderReport() {
     ${referralBody ? slide('Referral \u00b7 Back Links', referralBody, false, sel) : ''}
     ${aiAssistBody ? slide('AI assistants (LLMs)', aiAssistBody, false, sel) : ''}
     ${searchPagesBody}
+    ${coverSlide('Google Business Profile')}
     ${gbpDetailBody}
+    ${coverSlide('Google Map Review')}
     ${slide('Google reviews', reviewBody, false, false, 'gbp').replace('class="slide ', 'class="slide pn ')}
     ${slide('Google reviews \u00b7 what they said', reviewQuotesBody, false, false, 'gbp', true)}
     ${slide('Facebook', facebookBody, false, false, 'facebook', false, true)}
@@ -4550,11 +4645,18 @@ function renderReport() {
 
     <!-- ===== not yet reviewed by MW: below the agreed sequence ===== -->
     ${slide('Search Ads', searchAdsBody, false, sel, 'google_ads')}
+    ${coverSlide('TikTok Report')}
     ${slide('TikTok', tkChannelBody, false, true, 'tiktok')}
     ${tkTopBody ? slide('TikTok \u00b7 Top performances', tkTopBody, false, true, 'tiktok') : ''}
     ${contentBody}
     ${chatBody ? slide('Chat Bubble', chatBody, false, sel) : ''}
-    ${slide('Better AI', betterAiBody, false, 'BHQ')}`;
+    ${slide('Better AI', betterAiBody, false, 'BHQ')}
+
+    <!-- The last two covers close the deck (MW: "these last two you just put
+         them in the bottom of the monthly report"). They introduce work that
+         lives outside this dashboard, so there is no section behind them. -->
+    ${coverSlide('SEO Positioning Map')}
+    ${coverSlide('SEO and AI Report by ANGA')}`;
 
   // Charts must be drawn after the markup is in the DOM.
   if (U && U.months.length && window.Chart) {
@@ -6501,6 +6603,7 @@ function renderBclub() {
     </div>`;
 
   $('viewRoot').innerHTML = `
+    ${coverSlide('Better Club\nRevenue Attribution')}
     ${slideShell('Revenue attribution', combos,
       { first: true, scope: 'Better Club', cls: 'bc-pg1a' })}
     ${slideShell('Google impressions \u203a web traffic \u203a Better Club registers \u203a new paid members',
@@ -6963,6 +7066,7 @@ function renderEcomMonthly() {
   })();
 
   $('viewRoot').innerHTML = `
+    ${coverSlide('E-Commerce')}
     <div class="mr">
       <div class="mr-head">
         <div class="mr-title">E-Commerce</div>
@@ -9168,7 +9272,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.198.0';
+const CLIENT_BUILD = '3.199.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

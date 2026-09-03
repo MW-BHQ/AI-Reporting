@@ -1428,9 +1428,29 @@ setTimeout(() => {
          * silently grows back to seven sheets.
          */
         const printed = r ? [...r.querySelectorAll('.slide')]
-          .filter(sl => !sl.classList.contains('bc-screen-only')).length : 0;
+          .filter(sl => !sl.classList.contains('bc-screen-only')
+                     && !sl.classList.contains('cover')).length : 0;
         if (printed !== 3) {
-          return fail("better club", `${printed} slides would print, expected 3`), finish();
+          return fail("better club", `${printed} content slides would print, expected 3`), finish();
+        }
+        /**
+         * THE SECTION COVER IS PRINT-ONLY AND LEADS THE DECK. It is navigation
+         * furniture for a printed report and noise in a dashboard, so it is
+         * counted separately from the two content pages.
+         */
+        const cov = r ? r.querySelectorAll('.slide.cover').length : 0;
+        if (cov !== 1) return fail("better club", `${cov} covers, expected 1`), finish();
+        const firstSlide = r ? r.querySelector('.slide') : null;
+        if (!firstSlide || !firstSlide.classList.contains('cover')) {
+          return fail("better club", "the cover is not the first slide"), finish();
+        }
+        if (!/Better Club/.test((r.querySelector('.cover-title') || {}).textContent || '')) {
+          return fail("better club", "the cover has the wrong title"), finish();
+        }
+        // The month is derived from the range, never typed.
+        if (!/^\w+ \d{4}$|^\w+ \u2013 \w+ \d{4}$/.test(
+              ((r.querySelector('.cover-month') || {}).textContent || '').trim())) {
+          return fail("better club", "the cover month is not a derived range"), finish();
         }
         if (!r.querySelector('.slide.bc-pg1a') || !r.querySelector('.slide.bc-pg1b')
             || !r.querySelector('.slide.bc-pg2')) {

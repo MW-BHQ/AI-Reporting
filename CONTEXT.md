@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.198.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.199.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -718,6 +718,48 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.199.0 — section covers in the printed decks.**
+
+MW: "next for PDF version i want these covers to add between sections. done
+forget the month that's dynamic and the font is Poppin."
+
+**THE BACKGROUND IS MW'S OWN ARTWORK, EXTRACTED, NOT REBUILT.** `cover_JUNE.pdf`
+carries a 1280x720 JPEG — exactly the 16:9 of the page box — so it is now
+`public/brand/cover-bg.jpg` and full-bleeds with no scaling. `@page` margin was
+already 0. Approximating that blurred cross in CSS gradients would have been a
+guess at a brand asset when the same pixels were sitting in the file.
+
+**THE TYPE IS MEASURED OFF THE ARTWORK, NOT EYEBALLED.** Rasterising page 4 and
+finding the ink puts the first title line at 33.8% down and 12.6% in, with a
+21px cap height on a 405px page — a 52px Poppins at 720px, with a 52px line step
+so line-height 1.0. The first guess sat 7% too high. This build now lands within
+0.8% of the original on all three text blocks.
+
+**THE MONTH IS DERIVED FROM THE RANGE, never typed** (MW: "done forget the month
+that's dynamic"). A range inside one month names it; a wider one names both
+ends, because a cover reading "June" over a June-to-August deck would be quietly
+wrong.
+
+**COVERS ARE PRINT-ONLY.** A full-bleed title card is navigation furniture for a
+printed deck and noise in a dashboard someone is clicking through.
+
+Placement — MW specified four, three are inferred from the section they name:
+  · monthly report: `Website Performance` first; `Google Business Profile`,
+    `Google Map Review` and `TikTok Report` before their sections (INFERRED);
+    `SEO Positioning Map` and `SEO and AI Report by ANGA` close the deck, which
+    MW asked for explicitly — they introduce work outside this dashboard, so
+    there is no section behind them.
+  · e-commerce: `E-Commerce` first. That report is one `.mr` page rather than a
+    deck, so `.slide.cover + .mr` forces the report onto the next sheet.
+  · Better Club: `Better Club / Revenue Attribution` first.
+
+`.slide.cover:first-child` drops its break-before, or the deck opens on a blank
+sheet. Both `boot.js` and `print-overflow.py` now count covers SEPARATELY from
+content pages — the cover is a printed slide, and folding it into the page
+budget read as a regression on a layout that was fine.
+
+275 assertions; page one 711px of 718px with the chart at 51%, 0 clipping.
 
 **v3.198.0 — the score-card block loses its shell; sparklines take the space.**
 
