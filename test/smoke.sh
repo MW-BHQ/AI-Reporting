@@ -335,7 +335,16 @@ expect_field "bclub funnel newhns" "$BCLUB" "d.funnel.every(f=>f.newPaidHns===d.
 # survives as an override for months predating the roster, so it is fetched
 # separately — values:batchGet fails the whole request with a 400 if any range
 # names a tab that does not exist, and both tabs are optional by design.
-expect_field "bclub reg roster"    "$BCLUB" "/^Members tab/.test(d.registerSource)?'ok':undefined"
+expect_field "bclub reg roster"    "$BCLUB" "/^Total \\d/.test(d.registerSource)?'ok':undefined"
+# COHORT REVENUE, banked against the month the member JOINED rather than the
+# month they spent — the figure that makes two intakes comparable. May's three
+# joiners have spent 117,000 between them across the loaded months.
+expect_field "bclub cohort rev"    "$BCLUB" "d.memberStats.byMonth.find(m=>m.month==='2026-05').revenue===117000?'ok':undefined"
+expect_field "bclub rev per pt"    "$BCLUB" "Math.abs(d.memberStats.byMonth.find(m=>m.month==='2026-05').revenuePerPatient-58500)<1?'ok':undefined"
+# A spender with no User ID cannot be attributed to a cohort and must not be
+# silently dropped into one: the 5,000 blank-id row is in the monthly revenue
+# total but in no cohort.
+expect_field "bclub rev orphan"    "$BCLUB" "d.memberStats.byMonth.reduce((a,m)=>a+m.revenue,0) < d.months.reduce((a,m)=>a+m.revenue,0)?'ok':undefined"
 expect_field "bclub reg counted"   "$BCLUB" "d.funnel.every(f=>f.registers>0)?'ok':undefined"
 # THE FOUR STAGES MUST SHARE A SCOPE. Impressions and users were pulled
 # group-wide (27 branches) while the Better Club figures beside them covered

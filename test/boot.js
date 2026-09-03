@@ -481,7 +481,7 @@ function bclubFixture() {
       newPaidHns: m.newHns,
       registerToPaid: [258/1991, 250/1573, 64/1759, 189/2594, 514/2828][i],
     })),
-    registerSource: "Members tab (51,166 members)",
+    registerSource: "Total 51,166 members",
     registerNote: null,
     /**
      * The roster stats. `everPaid` at 18% of 51,166 is the shape of the real
@@ -498,6 +498,11 @@ function bclubFixture() {
         converted: [612, 401, 388, 402, 514][i],
         conversion: [612 / 1991, 401 / 1573, 388 / 1759, 402 / 2594, 514 / 2828][i],
         meanMonthsToFirst: [5.1, 4.4, 3.9, 1.8, 0.4][i],
+        revenue: [19400000, 12100000, 11800000, 12600000, 14700000][i],
+        revenuePerMember: [19400000 / 1991, 12100000 / 1573, 11800000 / 1759,
+                           12600000 / 2594, 14700000 / 2828][i],
+        revenuePerPatient: [19400000 / 612, 12100000 / 401, 11800000 / 388,
+                            12600000 / 402, 14700000 / 514][i],
       })),
       nationality: { minCell: 5, total: 42929, notRecorded: 8237, distinct: 96, rows: [
         { name: "THAI (ไทย)", members: 31200, share: 31200 / 42929 },
@@ -1401,15 +1406,35 @@ setTimeout(() => {
         if (!/BGH, BIH, BHT, WSH/.test(h)) {
           return fail("better club", "the four-hospital scope is not stated"), finish();
         }
-        if (!/BGH, BIH, BHT and WSH/.test(body)) {
-          return fail("better club", "the funnel note does not name the four hospitals"), finish();
-        }
+        if (!/BHQ/.test(h)) return fail("better club", "the stage scope pill is gone"), finish();
         /**
          * THE REGISTERS STAGE COMES FROM THE ROSTER, which is the whole point of
          * the User ID work — the stage was empty because nothing here knew when
          * anyone joined.
          */
-        if (!/Members tab/.test(body)) return fail("better club", "registers is not sourced from the roster"), finish();
+        if (!/Total 51,166 members/.test(body)) {
+          return fail("better club", "the roster total is not stated on the register stage"), finish();
+        }
+        /**
+         * The roster cards belong to the FUNNEL slide (MW: "try to combine this
+         * block with in the first section"), so they must appear before the
+         * cohort table rather than on a slide of their own.
+         */
+        const iCards = h.indexOf('Half visit within');
+        const iJoined = h.indexOf('who joined each month');
+        if (iCards < 0 || !(iCards < iJoined)) {
+          return fail("better club", "the roster cards are not on the funnel slide"), finish();
+        }
+        // "1 median · mean 4.8" was unreadable; the median is now a sentence.
+        if (/median\s*·\s*mean/.test(body)) {
+          return fail("better club", "the median/mean card is still in its confusing form"), finish();
+        }
+        // Cohort revenue replaced the months-to-first-visit column.
+        if (!/Revenue since/.test(body) || /Avg months to first visit/.test(body)) {
+          return fail("better club", "the cohort table still shows months rather than revenue"), finish();
+        }
+        // One name for one thing: "Have visited" and "Became patients" were both used.
+        if (/Have visited/.test(body)) return fail("better club", "the table still says Have visited"), finish();
         if (!/who joined each month/.test(body)) {
           return fail("better club", "the joined-to-patient table did not render"), finish();
         }

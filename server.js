@@ -7645,7 +7645,7 @@ async function buildBetterClub(from, to) {
   try {
     res = await sheetBatchGet(BCLUB_SHEET_ID, [
       `'${BCLUB_SUMMARY_TAB}'!A1:P`,
-      `'${BCLUB_DETAIL_TAB}'!A1:E`,
+      `'${BCLUB_DETAIL_TAB}'!A1:I`,
     ], { unformatted: true });
   } catch (e) {
     const msg = String((e && e.message) || e);
@@ -7747,7 +7747,18 @@ async function buildBetterClub(from, to) {
   if (detail.length > 1) {
     const dHead = detail[0].map((h) => String(h == null ? "" : h).trim());
     const dAt = (name) => dHead.indexOf(name);
-    const D = { month: dAt("MonthYear"), id: dAt("HN_ID"), rev: dAt("Revenue"), seg: dAt("Segment") };
+    /**
+     * `User ID` IS THE COHORT KEY NOW, with `HN_ID` as the fallback.
+     *
+     * HN only exists once someone has visited, so an HN-keyed cohort silently
+     * excludes every member who has not — the exact population the programme
+     * cares about. User ID comes from registration and covers everyone.
+     */
+    const D = {
+      month: dAt("MonthYear"), user: dAt("User ID"), hn: dAt("HN_ID"),
+      rev: dAt("Revenue"), seg: dAt("Segment"),
+    };
+    D.id = D.user > -1 ? D.user : D.hn;
     if (D.month === -1 || D.id === -1) {
       detailNote = `${BCLUB_DETAIL_TAB} is missing MonthYear or HN_ID — cohorts unavailable.`;
     } else {
@@ -7926,7 +7937,8 @@ async function buildBetterClub(from, to) {
       household: mAt("Household type"), channel: mAt("Register Channel"),
     };
     if (M.id > -1 && M.reg > -1) {
-      const regByMonth = new Map();      // month -> { joined, converted, lagSum, lagN }
+      const regByMonth = new Map();      // month -> { joined, converted, ... }
+      const regOfUser = new Map();       // User ID -> registration month
       // Blanks are counted under "" and reported as `notRecorded`, NOT dropped:
       // 16% of the real roster has no nationality, and silently excluding those
       // rows would inflate every share by a sixth.
@@ -7951,7 +7963,10 @@ async function buildBetterClub(from, to) {
         if (paid && lg !== null) { lagSum += lg; lagN++; lags.push(lg); }
 
         if (rk) {
-          if (!regByMonth.has(rk)) regByMonth.set(rk, { joined: 0, converted: 0, lagSum: 0, lagN: 0 });
+          regOfUser.set(id, rk);
+          if (!regByMonth.has(rk)) {
+            regByMonth.set(rk, { joined: 0, converted: 0, lagSum: 0, lagN: 0, revenue: 0 });
+          }
           const a = regByMonth.get(rk);
           a.joined++;
           if (paid) { a.converted++; if (lg !== null) { a.lagSum += lg; a.lagN++; } }
@@ -7967,6 +7982,35 @@ async function buildBetterClub(from, to) {
         }
       }
 
+      /**
+       * REVENUE BY THE MONTH THE MEMBER JOINED, not the month they spent.
+       *
+       * MW: "Avg months to first visit - remove rather put money if if make
+       * sense." It does: a cohort's registration count and its conversion rate
+       * say nothing about whether the people recruited that month were worth
+       * recruiting. Every baht any member has ever spent lands against the month
+       * they signed up, which is the figure that makes two intakes comparable.
+       *
+       * Only counts what `Rev_Attribution` holds, so it is revenue to date over
+       * the loaded months — a recent cohort has had less time to spend, and the
+       * table says so.
+       */
+      if (detail && detail.length > 1 && regOfUser.size) {
+        const dh = detail[0].map((h) => String(h == null ? "" : h).trim());
+        const uCol = dh.indexOf("User ID"), rCol = dh.indexOf("Revenue");
+        if (uCol > -1 && rCol > -1) {
+          for (let r = 1; r < detail.length; r++) {
+            const row = detail[r] || [];
+            const uid = String(row[uCol] == null ? "" : row[uCol]).trim();
+            if (!uid) continue;
+            const rk = regOfUser.get(uid);
+            if (!rk) continue;                       // spender is not in the roster
+            const a = regByMonth.get(rk);
+            if (a) a.revenue += bnum(row[rCol]);
+          }
+        }
+      }
+
       lags.sort((a, b) => a - b);
       memberStats = {
         total, live, tombstoned: total - live, everPaid,
@@ -7978,6 +8022,9 @@ async function buildBetterClub(from, to) {
             month: k, joined: a.joined, converted: a.converted,
             conversion: a.joined ? a.converted / a.joined : null,
             meanMonthsToFirst: a.lagN ? a.lagSum / a.lagN : null,
+            revenue: a.revenue,
+            revenuePerMember: a.joined ? a.revenue / a.joined : null,
+            revenuePerPatient: a.converted ? a.revenue / a.converted : null,
           })),
         /**
          * SMALL CELLS ARE FOLDED INTO "Other".
@@ -7998,7 +8045,7 @@ async function buildBetterClub(from, to) {
   let regBy = null, registerSource = null, registerNote = null;
   if (memberStats && memberStats.byMonth.length) {
     regBy = new Map(memberStats.byMonth.map((m) => [m.month, m.joined]));
-    registerSource = `${BCLUB_MEMBER_TAB} tab (${num0(memberStats.total)} members)`;
+    registerSource = `Total ${num0(memberStats.total)} members`;
   } else if (registers === null) {
     registerNote = `No "${BCLUB_REGISTER_TAB}" tab in the spreadsheet yet.`;
   } else if (registers.length < 2) {

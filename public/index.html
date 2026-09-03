@@ -6157,6 +6157,49 @@ function renderBclub() {
       the revenue attributed to them, with the new-member subset of each. Every month the spreadsheet holds.</div>
     </div>`;
 
+  /**
+   * THE MEMBERSHIP SLIDE. Two questions the revenue-keyed model could not ask:
+   * how many people joined, and how long they take to become patients.
+   *
+   * The cohort conversion here is NOT the funnel's month-over-month rate. That
+   * one divides July's new patients by July's registrations, which mixes two
+   * populations. This one follows the people who joined in a month and asks how
+   * many of them ever came — the question worth asking, and only answerable now
+   * that every member has an ID.
+   */
+  const mst = d.memberStats;
+  const thisMonth = mst ? (mst.byMonth.filter(x => x.month === s.month)[0] || null) : null;
+
+  /**
+   * "1 median · mean 4.8" was unreadable — MW: "so i take 1 or 4.8 months
+   * before they turn to be a patients?"
+   *
+   * It is 1. Half the members who ever visit do so within a month of joining.
+   * The 4.8 is a MEAN dragged up by a long tail of people who joined last year
+   * and came in much later: a real fact about the tail, and the wrong number to
+   * quote as typical. So the card states the median as a sentence — "Half visit
+   * within 1 month of joining" — and the mean survives only as a footnote to it.
+   */
+  const memberCards = mst ? `
+    <div class="grid g-4 mt">
+      <div class="stat"><div class="lab">Members</div><div class="val">${cnt(mst.live)}</div>
+        <div class="sub2">${mst.tombstoned ? `${cnt(mst.tombstoned)} no longer on the roster` : 'all current'}</div></div>
+      <div class="stat"><div class="lab">Have become patients</div><div class="val">${cnt(mst.everPaid)}</div>
+        <div class="sub2">${pct(mst.everPaidShare)} of all members, ever</div></div>
+      <div class="stat"><div class="lab">Half visit within</div><div class="val">${
+        mst.medianMonthsToFirst === null ? '—'
+          : mst.medianMonthsToFirst === 0 ? 'the same month'
+          : `${cnt(mst.medianMonthsToFirst)} month${mst.medianMonthsToFirst === 1 ? '' : 's'}`}</div>
+        <div class="sub2" data-tip="${esc('The average is ' + (mst.meanMonthsToFirst === null ? 'unknown'
+          : mst.meanMonthsToFirst.toFixed(1) + ' months') + ', pulled up by members who joined long ago and '
+          + 'visited much later. The median is the typical wait.')}">${
+          mst.medianMonthsToFirst === 0 ? 'they join' : 'of joining'}${
+          mst.meanMonthsToFirst === null ? '' : ` · average ${mst.meanMonthsToFirst.toFixed(1)}, long tail`}</div></div>
+      <div class="stat"><div class="lab">Joined in ${esc(s.label.replace(/ \d{4}$/, ''))}</div><div class="val">${
+        thisMonth ? cnt(thisMonth.joined) : '—'}</div>
+        <div class="sub2">${thisMonth ? `${cnt(thisMonth.converted)} have become patients` : 'not in the roster yet'}</div></div>
+    </div>` : '';
+
   const funnelBody = `
     <div class="card">
       <div class="grid g-4">
@@ -6166,26 +6209,19 @@ function renderBclub() {
           !d.registerSource ? 'awaiting a source'
             : (last && last.registers === null)
               ? `${esc(last.label.replace(/ \d{4}$/, ''))} not in the roster yet`
-              : `from the ${esc(d.registerSource)}`)}
+              : esc(d.registerSource))}
         ${stage('New paid members', 'newPaidHns', '#34A853', null,
           lastConv
             ? `<b>${pct(lastConv.registerToPaid)}</b> of registers converted${
                 lastConv.month === (last && last.month) ? '' : ` in ${esc(lastConv.label.replace(/ \d{4}$/, ''))}`}`
             : '')}
       </div>
-      <div class="note"><b>All four stages are BGH, BIH, BHT and WSH.</b> Impressions and users are
-      filtered to those four hospitals, not the 27-branch group, so the same population runs the whole way
-      down — a funnel counting 27 branches at the top and four at the bottom would give a conversion rate
-      that means nothing.
-      ${fsc.note ? `<br>${esc(fsc.note)}` : ''}
-      ${d.registerSource
-        ? `<br>New registers is counted from <b>Registered at</b> on the member roster, so it needs no
-           hand-entered figures and no separate feed.`
-        : `<br><b>New registers has no source connected</b>, so the third stage is empty and register-to-paid
-           cannot be computed. ${esc(d.registerNote || '')}`}
-      ${fsc.impressions === null ? '<br>Search Console was unavailable this run — press Refresh to retry.' : ''}
-      ${fsc.users === null ? '<br>GA4 was unavailable this run — press Refresh to retry.' : ''}</div>
-    </div>`;
+      ${(fsc.impressions === null || fsc.users === null || !d.registerSource) ? `<div class="note">
+        ${!d.registerSource ? `<b>New registers has no source.</b> ${esc(d.registerNote || '')}` : ''}
+        ${fsc.impressions === null ? 'Search Console was unavailable this run — press Refresh to retry.' : ''}
+        ${fsc.users === null ? '<br>GA4 was unavailable this run — press Refresh to retry.' : ''}</div>` : ''}
+    </div>
+    ${memberCards}`;
 
   const monthBody = `
     <div class="grid g-4">
@@ -6213,17 +6249,6 @@ function renderBclub() {
       </div>
     </div>`;
 
-  /**
-   * THE MEMBERSHIP SLIDE. Two questions the revenue-keyed model could not ask:
-   * how many people joined, and how long they take to become patients.
-   *
-   * The cohort conversion here is NOT the funnel's month-over-month rate. That
-   * one divides July's new patients by July's registrations, which mixes two
-   * populations. This one follows the people who joined in a month and asks how
-   * many of them ever came — the question worth asking, and only answerable now
-   * that every member has an ID.
-   */
-  const mst = d.memberStats;
   const mix = (title, block, note) => {
     if (!block || !block.rows.length) return '';
     return `<div class="card">
@@ -6243,40 +6268,28 @@ function renderBclub() {
   };
 
   const memberBody = mst ? `
-    <div class="grid g-4" style="margin-bottom:14px;">
-      <div class="stat"><div class="lab">Members</div><div class="val">${cnt(mst.live)}</div>
-        <div class="sub2">${mst.tombstoned ? `${cnt(mst.tombstoned)} no longer on the roster` : 'all current'}</div></div>
-      <div class="stat"><div class="lab">Have become patients</div><div class="val">${cnt(mst.everPaid)}</div>
-        <div class="sub2">${pct(mst.everPaidShare)} of all members, ever</div></div>
-      <div class="stat"><div class="lab">Months to first visit</div><div class="val">${
-        mst.medianMonthsToFirst === null ? '—' : cnt(mst.medianMonthsToFirst)}</div>
-        <div class="sub2">median · mean ${mst.meanMonthsToFirst === null ? '—' : mst.meanMonthsToFirst.toFixed(1)}</div></div>
-      <div class="stat"><div class="lab">Joined in ${esc(s.label.replace(/ \d{4}$/, ''))}</div><div class="val">${
-        (function () { var r = mst.byMonth.filter(x => x.month === s.month)[0]; return r ? cnt(r.joined) : '—'; })()}</div>
-        <div class="sub2">${(function () { var r = mst.byMonth.filter(x => x.month === s.month)[0];
-          return r ? `${cnt(r.converted)} have visited since` : 'not in the roster yet'; })()}</div></div>
-    </div>
-
     <div class="card">
       <div class="card-title">Of the people who joined each month, how many became patients</div>
       <table class="roomy"><thead><tr>
-        <th>Joined in</th><th class="num">Registered</th><th class="num">Have visited</th>
-        <th class="num">Converted</th><th class="num">Avg months to first visit</th>
+        <th>Joined in</th><th class="num">Registered</th><th class="num">Became patients</th>
+        <th class="num">CR%</th><th class="num">Revenue since ฿</th><th class="num">Per patient ฿</th>
       </tr></thead><tbody>
       ${mst.byMonth.slice().reverse().map(r => `<tr>
         <td class="strong">${esc(bclubMonthLabel(r.month))}</td>
         <td class="num"><b>${cnt(r.joined)}</b></td>
         <td class="num">${cnt(r.converted)}</td>
         <td class="num" style="color:var(--muted);">${pct(r.conversion)}</td>
-        <td class="num">${r.meanMonthsToFirst === null ? '—' : r.meanMonthsToFirst.toFixed(1)}</td>
+        <td class="num"><b>${cnt(r.revenue)}</b></td>
+        <td class="num" style="color:var(--muted);">${cnt(r.revenuePerPatient)}</td>
       </tr>`).join('')}
       </tbody></table>
       <div class="note"><b>This follows the people, not the calendar.</b> A row asks how many of the members
-      who joined that month have visited at any point since — which is why the newest months read low: they
-      have had less time. It is a different question from the funnel above, which divides one month's new
-      patients by the same month's registrations and so mixes two populations.
-      <br>Months are the honest unit: revenue arrives monthly, so a first visit resolves to a month rather
-      than a date. Someone who joined on 12 February and first paid in April took between one and three months.</div>
+      who joined that month have become patients at any point since, and what they have spent — which is why
+      the newest months read low: they have had less time. It is a different question from the funnel above,
+      which divides one month's new patients by the same month's registrations and so mixes two populations.
+      <br><b>Revenue since</b> is every baht those members have spent across the months loaded here, banked
+      against the month they signed up. That makes two intakes comparable in a way a registration count
+      cannot: March recruited fewer people than April but converted twice the share of them.</div>
     </div>` : '';
 
   const cohortBody = co ? `
@@ -6339,6 +6352,7 @@ function renderBclub() {
     ${slideShell('Revenue attribution', combos, { first: true, scope: 'Better Club' })}
     ${slideShell('Google impressions \u203a web traffic \u203a Better Club registers \u203a new paid members', funnelBody, {})}
     ${slideShell(`Better Club \u00b7 ${s.label}`, monthBody, { scope: 'Better Club' })}
+    ${slideShell('Who the revenue comes from', concBody, { scope: 'Better Club', flow: true })}
     ${memberBody ? slideShell('Who joins, and how long until they visit', memberBody, { scope: 'Better Club' }) : ''}
     ${mst ? slideShell('What the membership is made of', `
       <div class="grid g-2">
@@ -6349,8 +6363,7 @@ function renderBclub() {
         ${mix('Household type', mst.household, '')}
         ${mix('Register channel', mst.channel, 'How the member signed up.')}
       </div>`, { scope: 'Better Club', flow: true }) : ''}
-    ${slideShell('Do new members come back?', cohortBody, { scope: 'Better Club' })}
-    ${slideShell('Who the revenue comes from', concBody, { scope: 'Better Club', flow: true })}`;
+    ${slideShell('Do new members come back?', cohortBody, { scope: 'Better Club' })}`;
 
   // MW's SS2, first on the page.
   drawBclubCombo('bcCombo', mLab,
@@ -8830,7 +8843,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.190.0';
+const CLIENT_BUILD = '3.191.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

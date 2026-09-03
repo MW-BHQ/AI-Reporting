@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.190.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.191.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -718,6 +718,53 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.191.0 — Better Club: roster cards join the funnel, cohort revenue replaces the lag column.**
+
+MW: "combine this block with in the first section, remove footer" / "does Have
+visited means, become patients? if yes change it so" / "Converted > CR%" / "Avg
+months to first visit - remove rather put money if if make sense" / "the 3rd card
+quite confuse, so i take 1 or 4.8 months" / "move Who the revenue comes from to
+be under Better Club · July 2026."
+
+**"1 median \u00b7 mean 4.8" WAS UNREADABLE, and the fix is not shorter text — it is
+picking a number.** The answer is 1: half the members who ever visit do so within
+a month of joining. The 4.8 is a MEAN dragged up by a long tail of people who
+joined last year and came in much later; a real fact about the tail, and the
+wrong figure to quote as typical. The card now reads "Half visit within 1 month
+of joining" with the mean demoted to a footnote, and says "the same month" when
+the median is 0 rather than "0 months", which reads like a missing value.
+
+**"Have visited" AND "Became patients" WERE THE SAME THING under two names.** One
+name now, and an assertion fails if the old one comes back. `Converted` is `CR%`.
+
+**COHORT REVENUE REPLACED THE MONTHS-TO-FIRST-VISIT COLUMN.** Every baht a member
+has ever spent is banked against the month they SIGNED UP, not the month they
+spent it — which is what makes two intakes comparable. March recruited fewer
+people than April and converted twice the share of them; a registration count
+alone cannot say which intake was worth having. Needed widening the detail read
+from `A:E` to `A:I`, since `A:E` stopped at `Returned2Y` and never reached
+`User ID`.
+
+A spender with no `User ID` belongs to no cohort and is left out of the cohort
+totals rather than being dropped into one — asserted, so the cohort sum stays
+below the monthly revenue sum.
+
+**COHORTS NOW KEY ON `User ID`, NOT `HN_ID`.** An HN only exists once someone has
+visited, so an HN-keyed cohort silently excluded every member who had not — the
+exact population the programme is about.
+
+The roster cards moved onto the funnel slide and the funnel footer went with
+them; the four-hospital scope survives in the stage pill's tooltip. Slide order
+now: revenue attribution, funnel, the month, where the revenue comes from, who
+joins, what the membership is made of, cohorts.
+
+**A REGEX EDIT TO THE FIXTURE PASSED `node --check` WHILE CORRUPTING THE DATA.**
+Widening the detail rows stripped the quotes from the month, and `[2026-05,` is
+valid JavaScript — 2026 minus 5 — so the syntax check was happy and every month
+became the number 2021. Caught by reading the fixture back, not by a tool.
+
+275 assertions; 22 report sections + 7 Better Club slides, 0 clipping at 900px.
 
 **v3.190.0 — the registers stage comes from the member roster; the funnel is BHQ-scoped.**
 
