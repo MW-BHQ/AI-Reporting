@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.197.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.198.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -718,6 +718,32 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.198.0 — the score-card block loses its shell; sparklines take the space.**
+
+MW: "still more room to utilize. remove white bg here, and the horizon line
+under Google impressions › web traffic > ... then you can move the text a little
+down."
+
+**BOTH WERE THE SAME ELEMENT.** The wrapper `.card` around the eight score cards
+supplied the white panel AND the 1px top border that read as a rule under the
+title. Eight cards inside a ninth card was a box around boxes anyway — the
+`.stat` tiles carry their own edges, so the wrapper spent 18px/20px of padding
+and a border to say nothing. Removing it reclaimed the height and answered both
+notes at once.
+
+**A `!important` IN THE PRINT BLOCK ATE THE FIRST ATTEMPT.** `.bc-pg1b
+.card{padding:10px 12px!important}` outranked the shell-removal rule, so the
+measured page got 6px TALLER instead of 24px shorter — the title's new padding
+applied and the reclaim did not. Consolidated into one rule per surface.
+`!important` in a print block will silently outrank anything added later, which
+is worth remembering before adding the next one.
+
+Sparklines went 0.65in to 0.82in — the drawn line is now about 79px against the
+20px it started at, with the axes off, the bounds taken from the data and the
+plot area no longer paying for labels that are not drawn.
+
+275 assertions; page one 710px of 718px with the chart at 51%, 0 clipping.
 
 **v3.197.0 — the flat sparkline had three causes, and only the third one showed.**
 

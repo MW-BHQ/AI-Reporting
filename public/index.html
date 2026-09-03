@@ -1621,6 +1621,27 @@
    * last panel. `min-width:0` lets the track collapse; `max-width:100%` stops
    * the bitmap becoming the intrinsic size once it does.
    */
+  /**
+   * THE SCORE-CARD BLOCK HAS NO SHELL OF ITS OWN.
+   *
+   * MW: "remove white bg here, and the horizon line under Google impressions ›
+   * web traffic > ... then you can move the text a little down."
+   *
+   * BOTH were the same element: the wrapper `.card` supplies the white panel
+   * AND the 1px top border that read as a rule under the title. Eight cards
+   * inside a ninth card was a box around boxes anyway — the individual `.stat`
+   * tiles already carry their own edges, so the wrapper was only spending
+   * 18px/20px of padding and a border to say nothing.
+   *
+   * The reclaimed height goes to the sparklines, which is what MW was after.
+   */
+  #viewRoot .slide.bc-pg1b > .card{
+    background:none;border:0;box-shadow:none;backdrop-filter:none;
+    -webkit-backdrop-filter:none;padding:0;
+  }
+  /* With the rule gone the title was hugging the chart above it. */
+  #viewRoot .slide.bc-pg1b .slide-title{padding-top:6px;}
+
   .bc-stage, .bc-hero, .bc-mid { min-width:0; }
   .bc-stage canvas, .bc-hero canvas, .bc-mid canvas { max-width:100%; }
   #viewRoot .grid > * { min-width:0; }
@@ -1719,7 +1740,7 @@
      */
     .slide.bc-pg1a, .slide.bc-pg1b{padding-top:0!important;padding-bottom:0!important;}
     .bc-pg1a .card{padding:8px 10px!important;}
-    .bc-pg1b .card{padding:10px 12px!important;}
+    .bc-pg1b .card{padding:0!important;background:none!important;border:0!important;}
     .bc-pg1b .stat{padding:8px 10px!important;}
     .bc-pg1a .slide-title{min-height:2.4rem!important;margin-bottom:4px!important;}
     .bc-pg1b .slide-title.quiet{min-height:1.4rem!important;margin-bottom:4px!important;}
@@ -1739,10 +1760,11 @@
     /* Sparklines are back, at TREND size — tall enough to read a shape, not to
        read a value. 0.30in was too small to see at all — MW: "sparkline didnt
        come" — because a 29px box minus the card's own padding leaves almost no
-       plot. 0.65in is the largest the page budget allows beside a chart that
-       has to stay over half; combined with dropping the sparkline's own axes it
-       takes the drawn line from about 20px to about 60px. */
-    .bc-stage{height:0.65in!important;max-height:none!important;}
+       plot. 0.82in is the largest the page budget allows beside a chart that
+       has to stay over half, once the score-card block gave up its wrapper
+       card. With the axes off and the bounds taken from the data, the drawn
+       line went from about 20px to about 79px. */
+    .bc-stage{height:0.82in!important;max-height:none!important;}
   }
   @media screen{
     body.print-prep .bc-hero{height:3.6in!important;max-height:none!important;}
@@ -1751,12 +1773,12 @@
       padding-top:0!important;padding-bottom:0!important;
     }
     body.print-prep .bc-pg1a .card{padding:8px 10px!important;}
-    body.print-prep .bc-pg1b .card{padding:10px 12px!important;}
+    body.print-prep .bc-pg1b .card{padding:0!important;background:none!important;border:0!important;}
     body.print-prep .bc-pg1b .stat{padding:8px 10px!important;}
     body.print-prep .bc-pg1a .slide-title{min-height:2.4rem!important;margin-bottom:4px!important;}
     body.print-prep .bc-pg1b .slide-title.quiet{min-height:1.4rem!important;margin-bottom:4px!important;}
     body.print-prep .bc-pg1a .note, body.print-prep .bc-pg1b .note{display:none!important;}
-    body.print-prep .bc-stage{height:0.65in!important;max-height:none!important;}
+    body.print-prep .bc-stage{height:0.82in!important;max-height:none!important;}
   }
   @media(max-width:1080px){.g-6,.g-5,.g-4{grid-template-columns:repeat(2,1fr);}.g-2-1,.g-3,.g-2{grid-template-columns:1fr;}}
   @media(max-width:760px){
@@ -9146,7 +9168,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.197.0';
+const CLIENT_BUILD = '3.198.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

@@ -1483,6 +1483,15 @@ setTimeout(() => {
         if (!/\{ labels: true, money: \['y'\] \}/.test(SRC)) {
           return fail("better club", "the monthly chart has no data labels"), finish();
         }
+        /**
+         * THE SCORE-CARD BLOCK HAS NO WRAPPER SHELL. Its `.card` supplied both
+         * the white panel and the 1px border that read as a rule under the
+         * title, and eight cards inside a ninth was a box around boxes. The
+         * height it was spending went to the sparklines.
+         */
+        if (!/slide\.bc-pg1b > \.card\{/.test(SRC)) {
+          return fail("better club", "the score-card block still has a card shell"), finish();
+        }
         // Sparklines belong to the funnel row only — four charts, not eight.
         const sparks = r ? r.querySelectorAll('.slide.bc-pg1b .bc-stage').length : 0;
         if (sparks !== 4) {
