@@ -90,6 +90,12 @@ with sync_playwright() as p:
           logo: !!s.querySelector('.slide-logo'),
           range: !!s.querySelector('.slide-range'),
         })),
+        printed: slides.filter(s => getComputedStyle(s).display !== 'none').length,
+        // The two halves of page one, measured against a 7.5in sheet less its
+        // 2px. 2.6in/1.5in came to 846px here and silently became a third page.
+        pageOne: slides.filter(s => s.classList.contains('bc-pg1a')
+                                 || s.classList.contains('bc-pg1b'))
+                       .reduce((a, s) => a + s.getBoundingClientRect().height, 0),
         canvases: document.querySelectorAll('#viewRoot canvas').length,
         loose: [...document.querySelectorAll('#viewRoot canvas')]
                  .filter(c => !c.closest('.chart-wrap')).length,
@@ -113,6 +119,19 @@ for r in bc["slides"]:
     if clip != "ok" or hdr != "logo+range":
         bcbad.append(r["title"])
     print(f"  {r['title'][:44]:<46}{clip:<14}{hdr}")
+
+# THE EXPORT IS TWO PAGES. Three slides print — the pair that shares page one
+# and the month — and the pair has to FIT the sheet or it becomes three.
+if bc["printed"] != 3:
+    bcbad.append(f"{bc['printed']} slides print, expected 3")
+    print(f"  !! {bc['printed']} slides would print, expected 3")
+SHEET = 718
+if bc["pageOne"] > SHEET:
+    bcbad.append(f"page one is {round(bc['pageOne'])}px over a {SHEET}px sheet")
+    print(f"  !! page one measures {round(bc['pageOne'])}px against a {SHEET}px sheet "
+          f"— it will spill to a third page")
+else:
+    print(f"  page one {round(bc['pageOne'])}px of {SHEET}px  ok")
 
 # Every chart box must be a `.chart-wrap` with a built twin, or it prints blank.
 if bc["loose"]:

@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.191.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.192.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -718,6 +718,53 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.192.0 — Better Club exports two pages; quiet titles; every point labelled.**
+
+MW: "now the pdf, we will export only 2 pages" / "please use no capitalized
+here and not bright purple, find some mute color, no bold" / "for Revenue
+attribution graph - put data label" / "manager size carefully, now the last card
+is overflow" / "we spend too much time on this."
+
+**WHICH SLIDES PRINT IS NOW A MARKUP CONTRACT.** Page one carries revenue
+attribution and the funnel together, page two is the selected month, and the
+other four slides are screen-only. `bc-pg1a` / `bc-pg1b` / `bc-pg2` /
+`bc-screen-only`, asserted in `boot.js` — without that the deck silently grows
+back to seven sheets the next time a slide is added.
+
+**`.slide{break-after:page}` MEANT KILLING pg1b's BREAK-BEFORE WAS NOT ENOUGH.**
+Every slide forces a break AFTER itself, so pg1a ended the page on its own and
+the funnel still landed on sheet two. Both halves of the pair have to give up
+their own break. This cost a render cycle to find and is the kind of thing only
+a real export shows.
+
+**THE HEIGHTS WERE MEASURED IN-BROWSER, NOT ESTIMATED.** My first budget —
+2.6in hero, 1.5in stages — came to 846px against a 718px sheet and quietly
+produced a third page. A short sweep in Chromium found 1.9in/1.15in with the
+page-one notes hidden lands at 695px. The explanatory notes are the difference
+between two pages and three, and they are screen furniture anyway.
+`test/print-overflow.py` now measures the pair against the sheet and counts how
+many slides would print, so neither can regress unseen.
+
+**THE OVERFLOWING FOURTH PANEL WAS A GRID BLOWOUT, NOT A SIZING MISTAKE.** A
+grid item is `min-width:auto`, so a canvas carrying an inline width — which
+every chart does after a print pass — props its column open at the printed width
+and the four-up row overflows its card, clipping the last panel. `min-width:0`
+on the chart boxes and on `#viewRoot .grid > *` lets the track collapse;
+`max-width:100%` stops the bitmap becoming the intrinsic size once it does.
+
+**DATA LABELS ON EVERY POINT of the revenue chart**, matching the Looker chart it
+rebuilds. Two implementations, ONE config: `bcPointLabels` draws on the canvas
+for the screen and `chartToSvg` draws in the twin for print, both reading
+`options.plugins.lastPointLabels`, so they cannot disagree. Collisions are
+checked per x position — a global check pushed labels up because something sat
+at the same height four months away, and the column drifted off the plot.
+
+Titles use a `quiet` class: no uppercase, weight 500, muted grey rather than the
+deck violet.
+
+275 assertions; 22 report sections + 7 Better Club slides, page one 695px of
+718px, 0 clipping at 900px.
 
 **v3.191.0 — Better Club: roster cards join the funnel, cohort revenue replaces the lag column.**
 

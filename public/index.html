@@ -1613,6 +1613,53 @@
     body.print-prep{overflow:hidden!important;}
   }
   /**
+   * A CANVAS MUST NOT HOLD ITS GRID TRACK OPEN.
+   *
+   * A grid item defaults to `min-width:auto`, so a canvas carrying an inline
+   * width — which every chart does after a print pass — props its column open
+   * at that width and the four-up funnel row overflows its card, clipping the
+   * last panel. `min-width:0` lets the track collapse; `max-width:100%` stops
+   * the bitmap becoming the intrinsic size once it does.
+   */
+  .bc-stage, .bc-hero, .bc-mid { min-width:0; }
+  .bc-stage canvas, .bc-hero canvas, .bc-mid canvas { max-width:100%; }
+  #viewRoot .grid > * { min-width:0; }
+
+  /**
+   * THE PRINTED DECK IS TWO PAGES (MW: "now the pdf, we will export only 2
+   * pages"). Page one carries revenue attribution and the funnel together; page
+   * two is the selected month. Everything else is screen-only — the cohort,
+   * composition and revenue-concentration slides are for reading on screen, not
+   * for putting in front of a board.
+   *
+   * `.bc-pg1b` drops its page break so it lands under `.bc-pg1a`, and both give
+   * up the full-page height that `.slide` takes in print, or each would still
+   * claim a sheet of its own.
+   */
+  .slide-title.quiet {
+    text-transform:none; font-weight:500; letter-spacing:.01em;
+    color:var(--muted); min-height:2.6rem;
+  }
+  @media print{
+    .slide.bc-screen-only{display:none!important;}
+    .slide.bc-pg1a, .slide.bc-pg1b{
+      height:auto!important;min-height:0!important;
+    }
+    /**
+     * `.slide{break-after:page}` forces a break AFTER every slide, so killing
+     * pg1b's break-BEFORE was not enough — pg1a was still ending the page on
+     * its own. Both halves of the pair have to give up their own break.
+     */
+    .slide.bc-pg1a{ break-after:auto!important;page-break-after:auto!important; }
+    .slide.bc-pg1b{
+      break-before:auto!important;page-break-before:auto!important;
+      border-top:0!important;padding-top:0!important;
+    }
+    .slide.bc-pg1b .slide-right{display:none!important;}
+    .slide-title.quiet{min-height:2rem;color:#6B7280;}
+  }
+
+  /**
    * BETTER CLUB CHART BOXES.
    *
    * Classes rather than inline heights, because an inline height beats a class
@@ -1636,21 +1683,29 @@
   .bc-stage{height:120px;}
   .bc-mid{height:230px;}
 /*
-   * THE HEIGHTS ARE MEASURED, NOT GUESSED. 5.9in and 4.1in were an eyeball at
-   * 1400px and clipped by 32px and 10px once `test/print-overflow.py` measured
-   * them at 900px — the narrow width the harness uses on purpose, because a
-   * collapsing grid is what pushes a section over. The card padding, the note
-   * and the slide header all come out of the 7.5in sheet before the chart does.
+  /*
+   * TWO BLOCKS NOW SHARE PAGE ONE, so neither can take a page of height. Budget
+   * for a 7.5in sheet: two quiet headers ~0.9, hero 2.6, stage labels ~0.7,
+   * stage charts 1.5, roster cards 0.9, card padding ~0.6 => about 7.2in.
+   * Measured with test/print-overflow.py at 900px, not eyeballed — 5.9in and
+   * 4.1in looked right at 1400px and clipped once measured narrow.
    */
   @media print{
-    .bc-hero{height:5.4in!important;max-height:none!important;}
-    .bc-stage{height:3.5in!important;max-height:none!important;}
+    /* Measured in-browser, not eyeballed: 2.6/1.5 came to 846px against a
+       718px sheet and spilled onto a third page. 1.9/1.15 with the page-one
+       notes hidden measures 695px. */
+    .bc-hero{height:1.9in!important;max-height:none!important;}
+    .bc-stage{height:1.15in!important;max-height:none!important;}
     .bc-mid{height:3.6in!important;max-height:none!important;}
+    /* The explanatory notes are for the screen. On a two-page export they are
+       the difference between two pages and three. */
+    .bc-pg1a .note, .bc-pg1b .note{display:none!important;}
   }
   @media screen{
-    body.print-prep .bc-hero{height:5.4in!important;max-height:none!important;}
-    body.print-prep .bc-stage{height:3.5in!important;max-height:none!important;}
+    body.print-prep .bc-hero{height:1.9in!important;max-height:none!important;}
+    body.print-prep .bc-stage{height:1.15in!important;max-height:none!important;}
     body.print-prep .bc-mid{height:3.6in!important;max-height:none!important;}
+    body.print-prep .bc-pg1a .note, body.print-prep .bc-pg1b .note{display:none!important;}
   }
   @media(max-width:1080px){.g-6,.g-5,.g-4{grid-template-columns:repeat(2,1fr);}.g-2-1,.g-3,.g-2{grid-template-columns:1fr;}}
   @media(max-width:760px){
@@ -2145,14 +2200,14 @@ function humanDate(v) {
  *             break is acceptable; an anonymous continuation page is not, so a
  *             flowed section must carry its own header.
  */
-function slideShell(title, body, { first, scope, fill, flow, logo } = {}) {
+function slideShell(title, body, { first, scope, fill, flow, logo, cls } = {}) {
   if (!body) return '';
   const pill = scope ? ` <span class="all-four">${esc(scope)}</span>` : '';
   const right = `<span class="slide-right"><span class="slide-range">${esc(humanRange())}</span><img
     class="slide-logo" src="/brand/${esc(logo || 'bh-wordmark.png')}" alt=""
     onerror="this.style.display='none'"></span>`;
-  return `<div class="slide${first ? '' : ' slide-break'}${fill ? ' slide-fill' : ''}${flow ? ' slide-flow' : ''}">
-    <div class="slide-title"><span>${esc(title)}${pill}</span>${right}</div>
+  return `<div class="slide${first ? '' : ' slide-break'}${fill ? ' slide-fill' : ''}${flow ? ' slide-flow' : ''}${cls ? ' ' + cls : ''}">
+    <div class="slide-title${/\bquiet\b/.test(cls || '') ? ' quiet' : ''}"><span>${esc(title)}${pill}</span>${right}</div>
     ${body}</div>`;
 }
 
@@ -6349,11 +6404,16 @@ function renderBclub() {
     </div>`;
 
   $('viewRoot').innerHTML = `
-    ${slideShell('Revenue attribution', combos, { first: true, scope: 'Better Club' })}
-    ${slideShell('Google impressions \u203a web traffic \u203a Better Club registers \u203a new paid members', funnelBody, {})}
-    ${slideShell(`Better Club \u00b7 ${s.label}`, monthBody, { scope: 'Better Club' })}
-    ${slideShell('Who the revenue comes from', concBody, { scope: 'Better Club', flow: true })}
-    ${memberBody ? slideShell('Who joins, and how long until they visit', memberBody, { scope: 'Better Club' }) : ''}
+    ${slideShell('Revenue attribution', combos,
+      { first: true, scope: 'Better Club', cls: 'quiet bc-pg1a' })}
+    ${slideShell('Google impressions \u203a web traffic \u203a Better Club registers \u203a new paid members',
+      funnelBody, { cls: 'quiet bc-pg1b' })}
+    ${slideShell(`Better Club \u00b7 ${s.label}`, monthBody,
+      { scope: 'Better Club', cls: 'quiet bc-pg2' })}
+    ${slideShell('Who the revenue comes from', concBody,
+      { scope: 'Better Club', flow: true, cls: 'quiet bc-screen-only' })}
+    ${memberBody ? slideShell('Who joins, and how long until they visit', memberBody,
+      { scope: 'Better Club', cls: 'quiet bc-screen-only' }) : ''}
     ${mst ? slideShell('What the membership is made of', `
       <div class="grid g-2">
         ${mix('Nationality', mst.nationality, 'Current members only; members who have left the roster are excluded.')}
@@ -6362,8 +6422,9 @@ function renderBclub() {
       <div class="grid g-2 mt">
         ${mix('Household type', mst.household, '')}
         ${mix('Register channel', mst.channel, 'How the member signed up.')}
-      </div>`, { scope: 'Better Club', flow: true }) : ''}
-    ${slideShell('Do new members come back?', cohortBody, { scope: 'Better Club' })}`;
+      </div>`, { scope: 'Better Club', flow: true, cls: 'quiet bc-screen-only' }) : ''}
+    ${slideShell('Do new members come back?', cohortBody,
+      { scope: 'Better Club', cls: 'quiet bc-screen-only' })}`;
 
   // MW's SS2, first on the page.
   drawBclubCombo('bcCombo', mLab,
@@ -6400,11 +6461,58 @@ function renderBclub() {
  * lines drawn ON TOP of the bars. Chart.js decides draw order by dataset order,
  * so the lines are declared last on purpose.
  */
+/**
+ * On-screen twin of `chartToSvg`'s label pass. The printed chart is an SVG and
+ * draws its own labels; this is the canvas equivalent, reading the SAME
+ * `options.plugins.lastPointLabels` so one config drives both surfaces and they
+ * cannot disagree.
+ */
+const bcPointLabels = {
+  id: 'bcPointLabels',
+  afterDatasetsDraw(chart) {
+    const cfg = chart.options.plugins && chart.options.plugins.lastPointLabels;
+    if (!cfg || !cfg.enabled) return;
+    const { ctx, chartArea } = chart;
+    const money = cfg.money || [];
+    const placed = [];
+    ctx.save();
+    ctx.font = '600 10px Poppins, sans-serif';
+    ctx.textBaseline = 'alphabetic';
+    chart.data.datasets.forEach((ds, di) => {
+      const meta = chart.getDatasetMeta(di);
+      if (meta.hidden || !meta.data) return;
+      const isMoney = money.indexOf(meta.yAxisID) > -1;
+      ds.data.forEach((v, i) => {
+        if (v === null || v === undefined) return;
+        if (!cfg.all && i !== ds.data.length - 1) return;
+        const el = meta.data[i];
+        if (!el) return;
+        const n = Math.round(Number(v));
+        const txt = (isMoney ? '฿' : '') + (Math.abs(n) >= 1e6 ? (n / 1e6).toFixed(1) + 'M'
+          : Math.abs(n) >= 1e4 ? Math.round(n / 1e3) + 'K' : n.toLocaleString());
+        const w = ctx.measureText(txt).width;
+        let y = el.y - 6;
+        for (let g = 0; g < 6 && placed.some((q) => Math.abs(q.x - el.x) < w
+             && Math.abs(q.y - y) < 13); g++) y -= 13;
+        if (y < chartArea.top + 9) y = el.y + 14;
+        placed.push({ x: el.x, y: y });
+        ctx.fillStyle = 'rgba(255,255,255,.82)';
+        ctx.fillRect(el.x - w / 2 - 3, y - 9, w + 6, 12);
+        ctx.fillStyle = meta.type === 'bar' ? '#4C5878' : (ds.borderColor || '#4C5878');
+        ctx.textAlign = 'center';
+        ctx.fillText(txt, el.x, y);
+      });
+    });
+    ctx.restore();
+  },
+};
+
 function drawBclubCombo(canvasId, labels, bars, lines) {
   const el = document.getElementById(canvasId);
   if (!el || !window.Chart) return;
   if (el._chart) el._chart.destroy();
   el._chart = new Chart(el.getContext('2d'), {
+    plugins: [bcPointLabels],
     data: { labels, datasets: [
       /**
        * THE AXES ARE `y` AND `y1`, NOT DESCRIPTIVE NAMES.
@@ -6429,7 +6537,7 @@ function drawBclubCombo(canvasId, labels, bars, lines) {
         tooltip:{ callbacks:{ label:(c)=> ` ${c.dataset.label}: ${c.dataset.yAxisID==='y'
           ? '฿'+Math.round(c.parsed.y).toLocaleString() : Math.round(c.parsed.y).toLocaleString()}` } },
         // Read by chartToSvg, not by a canvas plugin — see there.
-        lastPointLabels:{ enabled:true, money:['y'] },
+        lastPointLabels:{ enabled:true, all:true, money:['y'] },
       },
       scales:{
         x:{ grid:{ display:false }, ticks:{ color:'#4C5878', font:cvFont(10), autoSkipPadding:6 } },
@@ -8647,11 +8755,21 @@ function chartToSvg(chart, W, H) {
     const placed = [];
     ds.forEach((d) => {
       const data = d.data || [];
-      // The last point THAT HAS A VALUE, not the last slot: a series whose
-      // newest month has not landed would be labelled on empty air.
-      let i = data.length - 1;
-      while (i >= 0 && (data[i] === null || data[i] === undefined)) i--;
-      if (i < 0) return;
+      /**
+       * `all` labels every point (MW: "for Revenue attribution graph - put data
+       * label"), matching the Looker chart this rebuilds. Otherwise just the
+       * last point that HAS a value — not the last slot, or a series whose
+       * newest month has not landed gets labelled on empty air.
+       */
+      const idxs = [];
+      if (lpl.all) {
+        data.forEach((v, k) => { if (v !== null && v !== undefined) idxs.push(k); });
+      } else {
+        let k = data.length - 1;
+        while (k >= 0 && (data[k] === null || data[k] === undefined)) k--;
+        if (k >= 0) idxs.push(k);
+      }
+      idxs.forEach((i) => {
       const axis = d.yAxisID || 'y';
       const y = yOf(axis)(data[i]);
       // A grouped bar is drawn off the band centre, so its label follows it.
@@ -8666,10 +8784,15 @@ function chartToSvg(chart, W, H) {
       const w = 6 + String(txt).length * (FS * 0.58);
       const right = x + 8 + w < padL + pw;
       let ty = y - 6;
-      // Nudge off any label already placed rather than overprinting it.
-      for (let g = 0; g < 6 && placed.some((q) => Math.abs(q.y - ty) < FS + 3); g++) ty -= FS + 4;
+      /**
+       * Collisions are checked PER X POSITION. With every point labelled, a
+       * global check pushes a label up because something else sits at the same
+       * height four months away, and the column drifts off the top of the plot.
+       */
+      for (let g = 0; g < 6 && placed.some((q) => Math.abs(q.x - x) < w
+           && Math.abs(q.y - ty) < FS + 3); g++) ty -= FS + 4;
       if (ty < padT + FS) ty = y + FS + 6;
-      placed.push({ y: ty });
+      placed.push({ x: x, y: ty });
       const bx = right ? x + 8 : x - 8 - w;
       out.push('<rect x="' + bx.toFixed(1) + '" y="' + (ty - FS).toFixed(1)
         + '" width="' + w.toFixed(1) + '" height="' + (FS + 5)
@@ -8680,6 +8803,7 @@ function chartToSvg(chart, W, H) {
         + svgEsc(((d.type || chart.config.type) === 'bar'
             ? '#4C5878' : (d.borderColor || '#4C5878')))
         + '">' + svgEsc(txt) + '</text>');
+      });
     });
   }
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H
@@ -8843,7 +8967,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.191.0';
+const CLIENT_BUILD = '3.192.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

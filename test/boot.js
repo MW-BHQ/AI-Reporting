@@ -1408,6 +1408,29 @@ setTimeout(() => {
         }
         if (!/BHQ/.test(h)) return fail("better club", "the stage scope pill is gone"), finish();
         /**
+         * THE EXPORT IS TWO PAGES. Which slides print is a MARKUP contract —
+         * the pair that shares page one, and the month. The other four are for
+         * reading on screen and must carry the screen-only class, or the deck
+         * silently grows back to seven sheets.
+         */
+        const printed = r ? [...r.querySelectorAll('.slide')]
+          .filter(sl => !sl.classList.contains('bc-screen-only')).length : 0;
+        if (printed !== 3) {
+          return fail("better club", `${printed} slides would print, expected 3`), finish();
+        }
+        if (!r.querySelector('.slide.bc-pg1a') || !r.querySelector('.slide.bc-pg1b')
+            || !r.querySelector('.slide.bc-pg2')) {
+          return fail("better club", "the page-one pair or the month slide is unmarked"), finish();
+        }
+        // Titles are quiet: not uppercased, not bold, not the bright violet.
+        if (!r.querySelector('.slide-title.quiet')) {
+          return fail("better club", "slide titles are not using the quiet style"), finish();
+        }
+        // Data labels on the revenue chart, on screen and in the twin.
+        if (!/lastPointLabels:\{ enabled:true, all:true/.test(SRC)) {
+          return fail("better club", "the revenue chart does not label every point"), finish();
+        }
+        /**
          * THE REGISTERS STAGE COMES FROM THE ROSTER, which is the whole point of
          * the User ID work — the stage was empty because nothing here knew when
          * anyone joined.
