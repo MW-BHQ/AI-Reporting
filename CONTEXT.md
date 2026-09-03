@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.196.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.197.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -718,6 +718,40 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.197.0 — the flat sparkline had three causes, and only the third one showed.**
+
+MW: "the sparkline still sleep line."
+
+A flat sparkline looked like one problem and was three, stacked. Each fix was
+necessary, and the first two changed nothing visible — which is exactly why this
+took three rounds.
+
+  1. **THE AXES.** Month names and y ticks ate ~30px of a 53px box. Fixed in
+     v3.196.0 by hiding both scales. No visible change.
+  2. **THE BOUNDS.** Chart.js rounds a scale to "nice" numbers EVEN WHEN THE
+     AXIS IS HIDDEN. Total users run 785K to 1M and got a 600K-1.2M scale, so a
+     21% spread drew across 36% of the box; impressions got 40M-80M for a
+     44M-70M series. `beginAtZero:false` and `grace` were not enough — the
+     bounds now come straight from the data with 12% padding, because nothing
+     reads a hidden axis and so there is nothing to round for. Measured usage
+     went from 36% to 81%. Still no visible change.
+  3. **THE PLOT AREA, which was the real constraint all along.** `chartToSvg`
+     reserved `padL:46` for y tick text and `padB:26` for month names
+     unconditionally. On a 62px box with both axes hidden that left `ph` at
+     26px, so the line was squeezed into 40% of its box whatever the scale said.
+     Padding is now reserved only for labels that are actually drawn.
+
+**THE LESSON WORTH KEEPING: when a fix that is provably correct changes nothing
+on screen, the constraint is somewhere else and the next fix will be invisible
+too.** Two rounds were spent tuning scale configuration while the plot area was
+26px. Measuring the DRAWN geometry rather than the configuration would have
+found it first.
+
+`shown()` now gates padding as well as rendering, so a hidden scale costs
+nothing. No other chart in the deck hides a scale, so nothing else moves.
+
+275 assertions; page one 709px of 718px with the chart at 51%, 0 clipping.
 
 **v3.196.0 — sparklines lose their axes; the monthly chart gains data labels.**
 

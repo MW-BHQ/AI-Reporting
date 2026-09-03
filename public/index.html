@@ -6638,6 +6638,24 @@ function drawBclubStage(canvasId, labels, data, color, emptyNote) {
   if (!el || !window.Chart) return;
   if (el._chart) el._chart.destroy();
   const has = data.some(v => v !== null && v !== undefined);
+  /**
+   * THE BOUNDS ARE SET EXPLICITLY, because `beginAtZero:false` was not enough.
+   *
+   * Chart.js still rounds a scale to "nice" numbers even when the axis is
+   * hidden, and nice numbers are the enemy of a sparkline: total users run 785K
+   * to 1M and got a 600K-1.2M scale, so a 21% spread drew across 36% of the box
+   * and still looked asleep. Nobody reads a hidden axis, so there is nothing to
+   * round for — the bounds come straight from the data with 12% of padding, and
+   * the line then uses ~80% of the height whatever the series.
+   */
+  const vals = data.filter(v => v !== null && v !== undefined).map(Number);
+  let lo = null, hi = null;
+  if (vals.length) {
+    lo = Math.min(...vals); hi = Math.max(...vals);
+    const pad = (hi - lo) * 0.12 || Math.abs(hi || 1) * 0.12 || 1;
+    lo -= pad; hi += pad;
+    if (lo > 0 && lo < pad) lo = 0;      // a series that nearly touches zero keeps it
+  }
   if (!has) {
     const box = el.parentElement;
     if (box) box.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:11.5px;text-align:center;padding:0 10px;">${esc(emptyNote || 'No source connected yet')}</div>`;
@@ -6667,7 +6685,23 @@ function drawBclubStage(canvasId, labels, data, color, emptyNote) {
        */
       scales:{
         x:{ display:false, grid:{ display:false } },
-        y:{ display:false, beginAtZero:true, grid:{ display:false } },
+        /**
+         * A SPARKLINE MUST NOT START AT ZERO. That is why they still looked
+         * flat after the axes came off and the box grew (MW: "the sparkline
+         * still sleep line").
+         *
+         * Impressions run 44M to 70M. Anchored at zero, that whole range is the
+         * top 37% of the plot and a 26M swing renders as a 20px wiggle. Total
+         * users are worse: 785K to 1M is a 21% spread drawn in the top fifth of
+         * the box. Fitting the scale to the data is the entire point of a
+         * sparkline — it shows SHAPE, and the magnitude is already printed as
+         * the card's own value above it.
+         *
+         * `grace` keeps the highest and lowest points off the edges so the line
+         * is not clipped by its own extremes.
+         */
+        y:{ display:false, grid:{ display:false },
+            ...(lo === null ? { beginAtZero:true } : { min:lo, max:hi }) },
       },
       layout:{ padding:{ top:10, right:34, bottom:2, left:2 } },
     },
@@ -8687,8 +8721,27 @@ function chartToSvg(chart, W, H) {
   if (!ds.length || !labels.length) return '';
   const sc = chart.scales || {};
   const hasY1 = !!sc.y1;
+  /**
+   * A SCALE WITH `display:false` DRAWS NOTHING AND RESERVES NOTHING.
+   * Chart.js honours the flag on screen; the twin has to as well, or the two
+   * surfaces disagree about what the same chart looks like.
+   */
+  const shown = (a) => (!!a && a.options && a.options.display === false) ? null : a;
   const FS = 10, LEG = 22;
-  const padL = 46, padR = hasY1 ? 46 : 14, padT = LEG + 10, padB = 26;
+  /**
+   * PADDING IS RESERVED FOR LABELS THAT EXIST, NOT FOR AXES THAT MIGHT.
+   *
+   * These were fixed: 46px on the left for y tick text and 26px at the bottom
+   * for month names. On a 62px sparkline box with both axes hidden that left
+   * `ph` at 26px — so the line was squeezed into 40% of its box and read as
+   * flat no matter how the scale was configured. Two earlier fixes (axes off,
+   * explicit bounds) both worked and neither showed, because the plot area was
+   * the real constraint all along.
+   */
+  const padL = shown(sc.y) ? 46 : 6;
+  const padR = hasY1 && shown(sc.y1) ? 46 : 14;
+  const padT = LEG + 10;
+  const padB = shown(sc.x) ? 26 : 6;
   const pw = Math.max(10, W - padL - padR), ph = Math.max(10, H - padT - padB);
   const anyBar = ds.some((d) => (d.type || chart.config.type) === 'bar');
   const n = labels.length;
@@ -8712,7 +8765,6 @@ function chartToSvg(chart, W, H) {
    * honours the flag on screen; the twin has to as well or the two surfaces
    * disagree about what a chart looks like.
    */
-  const shown = (a) => !!a && a.options && a.options.display === false ? null : a;
   const yl = shown(sc.y), y1 = shown(sc.y1);
   const yFn = yOf('y');
   ((yl && yl.ticks) || []).forEach((t) => {
@@ -9094,7 +9146,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.196.0';
+const CLIENT_BUILD = '3.197.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

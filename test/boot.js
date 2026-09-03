@@ -474,6 +474,8 @@ function bclubFixture() {
       month: m.month, label: m.label,
       impressions: [70100000, 65600000, 70900000, 48700000, 44500000][i],
       users: [926200, 785400, 858200, 922700, 866800][i],
+      // 44M-70M and 785K-1M: narrow bands high above zero, which is exactly
+      // the shape that disappears when a sparkline starts at zero.
       // Registers present for the earlier months and ABSENT for the newest,
       // which is the normal state — the sign-up figure arrives after the
       // revenue export. Exercises both the populated stage and the null cell.
@@ -1457,6 +1459,25 @@ setTimeout(() => {
          */
         if (!/const shown = \(a\) =>/.test(SRC)) {
           return fail("better club", "chartToSvg does not honour a hidden scale"), finish();
+        }
+        /**
+         * A HIDDEN SCALE MUST NOT RESERVE PADDING EITHER. `padL:46` and
+         * `padB:26` were fixed, so on a 62px sparkline box `ph` came to 26px
+         * and the line read as flat however the scale was configured — two
+         * earlier fixes both worked and neither showed, because the plot area
+         * was the real constraint.
+         */
+        if (!/const padL = shown\(sc\.y\) \? 46 : 6/.test(SRC)) {
+          return fail("better club", "a hidden axis still reserves its padding"), finish();
+        }
+        /**
+         * AND THE BOUNDS COME FROM THE DATA. Chart.js rounds a scale to nice
+         * numbers even when hidden — 785K to 1M became 600K to 1.2M, a 21%
+         * spread drawn across 36% of the box. Nothing reads a hidden axis, so
+         * there is nothing to round for.
+         */
+        if (!/\{ min:lo, max:hi \}/.test(SRC)) {
+          return fail("better club", "sparkline bounds are not taken from the data"), finish();
         }
         // The monthly chart opts into point labels; the report deck's do not.
         if (!/\{ labels: true, money: \['y'\] \}/.test(SRC)) {
