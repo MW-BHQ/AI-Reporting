@@ -75,9 +75,18 @@ with sync_playwright() as p:
     pg.wait_for_timeout(600)
     pg.evaluate("()=>{const b=document.querySelector('[data-load=\"bclub\"]'); b&&b.click();}")
     pg.wait_for_timeout(6000)
+    # MEASURED UNDER print-prep, WHICH IS PAGE WIDTH.
+    #
+    # The 900px viewport above is deliberate for the report deck: a collapsing
+    # grid is what pushes a section over. But Better Club's page one is a
+    # four-column score-card block, and at 900px g-4 collapses to two columns
+    # and reads ~100px taller than it can ever print. Measuring the two-page
+    # budget at 900px would fail a layout that is fine, which is the worst kind
+    # of test. print-prep is what the export itself applies.
+    pg.evaluate("()=>document.body.classList.add('print-prep')")
     pg.emulate_media(media="print")
     pg.evaluate("()=>{try{resizeChartsForPrint();fitNativeSlides();buildPrintSvgs()}catch(e){}}")
-    pg.wait_for_timeout(800)
+    pg.wait_for_timeout(900)
 
     bc = pg.evaluate("""() => {
       const slides = [...document.querySelectorAll('#viewRoot .slide')];
@@ -96,6 +105,11 @@ with sync_playwright() as p:
         pageOne: slides.filter(s => s.classList.contains('bc-pg1a')
                                  || s.classList.contains('bc-pg1b'))
                        .reduce((a, s) => a + s.getBoundingClientRect().height, 0),
+        // The revenue chart has to stay OVER HALF the page (MW). Every pixel of
+        // padding on page one was spent getting it there, so a future tweak
+        // that reclaims some would quietly drop it back under.
+        heroH: (document.querySelector('.bc-hero') || { getBoundingClientRect: () => ({ height: 0 }) })
+                 .getBoundingClientRect().height,
         canvases: document.querySelectorAll('#viewRoot canvas').length,
         loose: [...document.querySelectorAll('#viewRoot canvas')]
                  .filter(c => !c.closest('.chart-wrap')).length,
@@ -125,13 +139,23 @@ for r in bc["slides"]:
 if bc["printed"] != 3:
     bcbad.append(f"{bc['printed']} slides print, expected 3")
     print(f"  !! {bc['printed']} slides would print, expected 3")
-SHEET = 718
+SHEET = 718   # 7.5in at 96dpi, less the 2px the slide gives back
 if bc["pageOne"] > SHEET:
     bcbad.append(f"page one is {round(bc['pageOne'])}px over a {SHEET}px sheet")
     print(f"  !! page one measures {round(bc['pageOne'])}px against a {SHEET}px sheet "
           f"— it will spill to a third page")
 else:
     print(f"  page one {round(bc['pageOne'])}px of {SHEET}px  ok")
+
+# The chart must be more than half the page it shares.
+AVAIL = SHEET - 40          # less the slide header
+share = bc["heroH"] / AVAIL if AVAIL else 0
+if share <= 0.5:
+    bcbad.append(f"revenue chart is {round(share * 100)}% of the page, needs over 50%")
+    print(f"  !! revenue chart is {round(share * 100)}% of the available height, "
+          f"and has to be over half")
+else:
+    print(f"  revenue chart {round(bc['heroH'])}px, {round(share * 100)}% of the page  ok")
 
 # Every chart box must be a `.chart-wrap` with a built twin, or it prints blank.
 if bc["loose"]:

@@ -1431,6 +1431,32 @@ setTimeout(() => {
           return fail("better club", "the revenue chart does not label every point"), finish();
         }
         /**
+         * THE SCORE CARDS ARE ONE 4x2 BLOCK IN MW'S ORDER, and DOM order IS the
+         * layout — a four-column grid fills across, so grouping the cards by
+         * where their data came from would put the roster cards in column three
+         * of row one instead of columns three and four.
+         */
+        const labs = r ? [...r.querySelectorAll('.slide.bc-pg1b .stat .lab')]
+          .map(e => e.textContent.replace(/\s+/g, ' ').trim()) : [];
+        const wantOrder = ['Google impressions', 'Total users', 'Members', 'Have become patients',
+                           'Better Club new registers', 'New paid members', 'Half visit within', 'Joined in'];
+        if (labs.length !== 8) {
+          return fail("better club", `${labs.length} score cards on page one, expected 8`), finish();
+        }
+        for (let k = 0; k < 8; k++) {
+          if (labs[k].indexOf(wantOrder[k]) !== 0) {
+            return fail("better club",
+              `score card ${k + 1} is "${labs[k]}", expected "${wantOrder[k]}"`), finish();
+          }
+        }
+        /**
+         * A PDF HAS NO TOOLTIP, so page two has to say in words that the chips
+         * are month-on-month figures and which month they compare against.
+         */
+        if (!/month on month/.test(body) || !/against June 2026/.test(body)) {
+          return fail("better club", "page two does not explain the MoM chips"), finish();
+        }
+        /**
          * THE REGISTERS STAGE COMES FROM THE ROSTER, which is the whole point of
          * the User ID work — the stage was empty because nothing here knew when
          * anyone joined.

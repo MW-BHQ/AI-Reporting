@@ -1680,7 +1680,7 @@
    * chart IS the page.
    */
   .bc-hero{height:330px;}
-  .bc-stage{height:120px;}
+  .bc-stage{height:64px;}
   .bc-mid{height:230px;}
 /*
   /*
@@ -1694,18 +1694,56 @@
     /* Measured in-browser, not eyeballed: 2.6/1.5 came to 846px against a
        718px sheet and spilled onto a third page. 1.9/1.15 with the page-one
        notes hidden measures 695px. */
-    .bc-hero{height:1.9in!important;max-height:none!important;}
-    .bc-stage{height:1.15in!important;max-height:none!important;}
+    /**
+     * MEASURED, NOT ESTIMATED. Swept in Chromium at PAGE WIDTH — not at the
+     * harness's 900px, where `g-4` collapses to two columns and the score-card
+     * block reads 100px taller than it ever prints. 4.2in puts page one at
+     * 696px of a 718px sheet with the chart at 59% of the available height,
+     * which is the "bigger than half" MW asked for, with slack left over.
+     */
+    .bc-hero{height:4.0in!important;max-height:none!important;}
     .bc-mid{height:3.6in!important;max-height:none!important;}
+    /**
+     * EVERY PIXEL BELOW WAS NEEDED. With the deck's default padding the chart
+     * capped at 46% — under half however the sparklines were handled. The slide
+     * padding, the card padding and the header height each gave up 10-20px, and
+     * only together did they clear the bar.
+     */
+    .slide.bc-pg1a, .slide.bc-pg1b{padding-top:0!important;padding-bottom:0!important;}
+    .bc-pg1a .card{padding:8px 10px!important;}
+    .bc-pg1b .card{padding:10px 12px!important;}
+    .bc-pg1b .stat{padding:8px 10px!important;}
+    .bc-pg1a .slide-title, .bc-pg1b .slide-title{
+      min-height:1.5rem!important;margin-bottom:6px!important;
+    }
     /* The explanatory notes are for the screen. On a two-page export they are
        the difference between two pages and three. */
+    /* Page one's notes are screen furniture. Page TWO keeps its note: it is
+       what tells a printed reader the chips are month-on-month figures. */
     .bc-pg1a .note, .bc-pg1b .note{display:none!important;}
+    /**
+     * THE STAGE SPARKLINES COME OFF IN PRINT, and this is the trade that makes
+     * MW's brief possible: eight cards with a sparkline each measure 360px of a
+     * 718px sheet, which caps the revenue chart at ~35% of the page when the
+     * ask was "bigger than half". Without them the block is ~260px and the
+     * chart clears 55%. They stay on SCREEN, where there is no page to fit and
+     * the funnel trend is worth having.
+     */
+    .bc-pg1b .bc-stage{display:none!important;}
   }
   @media screen{
-    body.print-prep .bc-hero{height:1.9in!important;max-height:none!important;}
-    body.print-prep .bc-stage{height:1.15in!important;max-height:none!important;}
+    body.print-prep .bc-hero{height:4.0in!important;max-height:none!important;}
     body.print-prep .bc-mid{height:3.6in!important;max-height:none!important;}
+    body.print-prep .slide.bc-pg1a, body.print-prep .slide.bc-pg1b{
+      padding-top:0!important;padding-bottom:0!important;
+    }
+    body.print-prep .bc-pg1a .card{padding:8px 10px!important;}
+    body.print-prep .bc-pg1b .card{padding:10px 12px!important;}
+    body.print-prep .bc-pg1b .stat{padding:8px 10px!important;}
+    body.print-prep .bc-pg1a .slide-title,
+    body.print-prep .bc-pg1b .slide-title{min-height:1.5rem!important;margin-bottom:6px!important;}
     body.print-prep .bc-pg1a .note, body.print-prep .bc-pg1b .note{display:none!important;}
+    body.print-prep .bc-pg1b .bc-stage{display:none!important;}
   }
   @media(max-width:1080px){.g-6,.g-5,.g-4{grid-template-columns:repeat(2,1fr);}.g-2-1,.g-3,.g-2{grid-template-columns:1fr;}}
   @media(max-width:760px){
@@ -6169,7 +6207,18 @@ function renderBclub() {
   const fLab = fn.map(x => x.label.replace(/ \d{4}$/, ''));
   const mLab = ms.map(m => m.label.replace(/ \d{4}$/, ''));
   const fsc = d.funnelScope || {};
+  /**
+   * THE MEMBERSHIP STATS. Two questions the revenue-keyed model could not ask:
+   * how many people joined, and how long they take to become patients.
+   *
+   * Declared here because `funnelBody` is a template literal and evaluates the
+   * moment it is defined — anything it reads has to exist by then, not merely
+   * be declared later in the function.
+   */
+  const mst = d.memberStats;
+
   const last = fn.length ? fn[fn.length - 1] : null;
+  const thisMonth = mst ? (mst.byMonth.filter(x => x.month === s.month)[0] || null) : null;
   /**
    * THE CONVERSION IS SHOWN FOR THE NEWEST MONTH THAT HAS ONE, not strictly for
    * the newest month. The sign-up figure is entered by hand and arrives after
@@ -6178,32 +6227,29 @@ function renderBclub() {
    * pending. Labelled with its month so it is never mistaken for the latest.
    */
   const lastConv = fn.filter(x => x.registerToPaid !== null && x.registerToPaid !== undefined).pop() || null;
-  const stage = (title, key, colour, scopeNote, sub) => `
-    <div>
-      <div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;margin-bottom:2px;">
-        <span style="font-size:12px;font-weight:600;color:${colour};">${esc(title)}</span>
-        ${scopeNote ? `<span class="pill" data-tip="${esc(scopeNote)}">BHQ</span>` : ''}
-      </div>
-      <div style="font-size:18px;font-weight:600;">${
-        last && last[key] !== null && last[key] !== undefined ? cnt(last[key]) : '—'}</div>
-      <div style="font-size:11px;color:var(--muted);min-height:15px;margin-bottom:2px;">${sub || ''}</div>
-      <div class="chart-wrap bc-stage"><canvas id="bcStage_${key}"></canvas></div>
-    </div>`;
-
   /**
-   * SLIDES, NOT A SCROLL (MW: "pdf now pretty broken, apply all style from
-   * monthly report please; the header, logo, date range seperator").
+   * ONE SCORE-CARD BLOCK, 4 x 2, IN MW'S ORDER:
    *
-   * Every block is a `slideShell`, so each gets the deck's header — title,
-   * scope pill, date stamp and wordmark — and each occupies exactly one printed
-   * page. Chart boxes use `.chart-wrap` rather than an inline height, which is
-   * what lets the print and mobile rules resize them; an inline height beats a
-   * class and was why the printed charts stayed at their screen size.
+   *   gg imp   total users  | Member        Become patients
+   *   new reg  paid member  | Visit within  Joined <month>
    *
-   * SCOPE PILLS ARE HONEST PER SLIDE. The funnel slide carries no single pill
-   * because its four stages have two different scopes — the first two are B+ and
-   * the last two are the club — and each stage is badged individually. Putting
-   * one pill on that header would claim a scope for stages that do not share it.
+   * MW: "the main graph is important. make it bigger than half of the available
+   * height / score cards are lesser important." So the funnel stages and the
+   * roster cards stop being two separate rows and become one compact block,
+   * which is what buys the revenue chart its height. DOM ORDER IS THE LAYOUT:
+   * a 4-column grid fills across, so the eight cards have to be listed in
+   * reading order, not grouped by where the data came from.
+   *
+   * The stage sparklines survive at half their old height. They carry the only
+   * trend on the page for impressions and users, which the revenue chart cannot
+   * show, and dropping them to save 40px would cost the funnel its shape.
+   */
+  /**
+   * THE REVENUE CHART TAKES MORE THAN HALF THE PAGE (MW: "the main graph is
+   * important. make it bigger than half of the available height"). Its height
+   * comes from `.bc-hero` in the print block; the note under it is screen-only,
+   * because on a two-page export it is the difference between two pages and
+   * three.
    */
   const combos = `
     <div class="card">
@@ -6212,71 +6258,56 @@ function renderBclub() {
       the revenue attributed to them, with the new-member subset of each. Every month the spreadsheet holds.</div>
     </div>`;
 
-  /**
-   * THE MEMBERSHIP SLIDE. Two questions the revenue-keyed model could not ask:
-   * how many people joined, and how long they take to become patients.
-   *
-   * The cohort conversion here is NOT the funnel's month-over-month rate. That
-   * one divides July's new patients by July's registrations, which mixes two
-   * populations. This one follows the people who joined in a month and asks how
-   * many of them ever came — the question worth asking, and only answerable now
-   * that every member has an ID.
-   */
-  const mst = d.memberStats;
-  const thisMonth = mst ? (mst.byMonth.filter(x => x.month === s.month)[0] || null) : null;
+  const scoreCard = (title, value, sub, colour, scopeNote, key) => `
+    <div class="stat">
+      <div class="lab" style="${colour ? `color:${colour};` : ''}">${esc(title)}${
+        scopeNote ? ` <span class="pill" data-tip="${esc(scopeNote)}">BHQ</span>` : ''}</div>
+      <div class="val">${value}</div>
+      <div class="sub2">${sub || ''}</div>
+      ${key ? `<div class="chart-wrap bc-stage"><canvas id="bcStage_${key}"></canvas></div>` : ''}
+    </div>`;
 
-  /**
-   * "1 median · mean 4.8" was unreadable — MW: "so i take 1 or 4.8 months
-   * before they turn to be a patients?"
-   *
-   * It is 1. Half the members who ever visit do so within a month of joining.
-   * The 4.8 is a MEAN dragged up by a long tail of people who joined last year
-   * and came in much later: a real fact about the tail, and the wrong number to
-   * quote as typical. So the card states the median as a sentence — "Half visit
-   * within 1 month of joining" — and the mean survives only as a footnote to it.
-   */
-  const memberCards = mst ? `
-    <div class="grid g-4 mt">
-      <div class="stat"><div class="lab">Members</div><div class="val">${cnt(mst.live)}</div>
-        <div class="sub2">${mst.tombstoned ? `${cnt(mst.tombstoned)} no longer on the roster` : 'all current'}</div></div>
-      <div class="stat"><div class="lab">Have become patients</div><div class="val">${cnt(mst.everPaid)}</div>
-        <div class="sub2">${pct(mst.everPaidShare)} of all members, ever</div></div>
-      <div class="stat"><div class="lab">Half visit within</div><div class="val">${
-        mst.medianMonthsToFirst === null ? '—'
-          : mst.medianMonthsToFirst === 0 ? 'the same month'
-          : `${cnt(mst.medianMonthsToFirst)} month${mst.medianMonthsToFirst === 1 ? '' : 's'}`}</div>
-        <div class="sub2" data-tip="${esc('The average is ' + (mst.meanMonthsToFirst === null ? 'unknown'
-          : mst.meanMonthsToFirst.toFixed(1) + ' months') + ', pulled up by members who joined long ago and '
-          + 'visited much later. The median is the typical wait.')}">${
-          mst.medianMonthsToFirst === 0 ? 'they join' : 'of joining'}${
-          mst.meanMonthsToFirst === null ? '' : ` · average ${mst.meanMonthsToFirst.toFixed(1)}, long tail`}</div></div>
-      <div class="stat"><div class="lab">Joined in ${esc(s.label.replace(/ \d{4}$/, ''))}</div><div class="val">${
-        thisMonth ? cnt(thisMonth.joined) : '—'}</div>
-        <div class="sub2">${thisMonth ? `${cnt(thisMonth.converted)} have become patients` : 'not in the roster yet'}</div></div>
-    </div>` : '';
+  const stageVal = (key) => (last && last[key] !== null && last[key] !== undefined)
+    ? cnt(last[key]) : '—';
 
   const funnelBody = `
     <div class="card">
       <div class="grid g-4">
-        ${stage('Google impressions', 'impressions', '#E8833A', fsc.impressions)}
-        ${stage('Total users', 'users', '#8B5CF6', fsc.users)}
-        ${stage('Better Club new registers', 'registers', '#2C5282', null,
+        ${scoreCard('Google impressions', stageVal('impressions'), '',
+          '#E8833A', fsc.impressions, 'impressions')}
+        ${scoreCard('Total users', stageVal('users'), '',
+          '#8B5CF6', fsc.users, 'users')}
+        ${mst ? scoreCard('Members', cnt(mst.live),
+          mst.tombstoned ? `${cnt(mst.tombstoned)} no longer on the roster` : 'all current') : ''}
+        ${mst ? scoreCard('Have become patients', cnt(mst.everPaid),
+          `${pct(mst.everPaidShare)} of all members, ever`) : ''}
+        ${scoreCard('Better Club new registers', stageVal('registers'),
           !d.registerSource ? 'awaiting a source'
             : (last && last.registers === null)
               ? `${esc(last.label.replace(/ \d{4}$/, ''))} not in the roster yet`
-              : esc(d.registerSource))}
-        ${stage('New paid members', 'newPaidHns', '#34A853', null,
+              : `Total ${cnt(mst ? mst.total : 0)} members`,
+          '#2C5282', null, 'registers')}
+        ${scoreCard('New paid members', stageVal('newPaidHns'),
           lastConv
             ? `<b>${pct(lastConv.registerToPaid)}</b> of registers converted${
                 lastConv.month === (last && last.month) ? '' : ` in ${esc(lastConv.label.replace(/ \d{4}$/, ''))}`}`
-            : '')}
+            : '',
+          '#34A853', null, 'newPaidHns')}
+        ${mst ? scoreCard('Half visit within',
+          mst.medianMonthsToFirst === null ? '—'
+            : mst.medianMonthsToFirst === 0 ? 'the same month'
+            : `${cnt(mst.medianMonthsToFirst)} month${mst.medianMonthsToFirst === 1 ? '' : 's'}`,
+          `${mst.medianMonthsToFirst === 0 ? 'they join' : 'of joining'}${
+            mst.meanMonthsToFirst === null ? '' : ` · average ${mst.meanMonthsToFirst.toFixed(1)}, long tail`}`) : ''}
+        ${mst ? scoreCard(`Joined in ${esc(s.label.replace(/ \d{4}$/, ''))}`,
+          thisMonth ? cnt(thisMonth.joined) : '—',
+          thisMonth ? `${cnt(thisMonth.converted)} have become patients` : 'not in the roster yet') : ''}
       </div>
       ${(fsc.impressions === null || fsc.users === null || !d.registerSource) ? `<div class="note">
         ${!d.registerSource ? `<b>New registers has no source.</b> ${esc(d.registerNote || '')}` : ''}
         ${fsc.impressions === null ? 'Search Console was unavailable this run — press Refresh to retry.' : ''}
         ${fsc.users === null ? '<br>GA4 was unavailable this run — press Refresh to retry.' : ''}</div>` : ''}
-    </div>
-    ${memberCards}`;
+    </div>`;
 
   const monthBody = `
     <div class="grid g-4">
@@ -6289,6 +6320,9 @@ function renderBclub() {
       <div class="stat"><div class="lab">Revenue from new members</div><div class="val">${num(s.newRev, {money:true})}</div>
         <div class="sub2">${dlt(p ? chg(s.newRev, p.newRev) : null)} · ${pct(s.newRevShare)} of revenue</div></div>
     </div>
+    <div class="note">
+      <b>The green and red percentages are month on month${p ? `, against ${esc(p.label)}` : ''}.</b>
+      ${p ? `Everything else describes ${esc(s.label)} on its own.` : ''}</div>
     ${d.pending.length ? `<div class="note">
       <b>Not loaded yet:</b> ${d.pending.map(m => esc(bclubMonthLabel(m))).join(', ')}.
       The figures above describe <b>${esc(s.label)}</b>, the latest month the spreadsheet has.
@@ -8967,7 +9001,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.192.0';
+const CLIENT_BUILD = '3.193.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

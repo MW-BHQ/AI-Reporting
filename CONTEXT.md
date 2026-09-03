@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.192.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.193.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -718,6 +718,51 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.193.0 — the revenue chart takes the page; score cards become one 4x2 block.**
+
+MW: "the main graph is important. make it bigger than half of the available
+height / score cards are lesser important, you may consider re-arrange to this
+layout / the 2nd page, put MoM somewhere of pdf there's no tooltip to help users
+to understand."
+
+**THE SCORE CARDS ARE NOW ONE 4x2 BLOCK, in MW's order:** impressions, users,
+members, become-patients on the top row; new registers, paid members, visit
+within, joined-in-month on the second. DOM ORDER IS THE LAYOUT — a four-column
+grid fills across, so grouping the cards by where their data came from would put
+the roster pair in column three of row one instead of columns three and four.
+`boot.js` asserts all eight labels in sequence.
+
+**THE STAGE SPARKLINES COME OFF IN PRINT, and that is the trade that made the
+brief possible.** Eight cards with a sparkline each measure 360px of a 718px
+sheet, which caps the chart at ~35% of the page. Without them the block is 233px
+and the chart clears 57%. They stay on SCREEN, where there is no page to fit.
+
+**EVERY PIXEL OF PADDING ON PAGE ONE WAS SPENT.** With the deck's defaults the
+chart capped at 46% — under half however the sparklines were handled. Slide
+padding, card padding and header height each gave up 10-20px and only together
+cleared the bar. A future tidy-up that reclaims some would quietly drop the chart
+back under, so `print-overflow.py` now asserts the chart is over half the page as
+well as that page one fits.
+
+**THE HARNESS WAS MEASURING THE WRONG WIDTH.** Its 900px viewport is deliberate
+for the report deck — a collapsing grid is what pushes a section over — but
+Better Club's page one is a four-column block, and at 900px `g-4` collapses to
+two columns and reads ~100px taller than it can ever print. The Better Club pass
+now measures under `print-prep`, which is page width and is what the export
+applies. **A test that fails a layout which is actually fine is worse than no
+test**: it teaches you to ignore it.
+
+4.2in fit the sweep at 696px and measured 714px in the harness, which runs AFTER
+the SVG twins are built. 4px of slack is not slack, so the chart is 4.0in and
+page one sits at 695px.
+
+**PAGE TWO NOW SAYS THE CHIPS ARE MONTH-ON-MONTH, and names the month.** A PDF
+has no hover, so the +10.4% chips had nothing to explain them — the one thing a
+printed copy could not tell you. Page one's notes stay hidden; page two's is
+load-bearing.
+
+275 assertions; page one 695px of 718px with the chart at 57%, 0 clipping at 900px.
 
 **v3.192.0 — Better Club exports two pages; quiet titles; every point labelled.**
 
