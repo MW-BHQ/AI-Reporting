@@ -753,6 +753,42 @@ global.fetch = async (url, opts = {}) => {
      * The report window is 2026-07-01..2026-07-31, so `selected` must be
      * 2026-07 with 2026-06 as `prev`, and `pending` must be empty.
      */
+    /**
+     * BETTER CLUB `Members`: the roster that supplies the registers stage.
+     *
+     * Shaped like the real thing — `In snapshot` tombstones, blank nationality,
+     * a single-member nationality that MUST be suppressed, and members who have
+     * never paid. Registration months are chosen so the funnel's third stage
+     * has real values in the report window.
+     */
+    if (u.includes(encodeURIComponent("Members"))) {
+      return jsonRes({ spreadsheetId: "mock-bclub", valueRanges: [{ values: [
+        ["User ID","Nationality","Registered at","In snapshot","HN_ID","Has HN",
+         "First paid month","Months to first visit","Loaded at","Contact Country",
+         "Contact City","Household type","Register Channel","spare"],
+        ["u1","THAI (ไทย)","2026-05-04","Y","","Y","2026-06",1,"x","Thailand","Bangkok","living_alone","email",""],
+        ["u2","THAI (ไทย)","2026-05-19","Y","","Y","2026-07",2,"x","Thailand","Bangkok","family_with_no_kids","email",""],
+        ["u3","CHINESE (จีน)","2026-05-27","Y","","","","","x","China","Shanghai","living_alone","phone",""],
+        ["u4","THAI (ไทย)","2026-06-02","Y","","Y","2026-06",0,"x","Thailand","Nonthaburi","living_alone","phone",""],
+        ["u5","MYANMAR (เมียนมา)","2026-06-11","Y","","","","","x","","","","email",""],
+        ["u6","","2026-06-21","Y","","","","","x","","","","phone",""],
+        // Exactly one member — must be folded into "Other", never shown.
+        ["u7","ICELANDIC (ไอซ์แลนด์)","2026-07-01","Y","","Y","2026-07",0,"x","Iceland","Reykjavik","living_alone","email",""],
+        ["u8","THAI (ไทย)","2026-07-08","Y","","","","","x","Thailand","Bangkok","living_alone","email",""],
+        // Enough Thai members to clear the 5-member floor, so the fixture
+        // exercises the SHOWN branch as well as the suppressed one.
+        ["u10","THAI (ไทย)","2026-07-09","Y","","Y","2026-07",0,"x","Thailand","Bangkok","living_alone","email",""],
+        ["u11","THAI (ไทย)","2026-07-10","Y","","","","","x","Thailand","Chonburi","family_with_kids","email",""],
+        ["u12","CHINESE (จีน)","2026-07-11","Y","","","","","x","China","Beijing","living_alone","phone",""],
+        ["u13","CHINESE (จีน)","2026-07-12","Y","","","","","x","China","Beijing","living_alone","phone",""],
+        ["u14","CHINESE (จีน)","2026-07-13","Y","","Y","2026-07",0,"x","China","Beijing","living_alone","phone",""],
+        ["u15","CHINESE (จีน)","2026-07-14","Y","","","","","x","China","Beijing","living_alone","phone",""],
+        // Tombstone: counts in July's registrations, excluded from composition.
+        ["u9","THAI (ไทย)","2026-07-15","N","","","","","x","","","","email",""],
+        [],
+      ] }] });
+    }
+
     if (u.includes(encodeURIComponent("Registers"))) {
       return jsonRes({ spreadsheetId: "mock-bclub", valueRanges: [{ values: [
         ["MonthYear", "NewRegisters", "Source", "Note"],

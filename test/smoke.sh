@@ -329,17 +329,34 @@ expect_field "bclub big count"     "$BCLUB" "d.months.find(m=>m.month==='2026-06
 # group-level and registers explicitly null until a feed exists.
 expect_field "bclub funnel rows"   "$BCLUB" "d.funnel.length===d.months.length?'ok':undefined"
 expect_field "bclub funnel newhns" "$BCLUB" "d.funnel.every(f=>f.newPaidHns===d.months.find(m=>m.month===f.month).newHns)?'ok':undefined"
-# THE REGISTERS TAB. Fetched separately, because values:batchGet fails the whole
-# request with a 400 if any range names a tab that does not exist and this tab is
-# optional by design.
-expect_field "bclub reg source"    "$BCLUB" "d.registerSource?'ok':undefined"
-expect_field "bclub reg value"     "$BCLUB" "d.funnel.find(f=>f.month==='2026-06').registers===25?'ok':undefined"
-# A month present in the tab but BLANK stays null. As 0 it would draw a trough on
-# the funnel and divide into an infinite conversion.
-expect_field "bclub reg blank"     "$BCLUB" "d.funnel.find(f=>f.month==='2026-07').registers===null?'ok':undefined"
-expect_field "bclub reg no conv"   "$BCLUB" "d.funnel.find(f=>f.month==='2026-07').registerToPaid===null?'ok':undefined"
-# June: 2 new paying members against 25 registers.
-expect_field "bclub conversion"    "$BCLUB" "Math.abs(d.funnel.find(f=>f.month==='2026-06').registerToPaid-(2/25))<0.0001?'ok':undefined"
+# REGISTERS COMES FROM THE MEMBER ROSTER, not a hand-entered tab. Counting
+# `Registered at` by month is what the User ID work bought: the stage was empty
+# because nothing in this service knew when anyone joined. The `Registers` tab
+# survives as an override for months predating the roster, so it is fetched
+# separately — values:batchGet fails the whole request with a 400 if any range
+# names a tab that does not exist, and both tabs are optional by design.
+expect_field "bclub reg roster"    "$BCLUB" "/^Members tab/.test(d.registerSource)?'ok':undefined"
+expect_field "bclub reg counted"   "$BCLUB" "d.funnel.every(f=>f.registers>0)?'ok':undefined"
+# THE FOUR STAGES MUST SHARE A SCOPE. Impressions and users were pulled
+# group-wide (27 branches) while the Better Club figures beside them covered
+# four hospitals, so the conversion read off that funnel meant nothing.
+expect_field "bclub scope bhq"     "$BCLUB" "d.funnelScope.impressions==='BGH, BIH, BHT, WSH'?'ok':undefined"
+expect_field "bclub scope users"   "$BCLUB" "d.funnelScope.users==='BGH, BIH, BHT, WSH'?'ok':undefined"
+# Roster totals. A tombstoned member still counts in the month they registered —
+# they did register — but not in the current membership.
+expect_field "bclub members"       "$BCLUB" "d.memberStats.total===15&&d.memberStats.live===14?'ok':undefined"
+expect_field "bclub tombstone reg" "$BCLUB" "d.memberStats.byMonth.find(m=>m.month==='2026-07').joined===9?'ok':undefined"
+# A BLANK NATIONALITY IS REPORTED, NOT DROPPED. 16% of the real roster has none;
+# excluding those rows would inflate every share by a sixth.
+expect_field "bclub blank nat"     "$BCLUB" "d.memberStats.nationality.notRecorded===1?'ok':undefined"
+# SMALL CELLS ARE SUPPRESSED. One Icelandic member printed beside a revenue
+# figure names a patient, so groups under five fold into Other.
+expect_field "bclub suppressed"    "$BCLUB" "d.memberStats.nationality.rows.some(r=>r.suppressed)?'ok':undefined"
+expect_field "bclub cell floor"    "$BCLUB" "d.memberStats.nationality.rows.every(r=>r.suppressed||r.members>=5)?'ok':undefined"
+expect_field "bclub no iceland"    "$BCLUB" "d.memberStats.nationality.rows.every(r=>r.name.indexOf('ICELAND')===-1)?'ok':undefined"
+# Cohort conversion follows the PEOPLE who joined, not the calendar month: of
+# May's 3 joiners, 2 have since become patients.
+expect_field "bclub joined conv"   "$BCLUB" "Math.abs(d.memberStats.byMonth.find(m=>m.month==='2026-05').conversion-(2/3))<0.001?'ok':undefined"
 # Search Console rows are FLATTENED by gscQueryPage, so a date-dimension row
 # carries `date`, not the API's raw `keys` array. Reading `keys` returned null
 # for every month while still reporting the source as available.
@@ -349,7 +366,6 @@ expect_field "bclub users"         "$BCLUB" "d.funnel.some(f=>f.users>0)?'ok':un
 # zero would draw a real-looking trough on the funnel panel.
 expect_field "bclub gap is null"   "$BCLUB" "d.funnel.some(f=>f.impressions===null)?'ok':undefined"
 # Group-level scope must be declared so the client cannot label it BHQ.
-expect_field "bclub scope named"   "$BCLUB" "d.funnelScope.note.indexOf('group-level')>-1?'ok':undefined"
 expect_field "bclub arpu derived" "$BCLUB" "Math.abs(d.selected.arpu-11000)<1?'ok':undefined"
 expect_field "bclub share derived" "$BCLUB" "Math.abs(d.selected.newHnShare-(2/6))<0.001?'ok':undefined"
 # Old counts fall out of the sheet, but must reconcile against new + old = paid.
@@ -366,9 +382,6 @@ expect_field "bclub cohort fwd"  "$BCLUB" "d.cohorts.rows.every(r=>r.retained.ev
 # rows, so member count must match that month's paid total.
 expect_field "bclub conc month"  "$BCLUB" "d.concentration.month==='2026-07'?'ok':undefined"
 expect_field "bclub conc share"  "$BCLUB" "d.concentration.top10.share>0&&d.concentration.top10.share<=1?'ok':undefined"
-# Registration-to-paid is computed ONLY from the Registers tab. With no tab the
-# source is null and the stage stays empty; it is never filled from elsewhere.
-expect_field "bclub reg named"   "$BCLUB" "d.registerSource==='Registers tab'?'ok':undefined"
 
 ECOM="/api/ecommerce?from=$FROM&to=$TO"
 # PACKAGES ARE GROUPED BY NAME, NOT BY SKU (MW). The master re-codes a package

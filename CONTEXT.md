@@ -12,7 +12,7 @@ information. Re-discovering them costs days.
 
 ## 0. Current state — read before anything else
 
-**Version 3.189.0.** Sections 1–9 were written around v3.17 and remain accurate
+**Version 3.190.0.** Sections 1–9 were written around v3.17 and remain accurate
 on the APIs, but the product has more than doubled since. The dated entries
 under "Recent (August 2026)" further down are **newest-first** and are the real
 changelog — read those before the numbered sections.
@@ -718,6 +718,62 @@ improves.
 ## 13. Version history
 
 ### Recent (August 2026)
+
+**v3.190.0 — the registers stage comes from the member roster; the funnel is BHQ-scoped.**
+
+MW: "don't get lost, we are doing this user id thing to get who is new
+registers" / "the google imp, GA4 must filter down to BGH, BIH, BHT, WSH only."
+
+**THE REGISTERS STAGE WAS THE POINT OF THE USER ID WORK, and I had drifted off
+it.** The third funnel stage sat empty behind a hand-entered `Registers` tab
+while the actual answer was being assembled in the same spreadsheet: `Members`
+holds 51,166 rows of `User ID` + `Registered at`, so registrations by month is a
+group-by. No hand entry, no GA4 event to instrument, no upstream ask. The
+`Registers` tab survives only as an override for months predating the roster.
+
+**THE FUNNEL WAS MEASURING TWO DIFFERENT HOSPITALS.** Impressions and users were
+pulled group-wide — 27 branches and the whole domain — and labelled honestly as
+B+. Honest but useless: a funnel whose top two stages count 27 branches and
+whose bottom two count four is not a funnel, and the conversion rate read off it
+means nothing. `gscQuery` now takes the default `GSC_BRANCH_REGEX` and
+`ga4RunReport` gets `withBranch(null)`, so all four stages are BGH, BIH, BHT,
+WSH. This is the standing BHQ-vs-B+ rule and this section had broken it in the
+one direction that still looks plausible on screen.
+
+**TWO NEW SLIDES, from `Members`:**
+
+  · *Who joins, and how long until they visit* — registrations per month, how
+    many of that month's joiners have since become patients, and the median
+    months to first visit. This FOLLOWS THE PEOPLE, not the calendar: a row asks
+    how many of the members who joined in a month have ever visited, which is a
+    different question from the funnel's month-over-month rate and the one worth
+    asking. Months, not days — revenue arrives monthly, so a first visit
+    resolves to a month, and "47 days" would be invented precision.
+  · *What the membership is made of* — nationality, contact country, household
+    type and register channel.
+
+**SMALL CELLS ARE SUPPRESSED, and this is a disclosure control rather than
+tidiness.** MW's roster has single-member nationalities; "Icelandic, 1 member"
+printed beside a revenue figure names a patient. Groups under five members fold
+into `Other` with the merge count shown, and an assertion checks no
+sub-threshold group ever appears by name. DOB is not imported at all for the
+same reason — nationality plus contact city plus household type is already close
+to identifying, and a birth date closes the gap.
+
+**A BLANK NATIONALITY IS REPORTED, NOT DROPPED.** The first cut skipped empty
+values entirely, so `notRecorded` was always 0 — and 8,237 of 51,166 real members
+have no nationality. Excluding them would have inflated every share by a sixth
+while looking perfectly reasonable.
+
+Nationality labels are stripped of their Thai parenthetical (`THAI (ไทย)` →
+`THAI`) and grouped on the English part, so a future `THAI` without the Thai
+does not split into a second row.
+
+Two stale assertions had to be DELETED rather than adjusted: one required the
+stages to be badged `B+` and one required `registerSource === 'Registers tab'`.
+Both encoded the previous design and would have blocked the correct one.
+
+272 assertions; 22 report sections + 7 Better Club slides, 0 clipping at 900px.
 
 **v3.189.0 — Better Club prints as a deck; four bugs in the shared print path.**
 

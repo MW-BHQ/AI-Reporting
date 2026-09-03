@@ -4409,6 +4409,20 @@ const BCLUB_DETAIL_TAB = "Rev_Attribution";
 const BCLUB_REGISTER_TAB = "Registers";
 
 /**
+ * The member roster. `Registered at` on this tab IS the registers stage.
+ *
+ * THIS IS WHY THE USER ID WORK HAPPENED (MW: "we are doing this user id thing
+ * to get who is new registers"). The third funnel stage was empty because
+ * nothing in this service knew when anyone joined. `Members` now holds 51,166
+ * rows of `User ID` + `Registered at`, so counting registrations by month is a
+ * `GROUP BY` — no hand-entered tab, no GA4 event to instrument, no upstream ask.
+ *
+ * The `Registers` tab above stays supported as an override for months that
+ * predate the roster, but it is no longer the primary source.
+ */
+const BCLUB_MEMBER_TAB = "Members";
+
+/**
  * BETTER AI — the agentic assistant's conversion funnel, from its own Sheet.
  *
  * Two tabs, both daily, both read by HEADER NAME and never by position: the
@@ -7560,6 +7574,30 @@ function monthKeyCell(v) {
   return m ? `${m[1]}-${m[2]}` : "";
 }
 
+/**
+ * A count map to a ranked list, with everything below `minCell` and everything
+ * past `topN` folded into "Other".
+ *
+ * `minCell` is a DISCLOSURE control, not a tidiness one. A nationality with one
+ * member, printed next to a revenue figure, names a patient — so small groups
+ * are merged rather than shown. `Other` keeps the total honest, which a simple
+ * truncation would not.
+ */
+function bclubTopN(map, topN, minCell) {
+  const rows = [...map.entries()].filter(([k]) => k).sort((a, b) => b[1] - a[1]);
+  const total = rows.reduce((a, r) => a + r[1], 0);
+  const blank = map.get("") || 0;
+  const keep = [], merged = [];
+  rows.forEach((r, i) => { (i < topN && r[1] >= minCell ? keep : merged).push(r); });
+  const otherN = merged.reduce((a, r) => a + r[1], 0);
+  const out = keep.map(([name, n]) => ({ name, members: n, share: total ? n / total : null }));
+  if (otherN) {
+    out.push({ name: "Other", members: otherN, share: total ? otherN / total : null,
+               groups: merged.length, suppressed: true });
+  }
+  return { rows: out, total, notRecorded: blank, distinct: rows.length, minCell };
+}
+
 const bclubLabel = (key) => {
   const m = /^(\d{4})-(\d{2})$/.exec(key);
   return m ? `${MONTH_NAMES[+m[2] - 1]} ${m[1]}` : key;
@@ -7628,6 +7666,16 @@ async function buildBetterClub(from, to) {
    * batchGet above: one bad range fails all of them.
    */
   const registers = await sheetBatchGet(BCLUB_SHEET_ID, [`'${BCLUB_REGISTER_TAB}'!A1:B`], { unformatted: true })
+    .then((r) => (r[0] && r[0].values) || [])
+    .catch(() => null);
+
+  /**
+   * The roster, read in the same optional way. Columns A:N covers `User ID`
+   * through `Register Channel`; the hashed join keys sit to the right of that
+   * and are deliberately NOT fetched — this service has no use for them and
+   * should not hold them.
+   */
+  const members = await sheetBatchGet(BCLUB_SHEET_ID, [`'${BCLUB_MEMBER_TAB}'!A1:N`], { unformatted: true })
     .then((r) => (r[0] && r[0].values) || [])
     .catch(() => null);
 
@@ -7801,11 +7849,19 @@ async function buildBetterClub(from, to) {
    * Pulled over the SHEET'S OWN SPAN, not the selected range, because the panel
    * is a seven-month trend — the same reason the tables below show every month.
    *
-   * BOTH OF THESE ARE B+ / GROUP LEVEL, all 27 branches of the GA4 property and
-   * the whole `sc-domain:bangkokhospital.com` domain. They are NOT BHQ, and the
-   * payload says so in `scope` so the client cannot label them as the four
-   * hospitals. Conflating the two is the single easiest way to make this report
-   * wrong, and it is wrong in a direction nobody notices.
+   * BOTH ARE FILTERED TO THE FOUR HOSPITALS — BGH, BIH, BHT, WSH (MW: "the
+   * google imp, GA4 must filter down to BGH, BIH, BHT, WSH only").
+   *
+   * The first version pulled them GROUP-WIDE, all 27 branches and the whole
+   * domain, and labelled that honestly as B+. Honest, but wrong: a funnel whose
+   * top two stages count 27 branches and whose bottom two count four is not a
+   * funnel, and the conversion rate read off it is meaningless — the numerator
+   * and the denominator describe different hospitals.
+   *
+   * So the default branch filter now applies to both: `gscQuery` matches
+   * `GSC_BRANCH_REGEX` on the page path, `ga4RunReport` gets `withBranch(null)`,
+   * which is the same four-segment regex on the landing page. This is the
+   * standing BHQ-vs-B+ rule, and this section had broken it.
    *
    * Each is wrapped: a Search Console or GA4 failure must leave the sheet-based
    * cards standing rather than take the tab down, exactly as YouTube and Better
@@ -7827,10 +7883,15 @@ async function buildBetterClub(from, to) {
   };
 
   const [impr, users] = await Promise.all([
-    gscQuery(["date"], seriesFrom, seriesTo, { noBranchFilter: true })
+    // No `noBranchFilter`, so GSC_BRANCH_REGEX applies: BGH, BIH, BHT, WSH only.
+    gscQuery(["date"], seriesFrom, seriesTo)
       .then((rows) => byMonth(rows, (r) => r.date, (r) => r.impressions))
       .catch((e) => { logJson("WARNING", "bclub_gsc_unavailable", { error: String(e.message || e) }); return null; }),
-    ga4RunReport({ dimensions: ["date"], metrics: ["totalUsers"], from: seriesFrom, to: seriesTo })
+    // `withBranch(null)` is the same four-segment regex on the GA4 landing page.
+    ga4RunReport({
+      dimensions: ["date"], metrics: ["totalUsers"], from: seriesFrom, to: seriesTo,
+      dimensionFilter: withBranch(null),
+    })
       .then((rows) => byMonth(rows, (r) => ga4Date(r.date), (r) => r.totalUsers))
       .catch((e) => { logJson("WARNING", "bclub_ga4_unavailable", { error: String(e.message || e) }); return null; }),
   ]);
@@ -7841,8 +7902,104 @@ async function buildBetterClub(from, to) {
    * trough on the funnel and compute a 0% conversion, both of which look like
    * findings.
    */
+  /**
+   * REGISTRATIONS FROM THE ROSTER, which is what the User ID work bought.
+   *
+   * One pass over `Members` gives four things the funnel needs and could not
+   * have before: how many people joined each month, how many of them have since
+   * become patients, how long that took, and what the membership is made of.
+   *
+   * `In snapshot` = N rows are TOMBSTONES — members who have left the roster.
+   * They stay in the historical registration counts, because they did register
+   * that month and rewriting history when someone leaves would make last
+   * quarter's numbers change silently. They are excluded from the CURRENT
+   * membership composition, because they are not current members.
+   */
+  let memberStats = null;
+  if (members && members.length > 1) {
+    const mHead = members[0].map((h) => String(h == null ? "" : h).trim());
+    const mAt = (name) => mHead.indexOf(name);
+    const M = {
+      id: mAt("User ID"), reg: mAt("Registered at"), live: mAt("In snapshot"),
+      hasHn: mAt("Has HN"), first: mAt("First paid month"), lag: mAt("Months to first visit"),
+      nat: mAt("Nationality"), country: mAt("Contact Country"), city: mAt("Contact City"),
+      household: mAt("Household type"), channel: mAt("Register Channel"),
+    };
+    if (M.id > -1 && M.reg > -1) {
+      const regByMonth = new Map();      // month -> { joined, converted, lagSum, lagN }
+      // Blanks are counted under "" and reported as `notRecorded`, NOT dropped:
+      // 16% of the real roster has no nationality, and silently excluding those
+      // rows would inflate every share by a sixth.
+      const bump = (map, key) => { map.set(key, (map.get(key) || 0) + 1); };
+      const nat = new Map(), country = new Map(), city = new Map(),
+            household = new Map(), channel = new Map();
+      let total = 0, live = 0, everPaid = 0, lagSum = 0, lagN = 0;
+      const lags = [];
+
+      for (let r = 1; r < members.length; r++) {
+        const row = members[r] || [];
+        const id = String(row[M.id] == null ? "" : row[M.id]).trim();
+        if (!id) continue;
+        total++;
+        const isLive = M.live === -1 || String(row[M.live] || "").trim().toUpperCase() !== "N";
+        if (isLive) live++;
+
+        const rk = monthKeyCell(row[M.reg]);
+        const paid = M.hasHn > -1 && String(row[M.hasHn] || "").trim().toUpperCase() === "Y";
+        if (paid) everPaid++;
+        const lg = M.lag === -1 ? null : (row[M.lag] === "" || row[M.lag] == null ? null : bnum(row[M.lag]));
+        if (paid && lg !== null) { lagSum += lg; lagN++; lags.push(lg); }
+
+        if (rk) {
+          if (!regByMonth.has(rk)) regByMonth.set(rk, { joined: 0, converted: 0, lagSum: 0, lagN: 0 });
+          const a = regByMonth.get(rk);
+          a.joined++;
+          if (paid) { a.converted++; if (lg !== null) { a.lagSum += lg; a.lagN++; } }
+        }
+
+        // Composition describes CURRENT members only.
+        if (isLive) {
+          if (M.nat > -1) bump(nat, String(row[M.nat] || "").trim());
+          if (M.country > -1) bump(country, String(row[M.country] || "").trim());
+          if (M.city > -1) bump(city, String(row[M.city] || "").trim());
+          if (M.household > -1) bump(household, String(row[M.household] || "").trim());
+          if (M.channel > -1) bump(channel, String(row[M.channel] || "").trim());
+        }
+      }
+
+      lags.sort((a, b) => a - b);
+      memberStats = {
+        total, live, tombstoned: total - live, everPaid,
+        everPaidShare: total ? everPaid / total : null,
+        meanMonthsToFirst: lagN ? lagSum / lagN : null,
+        medianMonthsToFirst: lags.length ? lags[Math.floor(lags.length / 2)] : null,
+        byMonth: [...regByMonth.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))
+          .map(([k, a]) => ({
+            month: k, joined: a.joined, converted: a.converted,
+            conversion: a.joined ? a.converted / a.joined : null,
+            meanMonthsToFirst: a.lagN ? a.lagSum / a.lagN : null,
+          })),
+        /**
+         * SMALL CELLS ARE FOLDED INTO "Other".
+         *
+         * "Icelandic, 1 member" beside a revenue figure identifies a patient.
+         * Nationality is a sensitive attribute and this is a hospital, so the
+         * bar sits higher here than it would for a traffic source.
+         */
+        nationality: bclubTopN(nat, 12, 5),
+        country: bclubTopN(country, 10, 5),
+        city: bclubTopN(city, 10, 5),
+        household: bclubTopN(household, 8, 5),
+        channel: bclubTopN(channel, 6, 1),
+      };
+    }
+  }
+
   let regBy = null, registerSource = null, registerNote = null;
-  if (registers === null) {
+  if (memberStats && memberStats.byMonth.length) {
+    regBy = new Map(memberStats.byMonth.map((m) => [m.month, m.joined]));
+    registerSource = `${BCLUB_MEMBER_TAB} tab (${num0(memberStats.total)} members)`;
+  } else if (registers === null) {
     registerNote = `No "${BCLUB_REGISTER_TAB}" tab in the spreadsheet yet.`;
   } else if (registers.length < 2) {
     registerNote = `The "${BCLUB_REGISTER_TAB}" tab is empty.`;
@@ -7886,11 +8043,11 @@ async function buildBetterClub(from, to) {
     range: { from, to },
     months, selected, prev, pending,
     cohorts, concentration, detailNote,
-    funnel,
+    funnel, memberStats,
     funnelScope: {
-      impressions: impr ? "B+ (all 27 branches, whole domain)" : null,
-      users: users ? "B+ (all 27 branches)" : null,
-      note: "Impressions and users are group-level, not BHQ. Better Club figures come from the hospital's monthly export.",
+      impressions: impr ? "BGH, BIH, BHT, WSH" : null,
+      users: users ? "BGH, BIH, BHT, WSH" : null,
+      note: "Impressions and users are filtered to the four hospitals, matching the Better Club figures beside them.",
     },
     /**
      * Register-to-paid is the figure MW's Looker report leads on — 3.6% in March

@@ -477,16 +477,54 @@ function bclubFixture() {
       // Registers present for the earlier months and ABSENT for the newest,
       // which is the normal state — the sign-up figure arrives after the
       // revenue export. Exercises both the populated stage and the null cell.
-      registers: [1991, 1573, 1759, 2594, null][i],
+      registers: [1991, 1573, 1759, 2594, 2828][i],
       newPaidHns: m.newHns,
-      registerToPaid: [258/1991, 250/1573, 64/1759, 189/2594, null][i],
+      registerToPaid: [258/1991, 250/1573, 64/1759, 189/2594, 514/2828][i],
     })),
-    registerSource: "Registers tab",
+    registerSource: "Members tab (51,166 members)",
     registerNote: null,
+    /**
+     * The roster stats. `everPaid` at 18% of 51,166 is the shape of the real
+     * thing, and the nationality block carries a SUPPRESSED "Other" row so the
+     * small-cell branch renders — a single-member nationality beside a revenue
+     * figure names a patient, and the client must show the merge, not the group.
+     */
+    memberStats: {
+      total: 51166, live: 51100, tombstoned: 66, everPaid: 9173,
+      everPaidShare: 9173 / 51166,
+      meanMonthsToFirst: 4.7, medianMonthsToFirst: 3,
+      byMonth: months.map((m, i) => ({
+        month: m.month, joined: [1991, 1573, 1759, 2594, 2828][i],
+        converted: [612, 401, 388, 402, 514][i],
+        conversion: [612 / 1991, 401 / 1573, 388 / 1759, 402 / 2594, 514 / 2828][i],
+        meanMonthsToFirst: [5.1, 4.4, 3.9, 1.8, 0.4][i],
+      })),
+      nationality: { minCell: 5, total: 42929, notRecorded: 8237, distinct: 96, rows: [
+        { name: "THAI (ไทย)", members: 31200, share: 31200 / 42929 },
+        { name: "MYANMAR (เมียนมา)", members: 4100, share: 4100 / 42929 },
+        { name: "CHINESE (จีน)", members: 2600, share: 2600 / 42929 },
+        { name: "Other", members: 5029, share: 5029 / 42929, groups: 61, suppressed: true },
+      ] },
+      country: { minCell: 5, total: 20100, notRecorded: 31066, distinct: 48, rows: [
+        { name: "Thailand", members: 17400, share: 17400 / 20100 },
+        { name: "Other", members: 2700, share: 2700 / 20100, groups: 33, suppressed: true },
+      ] },
+      city: { minCell: 5, total: 19800, notRecorded: 31366, distinct: 120, rows: [
+        { name: "Bangkok", members: 12100, share: 12100 / 19800 },
+      ] },
+      household: { minCell: 5, total: 18900, notRecorded: 32266, distinct: 6, rows: [
+        { name: "living_alone", members: 8800, share: 8800 / 18900 },
+        { name: "family_with_kids", members: 6100, share: 6100 / 18900 },
+      ] },
+      channel: { minCell: 1, total: 51100, notRecorded: 0, distinct: 3, rows: [
+        { name: "email", members: 30500, share: 30500 / 51100 },
+        { name: "phone", members: 20600, share: 20600 / 51100 },
+      ] },
+    },
     funnelScope: {
-      impressions: "B+ (all 27 branches, whole domain)",
-      users: "B+ (all 27 branches)",
-      note: "Impressions and users are group-level, not BHQ. Better Club figures come from the hospital's monthly export.",
+      impressions: "BGH, BIH, BHT, WSH",
+      users: "BGH, BIH, BHT, WSH",
+      note: "Impressions and users are filtered to the four hospitals, matching the Better Club figures beside them.",
     },
     detailNote: "1,204 member-months carry no HN_ID (imported before HN was retained).",
   };
@@ -1309,14 +1347,17 @@ setTimeout(() => {
         }
         // The newest month has no register figure, so the count must read as an
         // em dash rather than as 0.
-        // The newest month has no register figure, so the conversion must fall
-        // back to the newest month that HAS one and be labelled with it.
-        if (!/converted in Jun/.test(body)) {
-          return fail("better club", "conversion did not fall back to the newest month with a figure"), finish();
+        /**
+         * The roster covers every month now, so the conversion belongs to the
+         * newest month and carries NO "in <month>" suffix — that suffix only
+         * appears when the newest month has no registration figure. Asserting
+         * its absence keeps the fallback from firing when it should not.
+         */
+        if (/converted in \w+/.test(body)) {
+          return fail("better club", "conversion fell back despite the newest month having a figure"), finish();
         }
-        // And the register stage must say the figure is pending, not show a bare dash.
-        if (!/not entered yet/.test(body)) {
-          return fail("better club", "a missing register month did not say so"), finish();
+        if (!/of registers converted/.test(body)) {
+          return fail("better club", "register-to-paid conversion did not render"), finish();
         }
         /**
          * PRINTED CHARTS ARE THE SVG TWIN, NOT THE CANVAS — print hides every
@@ -1350,9 +1391,35 @@ setTimeout(() => {
         if (!(iCombo < iFunnel && iFunnel < iMine)) {
           return fail("better club", `LS panels out of order: combo ${iCombo}, funnel ${iFunnel}, cohorts ${iMine}`), finish();
         }
-        // The group-level stages must be marked B+, never labelled BHQ.
-        if (!/B\+/.test(h)) return fail("better club", "group-level stages are not marked B+"), finish();
-        if (!/group-level/.test(body)) return fail("better club", "the B+ vs BHQ note is gone"), finish();
+        /**
+         * THE FOUR STAGES MUST SHARE A SCOPE. Impressions and users used to be
+         * pulled group-wide and badged B+ while the Better Club figures beside
+         * them were four hospitals — a funnel whose top counts 27 branches and
+         * whose bottom counts four gives a conversion rate that means nothing.
+         */
+        if (/\bB\+\b/.test(h)) return fail("better club", "a stage is still badged B+"), finish();
+        if (!/BGH, BIH, BHT, WSH/.test(h)) {
+          return fail("better club", "the four-hospital scope is not stated"), finish();
+        }
+        if (!/BGH, BIH, BHT and WSH/.test(body)) {
+          return fail("better club", "the funnel note does not name the four hospitals"), finish();
+        }
+        /**
+         * THE REGISTERS STAGE COMES FROM THE ROSTER, which is the whole point of
+         * the User ID work — the stage was empty because nothing here knew when
+         * anyone joined.
+         */
+        if (!/Members tab/.test(body)) return fail("better club", "registers is not sourced from the roster"), finish();
+        if (!/who joined each month/.test(body)) {
+          return fail("better club", "the joined-to-patient table did not render"), finish();
+        }
+        // Small cells must be shown as a merge, never as the group itself.
+        if (!/61 merged/.test(body)) return fail("better club", "suppressed nationalities not shown as merged"), finish();
+        if (!/8,237 members have this field blank/.test(body)) {
+          return fail("better club", "members with no nationality are not accounted for"), finish();
+        }
+        // The Thai parenthetical is stripped so one nationality is one row.
+        if (/THAI \(/.test(body)) return fail("better club", "nationality label keeps its Thai parenthetical"), finish();
         // Shading must not carry meaning: the reported month is marked by a pill.
         if (!/reported above/.test(body)) return fail("better club", "the reported-month pill is gone"), finish();
         // The small-sample caveat must travel with ARPU_New.
