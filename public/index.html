@@ -6380,6 +6380,26 @@ function renderBclub() {
   const fn = d.funnel || [];
   const fLab = fn.map(x => x.label.replace(/ \d{4}$/, ''));
   const mLab = ms.map(m => m.label.replace(/ \d{4}$/, ''));
+  /**
+   * REVENUE YEAR TO DATE, summed from the months already loaded.
+   *
+   * The year comes from the LATEST loaded month, not from today's clock: a deck
+   * built in January for December would otherwise report a year-to-date of zero
+   * while showing twelve months of revenue beside it. `MonthYear` is the
+   * "yyyy-MM" text the normaliser writes, so the year is its first four
+   * characters and there is no date parsing to get wrong.
+   *
+   * `null` when there is nothing to sum, so the title simply omits it rather
+   * than printing a confident zero.
+   */
+  const ytdRev = (() => {
+    const latest = ms.length ? String(ms[ms.length - 1].month || '') : '';
+    const yr = latest.slice(0, 4);
+    if (!/^\d{4}$/.test(yr)) return null;
+    const inYear = ms.filter(m => String(m.month || '').slice(0, 4) === yr);
+    if (!inYear.length) return null;
+    return inYear.reduce((a, m) => a + (Number(m.revenue) || 0), 0);
+  })();
   const fsc = d.funnelScope || {};
   /**
    * THE MEMBERSHIP STATS. Two questions the revenue-keyed model could not ask:
@@ -6513,7 +6533,15 @@ function renderBclub() {
 
     <div class="grid g-2-1 mt">
       <div class="card">
-        <div class="card-title">Members and revenue by month</div>
+        <!--
+          YTD REVENUE LIVES IN THIS TITLE (MW: "no need to create a new card
+          that will shift the layout, put it somewhere is enough").
+          It belongs here rather than on a scorecard: the chart underneath plots
+          exactly the months being summed, so the total reads as the area of the
+          revenue series rather than as a fifth unrelated figure. Nothing moves.
+        -->
+        <div class="card-title">Members and revenue by month${
+          ytdRev !== null ? ` \u00b7 ${thb(ytdRev)} YTD` : ''}</div>
         <div class="chart-wrap bc-mid"><canvas id="bcTrend"></canvas></div>
       </div>
       <div class="card">
@@ -9313,7 +9341,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.202.0';
+const CLIENT_BUILD = '3.203.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

@@ -1,5 +1,27 @@
 ### Recent (August 2026)
 
+**v3.203.0 — revenue YTD on the Better Club trend card. No new card.**
+
+MW: "do we have YTD rev yet? if not no need to create a new card that will shift
+the layout, put it somewhere is enough." There was none. It now reads in the
+chart's own title: "Members and revenue by month · ฿101.5M YTD".
+
+**THE TITLE IS THE RIGHT PLACE, not a fifth scorecard.** The chart underneath
+plots exactly the months being summed, so the total reads as the area of the
+revenue series rather than as another unrelated figure — and the four-card grid
+does not move, which is what MW asked for.
+
+**THE YEAR COMES FROM THE LATEST LOADED MONTH, NOT FROM THE CLOCK.** A deck
+built in January for December would otherwise report a year-to-date of zero
+while showing twelve months of revenue beside it. `MonthYear` is the "yyyy-MM"
+text the normaliser writes, so the year is its first four characters and there
+is no date parsing to get wrong.
+
+`null` when there is nothing to sum, so the title omits it rather than printing
+a confident zero.
+
+### Recent (August 2026)
+
 **v3.202.0 — the mini-card labels fit (MW: "lower the font size and use normal
 case so we can see the whole text without clipping").**
 
