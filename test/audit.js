@@ -388,11 +388,13 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
  * against a recorded ceiling: adding one is a failure, removing any is
  * progress, and the ceiling only ever comes down.
  *
- * WHEN YOU REMOVE SOME, LOWER `TYPE_PX_CEILING` in the same commit. The rule
- * says the new number in its message so there is nothing to look up.
+ * THE CEILING IS NOW ZERO (v3.213.0) — the migration is finished, so this has
+ * stopped being a ratchet and become a plain rule: any hard-coded px font-size
+ * in the markup fails. Do not raise it. If a size is genuinely needed that the
+ * scale does not have, the scale is what should change.
  */
 {
-  const TYPE_PX_CEILING = 68;
+  const TYPE_PX_CEILING = 0;
   // Only the markup half of the file: everything before the <style> block and
   // everything after it. Inside the block is the other rule's business.
   const styleStart = html.indexOf("<style>");

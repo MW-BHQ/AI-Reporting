@@ -2948,7 +2948,7 @@ $('loadBtn').addEventListener('click', async () => {
 });
 
 const errorState = (msg) => `<div class="card"><div class="state bad"><div class="big">Something went wrong</div>
-  <div style="max-width:460px;font-size:12.5px;">${esc(msg)}</div></div></div>`;
+  <div style="max-width:460px;font-size:var(--text-xs);">${esc(msg)}</div></div></div>`;
 const loadingState = (msg) => `<div class="card"><div class="state"><div class="big">${esc(msg)}</div>
   <div style="font-size:var(--text-xs);">Live pull — a few seconds.</div></div></div>`;
 
@@ -3344,7 +3344,7 @@ function renderReport() {
           <th class="num">MoM</th><th class="num">YoY</th></tr></thead><tbody>
         ${U.byBrand.map(b=>`<tr>
           <td><span class="hcode-sm">${esc(b.label)}</span></td>
-          <td class="num" style="font-size:15px;font-weight:600">${num(b.sessions)}</td>
+          <td class="num" style="font-size:var(--text-sm);font-weight:600">${num(b.sessions)}</td>
           <td class="num">${dlt(b.mom)}</td>
           <td class="num">${dlt(b.yoy)}</td>
         </tr>`).join('')}
@@ -3504,13 +3504,13 @@ function renderReport() {
         ${LM.locales.map(l=>{
           const fl = LANG_FLAG[String(l.code||'').toLowerCase()];
           return `<th class="num"><div class="lmflag">${fl || esc(l.code)}</div>
-          <div style="font-size:9.5px;font-weight:400;color:var(--faint)">${esc(l.label)}</div></th>`;
+          <div style="font-size:var(--text-4xs);font-weight:400;color:var(--faint)">${esc(l.label)}</div></th>`;
         }).join('')}
       </tr></thead><tbody>
-      ${LM.rows.map(r=>`<tr><td>${hlogo(r.key, 26)}<div style="font-size:9.5px;color:var(--faint);font-weight:600">MoM</div></td>
+      ${LM.rows.map(r=>`<tr><td>${hlogo(r.key, 26)}<div style="font-size:var(--text-4xs);color:var(--faint);font-weight:600">MoM</div></td>
         ${r.cells.map(c=>`<td class="num">
-          <div style="font-size:14px;font-weight:600">${c.sessions?num(c.sessions):'\u2014'}</div>
-          <div style="font-size:9.5px">${c.sessions?dltPlain(c.mom):''}</div></td>`).join('')}
+          <div style="font-size:var(--text-sm);font-weight:600">${c.sessions?num(c.sessions):'\u2014'}</div>
+          <div style="font-size:var(--text-4xs)">${c.sessions?dltPlain(c.mom):''}</div></td>`).join('')}
       </tr>`).join('')}
       </tbody></table>
     </div>` : '';
@@ -3659,7 +3659,7 @@ function renderReport() {
            */
           const cut = !r.blacklisted && ++shown > 10;
           return `<tr class="${r.blacklisted ? 'bl-row' : ''}${cut ? ' pr-cut' : ''}">
-          <td class="strong i18n">${esc(r.source)}${r.blacklisted?' <span style="font-size:9.5px;color:var(--faint)">blacklisted</span>':''}</td>
+          <td class="strong i18n">${esc(r.source)}${r.blacklisted?' <span style="font-size:var(--text-4xs);color:var(--faint)">blacklisted</span>':''}</td>
           <td class="num">${num(r.sessions)}</td>
           ${COLS.map(([id])=>`<td class="num">${num((r.events||{})[id]||0)}</td>`).join('')}
           </tr>`; }).join(''); })()
@@ -3755,7 +3755,7 @@ function renderReport() {
       const mix = t.hideMix ? [] : (t.mix || []).filter(e => e.value > 0);
       return `<div class="card">
         <div class="card-title">${t.label}
-          <span style="font-weight:400;color:var(--faint);font-size:10.5px">
+          <span style="font-weight:400;color:var(--faint);font-size:var(--text-3xs)">
             top ${Math.min(10, rows.length)} of ${num((cell[typeId]||{}).pageCount||0)} pages</span></div>
         <table class="sortable" data-heat="1"><thead><tr>
           <th>${esc(t.label)}</th>
@@ -3920,8 +3920,8 @@ function renderReport() {
         <div class="card-title">${esc(title)}</div>
         <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
           <svg viewBox="0 0 140 140" style="width:140px;height:140px;flex:0 0 auto">${arcs}
-            <text x="70" y="66" text-anchor="middle" style="font-size:19px;font-weight:700;fill:var(--ink)">${num(total)}</text>
-            <text x="70" y="84" text-anchor="middle" style="font-size:9px;fill:var(--faint)">cases</text>
+            <text x="70" y="66" text-anchor="middle" style="font-size:var(--text-lg);font-weight:700;fill:var(--ink)">${num(total)}</text>
+            <text x="70" y="84" text-anchor="middle" style="font-size:var(--text-4xs);fill:var(--faint)">cases</text>
           </svg>
           <table style="flex:1 1 220px;min-width:200px"><tbody>
             ${slices.map((r, i) => `<tr>
@@ -4017,9 +4017,9 @@ function renderReport() {
       <div class="card">
         <div class="card-title">All time</div>
         <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:2px">
-          <div style="font-size:38px;font-weight:700;color:var(--violet);line-height:1">
+          <div style="font-size:var(--text-4xl);font-weight:700;color:var(--violet);line-height:1">
             ${RVB.lifetime && RVB.lifetime.avg ? RVB.lifetime.avg : '\u2014'}</div>
-          <div style="font-size:15px;color:#F2A93B">${RVB.lifetime && RVB.lifetime.avg
+          <div style="font-size:var(--text-sm);color:#F2A93B">${RVB.lifetime && RVB.lifetime.avg
             ? stars5(Math.round(RVB.lifetime.avg)) : ''}</div>
         </div>
         <div class="lab" style="margin-bottom:12px">lifetime average across
@@ -4078,8 +4078,8 @@ function renderReport() {
       ${RVB.samples.filter(Boolean).map(sm=>`<tr>
         <td style="width:74px;vertical-align:top;color:${sm.stars>=4?'#2E9E6F':(sm.stars===3?'#F2A93B':'#D9534F')};
                    font-size:var(--text-xs);padding-top:3px">${stars5(sm.stars)}</td>
-        ${sm.comment ? `<td><div class="i18n" style="white-space:normal;font-size:12.5px">${esc(sm.comment)}</div>
-          <div style="font-size:10.5px;color:var(--faint);margin-top:2px">
+        ${sm.comment ? `<td><div class="i18n" style="white-space:normal;font-size:var(--text-xs)">${esc(sm.comment)}</div>
+          <div style="font-size:var(--text-3xs);color:var(--faint);margin-top:2px">
             ${esc(sm.reviewer)} \u00b7 ${esc(sm.when)}${sm.replied?'':' \u00b7 no reply yet'}</div></td>`
         : `<td><div style="font-size:var(--text-xs);color:var(--faint)">${num(sm.count)} review${sm.count===1?'':'s'}
             at this rating, none with a comment</div></td>`}
@@ -4119,11 +4119,11 @@ function renderReport() {
         <div class="card-title">The page <span class="all-four">BHQ</span></div>
         ${FB.page ? `
         <div class="grid g-3" style="margin-bottom:10px">
-          <div><div class="lab">Page impressions</div><div style="font-size:19px;font-weight:700">${num(FB.page.impressions)}</div>
-            <div style="font-size:10.5px;color:var(--faint)">${num(FB.page.organicReach)} organic</div></div>
-          <div><div class="lab">Followers</div><div style="font-size:19px;font-weight:700">${num(FB.page.followers)}</div>
-            <div style="font-size:10.5px;color:var(--faint)">${FB.page.newFollows?'+'+num(FB.page.newFollows)+' this period':''}</div></div>
-          <div><div class="lab">Post engagements</div><div style="font-size:19px;font-weight:700">${num(FB.page.engagements)}</div></div>
+          <div><div class="lab">Page impressions</div><div style="font-size:var(--text-lg);font-weight:700">${num(FB.page.impressions)}</div>
+            <div style="font-size:var(--text-3xs);color:var(--faint)">${num(FB.page.organicReach)} organic</div></div>
+          <div><div class="lab">Followers</div><div style="font-size:var(--text-lg);font-weight:700">${num(FB.page.followers)}</div>
+            <div style="font-size:var(--text-3xs);color:var(--faint)">${FB.page.newFollows?'+'+num(FB.page.newFollows)+' this period':''}</div></div>
+          <div><div class="lab">Post engagements</div><div style="font-size:var(--text-lg);font-weight:700">${num(FB.page.engagements)}</div></div>
         </div>
         ${[['TOFU','Page impressions',FB.page.impressions],
             ['','Post engagements',FB.page.engagements],
@@ -4133,10 +4133,10 @@ function renderReport() {
           const tone = ['#4B8DF8','#6BA3F7','#9CC3FA','#C6DBFC'][i];
           return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
             <div style="width:42px;font-size:var(--text-3xs);font-weight:700;color:var(--faint)">${stage}</div>
-            <div style="width:120px;font-size:11.5px;color:var(--ink-2)">${lab}</div>
+            <div style="width:120px;font-size:var(--text-2xs);color:var(--ink-2)">${lab}</div>
             <div style="flex:1;min-width:0"><div style="width:${w}%;min-width:70px;background:${tone};
               color:${i>2?'#1B2340':'#fff'};border-radius:20px;padding:7px 13px;text-align:right;
-              font-weight:700;font-size:15px">${num(val)}</div></div>
+              font-weight:700;font-size:var(--text-sm)">${num(val)}</div></div>
           </div>`;
         }).join('')}
         <div class="card-title" style="margin-top:16px">Actions</div>
@@ -4946,7 +4946,7 @@ function renderOverview() {
     if (S.overviewError) {
       $('viewRoot').innerHTML = errorState(S.overviewError) +
         `<div class="card"><div class="state">
-           <div style="max-width:460px;font-size:12.5px;color:var(--muted);">Overview pulls GA4,
+           <div style="max-width:460px;font-size:var(--text-xs);color:var(--muted);">Overview pulls GA4,
            Meta Ads, Search Console, Google Business Profile and FB &amp; TikTok organic in one
            request, so a single slow source can fail the whole pull. Retrying often succeeds.</div>
            <button class="btn btn-primary" data-load="overview" style="margin-top:4px;">Retry</button>
@@ -5008,7 +5008,7 @@ function renderOverview() {
   if (missing.length) {
     $('viewRoot').innerHTML = `<div class="card"><div class="state bad">
       <div class="big">This pull came back incomplete</div>
-      <div style="max-width:480px;font-size:12.5px;">The server answered but
+      <div style="max-width:480px;font-size:var(--text-xs);">The server answered but
       ${esc(missing.join(' and '))} ${missing.length > 1 ? 'are' : 'is'} missing, so the
       overview cannot be drawn. This usually means a source timed out mid-pull.</div>
       <button class="btn btn-primary" data-load="overview" style="margin-top:4px;">Retry</button>
@@ -5272,7 +5272,7 @@ function renderCampaigns() {
     </div>
     <p class="hint">Prefix match, case-insensitive. Type <b>260501</b> to roll up every <b>260501-*</b> variant, or a fuller code to narrow it. Visits and key events come from GA4; impressions are matched from Meta Ads campaign names.</p>
     <div id="campBody">${d ? '' : `<div class="card"><div class="state"><div class="big">No campaign loaded</div>
-      <div style="max-width:420px;font-size:12.5px;">Enter a code above, or press <b>Browse codes</b> to see what ran in this date range.</div></div></div>`}</div>
+      <div style="max-width:420px;font-size:var(--text-xs);">Enter a code above, or press <b>Browse codes</b> to see what ran in this date range.</div></div></div>`}</div>
   `;
   if (d) renderCampaignBody(d);
 
@@ -5297,7 +5297,7 @@ async function browseCampaigns() {
     const l = await loadCampaignList();
     const rows = (l.campaigns||[]).slice(0,60).map(c => `<tr>
       <td class="strong i18n" style="cursor:pointer" data-code="${esc(c.code)}">
-        ${c.topic?`${esc(c.topic)}<div style="font-size:10.5px;color:var(--faint);font-weight:400;">${esc(c.code)}</div>`:esc(c.code)}
+        ${c.topic?`${esc(c.topic)}<div style="font-size:var(--text-3xs);color:var(--faint);font-weight:400;">${esc(c.code)}</div>`:esc(c.code)}
         ${c.untagged?'<span class="pill warn" style="margin-left:7px;">untagged</span>':''}</td>
       <td class="num">${num(c.visits)}</td></tr>`).join('');
     $('campBody').innerHTML = `<div class="card">
@@ -5323,7 +5323,7 @@ function renderCampaignBody(d) {
           <b>Likely the date range.</b> ${esc(hint.message)}
         </div>
         <button class="btn btn-primary" id="fixRange" data-launch="${esc(hint.launch)}">Widen range to include ${esc(hint.launch)}</button>`
-        : `<div style="max-width:480px;font-size:12.5px;">No GA4 traffic and no ad campaigns carry this prefix between ${esc(d.range.from)} and ${esc(d.range.to)}. Check the spelling, try a shorter prefix, or browse the codes that did run.</div>`}
+        : `<div style="max-width:480px;font-size:var(--text-xs);">No GA4 traffic and no ad campaigns carry this prefix between ${esc(d.range.from)} and ${esc(d.range.to)}. Check the spelling, try a shorter prefix, or browse the codes that did run.</div>`}
       <button class="btn btn-ghost" id="emptyBrowse" style="margin-top:4px;">Browse codes that ran in this range</button>
     </div></div>`;
     const fix = document.getElementById('fixRange');
@@ -5420,7 +5420,7 @@ function renderCampaignBody(d) {
       ${d.organicPosts.slice(0,10).map(o=>`<tr>
         <td class="strong i18n trunc" title="${esc(o.excerpt)}">${o.permalink?`<a href="${esc(o.permalink)}" target="_blank" rel="noopener" style="color:var(--violet);text-decoration:none;">${esc(o.excerpt)}</a>`:esc(o.excerpt)}</td>
         <td class="num">${num(o.impressions)}</td><td class="num">${num(o.clicks)}</td><td class="num">${num(o.engagements)}</td></tr>`).join('')}
-      </tbody></table>`:`<div style="font-size:12.5px;color:var(--muted);">No organic posts carried this campaign's short links in this date range.</div>`}
+      </tbody></table>`:`<div style="font-size:var(--text-xs);color:var(--muted);">No organic posts carried this campaign's short links in this date range.</div>`}
       ${d.lineSameDay?`<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
         <div style="font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:10px;">LINE sends on campaign date · ${esc(d.lineSameDay.date)}</div>
         <div class="grid g-2">
@@ -5528,7 +5528,7 @@ function renderCampaignBody(d) {
     ${(d.trend||[]).length?`<div class="card mt no-print"><h2>Daily</h2><div class="chart-wrap"><canvas id="campChart"></canvas></div></div>`
       :`<div class="card mt no-print"><h2>Daily</h2><div class="state" style="padding:34px 20px;">
         <div class="big">No daily website activity</div>
-        <div style="max-width:420px;font-size:12.5px;">${d.offSiteGoal?'Expected for this campaign type — the results happen on Meta, so there is no day-by-day site traffic to plot.':'No sessions carry this campaign code, so there is nothing to chart.'}</div>
+        <div style="max-width:420px;font-size:var(--text-xs);">${d.offSiteGoal?'Expected for this campaign type — the results happen on Meta, so there is no day-by-day site traffic to plot.':'No sessions carry this campaign code, so there is nothing to chart.'}</div>
       </div></div>`}
   `;
   drawFunnelChart('funnelChart', [
@@ -5555,7 +5555,7 @@ function renderTopics() {
     <p class="hint">Claude expands the topic across Thai, English, Chinese, Japanese, Arabic, German, Myanmar, Vietnamese, Khmer &amp; Indonesian, then matches it against what the site actually ranks for. Language is read from the ranking page's URL locale, not guessed from the script.</p>
     <div class="tags">${['gallbladder','heart disease','cancer screening','knee replacement','diabetes'].map(t=>`<button class="tag" data-t="${t}">${t}</button>`).join('')}</div>
     <div id="topicBody">${d?'':`<div class="card"><div class="state"><div class="big">No topic explored yet</div>
-      <div style="max-width:420px;font-size:12.5px;">Enter a clinical topic to see multilingual search demand and content gaps.</div></div></div>`}</div>
+      <div style="max-width:420px;font-size:var(--text-xs);">Enter a clinical topic to see multilingual search demand and content gaps.</div></div></div>`}</div>
   `;
   if (d) renderTopicBody(d);
   $('topicGo').addEventListener('click', runTopic);
@@ -5588,7 +5588,7 @@ function renderTopicBody(d) {
 
     <div class="card mt"><h2>Sub-topics</h2>
       ${(d.clusters||[]).map(c=>`<div class="cluster"><h3>${esc(c.label)}</h3>${(c.queries||[]).map(q=>`<span class="qtag i18n">${esc(q)}</span>`).join('')}</div>`).join('')
-        || '<div style="color:var(--faint);font-size:12.5px;">No sub-topic grouping this run.</div>'}
+        || '<div style="color:var(--faint);font-size:var(--text-xs);">No sub-topic grouping this run.</div>'}
       ${d.clusterNote?`<div class="note">${esc(d.clusterNote)}</div>`:''}
     </div>
 
@@ -5676,8 +5676,8 @@ function renderUsers() {
         ${u.note?`<div class="u-note">${esc(u.note)}</div>`:''}
         <div class="u-count">${num((u.tabs||[]).length)} of ${num(tabs.length)} tabs</div></div>
       <div class="u-act">
-        <button class="btn btn-primary" data-save="${esc(u.email)}" style="padding:6px 14px;font-size:11.5px;">Save</button>
-        <button class="btn btn-ghost" data-del="${esc(u.email)}" style="padding:6px 12px;font-size:11.5px;color:var(--rose);">Remove</button>
+        <button class="btn btn-primary" data-save="${esc(u.email)}" style="padding:6px 14px;font-size:var(--text-2xs);">Save</button>
+        <button class="btn btn-ghost" data-del="${esc(u.email)}" style="padding:6px 12px;font-size:var(--text-2xs);color:var(--rose);">Remove</button>
       </div>
     </div>
     ${chips(u)}
@@ -5693,7 +5693,7 @@ function renderUsers() {
 
     <div class="card">
       <h2>Permanent admins</h2>
-      <div style="font-size:12.5px;color:var(--ink-2);line-height:1.9;">
+      <div style="font-size:var(--text-xs);color:var(--ink-2);line-height:1.9;">
         ${(d.admins||[]).map(a=>`<code>${esc(a)}</code>`).join(' · ')}
       </div>
       <div class="note">Set by deployment config (<code>ADMIN_EMAILS</code>), not editable here — that's deliberate, so a mistake in the list below can never lock everyone out. Admins always see every tab.</div>
@@ -5706,7 +5706,7 @@ function renderUsers() {
         <input class="text" id="newNote" placeholder="Role or note (optional)" style="max-width:220px;min-width:160px;">
         <button class="btn btn-primary" id="addUser">Add</button>
       </div>
-      <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;">
+      <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:var(--text-xs);">
         ${tabs.map(t=>`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
           <input type="checkbox" class="newTab" value="${esc(t.id)}" ${d.defaultTabs.includes(t.id)?'checked':''}> ${esc(t.label)}
         </label>`).join('')}
@@ -5716,7 +5716,7 @@ function renderUsers() {
       <div class="warnbox" style="margin-top:12px;">
         <b>Step 1 — grant IAP access first, or they'll see "You don't have access".</b><br>
         Open <a href="https://console.cloud.google.com/welcome?project=ai-reporting-503911&cloudshell=true" target="_blank" rel="noopener">Cloud Shell</a>, paste this command (it fills in as you type the email above), then come back and click Add.
-        <pre id="iapCmd" style="margin:8px 0 6px;padding:10px 12px;background:rgba(0,0,0,.05);border-radius:8px;font-size:11.5px;line-height:1.6;overflow-x:auto;white-space:pre;"></pre>
+        <pre id="iapCmd" style="margin:8px 0 6px;padding:10px 12px;background:rgba(0,0,0,.05);border-radius:8px;font-size:var(--text-2xs);line-height:1.6;overflow-x:auto;white-space:pre;"></pre>
         <button class="btn btn-ghost" id="copyIapCmd" style="padding:5px 10px;font-size:var(--text-2xs);">Copy command</button>
         <span id="iapCopied" style="font-size:var(--text-2xs);color:var(--faint);margin-left:8px;"></span>
       </div>
@@ -6078,7 +6078,7 @@ function loadPrompt(view, note) {
   }
   return `<div class="card"><div class="state">
     <div class="big">Ready to load</div>
-    <div style="max-width:470px;font-size:12.5px;color:var(--muted);">${note}</div>
+    <div style="max-width:470px;font-size:var(--text-xs);color:var(--muted);">${note}</div>
     <button class="btn btn-primary" data-load="${esc(view)}" style="margin-top:4px;">Load</button>
   </div></div>`;
 }
@@ -6129,14 +6129,14 @@ function renderPages() {
   if (S.pageError) { const m = S.pageError; $('viewRoot').innerHTML = box(errorState(m)); S.pageError = null; wirePages(); return; }
   if (!S.pageUrl) { $('viewRoot').innerHTML = box(`<div class="card mt"><div class="state">
       <div class="big">Enter a page to analyse</div>
-      <div style="font-size:12.5px;color:var(--muted);max-width:440px;">Nothing is fetched until you do — this reads GA4
+      <div style="font-size:var(--text-xs);color:var(--muted);max-width:440px;">Nothing is fetched until you do — this reads GA4
       for the date range above.</div></div></div>`); wirePages(); return; }
   if (S.pageLoading) { $('viewRoot').innerHTML = box(`<div class="card mt"><div class="state"><div class="big">Reading page performance…</div></div></div>`); wirePages(); return; }
   if (!d) { $('viewRoot').innerHTML = box(`<div class="card mt"><div class="state">
       <div class="big">Ready</div><button class="btn btn-primary" data-load="pages">Load</button></div></div>`); wirePages(); return; }
   if (d.empty) { $('viewRoot').innerHTML = box(`<div class="card mt"><div class="state">
       <div class="big">No sessions for ${esc(d.path)}</div>
-      <div style="font-size:12.5px;color:var(--muted);max-width:460px;">Either the page had no landing traffic in this
+      <div style="font-size:var(--text-xs);color:var(--muted);max-width:460px;">Either the page had no landing traffic in this
       range, or the path differs from what GA4 records — check the locale segment, for example <code>/th/</code>.</div>
     </div></div>`); wirePages(); return; }
 
@@ -6171,7 +6171,7 @@ function renderPages() {
     ${d.monthly.length > 1 ? `<div class="card mt">
       <div class="card-title">Sessions by month</div>
       <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${bars}</svg>
-      <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:6px;">
+      <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
         <span>${esc(d.monthly[0].month)}</span><span>${esc(d.monthly[d.monthly.length-1].month)}</span></div>
     </div>` : ''}
 
@@ -6329,7 +6329,7 @@ function renderGads() {
     ${d.monthly.length > 1 ? `<div class="card">
       <div class="card-title">Spend by month</div>
       <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${bars}</svg>
-      <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:6px;">
+      <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
         <span>${esc(d.monthly[0].month)}</span><span>${esc(d.monthly[d.monthly.length-1].month)}</span></div>
     </div>` : ''}
 
@@ -6362,9 +6362,9 @@ function renderGads() {
         <th class="num">CPC ฿</th><th class="num">Days live</th>
       </tr></thead><tbody>
       ${d.campaigns.map((c, i) => `<tr class="ra-row${c.groups.length?' has-kids':''}" data-camp="g-${i}">
-        <td class="trunc" style="max-width:0;" title="${esc(c.campaign)}">${c.groups.length?'<span class="ra-chev">›</span>':'<span class="ra-chev blank"></span>'}${c.code?`<span class="pill" style="font-size:9.5px;">${esc(c.code)}</span> `:''}${esc(c.campaign)}</td>
-        <td class="trunc" style="max-width:0;font-size:11.5px;color:var(--muted);" title="${esc(c.account)}">${esc(c.account)}</td>
-        <td style="font-size:10.5px;color:var(--muted);white-space:nowrap;">${esc(c.type||'—')}</td>
+        <td class="trunc" style="max-width:0;" title="${esc(c.campaign)}">${c.groups.length?'<span class="ra-chev">›</span>':'<span class="ra-chev blank"></span>'}${c.code?`<span class="pill" style="font-size:var(--text-4xs);">${esc(c.code)}</span> `:''}${esc(c.campaign)}</td>
+        <td class="trunc" style="max-width:0;font-size:var(--text-2xs);color:var(--muted);" title="${esc(c.account)}">${esc(c.account)}</td>
+        <td style="font-size:var(--text-3xs);color:var(--muted);white-space:nowrap;">${esc(c.type||'—')}</td>
         <td class="num barcell"><span class="minibar" style="width:${(c.spend/maxC*100).toFixed(1)}%"></span><b>${num(Math.round(c.spend))}</b></td>
         <td class="num">${num(c.impressions)}</td>
         <td class="num">${num(c.clicks)}</td>
@@ -6481,7 +6481,7 @@ function renderBclub() {
     // Shading is deliberately absent: MW's standing rule is that shading must
     // not carry meaning on an executive view. The rate is the figure.
     return `<td class="num" data-tip="${esc(`${cnt(hit.count)} of ${cnt(r.size)} came back in ${bclubMonthLabel(mk)} · ${num(hit.revenue,{money:true})}`)}">
-      <b>${cnt(hit.count)}</b><span style="color:var(--faint);font-size:10.5px;"> ${pct(hit.rate)}</span></td>`;
+      <b>${cnt(hit.count)}</b><span style="color:var(--faint);font-size:var(--text-3xs);"> ${pct(hit.rate)}</span></td>`;
   };
 
   const co = d.cohorts;
@@ -6728,7 +6728,7 @@ function renderBclub() {
       so a member is followed across months without this service ever seeing who they are.
       ${d.detailNote ? `<br>${esc(d.detailNote)}` : ''}</div>
     </div>` : `<div class="card"><div class="state"><div class="big">Cohorts unavailable</div>
-      <div style="max-width:470px;font-size:12.5px;color:var(--muted);">${esc(d.detailNote || 'The per-member tab could not be read.')}</div></div></div>`;
+      <div style="max-width:470px;font-size:var(--text-xs);color:var(--muted);">${esc(d.detailNote || 'The per-member tab could not be read.')}</div></div></div>`;
 
   const concBody = `
     <div class="card">
@@ -6757,9 +6757,9 @@ function renderBclub() {
         <td class="num">${cnt(m.newHns)}</td>
         <td class="num">${cnt(m.newRev)}</td>
         <td class="num">${cnt(m.arpu)}</td>
-        <td class="num">${cnt(m.arpuNew)}<span style="color:var(--faint);font-size:10.5px;"> /${cnt(m.newHns)}</span></td>
+        <td class="num">${cnt(m.arpuNew)}<span style="color:var(--faint);font-size:var(--text-3xs);"> /${cnt(m.newHns)}</span></td>
         <td class="num">${cnt(m.arpuOld)}</td>
-        <td class="num"><b>${cnt(m.ret2y)}</b><span style="color:var(--faint);font-size:10.5px;"> ${thb(m.ret2yRev)}</span></td>
+        <td class="num"><b>${cnt(m.ret2y)}</b><span style="color:var(--faint);font-size:var(--text-3xs);"> ${thb(m.ret2yRev)}</span></td>
       </tr>`).join('')}
       </tbody></table>
       <div class="note"><b>Per new member is shown with its member count for a reason.</b> It ran
@@ -7140,7 +7140,7 @@ function renderEcomMonthly() {
   if (S.ecommonError) { const m = S.ecommonError; $('viewRoot').innerHTML = errorState(m); S.ecommonError = null; return; }
   if (!d) { $('viewRoot').innerHTML = loadPrompt('ecommonthly', 'Builds the printable one-pager for the month the date range ends in.'); return; }
   if (d.empty) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in ${esc(d.monthLabel)}</div>
-    <div style="font-size:12.5px;color:var(--muted);">Move the date range to a period that has data.</div></div></div>`; return; }
+    <div style="font-size:var(--text-xs);color:var(--muted);">Move the date range to a period that has data.</div></div></div>`; return; }
 
   const yr = +d.month.slice(0,4), prevYr = yr - 1;
   // "1 Jan – 07-31" was unreadable; dates in a printed capsule need a month name.
@@ -7468,7 +7468,7 @@ function renderEcomChurn() {
     <div class="card">
       <div class="card-title">Where they were last seen</div>
       <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${bars}</svg>
-      <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:6px;">
+      <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
         <span>${esc((ls[0]||{}).month||'')}</span><span>${esc((ls[ls.length-1]||{}).month||'')}</span>
       </div>
       <div class="note">The month of each lost customer's final purchase. A tall recent bar is not necessarily bad —
@@ -7554,7 +7554,7 @@ function renderEcomMigration() {
         a switch needs a before and an after. The tables below still work: they compare each
         customer's first purchase with their later ones inside this range.</div>` : `
       <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${bars}</svg>
-      <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:6px;">
+      <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
         <span>${esc(d.months[0]||'')}</span><span>${esc(d.months[d.months.length-1]||'')}</span>
       </div>
       <div class="legend">${destTypes.map(t=>`<span class="lg"><i style="background:${typeColour(t)}"></i>moved to ${esc(t)}</span>`).join('')}</div>
@@ -7617,7 +7617,7 @@ function renderEcomMigration() {
 
     <div class="card mt">
       <div class="card-title">How this is counted</div>
-      <div class="note" style="font-size:12.5px;">
+      <div class="note" style="font-size:var(--text-xs);">
         <b>"Unclassified" is a channel whose name is missing from the taxonomy, not a new customer.</b>
         Every customer here bought at least twice, so none of them are new.<br><br>
         A customer is a stable hashed key built from their email — no name, phone or address is involved.
@@ -7661,7 +7661,7 @@ function renderEcomChannels() {
   // Each channel's own trend, scaled to itself so small channels are readable.
   const singleMonth = d.months.length < 2;
   const spark = (c) => {
-    if (singleMonth) return '<span style="color:var(--faint);font-size:10.5px;">one month</span>';
+    if (singleMonth) return '<span style="color:var(--faint);font-size:var(--text-3xs);">one month</span>';
     const mx = Math.max(...c.series, 1), w = 92, hgt = 26;
     const step = w / Math.max(c.series.length - 1, 1);
     const pts = c.series.map((v, i) => `${(i*step).toFixed(1)},${(hgt - (v/mx)*hgt).toFixed(1)}`).join(' ');
@@ -7690,7 +7690,7 @@ function renderEcomChannels() {
         </div>
       </div>
       <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${stack}</svg>
-      <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:6px;">
+      <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
         <span>${esc(months[0]||'')}</span><span>${esc(months[months.length-1]||'')}</span>
       </div>
       <div class="legend">${d.channels.map(c=>`<span class="lg"><i style="background:${colour(c.channel)}"></i>${esc(c.channel)}</span>`).join('')}</div>
@@ -7713,7 +7713,7 @@ function renderEcomChannels() {
       </tr></thead><tbody>
       ${d.channels.map(c => `<tr>
         <td class="strong" style="white-space:nowrap;"><i class="swatch" style="background:${colour(c.channel)}"></i>${esc(c.channel)}
-          ${c.type!=='Online'?`<span class="pill grey" style="font-size:9px;">${esc(c.type)}</span>`:''}</td>
+          ${c.type!=='Online'?`<span class="pill grey" style="font-size:var(--text-4xs);">${esc(c.type)}</span>`:''}</td>
         <td class="num strong">${num(Math.round(c.revenue))}</td>
         <td>${spark(c)}</td>
         <td class="num">${mom(c.momentum)}</td>
@@ -7863,7 +7863,7 @@ function renderEcomCentres() {
   if (S.ecomcError) { const m = S.ecomcError; $('viewRoot').innerHTML = errorState(m); S.ecomcError = null; return; }
   if (!d) { $('viewRoot').innerHTML = loadPrompt('ecomcentre', 'Reads the Orders sheet and groups sales by medical center.'); return; }
   if (d.empty) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in this range</div>
-    <div style="font-size:12.5px;color:var(--muted);">The Orders sheet holds ${num(d.rangeHas)} row(s).</div></div></div>`; return; }
+    <div style="font-size:var(--text-xs);color:var(--muted);">The Orders sheet holds ${num(d.rangeHas)} row(s).</div></div></div>`; return; }
 
   const t = d.totals, list = d.centres;
   const maxRev = Math.max(...list.map(c => c.revenue), 1);
@@ -7903,8 +7903,8 @@ function renderEcomCentres() {
         <td class="num">${num(c.orders)}</td>
         <td class="num">${delta(c.mom,`฿${num(Math.round(c.prevRevenue||0))} in the previous period`)}</td>
         <td class="num">${delta(c.yoy,`฿${num(Math.round(c.yoyRevenue||0))} a year earlier`)}</td>
-        <td class="trunc i18n" style="max-width:0;font-size:11.5px;color:var(--muted);" title="${esc(c.topPackage)} · ${num(c.topPackageUnits)} sold">${esc(c.topPackage)}<span style="color:var(--faint);"> ×${num(c.topPackageUnits)}</span></td>
-        <td style="font-size:11.5px;color:var(--muted);white-space:nowrap;">${esc(c.topChannel)}
+        <td class="trunc i18n" style="max-width:0;font-size:var(--text-2xs);color:var(--muted);" title="${esc(c.topPackage)} · ${num(c.topPackageUnits)} sold">${esc(c.topPackage)}<span style="color:var(--faint);"> ×${num(c.topPackageUnits)}</span></td>
+        <td style="font-size:var(--text-2xs);color:var(--muted);white-space:nowrap;">${esc(c.topChannel)}
           <span style="color:${c.concentration>=0.7?'#D97B1F':'var(--faint)'};font-weight:${c.concentration>=0.7?600:400};margin-left:6px;">${pct(c.concentration)}</span></td>
       </tr>`).join('')}
       </tbody></table></div>
@@ -7979,7 +7979,7 @@ function renderEcom() {
   if (!d) { $('viewRoot').innerHTML = loadPrompt('ecom', 'Reads the normalised Orders sheet — coupon rows from every sales channel — for the selected range.'); return; }
   if (d.empty) {
     $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in this date range</div>
-      <div style="font-size:12.5px;color:var(--muted);max-width:460px;">
+      <div style="font-size:var(--text-xs);color:var(--muted);max-width:460px;">
       The Orders sheet holds ${num(d.rangeHas)} row(s)${d.first?`, running from <b>${esc(d.first)}</b> to <b>${esc(d.last)}</b>`:''}.
       Move the date range to cover a month that has been imported.</div></div></div>`;
     return;
@@ -8023,7 +8023,7 @@ function renderEcom() {
     <div class="card">
       <div class="card-title">Daily revenue by channel</div>
       <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${bars}</svg>
-      <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:6px;">
+      <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
         <span>${esc(d.daily[0].date)}</span><span>${esc(d.daily[d.daily.length-1].date)}</span>
       </div>
       <div class="legend">${legend}</div>
@@ -8194,8 +8194,8 @@ These are relative percentiles, not absolute scores, and they are forward-lookin
       ${list.map((a,i)=>`
         <tr class="aud-row" data-i="${i}" style="cursor:pointer;">
           <td class="strong trunc" style="max-width:0;" title="${esc(a.name)}">${esc(a.name)}</td>
-          <td style="white-space:nowrap;font-size:11.5px;color:var(--muted);text-align:left;">
-            <span data-tip="${a.objective?esc(GOAL_FULL[a.objective]||a.objective)+' — Meta optimisation goal; Cost/result is priced on it.':'Meta returned no optimisation goal for this set, so it is priced per landing page view by default.'}${a.objectiveMix?' Used across '+a.objectiveMix.length+' goals: '+a.objectiveMix.map(m=>esc(GOAL_FULL[m.goal]||m.goal)+' '+Math.round(m.share*100)+'% of spend').join(', ')+'. The row follows the goal with the most spend; open it to see each campaign.':''}">${esc(GOAL_LABEL[a.objective]||'—')}${a.objectiveMix?` <span class="pill warn" style="font-size:9px;padding:1px 5px;">mixed</span>`:''}</span>
+          <td style="white-space:nowrap;font-size:var(--text-2xs);color:var(--muted);text-align:left;">
+            <span data-tip="${a.objective?esc(GOAL_FULL[a.objective]||a.objective)+' — Meta optimisation goal; Cost/result is priced on it.':'Meta returned no optimisation goal for this set, so it is priced per landing page view by default.'}${a.objectiveMix?' Used across '+a.objectiveMix.length+' goals: '+a.objectiveMix.map(m=>esc(GOAL_FULL[m.goal]||m.goal)+' '+Math.round(m.share*100)+'% of spend').join(', ')+'. The row follows the goal with the most spend; open it to see each campaign.':''}">${esc(GOAL_LABEL[a.objective]||'—')}${a.objectiveMix?` <span class="pill warn" style="font-size:var(--text-4xs);padding:1px 5px;">mixed</span>`:''}</span>
           </td>
           <td class="num">${num(a.uses)}</td>
           <td class="num">${fmtAmt(a.spend)}</td>
@@ -8251,7 +8251,7 @@ function renderGbp() {
   if (!d) {
     $('viewRoot').innerHTML = `<div class="card"><div class="state">
       <div class="big">Ready to load reviews</div>
-      <div style="max-width:470px;font-size:12.5px;">The range defaults to the last 12 months ending yesterday. Press <b>Load</b>.</div>
+      <div style="max-width:470px;font-size:var(--text-xs);">The range defaults to the last 12 months ending yesterday. Press <b>Load</b>.</div>
     </div></div>`;
     return;
   }
@@ -8327,7 +8327,7 @@ function renderGbp() {
       ${L.recent.map(r=>`<tr>
         <td class="strong" style="color:${r.star>=4?'var(--green)':(r.star==3?'var(--amber)':'var(--rose)')};">${r.star?r.star+' ★':'—'}</td>
         <td class="i18n" style="white-space:normal;font-size:var(--text-xs);">${r.comment?esc(r.comment):'<span style="color:var(--faint)">rating only, no comment</span>'}
-          ${r.reviewer?`<div style="font-size:10.5px;color:var(--faint);margin-top:3px;">${esc(r.reviewer)}</div>`:''}</td>
+          ${r.reviewer?`<div style="font-size:var(--text-3xs);color:var(--faint);margin-top:3px;">${esc(r.reviewer)}</div>`:''}</td>
         <td style="font-size:var(--text-2xs);color:var(--muted)">${esc(String(r.at||'').slice(0,10))}</td>
         <td>${r.replied?'<span class="pill">yes</span>':'<span class="pill warn">no</span>'}</td>
       </tr>`).join('')}
@@ -8413,7 +8413,7 @@ function renderBenchmark() {
   if (!d) {
     $('viewRoot').innerHTML = `<div class="card"><div class="state">
       <div class="big">Ready to benchmark</div>
-      <div style="max-width:500px;font-size:12.5px;">Press <b>Load</b>. This always reads the last 12 <b>complete</b> calendar months, so a partial month can't flatter the comparison. Results are stored and reused until the month rolls over.</div>
+      <div style="max-width:500px;font-size:var(--text-xs);">Press <b>Load</b>. This always reads the last 12 <b>complete</b> calendar months, so a partial month can't flatter the comparison. Results are stored and reused until the month rolls over.</div>
     </div></div>`;
     return;
   }
@@ -8462,7 +8462,7 @@ function renderBenchmark() {
       <table><thead><tr><th>Objective</th><th class="num">Spend</th><th class="num">Results</th>
         <th class="num">Cost per result</th><th class="num">Results / ฿1k</th><th class="num">CPM</th></tr></thead><tbody>
       ${a.goals.map(g=>`<tr>
-        <td class="strong">${esc(g.label)}<div style="font-size:10.5px;color:var(--faint);font-weight:400;">per ${esc(g.resultLabel)} · from ${esc(g.source)}</div></td>
+        <td class="strong">${esc(g.label)}<div style="font-size:var(--text-3xs);color:var(--faint);font-weight:400;">per ${esc(g.resultLabel)} · from ${esc(g.source)}</div></td>
         <td class="num">${num(g.spend,{money:true})}</td>
         <td class="num">${num(g.resultCount)}</td>
         <td class="num" style="font-weight:600;color:var(--ink)">${num(g.costPerResult,{money:true})}</td>
@@ -8543,7 +8543,7 @@ function renderAudit() {
   if (!d) {
     $('viewRoot').innerHTML = `<div class="card"><div class="state">
       <div class="big">Ready to audit</div>
-      <div style="max-width:460px;font-size:12.5px;">Press <b>Load</b> to measure how much traffic and ad spend can't be tied to a campaign code — the blind spot in the Campaigns view.</div>
+      <div style="max-width:460px;font-size:var(--text-xs);">Press <b>Load</b> to measure how much traffic and ad spend can't be tied to a campaign code — the blind spot in the Campaigns view.</div>
     </div></div>`;
     return;
   }
@@ -8593,7 +8593,7 @@ function renderAudit() {
 
     <div class="card mt">
       <h2>How to fix it</h2>
-      <div style="font-size:12.5px;color:var(--ink-2);line-height:1.75;">
+      <div style="font-size:var(--text-xs);color:var(--ink-2);line-height:1.75;">
         <b>Bare platform IDs</b> — the ad's destination URL is missing <code>utm_campaign</code>. Add the code to the link when the ad is built; Meta won't backfill it, so historic sessions stay unattributable.<br>
         <b>Placeholders</b> — a template variable reached production unsubstituted. Worth a pre-launch check on the link, since it silently costs the whole campaign's attribution.<br>
         <b>Names without a code</b> — the ad ran with a name that doesn't follow <code>YYMMDD-NN</code>, so it can't be searched or dated here. Renaming in the platform fixes future reporting.
@@ -9462,7 +9462,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.212.0';
+const CLIENT_BUILD = '3.213.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
@@ -9523,7 +9523,7 @@ fetch('/api/me').then(r => r.json()).then(me => {
   const start = (wanted && me.tabs.includes(wanted)) ? wanted : (me.tabs.find(t => t !== 'users') || me.tabs[0]);
   if (!start) {
     $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No tabs assigned</div>
-      <div style="max-width:420px;font-size:12.5px;">Your account is signed in${me.email?` as ${esc(me.email)}`:''} but hasn't been granted any views yet. Ask an admin to grant access.</div></div></div>`;
+      <div style="max-width:420px;font-size:var(--text-xs);">Your account is signed in${me.email?` as ${esc(me.email)}`:''} but hasn't been granted any views yet. Ask an admin to grant access.</div></div></div>`;
     return;
   }
   goTo(start, { push: !location.hash });

@@ -1,5 +1,40 @@
 ### Recent (August 2026)
 
+**v3.213.0 — the type scale migration is FINISHED. Zero hard-coded font sizes,
+and the ratchet is now a plain rule.**
+
+MW: "I will accept small visual shifts, let's correct them once and for all."
+All 68 remaining sizes rounded to the nearest existing token:
+
+    9.5px  ->  9px  x5      12.5px -> 12px  x25
+    10.5px -> 10px  x18     15px   -> 14px  x3
+    11.5px -> 11px  x8      19px   -> 18px  x4
+    9px, 14px (exact)  x4   38px   -> 36px  x1
+
+**TIES ROUND DOWN, deliberately.** Every one of these is a dense label in a
+tight card, and the box it sits in did not grow — rounding up would have been
+the change most likely to clip something. Checked after: zero text nodes
+overflowing their container across nine tabs, and `print-overflow` still 0.
+
+**THE SCALE DID NOT GROW TO ABSORB THE CODE.** The alternative was inventing
+`--text-2.5xs` and friends until every existing size had a home, which would
+have produced a fourteen-step "scale" that is not a scale. The code moved to the
+scale, which is the direction that leaves a design system behind rather than a
+lookup table.
+
+**`TYPE_PX_CEILING` IS 0 AND MUST NOT BE RAISED.** The rule has stopped being a
+ratchet and become a gate: any hard-coded px font-size in the markup fails.
+Verified by breaking it — one `font-size:31px` on the view title failed with
+`1 ... ceiling is 0` and named the markup. **If a size is genuinely needed that
+the scale lacks, the SCALE is what should change.**
+
+That closes the last item from the tab-consistency scan. Standing gaps left in
+the backlog are decisions, not defects: the seven print-less tabs (MW's call to
+leave them) and the item-scoped e-commerce metrics (waiting on the GA4 events
+moving to the group property).
+
+### Recent (August 2026)
+
 **v3.212.0 — the type-scale blind spot is measured, ratcheted, and a third of it
 is gone.**
 
