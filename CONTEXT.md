@@ -1,5 +1,28 @@
 ### Recent (August 2026)
 
+**v3.209.0 — the heat bars are inset from the row (MW).**
+
+MW: "every time we have heat bars, it uses full height it has, how about we give
+a little padding top and bottom to create some space, maybe it looks more
+readable?" Yes — a full-height band made consecutive rows read as one continuous
+column of colour, and the row boundaries disappeared, which is precisely what
+makes a heat bar hard to read.
+
+**DONE WITH `background-size`, NOT PADDING.** The bar is a `linear-gradient`
+background on the cell, so real padding would move the text and reflow every
+table that uses one. `background-size:100% calc(100% - 0.45rem)` with
+`background-position:center` insets the band and leaves the cell's height and
+the text exactly where they were — nothing reflows, no table grows, and
+`print-overflow` stayed at 0 clipping.
+
+Radius 4px -> 5px, because an inset band reads as a rounded BAR where a
+full-height one read as a clipped corner.
+
+Measured: 40px row, 7.2px removed, ~3.6px of air top and bottom across all 57
+heat cells on the monthly report.
+
+### Recent (August 2026)
+
 **v3.208.0 — housekeeping: the MONEY formatters converge on `num()`. Counts
 deliberately do not.**
 

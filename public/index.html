@@ -359,7 +359,24 @@
      after sorting, so nothing invited the first click. */
   table.sortable thead th{cursor:pointer;user-select:none;white-space:nowrap;font-weight:700;color:var(--ink-2);}
   table.sortable thead th.sorted{color:var(--violet);}
-  table.sortable td.heat{border-radius:4px;}
+  /**
+   * THE HEAT BAR IS INSET FROM THE ROW (MW: "every time we have heat bars, it
+   * uses full height it has, how about we give a little padding top and bottom
+   * to create some space, maybe it looks more readable?").
+   *
+   * It is a `linear-gradient` background, so a full-height band made every row
+   * read as one continuous block — the bars merged into a column of colour and
+   * the row boundaries disappeared, which is exactly what makes a heat bar hard
+   * to read.
+   *
+   * `background-size` insets it vertically without touching the layout: the
+   * cell keeps its height, so nothing reflows and the table does not grow. The
+   * radius then reads as a rounded bar rather than a clipped corner.
+   */
+  table.sortable td.heat{border-radius:5px;
+    background-size:100% calc(100% - 0.45rem)!important;
+    background-position:center!important;
+    background-repeat:no-repeat!important;}
   table.sortable thead th:hover{color:var(--ink-2);}
   table.sortable thead th::after{content:'↕';margin-left:5px;font-size:var(--text-4xs);
     color:var(--faint);opacity:.55;font-weight:400;}
@@ -9390,7 +9407,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.208.0';
+const CLIENT_BUILD = '3.209.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
