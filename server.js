@@ -7179,20 +7179,42 @@ app.get("/api/ecommerce/churn", requireTab("ecomchurn"), async (req, res) => {
  * the month, and its comparison is the identical span a year back — not the full
  * prior year, which would flatter every figure.
  */
-async function buildMonthly(month, scope) {
+/**
+ * THE REPORT HONOURS THE DATE RANGE (MW: "if it is set to be 15 Aug -> 31 Aug
+ * then it's 15 Aug to 31 Aug").
+ *
+ * It used to take only `to`, throw away `from`, and report the whole calendar
+ * month — so the picker said one thing and the page did another, silently. Now
+ * the selected window IS the window.
+ *
+ * The comparison is the same SPAN one year earlier, not the same calendar
+ * month, because that is the only honest counterpart to an arbitrary range:
+ * seventeen days must compare against seventeen days or the change figure is
+ * meaningless. Year-to-date runs from 1 January to the chosen `to`, and its
+ * counterpart to the same day last year.
+ *
+ * A day-of-month that does not exist a year earlier (29 February) is clamped to
+ * that month's last day rather than rolling into March, which is what
+ * `new Date()` would do and what would quietly shift a window.
+ */
+function yearBefore(iso) {
+  const y = +iso.slice(0, 4) - 1, m = +iso.slice(5, 7), d = +iso.slice(8, 10);
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return `${y}-${String(m).padStart(2, "0")}-${String(Math.min(d, last)).padStart(2, "0")}`;
+}
+
+async function buildMonthly(from, to, scope) {
   const all = await ecomRows();
   const rows = scope === "all" ? all : all.filter((r) => r.type === "Online");
-  const y = +month.slice(0, 4), m = +month.slice(5, 7);
-  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const y = +to.slice(0, 4), m = +to.slice(5, 7);
+  const prevFrom = yearBefore(from), prevTo = yearBefore(to);
   const win = {
-    month: { from: `${month}-01`, to: `${month}-${String(lastDay).padStart(2, "0")}` },
-    ytd: { from: `${y}-01-01`, to: `${month}-${String(lastDay).padStart(2, "0")}` },
+    month: { from, to },
+    ytd: { from: `${y}-01-01`, to },
+    monthPrev: { from: prevFrom, to: prevTo },
+    ytdPrev: { from: `${y - 1}-01-01`, to: prevTo },
   };
-  const prevY = y - 1;
-  const prevLast = new Date(Date.UTC(prevY, m, 0)).getUTCDate();
-  const pm = `${prevY}-${String(m).padStart(2, "0")}`;
-  win.monthPrev = { from: `${pm}-01`, to: `${pm}-${String(prevLast).padStart(2, "0")}` };
-  win.ytdPrev = { from: `${prevY}-01-01`, to: `${pm}-${String(prevLast).padStart(2, "0")}` };
+  const month = to.slice(0, 7);
 
   const agg = (w) => {
     const orders = new Set();
@@ -7236,9 +7258,23 @@ async function buildMonthly(month, scope) {
       share: chTotal ? e.revenue / chTotal : 0 }))
     .sort((a, b) => b.revenue - a.revenue);
 
+  /**
+   * THE LABEL TELLS THE TRUTH ABOUT THE WINDOW. A full calendar month still
+   * reads "August 2026" — that is the normal case and the nicer wording. Any
+   * other range spells out its dates, so a seventeen-day report can never be
+   * mistaken for a month.
+   */
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const wholeMonth = from === `${month}-01` && to === `${month}-${String(lastDay).padStart(2, "0")}`;
+  const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const human = (iso) => `${+iso.slice(8, 10)} ${MON[+iso.slice(5, 7) - 1]} ${iso.slice(0, 4)}`;
   return {
-    month, monthLabel: new Date(Date.UTC(y, m - 1, 1))
-      .toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }),
+    month,
+    monthLabel: wholeMonth
+      ? new Date(Date.UTC(y, m - 1, 1))
+          .toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" })
+      : `${human(from)} \u2013 ${human(to)}`,
+    wholeMonth,
     scope: scope === "all" ? "all" : "online",
     windows: win,
     mtd: { ...mtd, prev: mtdPrev, change: pctChange(mtd.revenue, mtdPrev.revenue),
@@ -7253,11 +7289,19 @@ async function buildMonthly(month, scope) {
 app.get("/api/ecommerce/monthly", requireTab("ecommonthly"), async (req, res) => {
   const { to } = req.query;
   if (!isoDate(to)) return res.status(400).json({ error: "to must be YYYY-MM-DD" });
-  const month = /^\d{4}-\d{2}$/.test(String(req.query.month || "")) ? req.query.month : to.slice(0, 7);
+  /**
+   * `from` is optional so an old link still resolves, and defaults to the first
+   * of `to`'s month — the behaviour this endpoint used to have unconditionally.
+   * The cache key carries BOTH dates: keying on the month alone would have
+   * served a full-month payload to a seventeen-day request, which is the exact
+   * class of silent-wrong-data the version-keyed caches exist to prevent.
+   */
+  const from = isoDate(req.query.from) ? req.query.from : `${to.slice(0, 7)}-01`;
+  if (from > to) return res.status(400).json({ error: "from must not be after to" });
   try {
     const scope = req.query.scope === "all" ? "all" : "online";
-    const out = await withCache(`ecommonthly:${scope}:${month}`, req.query.refresh === "1",
-      () => buildMonthly(month, scope));
+    const out = await withCache(`ecommonthly:${scope}:${from}:${to}`, req.query.refresh === "1",
+      () => buildMonthly(from, to, scope));
     res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
   } catch (err) {
     logJson("ERROR", "ecom_monthly_failed", { error: String(err.message || err) });

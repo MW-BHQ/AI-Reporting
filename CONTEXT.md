@@ -1,5 +1,42 @@
 ### Recent (August 2026)
 
+**v3.211.0 — the E-commerce Report honours the date range (MW: "if it is set to
+be 15 Aug -> 31 Aug then it's 15 Aug to 31 Aug").**
+
+It took only `to`, discarded `from`, and reported the whole calendar month. The
+picker said one thing and the page did another, with nothing saying so — which
+is worse than not having the control.
+
+**THE COMPARISON IS THE SAME SPAN ONE YEAR EARLIER, not the same calendar
+month.** Seventeen days must compare against seventeen days or the change figure
+is meaningless. Year-to-date runs 1 January to the chosen `to`, and its
+counterpart to the same day last year. A day that does not exist a year earlier
+(29 February) is clamped to that month's last day rather than rolling into
+March, which is what `new Date()` would do and what would silently shift the
+window.
+
+**THE LABEL TELLS THE TRUTH ABOUT THE WINDOW.** A full calendar month still
+reads "August 2026" — the normal case, and the nicer wording. Anything else
+spells out its dates, so a seventeen-day report can never be mistaken for a
+month. Verified: `2026-08-01..31` -> "August 2026";
+`2026-08-15..31` -> "15 Aug 2026 - 31 Aug 2026".
+
+**BOTH CACHE KEYS CARRY BOTH DATES**, server and client. Keyed on the month
+alone, a seventeen-day request would have been served the full-month payload
+from cache — the exact silent-wrong-data class the version-keyed caches exist to
+prevent, and the easiest thing to miss in a change like this.
+
+`from` stays optional and defaults to the first of `to`'s month, so an existing
+link still resolves to the old behaviour rather than erroring. `from > to` is a
+400 rather than an empty report.
+
+**MW's decision on the seven print-less tabs: leave them.** Overview, Users,
+Pages, Google Ads, Audiences, GBP and Topic Explorer are screen tools; he will
+ask for a print path on the ones that turn out to need one. Recorded so nobody
+"fixes" it as an inconsistency.
+
+### Recent (August 2026)
+
 **v3.210.0 — housekeeping: the scope pill is on every tab, set once in the
 shell.**
 

@@ -2736,10 +2736,12 @@ async function loadEcomRoas(refresh = false) {
 }
 
 async function loadEcomMonthly(refresh = false) {
-  const key = `${$('to').value}|${S.ecomScope}`;
+  // Both dates in the key: keyed on `to` alone, changing only the start date
+  // would have been served the previous range's payload from memory.
+  const key = `${$('from').value}|${$('to').value}|${S.ecomScope}`;
   if (!refresh && S.ecommonKey === key && S.ecommon) return S.ecommon;
   setStatus('busy', 'building the monthly report…');
-  const res = await fetch(`/api/ecommerce/monthly?to=${$('to').value}&scope=${S.ecomScope}${refresh?'&refresh=1':''}`);
+  const res = await fetch(`/api/ecommerce/monthly?from=${$('from').value}&to=${$('to').value}&scope=${S.ecomScope}${refresh?'&refresh=1':''}`);
   if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,220)}`);
   S.ecommon = await res.json(); S.ecommonKey = key;
   setStatus('ok', S.ecommon.cached ? `cached ${S.ecommon.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
@@ -7138,7 +7140,7 @@ function renderEcomMonthly() {
   if (S.ecommonError) { const m = S.ecommonError; $('viewRoot').innerHTML = errorState(m); S.ecommonError = null; return; }
   if (!d) { $('viewRoot').innerHTML = loadPrompt('ecommonthly', 'Builds the printable one-pager for the month the date range ends in.'); return; }
   if (d.empty) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in ${esc(d.monthLabel)}</div>
-    <div style="font-size:12.5px;color:var(--muted);">Move the date range so it ends inside a month that has data.</div></div></div>`; return; }
+    <div style="font-size:12.5px;color:var(--muted);">Move the date range to a period that has data.</div></div></div>`; return; }
 
   const yr = +d.month.slice(0,4), prevYr = yr - 1;
   // "1 Jan – 07-31" was unreadable; dates in a printed capsule need a month name.
@@ -9460,7 +9462,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.210.0';
+const CLIENT_BUILD = '3.211.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
