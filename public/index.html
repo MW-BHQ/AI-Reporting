@@ -964,9 +964,26 @@
    */
   .mini{border:1px solid var(--line);border-radius:10px;padding:9px 11px 10px;
     background:#fff;}
-  .mini .lab{display:flex;align-items:center;gap:5px;font-size:var(--text-2xs);letter-spacing:.06em;
-    text-transform:uppercase;color:var(--faint);margin-bottom:3px;white-space:nowrap;
-    overflow:hidden;text-overflow:ellipsis;}
+  /**
+   * SENTENCE CASE AND SMALLER, SO THE LABEL FITS (MW: "lower the font size and
+   * use normal case so we can see the whole text without clipping").
+   *
+   * These sit five-across in a quarter-panel, so "Added to cart" had about
+   * 70px. Uppercase plus .06em of tracking made it "ADDED TC…" — the ellipsis
+   * was doing the work the type size should have. Sentence case is roughly 12%
+   * narrower before the tracking is even counted, and dropping the tracking
+   * gives back another character or two.
+   *
+   * Sentence case alone was not enough — five cards across a half panel leaves
+   * about 70px, and "Doctor profiles" still did not fit on one line. So the
+   * label WRAPS instead of truncating, with `min-height:2.3em` reserving the
+   * second line on every card so the values below them stay on one baseline.
+   * Truncation was the wrong tool: an ellipsis hides the word, a second line
+   * shows it.
+   */
+  .mini .lab{display:flex;align-items:flex-start;gap:5px;font-size:var(--text-2xs);
+    letter-spacing:0;text-transform:none;color:var(--faint);margin-bottom:3px;
+    line-height:1.2;min-height:2.5em;}
   /* actIcon carries its own right margin; the flex gap already spaces it. */
   .mini .lab svg{margin-right:0;flex:0 0 auto;opacity:.85;}
   .mini .val{font-size:var(--text-2xl);font-weight:750;line-height:1.05;color:var(--ink);}
@@ -9296,7 +9313,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.201.0';
+const CLIENT_BUILD = '3.202.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

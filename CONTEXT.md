@@ -1,5 +1,27 @@
 ### Recent (August 2026)
 
+**v3.202.0 — the mini-card labels fit (MW: "lower the font size and use normal
+case so we can see the whole text without clipping").**
+
+Five cards across a half panel leaves each label about 70px. Uppercase plus
+.06em of tracking turned "Added to cart" into "ADDED TC…" and "Doctor profiles"
+into "DOCTOR P…" — the ellipsis was doing the work the type size should have.
+
+Sentence case, no tracking, and **the label WRAPS instead of truncating**.
+Truncation was the wrong tool: an ellipsis hides the word, a second line shows
+it. `min-height:2.5em` reserves the second line on every card so the values
+below stay on one baseline whether the label runs to one line or two.
+
+**SENTENCE CASE ALONE WAS NOT ENOUGH**, which is worth recording — it bought
+about 12% and "Doctor profiles" still overflowed. Measured both before and
+after, on screen and in print media, rather than assumed.
+
+**`type:scale` CAUGHT A HARD-CODED 10px** on the way through. The first attempt
+set `font-size:10px` directly; the audit named it immediately and it became
+`var(--text-2xs)`. That rule keeps paying for itself.
+
+### Recent (August 2026)
+
 **v3.201.0 — compact axis ticks on `drawChart` (MW: "use compact number
 everywhere — keep it consistency").**
 
