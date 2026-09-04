@@ -1,5 +1,31 @@
 ### Recent (August 2026)
 
+**v3.205.0 — MY BUG: an orphaned line of template leaked onto the page and broke
+the pagination.**
+
+MW: "the 8 cards break to a new page." The screenshot also showed
+`: 'not in the roster yet')}` printed as body text under the cards, which is the
+actual fault and the cause of the break — a bare text node inside the score-card
+grid, which pushed the row past the page.
+
+**HOW IT GOT THERE, because the mechanism will recur.** v3.204 replaced the
+three-line `New Registers` scoreCard call by line range, walking forward to the
+first line containing `)}` as the end of the call. Line TWO contains
+`${esc(s.label.replace(/ \d{4}$/, ''))}` — which ends in `))}`. So the walk
+stopped one line early, the replacement went in, and line three was left behind
+as loose text inside a template literal.
+
+**AND NO TEST CAUGHT IT.** `boot.js` checks the eight score-card labels and they
+were all correct; `print-overflow.py` reported 0 clipping because the stray text
+made the block TALLER rather than clipped. A visible defect on the page passed
+both. **A brace-counting scan is not a parser — when replacing a multi-line call
+by range, match the closing line explicitly, or count parentheses.**
+
+Line deleted; 277 assertions green, 33 sections, 0 clipping, and the stray text
+is gone from the render.
+
+### Recent (August 2026)
+
 **v3.204.0 — Revenue YTD takes the duplicate card. v3.203's title placement
 replaced.**
 

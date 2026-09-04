@@ -6518,7 +6518,6 @@ function renderBclub() {
         ${scoreCard('Revenue YTD', ytdRev === null ? '\u2014' : thb(ytdRev),
           ytdRev === null ? 'no months loaded'
             : `${esc(ytdYear)} \u00b7 ${cnt(ytdMonths)} month${ytdMonths === 1 ? '' : 's'} loaded`)}
-                    : 'not in the roster yet')}
       </div>` : ''}
       ${(fsc.impressions === null || fsc.users === null || !d.registerSource) ? `<div class="note">
         ${!d.registerSource ? `<b>New registers has no source.</b> ${esc(d.registerNote || '')}` : ''}
@@ -9350,7 +9349,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.204.0';
+const CLIENT_BUILD = '3.205.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
