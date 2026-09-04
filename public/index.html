@@ -2039,7 +2039,7 @@
     </div>
     <div class="head">
       <div>
-        <h1 id="viewTitle">Overview</h1>
+        <h1 id="viewTitle">Overview <span class="all-four" id="viewScope" hidden></span></h1>
         <div class="subtitle" id="viewSub">Impressions → Visits → Key Events across all channels</div>
       </div>
       <div class="toolbar">
@@ -2583,6 +2583,41 @@ document.querySelectorAll('.nav-item').forEach(item => {
 // Views where the toolbar date range has no meaning.
 const NO_DATE_VIEWS = new Set(['benchmark', 'users']);
 
+/**
+ * WHICH SCOPE EACH TAB IS SHOWING. Three kinds, and the distinction is the point:
+ *   - GA4 / Search Console / GBP tabs are BRANCH-FILTERED to the four hospitals,
+ *     so they are BHQ. If BRANCH_SEGMENTS=off on the server they become the whole
+ *     27-branch property and the pill has to say B+ instead — otherwise the page
+ *     shows a group figure under a BHQ label, which is the mistake this project
+ *     has spent the most time on.
+ *   - E-commerce tabs are scoped by CHANNEL, not by hospital. The pill mirrors
+ *     the control the reader already has.
+ *   - Users, Audit, Benchmark, Topics and Campaigns are not scoped to a hospital
+ *     set. No pill: an invented one is worse than none.
+ */
+const ECOM_VIEWS = new Set(['ecom', 'ecommonthly', 'ecomchannels', 'ecompackages',
+  'ecomcentres', 'ecomchurn', 'ecomroas', 'ecommigration']);
+/**
+ * `bclub` is in here on purpose, and it was the one I nearly got wrong.
+ *
+ * Its figures come from the Better Club SHEET, not from a branch-filtered GA4
+ * pull — so stamping BHQ on the tab would assert a hospital scope the data does
+ * not have. Its own sections already carry a "Better Club" pill, which is the
+ * honest label. Only the two GA4 cards on its funnel page are BHQ, and those
+ * say so themselves.
+ */
+const UNSCOPED_VIEWS = new Set(['users', 'audit', 'benchmark', 'topics', 'campaigns', 'bclub']);
+function scopeFor(view) {
+  if (UNSCOPED_VIEWS.has(view)) return '';
+  if (ECOM_VIEWS.has(view)) return S.ecomScope === 'online' ? 'Online only' : 'All channels';
+  // `branchFilter` comes from the server's boot payload. Absent means we have
+  // not been told, and guessing BHQ when the filter is off would label a
+  // 27-branch figure as four hospitals.
+  if (S.branchFilter === 'off') return 'B+';
+  if (S.branchFilter === 'on') return 'BHQ';
+  return '';
+}
+
 const TITLES = {
   overview: ['Overview', 'Impressions → Visits → Key Events across all channels'],
   campaigns: ['Campaigns', 'Enter a utm_campaign code to see its funnel and every variant'],
@@ -2918,7 +2953,25 @@ const loadingState = (msg) => `<div class="card"><div class="state"><div class="
 // ============================================================ render: shell
 function render() {
   const [t, s] = TITLES[S.view];
-  $('viewTitle').textContent = t; $('viewSub').textContent = s;
+  /**
+   * THE SCOPE PILL, ON EVERY TAB (housekeeping, v3.210.0).
+   *
+   * "Scope always shown as a pill" has been the convention since the monthly
+   * report was built, and the monthly report was the only place honouring it.
+   * On the other twelve tabs a reader could not tell whether they were seeing
+   * the four hospitals or all twenty-seven branches without opening the
+   * sidebar — and those two figures differ by a factor of three.
+   *
+   * Set in the SHELL rather than in twelve render functions: one place, and a
+   * tab added later inherits it instead of being forgotten.
+   */
+  const scopeEl = $('viewScope');
+  $('viewTitle').textContent = t + ' ';
+  $('viewTitle').appendChild(scopeEl);
+  const sc = scopeFor(S.view);
+  scopeEl.textContent = sc || '';
+  scopeEl.hidden = !sc;
+  $('viewSub').textContent = s;
   // The benchmark is inherently trailing, so a range picker would only mislead.
   const hideDates = NO_DATE_VIEWS.has(S.view);
   document.querySelector('.dates').classList.toggle('hidden', hideDates);
@@ -9407,9 +9460,17 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.209.0';
+const CLIENT_BUILD = '3.210.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
+  /**
+   * The scope pill needs to know whether the four-hospital filter is on, and
+   * this is the one call the client already makes at boot — so it rides along
+   * rather than adding a second round trip. `render()` is called again because
+   * the first paint happens before this resolves, and a pill that appears only
+   * after a tab change is worse than one that appears late.
+   */
+  if (v.branchFilter) { S.branchFilter = v.branchFilter; try { render(); } catch (e) {} }
   const stale = v.version && v.version !== CLIENT_BUILD;
   $('verLabel').innerHTML = 'v' + esc(v.version) + (v.modelArmor ? ' · armor on' : '') +
     (stale ? `<div class="stale-note">page is v${esc(CLIENT_BUILD)}</div>` : '');

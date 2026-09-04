@@ -8492,6 +8492,10 @@ app.delete("/api/users", requireAdmin, async (req, res) => {
 
 app.get("/api/version", (_req, res) => res.json({
   version: VERSION, ga4Property: GA4_ACCOUNT,
+  // Whether the four-hospital landing-page filter is applied. The client needs
+  // it to label its scope pill honestly: with the filter off, every GA4 figure
+  // is the whole 27-branch property and must not read as BHQ.
+  branchFilter: BRANCH_FILTER_OFF ? "off" : "on",
   cacheTtlSec: CACHE_TTL_MS / 1000, cacheEntries: cache.size,
   modelArmor: MA_ENABLED, locales: LOCALES,
   accessPersistence: ACCESS_BUCKET ? "gcs" : "memory-only",

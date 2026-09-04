@@ -1,5 +1,39 @@
 ### Recent (August 2026)
 
+**v3.210.0 — housekeeping: the scope pill is on every tab, set once in the
+shell.**
+
+"Scope always shown as a pill" has been the convention since the monthly report
+was built, and the monthly report was the ONLY place honouring it. On the other
+twelve tabs a reader could not tell whether they were seeing the four hospitals
+or all twenty-seven branches without opening the sidebar — and those two figures
+differ by a factor of three.
+
+**SET IN THE SHELL, NOT IN TWELVE RENDER FUNCTIONS.** One place, and a tab added
+later inherits it instead of being forgotten. `scopeFor(view)` decides:
+ - GA4 / Search Console / GBP tabs -> `BHQ`, or `B+` when the server reports
+   `BRANCH_SEGMENTS=off`. The server now returns `branchFilter` on
+   `/api/version`, which the client already fetches at boot, so no second round
+   trip. **Guessing BHQ when the filter is off would print a 27-branch figure
+   under a four-hospital label** — the mistake this project has spent the most
+   time on.
+ - E-commerce tabs -> the channel scope, mirroring the control already on
+   screen.
+ - Users, Audit, Benchmark, Topics, Campaigns -> nothing. An invented pill is
+   worse than none.
+
+**AND ONE I NEARLY GOT WRONG: `bclub` gets no pill.** Its figures come from the
+Better Club SHEET, not from a branch-filtered GA4 pull, so stamping BHQ on it
+would assert a hospital scope the data does not have. Its own sections already
+carry a "Better Club" pill, and only the two GA4 cards on its funnel page are
+BHQ — those say so themselves. **A consistency pass that makes a label
+consistent and wrong is worse than the inconsistency.**
+
+Verified on thirteen tabs: BHQ on the six GA4 tabs, the channel scope on the
+e-commerce tabs, nothing on the five unscoped ones, no console errors.
+
+### Recent (August 2026)
+
 **v3.209.0 — the heat bars are inset from the row (MW).**
 
 MW: "every time we have heat bars, it uses full height it has, how about we give
