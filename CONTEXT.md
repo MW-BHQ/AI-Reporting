@@ -1,3 +1,27 @@
+### Recent (August 2026)
+
+**v3.201.0 — compact axis ticks on `drawChart` (MW: "use compact number
+everywhere — keep it consistency").**
+
+`drawChart` was the odd one out. `drawBars` has shortened its ticks since it was
+written and `num()` shortens every figure the deck prints, so Better Club's
+revenue axis read `105,000,000` beside a series labelled `63.2M` and beside a
+member axis on the next card reading `3K` — three formats on one screen.
+
+One decimal below ten units, none above: 2,800 -> `2.8K`, 105,000,000 -> `105M`
+rather than `105.0M`. No baht prefix on ticks — the series legend already says
+THB and a currency sign on every gridline is noise.
+
+Applied to `y` and `y1` in `drawChart`, so it lands on every chart the deck
+draws through it, not just Better Club. That is the consistency MW asked for.
+
+**A NEAR MISS WORTH RECORDING.** My working tree was at v3.185.0 while `main`
+had moved to v3.200.0 from a parallel session, and I nearly pushed on top of it
+— fifteen releases, including the whole Better Club section, would have gone.
+Caught only because the Better Club tab MW was pointing at did not exist in my
+copy. **When a screenshot shows something the tree does not have, the tree is
+stale — fetch before doing anything else.**
+
 # CONTEXT — read this before changing anything
 
 Handoff document for **BHQ War Room** (formerly "BHQ Signal Room", originally

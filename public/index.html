@@ -8610,6 +8610,27 @@ function drawBars(canvasId, labels, datasets, opts = {}) {
  * flag drives the canvas plugin on screen and `chartToSvg` in the printed twin,
  * so the two surfaces cannot format the same number differently.
  */
+/**
+ * COMPACT AXIS TICKS (MW: "use compact number everywhere — keep it
+ * consistency").
+ *
+ * `drawChart` was the odd one out. `drawBars` has always shortened its ticks,
+ * and `num()` shortens every figure the deck prints, so the Better Club revenue
+ * axis reading `105,000,000` next to a series labelled `63.2M` — and next to a
+ * member axis reading `3K` on the chart beside it — was three formats on one
+ * screen.
+ *
+ * One decimal below ten units and none above, so 2,800 is `2.8K` and 105,000,000
+ * is `105M` rather than `105.0M`. No currency prefix: the series legend already
+ * says THB, and a baht sign on every gridline is noise.
+ */
+function axisNum(v) {
+  const a = Math.abs(v);
+  if (a >= 1e6) return (v / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M';
+  if (a >= 1e3) return (v / 1e3).toFixed(a >= 1e4 ? 0 : 1).replace(/\.0$/, '') + 'K';
+  return String(Math.round(v * 100) / 100);
+}
+
 function drawChart(canvasId, rows, series, opts = {}) {
   const el = document.getElementById(canvasId);
   if (!el) return;
@@ -8642,7 +8663,7 @@ function drawChart(canvasId, rows, series, opts = {}) {
         },
         scales: {
           x: { ticks:{ color:'#A7B0C7', font:cvFont(10), maxRotation:0, autoSkip:true, autoSkipPadding:12, maxTicksLimit:8 }, grid:{ color:'rgba(90,110,160,.09)' } },
-          y: { position:'left', ticks:{ color:'#A7B0C7', font:cvFont(10), autoSkipPadding:6 }, grid:{ color:'rgba(90,110,160,.09)' } },
+          y: { position:'left', ticks:{ color:'#A7B0C7', font:cvFont(10), autoSkipPadding:6, callback:(v)=>axisNum(v) }, grid:{ color:'rgba(90,110,160,.09)' } },
           /**
            * THE RIGHT-HAND AXIS ONLY EXISTS WHEN A SERIES ASKS FOR IT.
            *
@@ -8657,7 +8678,7 @@ function drawChart(canvasId, rows, series, opts = {}) {
            * visibly wrong, rather than onto a phantom scale where it is not.
            */
           ...(series.some((s) => s.axis === 'y1')
-            ? { y1: { position:'right', ticks:{ color:'#A7B0C7', font:cvFont(10), autoSkipPadding:6 }, grid:{ display:false } } }
+            ? { y1: { position:'right', ticks:{ color:'#A7B0C7', font:cvFont(10), autoSkipPadding:6, callback:(v)=>axisNum(v) }, grid:{ display:false } } }
             : {}),
         },
       },
@@ -9275,7 +9296,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.200.0';
+const CLIENT_BUILD = '3.201.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
