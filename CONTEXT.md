@@ -1,5 +1,37 @@
 ### Recent (August 2026)
 
+**v3.215.0 — the Better Club funnel row loses its card too, and the convention
+is now an audit rule.**
+
+MW spotted the AI assistants block by eye in v3.214. **Scanning for the SHAPE
+found one more:** the Better Club funnel page had eight score cards inside a
+`.card`, the same white-on-white. Those were the only two on the deck; every
+other section puts its scorecard row bare on the tinted page and keeps the card
+for the table or chart beneath.
+
+**`layout:scorecards-bare` ASKS THE QUESTION EVERY RUN.** The consistency scan
+checked scope pills, number formatters and type sizes and never asked which
+sections wrap their scorecards — because nobody had thought to ask. A convention
+that lives only in the reviewer's eye is not a convention; it is a habit that
+holds until someone new writes a section.
+
+The rule counts by BALANCING TAGS rather than by regex, because a nested `.card`
+legitimately appears inside these blocks for the table. What it tests is whether
+the OUTERMOST card contains a scorecard grid.
+
+**VERIFIED BY BREAKING IT** — wrapped the month row in a card and it failed,
+naming the markup. Restored, green. Third guard in three releases proved this
+way, and after v3.214's unbalanced div shipped past 278 green assertions, that
+is the only discipline worth having.
+
+Also: the availability note inside the funnel body kept a card of its own, since
+a bare note on the tint reads as an orphan, and the open/close tags were counted
+before and after — 4 and 4 — as the v3.214 lesson requires.
+
+279 assertions, 33 sections, 0 clipping, no console errors.
+
+### Recent (August 2026)
+
 **v3.214.0 — the AI assistants scorecards sit on the page, not on a white panel
 (MW).**
 

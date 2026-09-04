@@ -371,6 +371,51 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
     : ok("type:scale", "report font sizes all come from the rem scale");
 }
 
+// --------------------------------------- scorecard rows must not sit in a card
+/**
+ * A LAYOUT CONVENTION THE CONSISTENCY SCAN MISSED.
+ *
+ * Every section on the deck puts its scorecard row BARE on the tinted page and
+ * keeps the white `.card` for the table or chart beneath it. Two sections did
+ * not — the AI assistants block and the Better Club funnel — so ten and eight
+ * white score cards sat on a white panel and lost their edges. MW spotted the
+ * first by eye; the second was found only by scanning for the shape.
+ *
+ * The scan that checked scope pills, number formatters and type sizes never
+ * asked which sections wrap their scorecards, because nobody had thought to
+ * ask. This rule is the question, written down so it gets asked every run.
+ *
+ * Balanced by tag counting rather than by regex, because a nested `.card`
+ * legitimately appears INSIDE these blocks for the table — the test is whether
+ * the OUTERMOST card contains a scorecard grid.
+ */
+{
+  const styleStart = html.indexOf("<style>");
+  const styleEnd = html.indexOf("</style>");
+  const jsPart = styleStart === -1 ? html
+    : html.slice(0, styleStart) + html.slice(styleEnd === -1 ? styleStart : styleEnd);
+  const wrapped = [];
+  const open = /<div class="((?:[^"]*\s)?card(?:\s[^"]*)?)"[^>]*>/g;
+  let m;
+  while ((m = open.exec(jsPart))) {
+    let depth = 1, i = m.index + m[0].length;
+    while (depth > 0 && i < jsPart.length) {
+      const nd = jsPart.indexOf("<div", i), cd = jsPart.indexOf("</div>", i);
+      if (cd === -1) break;
+      if (nd !== -1 && nd < cd) { depth++; i = nd + 4; } else { depth--; i = cd + 6; }
+    }
+    const blk = jsPart.slice(m.index + m[0].length, i);
+    if (/class="grid g-[45]"/.test(blk) && /\b(mini|kpi|scoreCard)\(/.test(blk)) {
+      wrapped.push(jsPart.slice(m.index, m.index + 70).replace(/\s+/g, " "));
+    }
+  }
+  wrapped.length
+    ? fail("layout:scorecards-bare", `${wrapped.length} scorecard row(s) wrapped in a .card — ` +
+        `white cards on a white panel lose their edges. Put the row on the page and card the ` +
+        `table instead. At: ${wrapped[0]}`)
+    : ok("layout:scorecards-bare", "no scorecard row is wrapped in a card");
+}
+
 // ------------------------------------------- hard-coded type in JS literals
 /**
  * THE BLIND SPOT, MEASURED AT LAST.

@@ -6591,7 +6591,12 @@ function renderBclub() {
    * information.
    */
   const funnelBody = `
-    <div class="card">
+    <!--
+      NO CARD ROUND THE SCORECARDS (the same finding as the AI assistants
+      block, v3.215.0). Eight white score cards on a white panel lose their
+      edges, and every other section puts its scorecard row bare on the tinted
+      page. This was the last one still wrapped.
+    -->
       <div class="grid g-4">
         ${scoreCard('Google impressions', stageVal('impressions'), '',
           '#E8833A', fsc.impressions, 'impressions')}
@@ -6630,11 +6635,11 @@ function renderBclub() {
           ytdRev === null ? 'no months loaded'
             : `${esc(ytdYear)} \u00b7 ${cnt(ytdMonths)} month${ytdMonths === 1 ? '' : 's'} loaded`)}
       </div>` : ''}
-      ${(fsc.impressions === null || fsc.users === null || !d.registerSource) ? `<div class="note">
+      ${(fsc.impressions === null || fsc.users === null || !d.registerSource) ? `<div class="card"><div class="note">
         ${!d.registerSource ? `<b>New registers has no source.</b> ${esc(d.registerNote || '')}` : ''}
         ${fsc.impressions === null ? 'Search Console was unavailable this run — press Refresh to retry.' : ''}
-        ${fsc.users === null ? '<br>GA4 was unavailable this run — press Refresh to retry.' : ''}</div>` : ''}
-    </div>`;
+        ${fsc.users === null ? '<br>GA4 was unavailable this run — press Refresh to retry.' : ''}</div></div>` : ''}
+    `;
 
   const monthBody = `
     <div class="grid g-4">
@@ -9463,7 +9468,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.214.0';
+const CLIENT_BUILD = '3.215.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
