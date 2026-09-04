@@ -805,7 +805,10 @@ setTimeout(() => {
         // Matched on `.ai-card`, not on the title text: as of v3.151.0 the block
         // is its own slide and the title moved to the slide header, so there is
         // no `.card-title` to read. The class is also the more stable hook.
-        const card = root ? root.querySelector(".card.ai-card") : null;
+        // `.ai-card` without `.card` as of v3.214.0: the scorecards sit bare on
+        // the page and only the table keeps a white panel, so the wrapper is no
+        // longer a card. The hook is the same.
+        const card = root ? root.querySelector(".ai-card") : null;
         if (!card) return fail("ai card layout", "AI card not found");
         const rows = [...card.querySelectorAll(".grid.g-5")];
         // `.mini` is the styled scorecard added in v3.105.0; `.stat` is the

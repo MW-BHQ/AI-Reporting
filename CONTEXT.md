@@ -1,5 +1,38 @@
 ### Recent (August 2026)
 
+**v3.214.0 — the AI assistants scorecards sit on the page, not on a white panel
+(MW).**
+
+MW: "the white bg should not cover on this area, it's out of theme and make the
+score cards not prominent." Right on both counts. The whole section was one
+`.card`, so ten white scorecards sat on a white panel and lost their edges —
+and **every other section on the deck puts its scorecard row bare on the tinted
+page and keeps the card for the table.** This block was the only one doing it
+differently, which is exactly what the consistency scan was for and exactly what
+it missed: the scan checked scope pills, formatters and type, and never asked
+which sections wrap their scorecards.
+
+`ai-card` keeps its name and loses `card`. The table gets its own `.card`, so it
+keeps the panel the scorecards gave up. `boot.js` matched on `.card.ai-card` and
+now matches `.ai-card`.
+
+**AND A PROCESS FAILURE OF MINE WORTH RECORDING.** Three scripted edits in a row
+half-applied: each script asserted several anchors, wrote nothing when a later
+one failed — correct — but I did not re-check the file between attempts, so a
+line-based fix in the third script added a `</div>` for an opening tag the
+second script had never written. **An unbalanced div, shipped past 278 green
+assertions**, because the suite renders the DOM and browsers silently repair bad
+nesting. Caught only by reading the computed class in the browser and seeing
+`card ai-card` where it should have said `ai-card`.
+
+Two rules from it: **after any failed scripted edit, re-read the file before the
+next attempt** — the failure tells you nothing about what earlier scripts did.
+And when restructuring markup, **count the open and close tags in the block as
+part of the verification**; the test suite cannot see nesting the browser has
+already fixed.
+
+### Recent (August 2026)
+
 **v3.213.0 — the type scale migration is FINISHED. Zero hard-coded font sizes,
 and the ratchet is now a plain rule.**
 

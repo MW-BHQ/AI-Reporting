@@ -3680,7 +3680,7 @@ function renderReport() {
     const A = RF.ai;
     // `ai-card`: the slide title now names this block, so there is no
     // `.card-title` left to match on. A class is a better hook than the text.
-    return `<div class="card ai-card">
+    return `<div class="ai-card">
       ${A.rows.length ? `
       <div class="grid g-5" style="margin-bottom:8px">
         ${mini('Sessions', num(A.totals.sessions), { lead: true, icon: 'sessions',
@@ -3708,7 +3708,8 @@ function renderReport() {
           ['purchase',     'Purchase'],
         ];
         return `
-      <table class="sortable" data-heat="1" style="margin-top:2rem"><thead><tr>
+      <div class="card">
+      <table class="sortable" data-heat="1"><thead><tr>
         <th>Assistant</th><th class="num">${actIcon('sessions')}Sessions</th>
         ${AI_COLS.map(([id,lab])=>`<th class="num">${actIcon(id)}${esc(lab)}</th>`).join('')}
       </tr></thead><tbody>
@@ -3717,12 +3718,12 @@ function renderReport() {
         <td class="num">${num(r.sessions)}</td>
         ${AI_COLS.map(([id])=>`<td class="num">${num((r.events||{})[id]||0)}</td>`).join('')}
         </tr>`).join('')}
-      </tbody></table>`;
+      </tbody></table></div>`;
       })()}
       `
-      : `<div class="note"><b>No assistant traffic identified in this range.</b> That is a real answer, not
+      : `<div class="card"><div class="note"><b>No assistant traffic identified in this range.</b> That is a real answer, not
       a gap \u2014 but it is a floor: an assistant that strips the referrer arrives as Direct and cannot be
-      told apart from any other direct visit.</div>`}
+      told apart from any other direct visit.</div></div>`}
     </div>`;
   })() : '';
 
@@ -9462,7 +9463,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.213.0';
+const CLIENT_BUILD = '3.214.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
