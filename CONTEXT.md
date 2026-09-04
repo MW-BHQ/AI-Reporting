@@ -1,5 +1,38 @@
 ### Recent (August 2026)
 
+**v3.206.0 — housekeeping 1 of 3: Search Console language rows get the same
+default locale as everything else. This one was a real reporting bug.**
+
+The audit MW asked for found an inconsistency INSIDE ONE TABLE. In the same
+block, `langSessions` and `langKeyEvents` passed `orDefault`, and `gscLang` did
+not:
+
+    gscLang       -> localeFromPath(r.page)         <- no default
+    langSessions  -> localeFromPath(..., true)
+    langKeyEvents -> localeFromPath(..., true)
+
+So impressions and clicks discarded un-prefixed URLs while sessions and actions
+counted them as Thai — **Thai impressions understated against Thai sessions on
+the same row.** Nobody could have debugged that from the outside; the two
+figures disagree and nothing on the page says why.
+
+**MY REASONING IN v3.180 WAS WRONG ABOUT THE FIELD.** I wrote that "a Search
+Console query has no path to fall back from", which is true — and then applied
+it to a bucket keyed on `page`, which is a URL. Five of six call sites got the
+rule right and the sixth got the sentence right about the wrong column.
+
+**THE GENUINE EXCEPTION IS STILL AN EXCEPTION.** `server.js:5842` keeps
+`localeFromPath(r.page)` with no default on purpose: it records `langSource` as
+`url` / `script` / `assumed`, so defaulting there would label a guess as having
+come from the URL. Leaving it is the point, not an oversight — and now it is
+documented as such so the next audit does not "fix" it.
+
+Housekeeping 2 (compact ticks on the four charts that bypass `drawChart`) and 3
+(`drawBclubStage`'s inline-styled empty state) are next, deliberately in
+separate releases: this one moves reported figures and those two do not.
+
+### Recent (August 2026)
+
 **v3.205.0 — MY BUG: an orphaned line of template leaked onto the page and broke
 the pagination.**
 

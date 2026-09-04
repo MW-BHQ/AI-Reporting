@@ -2135,8 +2135,22 @@ async function buildReport(from, to) {
   const langBlank = () => ({ impressions: 0, clicks: 0, sessions: 0, keyEvents: 0 });
   const byLang = {};
   for (const k of Object.keys(LOCALES)) byLang[k] = { code: k, label: LOCALES[k], ...langBlank() };
+  /**
+   * `true` HERE TOO, and its absence was a bug (v3.206.0).
+   *
+   * v3.180 gave the five traffic buckets a default locale for un-prefixed URLs
+   * and left this one alone, on the reasoning that "a Search Console query has
+   * no path to fall back from". Wrong field: `page` is a URL, not a query. So
+   * on the SAME TABLE, impressions and clicks discarded un-prefixed pages while
+   * sessions and actions counted them as Thai — Thai impressions understated
+   * against Thai sessions on the same row, which is the kind of internal
+   * disagreement nobody can debug from the outside.
+   *
+   * The genuine no-fallback case is the one below at `byQuery`, where the row
+   * really is a search term with no URL.
+   */
   for (const r of (data.gscLang || [])) {
-    const l = localeFromPath(r.page); if (!l || !byLang[l]) continue;
+    const l = localeFromPath(r.page, true); if (!l || !byLang[l]) continue;
     byLang[l].impressions += n(r.impressions); byLang[l].clicks += n(r.clicks);
   }
   for (const r of (data.langSessions || [])) {
