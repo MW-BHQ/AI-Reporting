@@ -1564,7 +1564,7 @@ setTimeout(() => {
         const wantOrder = ['Google impressions', 'Total users', 'Better Club new registers',
                            'New paid members',
                            'Total', 'Have become patients', 'Median time to first visit',
-                           'New Registers'];
+                           'Revenue YTD'];
         if (labs.length !== 8) {
           return fail("better club", `${labs.length} score cards on page one, expected 8`), finish();
         }

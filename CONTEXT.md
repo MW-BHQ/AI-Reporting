@@ -1,5 +1,33 @@
 ### Recent (August 2026)
 
+**v3.204.0 — Revenue YTD takes the duplicate card. v3.203's title placement
+replaced.**
+
+MW: "I don't see your ytd number, how about we use this card?" Two things in
+that: v3.203 put YTD in the trend card's TITLE, where MW did not find it — a
+figure in a heading is not where anyone looks for a figure. And the card he
+pointed at was printing the SAME 3,234 as the "Better Club new registers" card
+directly above it. **The block already had a spare slot; it just looked
+occupied.**
+
+So Revenue YTD sits there now, sub-line "2026 · 8 months loaded", and the title
+goes back to plain. No card added, no layout shift, and one duplicate figure
+gone from the page.
+
+**A LAYOUT ASSERTION IN `boot.js` CAUGHT THE SWAP** — the other session had
+pinned the eight score-card labels in order, so changing card eight failed the
+suite by name: `score card 8 is "Revenue YTD", expected "New Registers"`.
+Updated deliberately, not worked around. That test is doing exactly what it
+should: a card order changed by accident would have failed identically.
+
+**AND A NOTE ON EDITING THIS FILE FROM A SCRIPT.** Three exact-string
+replacements failed in a row because the source holds a LITERAL `·` (U+00B7)
+where I was matching the escape `\u00b7`. Match on a line anchor and replace by
+line range when the target contains non-ASCII; the file is UTF-8 and the escapes
+in it are not uniform.
+
+### Recent (August 2026)
+
 **v3.203.0 — revenue YTD on the Better Club trend card. No new card.**
 
 MW: "do we have YTD rev yet? if not no need to create a new card that will shift

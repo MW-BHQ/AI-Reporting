@@ -6392,12 +6392,14 @@ function renderBclub() {
    * `null` when there is nothing to sum, so the title simply omits it rather
    * than printing a confident zero.
    */
+  let ytdYear = '', ytdMonths = 0;
   const ytdRev = (() => {
     const latest = ms.length ? String(ms[ms.length - 1].month || '') : '';
     const yr = latest.slice(0, 4);
     if (!/^\d{4}$/.test(yr)) return null;
     const inYear = ms.filter(m => String(m.month || '').slice(0, 4) === yr);
     if (!inYear.length) return null;
+    ytdYear = yr; ytdMonths = inYear.length;
     return inYear.reduce((a, m) => a + (Number(m.revenue) || 0), 0);
   })();
   const fsc = d.funnelScope || {};
@@ -6506,8 +6508,16 @@ function renderBclub() {
             : mst.medianMonthsToFirst === 0 ? 'same month'
             : `${cnt(mst.medianMonthsToFirst)} month${mst.medianMonthsToFirst === 1 ? '' : 's'}`,
           'after joining')}
-        ${scoreCard('New Registers', thisMonth ? cnt(thisMonth.joined) : '—',
-          thisMonth ? `${esc(s.label.replace(/ \d{4}$/, ''))} · ${cnt(thisMonth.converted)} became patients`
+        <!--
+          REVENUE YTD TAKES THIS SLOT (MW: "how about we use this card?").
+          It held "New Registers", which printed the SAME figure as the
+          "Better Club new registers" card directly above it. So this costs
+          nothing real and buys the one number the block was missing, with no
+          card added and no layout shift.
+        -->
+        ${scoreCard('Revenue YTD', ytdRev === null ? '\u2014' : thb(ytdRev),
+          ytdRev === null ? 'no months loaded'
+            : `${esc(ytdYear)} \u00b7 ${cnt(ytdMonths)} month${ytdMonths === 1 ? '' : 's'} loaded`)}
                     : 'not in the roster yet')}
       </div>` : ''}
       ${(fsc.impressions === null || fsc.users === null || !d.registerSource) ? `<div class="note">
@@ -6540,8 +6550,7 @@ function renderBclub() {
           exactly the months being summed, so the total reads as the area of the
           revenue series rather than as a fifth unrelated figure. Nothing moves.
         -->
-        <div class="card-title">Members and revenue by month${
-          ytdRev !== null ? ` \u00b7 ${thb(ytdRev)} YTD` : ''}</div>
+        <div class="card-title">Members and revenue by month</div>
         <div class="chart-wrap bc-mid"><canvas id="bcTrend"></canvas></div>
       </div>
       <div class="card">
@@ -9341,7 +9350,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.203.0';
+const CLIENT_BUILD = '3.204.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;
