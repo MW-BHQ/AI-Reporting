@@ -509,22 +509,68 @@ async function gscToken() {
  * long tail rather than the headline, but paging keeps the buckets honest.
  */
 function gscQuery(dimensions, from, to, opts = {}) {
-  const { rowLimit = 25000, noBranchFilter = false, maxPages = 1 } = opts;
-  return memoUpstream(`gsc|${from}|${to}|${dimensions.join(",")}|${rowLimit}|${maxPages}|${noBranchFilter}`,
-    () => gscQueryUncached(dimensions, from, to, { rowLimit, noBranchFilter, maxPages }));
+  const { rowLimit = 25000, noBranchFilter = false, maxPages = 1, localeRegex = null } = opts;
+  // `localeRegex` is part of the memo key: without it, ten locale queries that
+  // differ ONLY by their filter would all be served the first one's answer.
+  return memoUpstream(`gsc|${from}|${to}|${dimensions.join(",")}|${rowLimit}|${maxPages}|${noBranchFilter}|${localeRegex || ""}`,
+    () => gscQueryUncached(dimensions, from, to, { rowLimit, noBranchFilter, maxPages, localeRegex }));
 }
 
-async function gscQueryUncached(dimensions, from, to, { rowLimit, noBranchFilter, maxPages }) {
+/**
+ * PER-LOCALE TOTALS, ASKED FOR DIRECTLY INSTEAD OF SUMMED FROM A PAGE LIST.
+ *
+ * MW compared BGH Thai impressions against Looker Studio: 16.9M there, 7.4M
+ * here. The cause was the `["page"]` pull that fed the language buckets —
+ * Search Console caps a response at 25,000 rows and `maxPages` was 1, so
+ * everything past the first 25,000 URLs was dropped. Rows come back sorted by
+ * clicks, so what went missing was the long tail, which on a hospital site is
+ * most of the impressions. A short page ends the loop and looks exactly like
+ * completion; nothing warned.
+ *
+ * PAGING IT WOULD HAVE WORKED AND IS STILL THE WRONG ANSWER. Reaching 16.9M for
+ * one locale means hundreds of thousands of URLs, so it would be twenty-plus
+ * sequential calls and half a million row objects held in memory, to compute
+ * ten sums. Search Console will do the summing: one query per locale, filtered
+ * by a page regex, with NO dimensions returns a single row of totals. Ten small
+ * calls, exact figures, and no row ceiling to truncate against — ever.
+ *
+ * THE DEFAULT LOCALE'S REGEX MAKES THE PREFIX OPTIONAL, which is the same rule
+ * `localeFromPath(url, true)` applies: bangkokhospital.com serves Thai with no
+ * prefix, so `/bangkok/...` is Thai and must be counted as Thai. `/en/bangkok/`
+ * cannot match it — after the optional `th/` the next segment has to be a
+ * branch, and `en` is not one.
+ */
+async function gscLocaleTotals(from, to) {
+  const branches = `(${BRANCH_SEGMENTS.join("|")})`;
+  const out = {};
+  await Promise.all(Object.keys(LOCALES).map(async (code) => {
+    const prefix = code === DEFAULT_LOCALE ? `(${code}/)?` : `${code}/`;
+    const rx = `^https?://[^/]+/${prefix}${branches}([/?]|$)`;
+    try {
+      const rows = await gscQuery([], from, to, { localeRegex: rx, rowLimit: 1 });
+      const r = rows[0] || {};
+      out[code] = { impressions: n(r.impressions), clicks: n(r.clicks) };
+    } catch (e) {
+      // One locale failing must not empty the other nine. `null` is not zero:
+      // the row is left absent so the consumer can tell "no data" from "none".
+      logJson("WARN", "gsc_locale_failed", { code, error: String(e.message || e) });
+      out[code] = null;
+    }
+  }));
+  return out;
+}
+
+async function gscQueryUncached(dimensions, from, to, { rowLimit, noBranchFilter, maxPages, localeRegex }) {
   const out = [];
   for (let page = 0; page < maxPages; page++) {
-    const batch = await gscQueryPage(dimensions, from, to, { rowLimit, noBranchFilter, startRow: page * rowLimit });
+    const batch = await gscQueryPage(dimensions, from, to, { rowLimit, noBranchFilter, localeRegex, startRow: page * rowLimit });
     out.push(...batch);
     if (batch.length < rowLimit) break;      // last page
   }
   return out;
 }
 
-async function gscQueryPage(dimensions, from, to, { rowLimit, noBranchFilter, startRow }) {
+async function gscQueryPage(dimensions, from, to, { rowLimit, noBranchFilter, startRow, localeRegex }) {
   const token = await gscToken();
   const body = {
     startDate: from, endDate: to,
@@ -533,10 +579,13 @@ async function gscQueryPage(dimensions, from, to, { rowLimit, noBranchFilter, st
     startRow,
     dataState: "final",
   };
-  if (!noBranchFilter && !BRANCH_FILTER_OFF) {
+  // A locale regex already restricts to the four branches, so it REPLACES the
+  // branch filter rather than stacking with it.
+  const rx = localeRegex || ((!noBranchFilter && !BRANCH_FILTER_OFF) ? GSC_BRANCH_REGEX : null);
+  if (rx) {
     body.dimensionFilterGroups = [{
       groupType: "and",
-      filters: [{ dimension: "page", operator: "includingRegex", expression: GSC_BRANCH_REGEX }],
+      filters: [{ dimension: "page", operator: "includingRegex", expression: rx }],
     }];
   }
   const res = await fetch(`${GSC_API_BASE}/sites/${encodeURIComponent(GSC_SITE)}/searchAnalytics/query`, {
@@ -1867,7 +1916,15 @@ async function buildReport(from, to) {
       "review_comment", "review_reviewer", "review_reply_comment"], ytdFrom, to);
   jobs.gbpLifetime = windsor("google_my_business",
     ["location_title", "review_total_count", "review_average_rating_total"], from, to);
-  jobs.gscLang = gscQuery(["page"], from, to);
+  /**
+   * TEN TOTALS FROM SEARCH CONSOLE, not one truncated list of pages.
+   * See `gscLocaleTotals`: the old `["page"]` pull lost everything past 25,000
+   * URLs, which put BGH Thai at 7.4M against Looker Studio's 16.9M.
+   */
+  jobs.gscLangTotals = gscLocaleTotals(from, to).catch((e) => {
+    logJson("WARN", "gsc_locale_totals_failed", { error: String(e.message || e) });
+    return null;
+  });
   /**
    * ONE request covering all 40 hospital x language search pages. The page URL
    * carries both the branch segment and the locale, so query x page buckets
@@ -2149,9 +2206,11 @@ async function buildReport(from, to) {
    * The genuine no-fallback case is the one below at `byQuery`, where the row
    * really is a search term with no URL.
    */
-  for (const r of (data.gscLang || [])) {
-    const l = localeFromPath(r.page, true); if (!l || !byLang[l]) continue;
-    byLang[l].impressions += n(r.impressions); byLang[l].clicks += n(r.clicks);
+  // Straight from Search Console, one exact total per locale.
+  for (const [code, t] of Object.entries(data.gscLangTotals || {})) {
+    if (!t || !byLang[code]) continue;
+    byLang[code].impressions += n(t.impressions);
+    byLang[code].clicks += n(t.clicks);
   }
   for (const r of (data.langSessions || [])) {
     const l = localeFromPath(r.landing_page, true); if (!l || !byLang[l]) continue;
@@ -3509,7 +3568,7 @@ async function buildReport(from, to) {
     tiktok,
     social,
     languages,
-    languagesAvailable: data.gscLang !== null || data.langSessions !== null,
+    languagesAvailable: data.gscLangTotals !== null || data.langSessions !== null,
     brands: BRAND_KEYS.map((k) => perBrand[k]),
     unmapped: metaUnmapped.accounts.length ? metaUnmapped : null,
     shared: {

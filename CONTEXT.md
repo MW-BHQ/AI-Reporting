@@ -1,5 +1,49 @@
 ### Recent (August 2026)
 
+**v3.216.0 — the per-language Search figures were less than half. Search Console
+now does the summing.**
+
+MW checked BGH Thai impressions against Looker Studio: **16.9M there, 7.4M
+here.** The language buckets were summed from a `gscQuery(["page"])` pull, and
+Search Console caps a response at 25,000 rows with `maxPages` left at 1. Every
+URL past the first 25,000 was dropped. Rows arrive sorted by clicks, so what
+went missing was the long tail — which on a hospital site is most of the
+impressions.
+
+**IT LOOKED EXACTLY LIKE SUCCESS.** A short page ends the paging loop, which is
+also what the last page looks like. No warning, no error, and the sibling
+`query x page` pull already set `maxPages: 3` for this very reason — so the
+problem was known and this pull was left behind.
+
+**PAGING WOULD HAVE WORKED AND IS STILL THE WRONG ANSWER.** 16.9M for one locale
+means hundreds of thousands of URLs: twenty-plus sequential calls and half a
+million row objects in memory, to compute ten sums. Search Console will do the
+summing — one query per locale, filtered by a page regex, with NO dimensions,
+returns a single row of totals. Ten small calls, exact figures, and no row
+ceiling to truncate against ever again.
+
+**THE DEFAULT LOCALE'S REGEX MAKES THE PREFIX OPTIONAL**, matching what
+`localeFromPath(url, true)` does since v3.180: `/bangkok/...` is Thai.
+`/en/bangkok/` cannot match it, because after the optional `th/` the next
+segment must be a branch and `en` is not one.
+
+**THE LOCALE REGEX IS IN THE MEMO KEY.** Ten queries differing only by their
+filter would otherwise all be served the first one's answer — the same
+silent-wrong-data shape as the GA4 property cache in v3.178.
+
+**NOT VERIFIABLE FROM HERE.** Search Console is unreachable from the build
+environment and the mock returns the same rows for every locale, so the mock
+proves the plumbing and nothing about the numbers. On the first real run, Thai
+should read at LEAST 16.9M — that figure is BGH alone and this page is all four
+hospitals, so expect materially more.
+
+**AND THE BROADER LESSON: my v3.206 fix to this same block was real but tiny.**
+I spent a release on un-prefixed URLs while the bucket was missing more than
+half its data to a row cap I never checked. **When a figure is questioned, check
+the size of the pull before tuning what it contains.**
+
+### Recent (August 2026)
+
 **v3.215.0 — the Better Club funnel row loses its card too, and the convention
 is now an audit rule.**
 
