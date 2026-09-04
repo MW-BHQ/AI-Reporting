@@ -1,5 +1,38 @@
 ### Recent (August 2026)
 
+**v3.212.0 — the type-scale blind spot is measured, ratcheted, and a third of it
+is gone.**
+
+`type:scale` reads the `<style>` block, so it has reported green for a dozen
+releases on a file that still held 100 hard-coded font sizes — all of them in
+inline `style="..."` attributes inside JS template literals, which CSS parsing
+cannot reach. CONTEXT has carried "a green audit does not mean the migration is
+done" as a warning all that time. **A warning nobody can act on is not a
+control.**
+
+**`type:scale-js` COUNTS THEM, AS A RATCHET RATHER THAN A GATE.** Failing
+outright on 100 pre-existing sites would block every release until someone did
+the whole migration in one sitting — which is how a rule gets deleted instead of
+satisfied. So the count is compared against a recorded ceiling: adding one
+fails, removing any passes and prints the new number to put in the file. The
+ceiling only ever comes down.
+
+**VERIFIED BY BREAKING IT.** Added a single `font-size:31px` to the view title
+and the rule failed with `101 ... ceiling is 100`, naming the offending markup.
+Removed, back to green. A ratchet that cannot detect an increase is worse than
+no ratchet, because it looks like coverage.
+
+**32 SITES CONVERTED IN THE SAME PASS**, and only the ones that map EXACTLY onto
+the scale: 10, 11, 12, 18, 30 and 36px to their tokens. The remaining 68 are
+sizes with no token — 9.5, 10.5, 11.5, 12.5, 13, 19 — and inventing tokens to
+absorb them would be growing the scale to fit the code rather than the reverse.
+That is a design decision for MW, not a tidy-up.
+
+Ceiling now 68. Verified across six tabs with no console errors, 278
+assertions, 33 sections, 0 clipping.
+
+### Recent (August 2026)
+
 **v3.211.0 — the E-commerce Report honours the date range (MW: "if it is set to
 be 15 Aug -> 31 Aug then it's 15 Aug to 31 Aug").**
 

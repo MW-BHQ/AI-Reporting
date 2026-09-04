@@ -371,6 +371,49 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
     : ok("type:scale", "report font sizes all come from the rem scale");
 }
 
+// ------------------------------------------- hard-coded type in JS literals
+/**
+ * THE BLIND SPOT, MEASURED AT LAST.
+ *
+ * `type:scale` above reads the `<style>` block, so it reports green on a file
+ * that still contains around 140 hard-coded font sizes — because they are
+ * inside JS TEMPLATE LITERALS, in inline `style="..."` attributes on markup
+ * built at render time. CONTEXT has carried "a green audit does not mean the
+ * migration is done" as a warning for a dozen releases. A warning nobody can
+ * act on is not a control, so this counts them.
+ *
+ * A RATCHET, NOT A GATE. Failing outright on 140 pre-existing sites would block
+ * every release until someone does a 140-site migration in one sitting, which
+ * is how a rule gets deleted rather than satisfied. So the count is compared
+ * against a recorded ceiling: adding one is a failure, removing any is
+ * progress, and the ceiling only ever comes down.
+ *
+ * WHEN YOU REMOVE SOME, LOWER `TYPE_PX_CEILING` in the same commit. The rule
+ * says the new number in its message so there is nothing to look up.
+ */
+{
+  const TYPE_PX_CEILING = 68;
+  // Only the markup half of the file: everything before the <style> block and
+  // everything after it. Inside the block is the other rule's business.
+  const styleStart = html.indexOf("<style>");
+  const styleEnd = html.indexOf("</style>");
+  const jsPart = styleStart === -1 ? html
+    : html.slice(0, styleStart) + html.slice(styleEnd === -1 ? styleStart : styleEnd);
+  const hits = [...jsPart.matchAll(/font-size:\s*([\d.]+)px/g)];
+  const n = hits.length;
+  if (n > TYPE_PX_CEILING) {
+    const where = jsPart.slice(Math.max(0, hits[hits.length - 1].index - 60),
+                               hits[hits.length - 1].index + 30).replace(/\s+/g, " ");
+    fail("type:scale-js", `${n} hard-coded px font-size in JS markup, ceiling is ` +
+      `${TYPE_PX_CEILING}. Use a var(--text-*) token. Near: ...${where}...`);
+  } else if (n < TYPE_PX_CEILING) {
+    ok("type:scale-js", `${n} hard-coded px font-size in JS markup, down from ` +
+      `${TYPE_PX_CEILING} — lower TYPE_PX_CEILING in test/audit.js to ${n}`);
+  } else {
+    ok("type:scale-js", `${n} hard-coded px font-size in JS markup, at the ceiling`);
+  }
+}
+
 // ------------------------------------------------- backticks in HTML comments
 /**
  * A BACKTICK INSIDE A TEMPLATE LITERAL TERMINATES IT.

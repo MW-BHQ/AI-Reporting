@@ -2950,7 +2950,7 @@ $('loadBtn').addEventListener('click', async () => {
 const errorState = (msg) => `<div class="card"><div class="state bad"><div class="big">Something went wrong</div>
   <div style="max-width:460px;font-size:12.5px;">${esc(msg)}</div></div></div>`;
 const loadingState = (msg) => `<div class="card"><div class="state"><div class="big">${esc(msg)}</div>
-  <div style="font-size:12px;">Live pull — a few seconds.</div></div></div>`;
+  <div style="font-size:var(--text-xs);">Live pull — a few seconds.</div></div></div>`;
 
 // ============================================================ render: shell
 function render() {
@@ -3337,9 +3337,9 @@ function renderReport() {
         <div class="chart-wrap" style="height:270px"><canvas id="repUsers"></canvas></div>
       </div>
       <div class="card">
-        <div style="font-size:30px;font-weight:700;color:var(--violet);line-height:1.1">${num(U.total)}</div>
+        <div style="font-size:var(--text-3xl);font-weight:700;color:var(--violet);line-height:1.1">${num(U.total)}</div>
         <div class="lab" style="margin-bottom:8px">sessions this period</div>
-        <div style="font-size:12px;margin-bottom:12px">MoM ${dlt(U.mom)} &nbsp; YoY ${dlt(U.yoy)}</div>
+        <div style="font-size:var(--text-xs);margin-bottom:12px">MoM ${dlt(U.mom)} &nbsp; YoY ${dlt(U.yoy)}</div>
         <table><thead><tr><th>Hospital</th><th class="num">Sessions</th>
           <th class="num">MoM</th><th class="num">YoY</th></tr></thead><tbody>
         ${U.byBrand.map(b=>`<tr>
@@ -3622,7 +3622,7 @@ function renderReport() {
       </div>
       ${RF.blacklistActive ? `
       <label class="bl-switch" style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;
-             font-size:11px;color:var(--ink-2);margin-bottom:8px">
+             font-size:var(--text-2xs);color:var(--ink-2);margin-bottom:8px">
         <input type="checkbox" data-blacklist="1" checked style="cursor:pointer">
         <span>Hide blacklisted referrers
         (<b>${num(RF.blacklistedCount)}</b> of ${num(RF.referrerCount)})</span>
@@ -4077,11 +4077,11 @@ function renderReport() {
       <table><tbody>
       ${RVB.samples.filter(Boolean).map(sm=>`<tr>
         <td style="width:74px;vertical-align:top;color:${sm.stars>=4?'#2E9E6F':(sm.stars===3?'#F2A93B':'#D9534F')};
-                   font-size:12px;padding-top:3px">${stars5(sm.stars)}</td>
+                   font-size:var(--text-xs);padding-top:3px">${stars5(sm.stars)}</td>
         ${sm.comment ? `<td><div class="i18n" style="white-space:normal;font-size:12.5px">${esc(sm.comment)}</div>
           <div style="font-size:10.5px;color:var(--faint);margin-top:2px">
             ${esc(sm.reviewer)} \u00b7 ${esc(sm.when)}${sm.replied?'':' \u00b7 no reply yet'}</div></td>`
-        : `<td><div style="font-size:12px;color:var(--faint)">${num(sm.count)} review${sm.count===1?'':'s'}
+        : `<td><div style="font-size:var(--text-xs);color:var(--faint)">${num(sm.count)} review${sm.count===1?'':'s'}
             at this rating, none with a comment</div></td>`}
       </tr>`).join('')}
       </tbody></table>
@@ -4262,11 +4262,11 @@ function renderReport() {
      */
     const bar = (lab, val, max, col) => `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <div style="width:104px;font-size:11px;color:var(--ink-2)">${esc(lab)}</div>
+        <div style="width:104px;font-size:var(--text-2xs);color:var(--ink-2)">${esc(lab)}</div>
         <div style="flex:1;min-width:0">
           <div style="width:${Math.max(4, Math.round((val/max)*100))}%;min-width:38px;background:${col};
                       color:#fff;border-radius:20px;padding:3px 9px;text-align:right;
-                      font-size:11px;font-weight:700">${num(val)}</div>
+                      font-size:var(--text-2xs);font-weight:700">${num(val)}</div>
         </div>
       </div>`;
     return `
@@ -4327,7 +4327,7 @@ function renderReport() {
           <div class="val" style="margin:2px 0 4px">${v ? big(v) : '\u2014'}</div>
           <div class="note i18n" style="margin:0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">
             ${v ? esc(v.caption || '(no caption)') : 'nothing in range'}</div>
-          ${v ? `<div style="font-size:10px;color:var(--faint);margin-top:3px">${num(v.views)} views</div>` : ''}
+          ${v ? `<div style="font-size:var(--text-3xs);color:var(--faint);margin-top:3px">${num(v.views)} views</div>` : ''}
         </div>
       </div>`;
     const ratePct = (v) => (v.rate * 100).toFixed(2) + '%';
@@ -4669,7 +4669,7 @@ function renderReport() {
               <div class="val">${num(val)}</div>
               <div class="sub2">${diff === null ? '<span class="dlt none">\u2014</span>'
                 : `<span class="dlt ${diff>0?'up':(diff<0?'down':'flat')}">${diff>0?'+':''}${num(diff)}</span>
-                   <span style="font-size:10px;color:var(--faint)">vs last month</span>`}</div>
+                   <span style="font-size:var(--text-3xs);color:var(--faint)">vs last month</span>`}</div>
             </div>`;
           }).join('')}
       </div>
@@ -5422,7 +5422,7 @@ function renderCampaignBody(d) {
         <td class="num">${num(o.impressions)}</td><td class="num">${num(o.clicks)}</td><td class="num">${num(o.engagements)}</td></tr>`).join('')}
       </tbody></table>`:`<div style="font-size:12.5px;color:var(--muted);">No organic posts carried this campaign's short links in this date range.</div>`}
       ${d.lineSameDay?`<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:10px;">LINE sends on campaign date · ${esc(d.lineSameDay.date)}</div>
+        <div style="font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:10px;">LINE sends on campaign date · ${esc(d.lineSameDay.date)}</div>
         <div class="grid g-2">
           <div class="stat"><div class="lab">Broadcast messages delivered</div><div class="val">${num(d.lineSameDay.broadcasts)}</div></div>
           <div class="stat"><div class="lab">Targeted / API messages delivered</div><div class="val">${num(d.lineSameDay.targeted)}</div></div>
@@ -5430,13 +5430,13 @@ function renderCampaignBody(d) {
         <div class="note">Matched by date only: these are all LINE messages sent on the campaign's launch date (from the code ${esc(d.code||'')}). Opens and clicks aren't recorded for OA Manager sends, so delivery volume is the honest ceiling here.</div>
       </div>`:''}
       ${d.lineMessages&&d.lineMessages.messages.length?`<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:10px;">LINE broadcasts · ${d.lineMessages.messages.length} message(s)</div>
+        <div style="font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:10px;">LINE broadcasts · ${d.lineMessages.messages.length} message(s)</div>
         <div class="grid g-3">
           <div class="stat"><div class="lab">Delivered</div><div class="val">${num(d.lineMessages.delivered)}</div></div>
           <div class="stat"><div class="lab">Opened</div><div class="val">${num(d.lineMessages.opens)}</div></div>
           <div class="stat"><div class="lab">Link clicks</div><div class="val">${num(d.lineMessages.clicks)}</div></div>
         </div></div>`:''}
-      ${(d.shortLinks||[]).length?`<div class="note"><b>Registered short links:</b> ${d.shortLinks.slice(0,8).map(l=>`<code style="font-size:11px;">${esc(l)}</code>`).join(' &middot; ')}${d.shortLinks.length>8?` +${d.shortLinks.length-8} more`:''}<br>Organic posts are found by searching post text for these links, so a post only appears here if it used a link registered in UTM Builder 2026. LINE broadcasts and EDM can't be matched this way &mdash; those platforms don't expose message content.</div>`:'<div class="note">No short links are registered against this code in UTM Builder 2026, so organic posts can\'t be matched.</div>'}
+      ${(d.shortLinks||[]).length?`<div class="note"><b>Registered short links:</b> ${d.shortLinks.slice(0,8).map(l=>`<code style="font-size:var(--text-2xs);">${esc(l)}</code>`).join(' &middot; ')}${d.shortLinks.length>8?` +${d.shortLinks.length-8} more`:''}<br>Organic posts are found by searching post text for these links, so a post only appears here if it used a link registered in UTM Builder 2026. LINE broadcasts and EDM can't be matched this way &mdash; those platforms don't expose message content.</div>`:'<div class="note">No short links are registered against this code in UTM Builder 2026, so organic posts can\'t be matched.</div>'}
     </div>`:''}
 
     ${(d.sheetErrors&&d.sheetErrors.length)?`<div class="warnbox">Internal sheets unavailable: ${d.sheetErrors.map(esc).join(' | ')} &mdash; campaign names and organic matching are degraded. Check <code>/api/sheets-check</code>.</div>`:''}
@@ -5684,8 +5684,8 @@ function renderUsers() {
   </div>`;
   const LEGACY_ROW = (u) => `<tr data-email="${esc(u.email)}">
     <td class="strong">${esc(u.email)}</td>
-    <td class="num"><button class="btn btn-ghost" data-save="${esc(u.email)}" style="padding:5px 10px;font-size:11px;">Save</button></td>
-    <td class="num"><button class="btn btn-ghost" data-del="${esc(u.email)}" style="padding:5px 10px;font-size:11px;color:var(--rose);">Remove</button></td>
+    <td class="num"><button class="btn btn-ghost" data-save="${esc(u.email)}" style="padding:5px 10px;font-size:var(--text-2xs);">Save</button></td>
+    <td class="num"><button class="btn btn-ghost" data-del="${esc(u.email)}" style="padding:5px 10px;font-size:var(--text-2xs);color:var(--rose);">Remove</button></td>
   </tr>`;
 
   $('viewRoot').innerHTML = `
@@ -5717,8 +5717,8 @@ function renderUsers() {
         <b>Step 1 — grant IAP access first, or they'll see "You don't have access".</b><br>
         Open <a href="https://console.cloud.google.com/welcome?project=ai-reporting-503911&cloudshell=true" target="_blank" rel="noopener">Cloud Shell</a>, paste this command (it fills in as you type the email above), then come back and click Add.
         <pre id="iapCmd" style="margin:8px 0 6px;padding:10px 12px;background:rgba(0,0,0,.05);border-radius:8px;font-size:11.5px;line-height:1.6;overflow-x:auto;white-space:pre;"></pre>
-        <button class="btn btn-ghost" id="copyIapCmd" style="padding:5px 10px;font-size:11px;">Copy command</button>
-        <span id="iapCopied" style="font-size:11px;color:var(--faint);margin-left:8px;"></span>
+        <button class="btn btn-ghost" id="copyIapCmd" style="padding:5px 10px;font-size:var(--text-2xs);">Copy command</button>
+        <span id="iapCopied" style="font-size:var(--text-2xs);color:var(--faint);margin-left:8px;"></span>
       </div>
     </div>
 
@@ -7767,7 +7767,7 @@ function renderEcomChannels() {
             <title>${esc(s.label)}: ${s.type==='step'&&s.value>=0?'+':''}฿${num(Math.round(s.value))}</title></rect>
           <text x="${(x+w/2).toFixed(1)}" y="${Math.max(10, top-5).toFixed(1)}" text-anchor="middle" font-size="9.5" fill="var(--muted)">${s.type==='step'&&s.value>=0?'+':''}${Math.abs(s.value)>=1000?(s.value/1000000>=1?(s.value/1000000).toFixed(1)+'M':(s.value/1000).toFixed(0)+'K'):Math.round(s.value)}</text>`;
       }).join('');
-      const labels = steps.map((s,i) => `<span style="width:${(100/steps.length).toFixed(2)}%;text-align:center;font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 3px;" title="${esc(s.label)}">${esc(s.label)}</span>`).join('');
+      const labels = steps.map((s,i) => `<span style="width:${(100/steps.length).toFixed(2)}%;text-align:center;font-size:var(--text-3xs);color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 3px;" title="${esc(s.label)}">${esc(s.label)}</span>`).join('');
       return `<div class="card mt">
         <div class="card-title">What moved between the two halves</div>
         <svg viewBox="0 0 ${W2} ${H2}" width="100%" height="${H2}" style="display:block;overflow:visible;">${bars}</svg>
@@ -8140,7 +8140,7 @@ function renderAudiences() {
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
         <div class="card-title" style="margin:0;">Audience sets · ${esc($('from').value)} → ${esc($('to').value)}</div>
-        <select id="audSort" style="font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--glass-2);color:var(--ink);">
+        <select id="audSort" style="font-size:var(--text-xs);padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--glass-2);color:var(--ink);">
           <option value="primary"${S.audienceSort==='primary'?' selected':''}>Cheapest result first</option>
           <option value="spend"${S.audienceSort==='spend'?' selected':''}>Highest spend</option>
           <option value="impressions"${S.audienceSort==='impressions'?' selected':''}>Most impressions</option>
@@ -8206,10 +8206,10 @@ These are relative percentiles, not absolute scores, and they are forward-lookin
           <td style="white-space:nowrap;">${rankDots(a.rankings)}</td>
           <td class="num">${fmtAmt(a.cpm)}</td>
           <td class="num strong" style="white-space:nowrap;">${a.lowVolume?'<span class="pill warn" title="Under 1,000 impressions — too little delivery for a cost-per to mean anything">too small</span>':a.primary.cost===null?'<span title="Spent money but the primary action never fired">—⚠</span>':fmtAmt(a.primary.cost)} ${a.lowVolume?'':kpiPill(a.primary)}</td>
-          <td style="color:var(--faint);font-size:11px;">${S.audienceOpen===i?'▾':'▸'}</td>
+          <td style="color:var(--faint);font-size:var(--text-2xs);">${S.audienceOpen===i?'▾':'▸'}</td>
         </tr>
         ${S.audienceOpen===i?`<tr><td colspan="12" style="background:var(--glass-2);padding:10px 14px;">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.9;">
+          <div style="font-size:var(--text-2xs);color:var(--muted);margin-bottom:8px;line-height:1.9;">
             Ad account${a.accounts.length>1?'s':''}: <b>${a.accounts.length?a.accounts.map(esc).join(' · '):'unknown'}</b>
             ${a.isCpas?'':` · click→visit rate: <b>${pct(a.lpvRate)}</b>`}
             · CPC: <b>${fmtTHB(a.cpc)}</b>
@@ -8220,12 +8220,12 @@ These are relative percentiles, not absolute scores, and they are forward-lookin
           ${a.campaigns.map(c=>`<tr>
             <td style="color:var(--muted);white-space:nowrap;">${esc(c.account||'—')}</td>
             <td class="trunc" title="${esc(c.campaign)}">${esc(c.campaign)}</td>
-            <td style="white-space:nowrap;font-size:11px;color:var(--muted);" title="${esc(GOAL_FULL[c.goal]||c.goal||'no optimisation goal reported')}">${esc(GOAL_LABEL[c.goal]||'—')}</td>
+            <td style="white-space:nowrap;font-size:var(--text-2xs);color:var(--muted);" title="${esc(GOAL_FULL[c.goal]||c.goal||'no optimisation goal reported')}">${esc(GOAL_LABEL[c.goal]||'—')}</td>
             <td class="num">${fmtAmt(c.spend)}</td><td class="num">${num(c.impressions)}</td>
             <td class="num">${pct(c.impressions>0?c.clicks/c.impressions:null)}</td>
             <td class="num">${num(c.clicks)}</td><td class="num">${a.isCpas?'—':num(c.lpv)}</td>
             <td class="num">${c.leads?num(c.leads):'—'}</td><td class="num">${c.messages?num(c.messages):'—'}</td>
-            <td class="num strong">${c.costPerResult==null?'—':fmtAmt(c.costPerResult)} <span style="color:var(--faint);font-size:10px;">${esc(c.resultLabel||'')}</span></td>
+            <td class="num strong">${c.costPerResult==null?'—':fmtAmt(c.costPerResult)} <span style="color:var(--faint);font-size:var(--text-3xs);">${esc(c.resultLabel||'')}</span></td>
             ${a.isCpas?`<td class="num">${c.purchases?num(c.purchases):'—'}</td><td class="num">${c.revenue?fmtAmt(c.revenue):'—'}</td>`:''}</tr>`).join('')}
           </tbody></table>
         </td></tr>`:''}`).join('')}
@@ -8314,7 +8314,7 @@ function renderGbp() {
       <div class="card"><h2>All listings</h2>
         <table><thead><tr><th>Listing</th><th class="num">Rating</th><th class="num">Total</th></tr></thead><tbody>
         ${list.map(l=>`<tr style="${l.key===S.gbpTab?'background:rgba(124,107,245,.05)':''}">
-          <td class="strong" style="cursor:pointer" data-gtab2="${esc(l.key)}">${esc(l.key)}<div style="font-size:10px;color:var(--faint);font-weight:400;">${esc(l.title.slice(0,32))}</div></td>
+          <td class="strong" style="cursor:pointer" data-gtab2="${esc(l.key)}">${esc(l.key)}<div style="font-size:var(--text-3xs);color:var(--faint);font-weight:400;">${esc(l.title.slice(0,32))}</div></td>
           <td class="num" style="color:${l.allTimeRating>=4.5?'var(--green)':(l.allTimeRating>=4?'var(--amber)':'var(--rose)')};font-weight:600;">${l.allTimeRating!=null?l.allTimeRating.toFixed(1):'—'}</td>
           <td class="num">${num(l.allTimeCount)}</td></tr>`).join('')}
         </tbody></table>
@@ -8326,9 +8326,9 @@ function renderGbp() {
       <table><thead><tr><th style="width:52px;">Stars</th><th>Review</th><th style="width:92px;">Date</th><th style="width:66px;">Replied</th></tr></thead><tbody>
       ${L.recent.map(r=>`<tr>
         <td class="strong" style="color:${r.star>=4?'var(--green)':(r.star==3?'var(--amber)':'var(--rose)')};">${r.star?r.star+' ★':'—'}</td>
-        <td class="i18n" style="white-space:normal;font-size:12px;">${r.comment?esc(r.comment):'<span style="color:var(--faint)">rating only, no comment</span>'}
+        <td class="i18n" style="white-space:normal;font-size:var(--text-xs);">${r.comment?esc(r.comment):'<span style="color:var(--faint)">rating only, no comment</span>'}
           ${r.reviewer?`<div style="font-size:10.5px;color:var(--faint);margin-top:3px;">${esc(r.reviewer)}</div>`:''}</td>
-        <td style="font-size:11px;color:var(--muted)">${esc(String(r.at||'').slice(0,10))}</td>
+        <td style="font-size:var(--text-2xs);color:var(--muted)">${esc(String(r.at||'').slice(0,10))}</td>
         <td>${r.replied?'<span class="pill">yes</span>':'<span class="pill warn">no</span>'}</td>
       </tr>`).join('')}
       </tbody></table>
@@ -8403,7 +8403,7 @@ function renderGbp() {
   } catch (e) {
     console.error('gbp chart failed:', e);
     const box = el && el.parentElement;
-    if (box) box.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:12px;">Chart unavailable. The distribution table below still shows the breakdown.</div>`;
+    if (box) box.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:var(--text-xs);">Chart unavailable. The distribution table below still shows the breakdown.</div>`;
   }
 }
 
@@ -8572,7 +8572,7 @@ function renderAudit() {
       ${(tr.issues||[]).map(i=>`<tr>
         <td class="strong" style="max-width:330px;white-space:normal;">${esc(i.label)}</td>
         <td class="num">${num(i.visits)}</td><td class="num">${num(i.keyEvents)}</td>
-        <td class="i18n" style="font-size:11px;color:var(--muted);max-width:300px;white-space:normal;">${i.examples.map(e=>`<code>${esc(e)}</code>`).join(', ')}</td>
+        <td class="i18n" style="font-size:var(--text-2xs);color:var(--muted);max-width:300px;white-space:normal;">${i.examples.map(e=>`<code>${esc(e)}</code>`).join(', ')}</td>
       </tr>`).join('')||'<tr><td colspan="4" class="num">Nothing untagged in this range — tagging is clean.</td></tr>'}
       </tbody></table>
       <div class="note">Each row is a distinct failure mode, not a severity ranking. A bare platform ID means the ad's destination URL carried no <code>utm_campaign</code>, so GA4 recorded the platform's own campaign ID instead — those sessions are real, they just can't be grouped with the campaign they belong to.</div>
@@ -8583,7 +8583,7 @@ function renderAudit() {
       <table><thead><tr><th>Ad campaign</th><th>Account</th><th class="num">Impr</th><th class="num">Clicks</th><th class="num">Spend</th></tr></thead><tbody>
       ${sp.unmatchedCampaigns.map(c=>`<tr>
         <td class="strong i18n trunc" title="${esc(c.name)}">${esc(c.name)}</td>
-        <td style="font-size:11px;color:var(--muted)">${esc(c.account)}</td>
+        <td style="font-size:var(--text-2xs);color:var(--muted)">${esc(c.account)}</td>
         <td class="num">${num(c.impressions)}</td><td class="num">${num(c.clicks)}</td>
         <td class="num">${num(c.spend,{money:true})}</td>
       </tr>`).join('')}
@@ -8649,7 +8649,7 @@ function drawFunnelChart(canvasId, stages) {
   const usable = stages.filter(s => s.value != null && s.value > 0);
   if (!usable.length) {
     const box = el.parentElement;
-    if (box) box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:12px;">No funnel data for this campaign.</div>';
+    if (box) box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:var(--text-xs);">No funnel data for this campaign.</div>';
     return;
   }
   try {
@@ -8679,7 +8679,7 @@ function drawFunnelChart(canvasId, stages) {
   } catch (e) {
     console.error('funnel chart failed:', e);
     const box = el.parentElement;
-    if (box) box.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:12px;">Chart unavailable. Figures are in the table below.</div>`;
+    if (box) box.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:var(--text-xs);">Chart unavailable. Figures are in the table below.</div>`;
   }
 }
 
@@ -8852,7 +8852,7 @@ function drawChart(canvasId, rows, series, opts = {}) {
   } catch (e) {
     console.error('chart failed:', e);
     const box = el.parentElement;
-    if (box) box.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:12px;text-align:center;">Chart unavailable (${esc(e.message)}).<br>Figures above are still live.</div>`;
+    if (box) box.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:var(--text-xs);text-align:center;">Chart unavailable (${esc(e.message)}).<br>Figures above are still live.</div>`;
   }
 }
 
@@ -9462,7 +9462,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.211.0';
+const CLIENT_BUILD = '3.212.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
