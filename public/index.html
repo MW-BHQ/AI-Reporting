@@ -962,6 +962,9 @@
    * larger figure. A zero is deliberately muted rather than hidden — it still
    * has to be readable as a real answer.
    */
+  /* The placeholder a chart shows when its source is not connected. */
+  .chart-empty{display:flex;align-items:center;justify-content:center;height:100%;
+    color:var(--faint);font-size:var(--text-2xs);text-align:center;padding:0 10px;}
   .mini{border:1px solid var(--line);border-radius:10px;padding:9px 11px 10px;
     background:#fff;}
   /**
@@ -4694,7 +4697,7 @@ function renderReport() {
                        ticks:{color:'#8A94AD',font:cvFont(9),autoSkipPadding:8} },
                    y:{ stacked:true, beginAtZero:true, grid:{color:'#EEF1F8'},
                        ticks:{color:'#8A94AD',font:cvFont(9),autoSkipPadding:8,
-                              callback:(v)=> v>=1e6?(v/1e6)+'M' : v>=1e3?(v/1e3)+'K' : v} } },
+                              callback:(v)=>axisNum(v)} } },
           plugins:{ legend:{ labels:{color:'#4C5878',font:cvFont(10),usePointStyle:true,boxWidth:cvBox(7)} } } },
       });
     }
@@ -4737,9 +4740,11 @@ function renderReport() {
           options:{ responsive:true, maintainAspectRatio:false, animation:false,
             scales:{ x:{ stacked:true, grid:{display:false}, ticks:{color:'#8A94AD',font:cvFont(9),autoSkipPadding:8} },
                      y:{ stacked:true, beginAtZero:true, grid:{color:'#EEF1F8'},
-                         ticks:{color:'#8A94AD',font:cvFont(9),autoSkipPadding:8} },
+                         ticks:{color:'#8A94AD',font:cvFont(9),autoSkipPadding:8,
+                              callback:(v)=>axisNum(v)} },
                      y1:{ position:'right', grid:{display:false}, suggestedMin:3.5, suggestedMax:5,
-                          ticks:{color:'#8A94AD',font:cvFont(9),autoSkipPadding:8} } },
+                          ticks:{color:'#8A94AD',font:cvFont(9),autoSkipPadding:8,
+                              callback:(v)=>axisNum(v)} } },
             plugins:{ legend:{ labels:{color:'#4C5878',font:cvFont(10),usePointStyle:true,boxWidth:cvBox(7)} } } },
         });
       }
@@ -6799,11 +6804,11 @@ function drawBclubCombo(canvasId, labels, bars, lines) {
         y:{ position:'left', beginAtZero:true, grid:{ color:'#EEF1F8' },
           title:{ display:true, text:'Revenue (THB)', color:'#8A94AD', font:cvFont(9.5) },
           ticks:{ color:'#8A94AD', font:cvFont(9),
-                  callback:(v)=> v>=1e6?(v/1e6)+'M' : v>=1e3?(v/1e3)+'K' : v } },
+                  callback:(v)=>axisNum(v) } },
         y1:{ position:'right', beginAtZero:true, grid:{ display:false },
           title:{ display:true, text:'Members', color:'#8A94AD', font:cvFont(9.5) },
           ticks:{ color:'#8A94AD', font:cvFont(9),
-                  callback:(v)=> v>=1e3?(v/1e3)+'K':v } },
+                  callback:(v)=>axisNum(v) } },
       },
     },
   });
@@ -6839,7 +6844,9 @@ function drawBclubStage(canvasId, labels, data, color, emptyNote) {
   }
   if (!has) {
     const box = el.parentElement;
-    if (box) box.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:11.5px;text-align:center;padding:0 10px;">${esc(emptyNote || 'No source connected yet')}</div>`;
+        // `chart-empty` rather than inline type: a hard-coded 11.5px here is
+      // invisible to type:scale, which cannot see inside a template literal.
+      if (box) box.innerHTML = `<div class="chart-empty">${esc(emptyNote || 'No source connected yet')}</div>`;
     return;
   }
   el._chart = new Chart(el.getContext('2d'), {
@@ -8274,7 +8281,8 @@ function renderGbp() {
         scales:{
           x:{ stacked:true, ticks:{ color:'#A7B0C7', font:cvFont(10), autoSkipPadding:8 }, grid:{ display:false } },
           y:{ stacked:true, beginAtZero:true, title:{display:true,text:'Reviews',color:'#A7B0C7',font:{size:10}},
-              ticks:{ color:'#A7B0C7', font:cvFont(10), autoSkipPadding:6, precision:0 }, grid:{ color:'rgba(90,110,160,.09)' } },
+              ticks:{ color:'#A7B0C7', font:cvFont(10), autoSkipPadding:6, precision:0,
+                  callback:(v)=>axisNum(v) }, grid:{ color:'rgba(90,110,160,.09)' } },
           y1:{ position:'right',
                // The running all-time score moves in hundredths, so a full 1-5
                // axis would flatten it into a straight line. Padded around the
@@ -9349,7 +9357,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.206.0';
+const CLIENT_BUILD = '3.207.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

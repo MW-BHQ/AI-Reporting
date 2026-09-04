@@ -1,5 +1,35 @@
 ### Recent (August 2026)
 
+**v3.207.0 — housekeeping 2 and 3: every value axis is compact, and the chart
+empty-state stops hard-coding its type.**
+
+**2 of 3 — FOUR CHARTS NEVER GOT v3.201.** `axisNum` went on `drawChart`, but
+`renderReport`'s stacked combo, `drawBclubCombo` and `renderGbp`'s reviews stack
+build Chart.js directly, so they were untouched. Two of them had NO tick
+callback at all and printed full digits; three had a HAND-ROLLED formatter with
+no rounding, so 1,234,567 rendered as `1.234567M`. All five value axes now call
+`axisNum`.
+
+MW's original request was for Better Club, and `drawBclubCombo` IS a Better Club
+chart — so v3.201 delivered about half of what was asked for and reported it as
+done. **Applying a fix to the shared helper is not the same as applying it
+everywhere; the charts that bypass the helper are exactly the ones that need
+checking.**
+
+The two rating axes are passed through the same function deliberately: `axisNum`
+only shortens at a thousand and above, so 4.8 stays 4.8.
+
+**3 of 3 — `drawBclubStage`'s empty state** was an inline-styled div with a
+hard-coded `font-size:11.5px`, invisible to `type:scale` because the rule cannot
+see inside a template literal. Now a `.chart-empty` class on `--text-2xs`.
+
+**THE AUDIT'S BLIND SPOT IS THE POINT.** `type:scale` passes on a file that
+still contains hard-coded sizes, because the ones in JS strings are unreachable
+from CSS parsing. That is documented in the backlog as a known gap; this is the
+first instance actually removed rather than noted.
+
+### Recent (August 2026)
+
 **v3.206.0 — housekeeping 1 of 3: Search Console language rows get the same
 default locale as everything else. This one was a real reporting bug.**
 
