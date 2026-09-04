@@ -2228,9 +2228,20 @@ function num(v, opts = {}) {
   if (v === null || v === undefined || Number.isNaN(v)) return '—';
   const a = Math.abs(v);
   if (opts.money) {
-    if (a >= 1e6) return '฿' + (v/1e6).toFixed(2) + 'M';
-    if (a >= 1e3) return '฿' + (v/1e3).toFixed(1) + 'K';
-    return '฿' + v.toFixed(0);
+    if (a >= 1e6) return '\u0e3f' + (v/1e6).toFixed(2) + 'M';
+    if (a >= 1e3) return '\u0e3f' + (v/1e3).toFixed(1) + 'K';
+    /**
+     * SATANG SURVIVE BELOW A HUNDRED BAHT (v3.208.0).
+     *
+     * `toFixed(0)` turned a CPC of 4.35 into `\u0e3f4`. That was invisible while
+     * Google Ads used its own `fmtTHB`, which kept two decimals under 100 — so
+     * routing those figures through `num()` would have quietly dropped the
+     * cents off every cost-per metric on the deck. The floor is where the
+     * precision actually matters: a spend of \u0e3f4,350,000 does not need
+     * satang, a cost-per-click does.
+     */
+    if (a > 0 && a < 100) return '\u0e3f' + v.toFixed(2);
+    return '\u0e3f' + v.toFixed(0);
   }
   if (opts.pct) return v.toFixed(opts.dp ?? 1) + '%';
   if (opts.dp !== undefined) return v.toFixed(opts.dp);
@@ -5809,7 +5820,16 @@ const stackTotalLabels = {
 };
 
 // ============================================================ AUDIENCES
-const fmtTHB = (v) => v === null || v === undefined ? '—' : '฿' + (v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(2));
+/**
+ * DELEGATES TO `num()` (v3.208.0). It used to print `\u0e3f83,500,000` where the
+ * monthly report printed `\u0e3f83.50M` for the same value — the reader's format
+ * depended on which tab the figure landed on, which is the whole reason MW has
+ * twice had to ask for compact numbers on a specific tab.
+ *
+ * Kept as a name rather than deleted: nine call sites, and a wrapper that
+ * cannot drift is worth more than nine edits that can.
+ */
+const fmtTHB = (v) => num(v, { money: true });
 const pct = (v) => v === null || v === undefined ? '—' : (v * 100).toFixed(v < 0.1 ? 2 : 1) + '%';
 // Bare amount: the ฿ lives in the column header instead of every cell.
 // Short label for the narrow Obj column, plus the full Meta goal name for the
@@ -5849,7 +5869,8 @@ const rankDots = (r) => {
     });
   return `<span class="qec">${cells.join('')}</span>`;
 };
-const fmtAmt = (v) => v === null || v === undefined ? '—' : (v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(2));
+/** Same as `fmtTHB` without the sign. Delegates for the same reason. */
+const fmtAmt = (v) => String(num(v, { money: true })).replace(/^\u0e3f/, '');
 // ============================================================ E-COMMERCE
 // One colour per channel TYPE, so the same group reads the same in every chart
 // and table on the migration tab.
@@ -6348,7 +6369,19 @@ function renderBclub() {
    * reconciled against anything. Revenue keeps the abbreviation, where the
    * magnitude is the point.
    */
-  const cnt = (v) => (v === null || v === undefined || Number.isNaN(v)) ? '—' : Math.round(v).toLocaleString();
+  /**
+   * NOT delegated to `num()`, and that is deliberate (v3.208.0).
+   *
+   * `num()` shortens at a thousand, which is right for impressions and wrong
+   * for a member count: "2.9K paying members" throws away the 58 that "2,858"
+   * carries, and a membership figure is read as an exact number. Tried it,
+   * `boot.js` failed on the paying-member count, and the test was right.
+   *
+   * The convergence in this release is about MONEY, where the two formats
+   * genuinely disagreed on the same value. Counts were never inconsistent —
+   * they were consistently full-precision, on purpose.
+   */
+  const cnt = (v) => (v === null || v === undefined || Number.isNaN(v)) ? '\u2014' : Math.round(v).toLocaleString();
   /**
    * MONEY CARRIES ITS UNIT IN THE LABEL, NOT AS A GLYPH (MW: "always use
    * Revenue (THB) not ฿, it's really hard to read"). The baht sign sits low and
@@ -9357,7 +9390,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.207.0';
+const CLIENT_BUILD = '3.208.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   const stale = v.version && v.version !== CLIENT_BUILD;

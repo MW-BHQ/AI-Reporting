@@ -1,5 +1,44 @@
 ### Recent (August 2026)
 
+**v3.208.0 — housekeeping: the MONEY formatters converge on `num()`. Counts
+deliberately do not.**
+
+The tab scan found six competing number formatters. This release settles the two
+that genuinely disagreed on the same value: `fmtTHB` printed
+`\u0e3f83,500,000` where the monthly report printed `\u0e3f83.50M`, so a
+figure's format depended on which tab it landed on — which is exactly why MW has
+twice had to ask for compact numbers on a specific tab. `fmtTHB` and `fmtAmt`
+now delegate to `num()`.
+
+**KEPT AS NAMES RATHER THAN DELETED.** Nine call sites, and a wrapper that
+cannot drift is worth more than nine edits that can.
+
+**`num()` HAD TO LEARN SATANG FIRST.** Its money branch used `toFixed(0)`, which
+turns a CPC of 4.35 into `\u0e3f4`. That was invisible while Google Ads had its
+own formatter keeping two decimals under a hundred — so a blind swap would have
+dropped the cents off every cost-per metric on the deck. Now: two decimals below
+\u0e3f100, none above. A spend of \u0e3f4.35M does not need satang; a
+cost-per-click does.
+
+**AND THE PART WORTH RECORDING: CONVERGENCE WAS THE WRONG ANSWER FOR COUNTS.**
+`cnt` was routed through `num()` too, and `boot.js` failed on the paying-member
+count — because `num()` shortens at a thousand and "2.9K paying members" throws
+away the 58 that "2,858" carries. A membership figure is read as an exact
+number. **The test was right and the tidying was wrong.** Counts were never
+inconsistent; they were consistently full-precision on purpose, and that is now
+written down in the code so the next audit does not "fix" it either.
+
+**STILL DELIBERATELY UNTOUCHED: the 13 `toLocaleString()` calls in Chart.js
+tooltips.** A tooltip is where a reader goes FOR the exact figure, so full
+precision there is the feature, not a divergence.
+
+Remaining from the scan: scope pills missing on twelve tabs, ~140 hard-coded
+font sizes in JS literals that `type:scale` cannot see, and two decisions for MW
+(the e-commerce monthly report ignoring `from`, and seven tabs with no print
+path).
+
+### Recent (August 2026)
+
 **v3.207.0 — housekeeping 2 and 3: every value axis is compact, and the chart
 empty-state stops hard-coding its type.**
 
