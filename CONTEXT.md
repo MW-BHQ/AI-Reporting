@@ -1,5 +1,21 @@
 ### Recent (August 2026)
 
+**v3.235.0 — the GBP second row stretches into the page.**
+
+`flex:1 1 auto` on `.gbp-row`, both columns as flex columns, and the chart wrap
+growing into whatever height the row gets. Taller, but it still stops short of
+the sheet.
+
+**STOPPING HERE, because the remaining gap is not a layout problem.** The slide
+zooms to 0.549, so its page box is 7.5in / 0.549 tall — far taller than the
+content, and no amount of `flex:1` fills a box that is oversized to begin with.
+Three CSS attempts have each made it a bit better and left the same gap, which
+is the signal to stop editing layout: **`fitNativeSlides` is measuring a natural
+height that does not match what is on the page.** Fix the measurement and the
+gap closes on its own.
+
+### Recent (August 2026)
+
 **v3.234.0 — GBP page one: chart left, star distribution right.**
 
 One wrapper div and one print rule. `.slide.pn .gbp-row` is a 1.2fr/0.8fr grid;

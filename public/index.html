@@ -507,7 +507,13 @@
     .slide.pn .grid.g-2-1{grid-template-columns:1fr!important;}
     /* Chart left, star distribution right: side by side halves the slide's
        height, which is what was forcing the 0.549 zoom. Screen stays stacked. */
-    .slide.pn .gbp-row{display:grid;grid-template-columns:1.2fr .8fr;gap:12px;align-items:start;}
+    .slide.pn .gbp-row{display:grid;grid-template-columns:1.2fr .8fr;gap:12px;
+      align-items:stretch;flex:1 1 auto;min-height:0;}
+    /* Both columns take the height the row was given, and the chart grows into
+       it — otherwise the row stretches and its contents sit at the top. */
+    .slide.pn .gbp-row > *,
+    .slide.pn .gbp-row .card{display:flex;flex-direction:column;min-height:0;}
+    .slide.pn .gbp-row .gbp-chart{flex:1 1 auto;height:auto!important;min-height:0;}
     .mr{border:0;border-radius:0;}
     /* Tints can vanish on a mono printer, so the ghost bars keep their outline
        and the panels lose their fill. */
@@ -9550,7 +9556,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.234.0';
+const CLIENT_BUILD = '3.235.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
