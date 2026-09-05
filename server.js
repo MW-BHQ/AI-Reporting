@@ -5400,12 +5400,21 @@ async function buildGbp(from, to) {
      * in, with its count, so "nothing to quote" is visible rather than an empty
      * row.
      */
+    /**
+     * ALWAYS FIVE ROWS (MW: "if in the period is really have no review on which
+     * star, just put it as no review").
+     *
+     * The empty levels used to be dropped, so a missing 3★ looked identical to
+     * a 3★ the report had failed to find — and MW read it as the second, which
+     * is the correct thing to assume when a row simply is not there. An
+     * explicit "no review" says which it is.
+     */
     const samples = [5, 4, 3, 2, 1].map((star) => {
       const all = recent.filter((r) => r.star === star);
-      if (!all.length) return null;
+      if (!all.length) return { star, count: 0, empty: true };
       const withText = all.find((r) => String(r.comment || "").trim());
       return { star, count: all.length, ...(withText || all[0]) };
-    }).filter(Boolean);
+    });
     const negatives = recent.filter((r) => r.star && r.star <= 3);
     return {
       key: l.key, title: l.title, unlisted: Boolean(l.unlisted),

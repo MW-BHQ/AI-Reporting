@@ -8361,7 +8361,12 @@ function renderGbp() {
             where `L.recent` is only what the list below needs. Doing it twice
             in two places is how the two quietly disagree. */ ''}
       ${(L.samples||[]).map(r=>{
-        const st = r.star;
+        // An empty level renders as one plain row rather than being skipped,
+        // so "no review at this rating" is stated instead of inferred.
+        if (r.empty) return `<tr>
+          <td class="strong" style="color:var(--faint);">${r.star} \u2605</td>
+          <td style="color:var(--faint);font-size:var(--text-xs);">No review at this rating in the period</td>
+          <td></td><td></td></tr>`;
         return `<tr>
         <td class="strong" style="color:${r.star>=4?'var(--green)':(r.star==3?'var(--amber)':'var(--rose)')};">${r.star?r.star+' ★':'—'}</td>
         <td class="i18n" style="white-space:normal;font-size:var(--text-xs);">${r.comment?esc(r.comment):'<span style="color:var(--faint)">rating only, no comment</span>'}
@@ -9521,7 +9526,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.227.0';
+const CLIENT_BUILD = '3.228.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

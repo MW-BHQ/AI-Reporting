@@ -1,5 +1,28 @@
 ### Recent (August 2026)
 
+**v3.228.0 — Customers Voices always shows five rows; an empty level says so.**
+
+MW: "if in the period is really have no review on which star, just put it as no
+review."
+
+Dropping the empty levels made a missing 3★ look **identical to a 3★ the report
+had failed to find** — and MW read it as the second, which is the correct thing
+to assume when a row is simply absent. Twice now he has told me a rating was
+"missing" when the honest answer was "there wasn't one". **An absent row is a
+question; a stated absence is an answer.**
+
+All five levels now render, empty ones reading "No review at this rating in the
+period" in the faint style, with the date and replied cells blank rather than
+invented.
+
+Reply status is left exactly as it comes — MW: "don't worry about star with no
+reply, you just show as it is."
+
+Verified: 5★ and 2★ show their samples, 4/3/1 show the placeholder, no console
+errors.
+
+### Recent (August 2026)
+
 **v3.227.0 — Customers Voices samples from twelve months, not sixty days.**
 
 MW: "you miss 2, 3, 4 stars." BGH had no 2, 3 or 4-star review in the last sixty
