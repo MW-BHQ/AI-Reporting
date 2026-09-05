@@ -1,5 +1,36 @@
 ### Recent (August 2026)
 
+**v3.222.0 — the date sweep is finished. Twenty tabs, three surfaces, zero ISO.**
+
+The last seven: the churn "no purchase in the N days before ..." sentence, two
+e-commerce comparison tooltips (`vs previous 365 days`, `vs ... YoY`), the
+Better Club sheet-coverage note in two places, the campaigns empty state, and
+the E-commerce Channels one-month warning.
+
+**FOUR RELEASES FOR ONE FORMATTING CHANGE, and the reason is worth keeping.**
+Each pass fixed what that pass could SEE:
+
+  - v3.219 — a source grep. Missed the chart helpers entirely.
+  - v3.220 — walking rendered text. Missed canvases, because a chart is pixels.
+  - v3.221 — reading `chart.data.labels` off each Chart.js instance. Found the
+    axes; missed `title` attributes and states the default range never renders.
+  - v3.222 — all three surfaces at once, across twenty tabs.
+
+**THE CHECK IS THE DELIVERABLE, not the fix.** A date format is trivial; knowing
+you have found all of them is not. The sweep that works reads TEXT NODES,
+`data-tip` AND `title` attributes, and Chart.js label arrays — miss any one and
+it reports clean while the reader sees ISO. Written down as the method for the
+next "is it everywhere" question, because there will be one.
+
+**AND THE AUDIT RULE IS STILL ONLY A TRIPWIRE.** It matches property accesses
+whose names I thought of. It has never once caught what MW caught by eye. Its
+value is stopping a NEW one, not proving the old ones are gone.
+
+Left alone deliberately: `f.from` / `f.to` on the migration table are customer
+TYPES ("Online", "Offline"), not dates.
+
+### Recent (August 2026)
+
 **v3.221.0 — chart axis labels, at all five entry points this time.**
 
 MW: "I don't think you have scanned the whole war room report." He was right for

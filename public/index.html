@@ -4572,7 +4572,7 @@ function renderReport() {
       ? `<div class="card mt" style="border-color:#E4B84B">
            <div class="card-title">YouTube data is out of date</div>
            <div class="note" style="margin-top:0">The sheet covers
-           ${cov ? `${esc(cov.from)} to ${esc(cov.to)}` : 'no dated rows'}, which does not reach
+           ${cov ? `${esc(humanDate(cov.from) || cov.from)} to ${esc(humanDate(cov.to) || cov.to)}` : 'no dated rows'}, which does not reach
            this report period. Re-export the Date view from YouTube Studio into the
            <b>Daily</b> tab.</div>
          </div>`
@@ -4600,7 +4600,7 @@ function renderReport() {
       ${sr.length > 1
         ? '<div class="chart-wrap" style="height:200px"><canvas id="repYtViews"></canvas></div>'
         : '<div class="note" style="margin-top:0">No daily rows in this period.</div>'}
-      <div class="note">${cov ? `Sheet covers ${esc(cov.from)} to ${esc(cov.to)}. ` : ''}${gaps}</div>
+      <div class="note">${cov ? `Sheet covers ${esc(humanDate(cov.from) || cov.from)} to ${esc(humanDate(cov.to) || cov.to)}. ` : ''}${gaps}</div>
     </div>`;
   })() : '';
 
@@ -5337,7 +5337,7 @@ function renderCampaignBody(d) {
           <b>Likely the date range.</b> ${esc(hint.message)}
         </div>
         <button class="btn btn-primary" id="fixRange" data-launch="${esc(hint.launch)}">Widen range to include ${esc(hint.launch)}</button>`
-        : `<div style="max-width:480px;font-size:var(--text-xs);">No GA4 traffic and no ad campaigns carry this prefix between ${esc(d.range.from)} and ${esc(d.range.to)}. Check the spelling, try a shorter prefix, or browse the codes that did run.</div>`}
+        : `<div style="max-width:480px;font-size:var(--text-xs);">No GA4 traffic and no ad campaigns carry this prefix between ${esc(humanDate(d.range.from) || d.range.from)} and ${esc(humanDate(d.range.to) || d.range.to)}. Check the spelling, try a shorter prefix, or browse the codes that did run.</div>`}
       <button class="btn btn-ghost" id="emptyBrowse" style="margin-top:4px;">Browse codes that ran in this range</button>
     </div></div>`;
     const fix = document.getElementById('fixRange');
@@ -7478,7 +7478,7 @@ function renderEcomChurn() {
         <div class="sub2">${pct(t.oneAndDone/(t.churned||1))} of the lost · ${num(t.lapsed)} bought repeatedly then stopped</div></div>
     </div>
     <div class="note" style="margin:0 0 14px;">
-      <b>Lost</b> means no purchase in the ${d.windowDays} days before ${esc(d.referenceDate)}, attributed to the channel and
+      <b>Lost</b> means no purchase in the ${d.windowDays} days before ${esc(humanDate(d.referenceDate) || d.referenceDate)}, attributed to the channel and
       centre of the customer's <b>last</b> purchase — where the relationship ended, which is the place you can act on.
       The two kinds are worth separating: <b>${num(t.oneAndDone)} never came back after a single purchase</b>, which is an
       acquisition-quality problem, while <b>${num(t.lapsed)} bought repeatedly and then stopped</b>, which is a retention one.
@@ -7757,7 +7757,7 @@ function renderEcomChannels() {
       if (d.months.length < 2) return `<div class="card mt">
         <div class="card-title">What moved between the two halves</div>
         <div class="note" style="margin:0;">Needs at least two months. The range currently covers
-        <b>${esc(d.months[0]||'one month')}</b> only — widen it to 90D or a custom range and this
+        <b>${esc(humanDate(d.months[0]||'') || d.months[0] || 'one month')}</b> only — widen it to 90D or a custom range and this
         will show which channels drove the change.</div></div>`;
       const movers = d.channels.filter(c => Math.abs(c.delta) > 0).sort((a,b) => b.delta - a.delta);
       if (!movers.length || !d.split.lastFrom) return '';
@@ -8030,8 +8030,8 @@ function renderEcom() {
   $('viewRoot').innerHTML = `
     <div class="grid g-4" style="margin-bottom:14px;">
       <div class="stat"><div class="lab">Gross revenue</div><div class="val">฿${num(Math.round(t.revenue))}</div>
-        ${d.compare?`<div class="sub2">${delta(d.compare.prev.change,`vs previous ${d.compare.windows.days} days (${d.compare.windows.prev.from} → ${d.compare.windows.prev.to})`)} MoM
-          ${delta(d.compare.yoy.change,`vs ${d.compare.windows.yoy.from} → ${d.compare.windows.yoy.to}`)} YoY</div>`:''}</div>
+        ${d.compare?`<div class="sub2">${delta(d.compare.prev.change,`vs previous ${d.compare.windows.days} days (${humanDate(d.compare.windows.prev.from) || d.compare.windows.prev.from} → ${humanDate(d.compare.windows.prev.to) || d.compare.windows.prev.to})`)} MoM
+          ${delta(d.compare.yoy.change,`vs ${humanDate(d.compare.windows.yoy.from) || d.compare.windows.yoy.from} → ${humanDate(d.compare.windows.yoy.to) || d.compare.windows.yoy.to}`)} YoY</div>`:''}</div>
       <div class="stat"><div class="lab">Marketplace fees</div><div class="val">฿${num(Math.round(t.fees))}</div>
         <div class="sub2">${pct(t.takeRate)} of gross</div></div>
       <div class="stat"><div class="lab">Net revenue</div><div class="val">฿${num(Math.round(t.net))}</div></div>
@@ -9498,7 +9498,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.221.0';
+const CLIENT_BUILD = '3.222.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
