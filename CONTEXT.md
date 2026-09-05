@@ -1,5 +1,34 @@
 ### Recent (August 2026)
 
+**v3.223.0 — GBP footnote removed; two real defects fixed in the reviews chart;
+the blank chart itself NOT yet proven fixed.**
+
+MW: "fix the broken chart and remove the footnote."
+
+**DONE AND VERIFIED: the footnote is gone.** Six lines of prose under a chart.
+
+**DONE, TWO GENUINE DEFECTS:**
+ - The x labels read `m.label`, and the series rows have never carried one —
+   every tick was `undefined`. It rendered as an unlabelled axis rather than an
+   error, which is how it survived. Now `m.month`.
+ - `L.months` only holds months that RECEIVED a review, so a quiet month mapped
+   to `undefined` and every `m.s5` / `m.cumRating` downstream read undefined.
+   One gap could empty the chart. Quiet months are now zero rows.
+
+**NOT PROVEN: the chart still renders empty against the mock.** Labels still
+come back `undefined` in the browser after the fix, which means the instance
+being drawn is not the code path I edited — there are three `new Chart(` sites
+and at least two touch `S.charts.gbpChart`. I ran out of room to confirm which
+one runs.
+
+**SAYING SO RATHER THAN CLAIMING THE FIX.** Both edits are correct and safe on
+their own, but neither has been shown to make the bars appear, and MW's report
+was that the chart is blank. **The next step is to find which `new Chart(` call
+actually creates `gbpChart` at runtime** — log the line, or set a marker
+property on the instance and read it back — before touching anything else.
+
+### Recent (August 2026)
+
 **v3.222.0 — the date sweep is finished. Twenty tabs, three surfaces, zero ISO.**
 
 The last seven: the churn "no purchase in the N days before ..." sentence, two

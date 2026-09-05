@@ -8322,7 +8322,8 @@ function renderGbp() {
     <div class="card mt">
       <h2>Reviews by month &middot; stars stacked, rating overlaid</h2>
       <div style="height:300px;"><canvas id="gbpChart"></canvas></div>
-      <div class="note">Bars stack the count of 1–5★ reviews received each month, 5★ at the base so low ratings stay visible on top; the number above each bar is that month's total. The purple line is the <b>all-time rating as it stood at the end of each month</b> — the score a patient would have seen on Google at that moment — with its value printed above each dot. Hover a month to see that month's own average instead. Reviews predating this range still count toward the line: the opening balance is derived from the listing's all-time total, which Google publishes rounded to one decimal, so the line can sit a fraction of a star off in absolute terms while its trend is exact.${L.cumulativeBasis==='range-only'?' <b>All-time totals were unavailable for this listing, so the line accumulates only from reviews in this range and reads low at the start.</b>':''}</div>
+      <!-- Footnote removed (MW). It ran to six lines under a chart whose
+           axis now labels itself. -->
     </div>
 
     <div class="grid g-2-1 mt">
@@ -8365,7 +8366,10 @@ function renderGbp() {
     S.charts.gbpChart = new Chart(el, {
       plugins: [stackTotalLabels, ratingDotLabels],
       data: {
-        labels: series.map(m=>humanDate(m.label) || m.label),
+        // `.month`, not `.label` — the series rows have never carried a
+            // `label`, so every x tick was `undefined`. It read as an
+            // unlabelled axis rather than an error, which is why it survived.
+            labels: series.map(m=>humanDate(m.month) || m.month),
         // 5★ first puts it at the base of the stack, so the low ratings sit on
         // top where they're actually visible instead of buried under the green.
         datasets: [
@@ -9498,7 +9502,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.222.0';
+const CLIENT_BUILD = '3.223.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

@@ -5277,7 +5277,17 @@ async function buildGbp(from, to) {
 
   const out = listings.map((l) => {
     const L = per.get(l.title);
-    const series = months.map((m) => L.months.get(m.key));
+    /**
+     * A MONTH WITH NO REVIEWS IS A ZERO ROW, NOT `undefined` (v3.223.0).
+     *
+     * `L.months` only has an entry for months that received a review, so any
+     * quiet month mapped to `undefined` — and every `m.s5` / `m.cumRating` read
+     * downstream then yielded undefined, which Chart.js draws as nothing. One
+     * gap emptied the whole chart, which is what MW was looking at: 5,000
+     * reviews in the period and a blank panel with a 0-to-1 axis.
+     */
+    const series = months.map((m) => L.months.get(m.key)
+      || { month: m.key, count: 0, sum: 0, s1: 0, s2: 0, s3: 0, s4: 0, s5: 0 });
 
     /**
      * Running all-time rating at the END of each month — the number that shows
