@@ -8301,7 +8301,15 @@ function renderGbp() {
     </tr>`;
   };
 
-  $('viewRoot').innerHTML = `
+  /**
+   * PRINTS AS MONTHLY-REPORT SLIDES (MW: "when I say do the PDF version, I mean
+   * you use Monthly report as the template and follow it always").
+   *
+   * `slideShell` is the deck's own shell — title, scope pill, date range and
+   * logo — so this tab inherits the header rather than growing its own copy.
+   * Two sheets: the listing's numbers, then Customers Voices.
+   */
+  const gbpPage1 = `
     ${tabStrip}
     ${d.unparsedStars?`<div class="warnbox">${d.unparsedStars} review(s) had a star rating this build couldn't read, so they're excluded from the breakdown.</div>`:''}
     ${L.unlisted?`<div class="warnbox">This listing wasn't in the five you specified, but the account returns it — showing it rather than dropping data.</div>`:''}
@@ -8349,7 +8357,8 @@ function renderGbp() {
       </div>
     </div>
 
-    ${(L.recent||[]).length?`<div class="card mt gbp-voices">
+  `;
+  const gbpVoices = (L.recent||[]).length ? `<div class="card mt gbp-voices">
       <!--
         ONE SAMPLE PER STAR, HIGHEST FIRST (MW), matching Customers Voices on
         the monthly report. A raw recent list is dominated by five-star
@@ -8381,8 +8390,11 @@ function renderGbp() {
         </tr>`;
       }).join('')}
       </tbody></table>
-    </div>`:''}
-  `;
+      </div>` : '';
+  $('viewRoot').innerHTML = tabStrip
+    + slideShell(`Google Business Profile \u00b7 ${L.title}`, gbpPage1,
+        { first: true, scope: 'BHQ', cls: 'quiet' })
+    + slideShell('Customers Voices', gbpVoices, { scope: 'BHQ', cls: 'quiet' });
 
   document.querySelectorAll('[data-gtab]').forEach(b=>b.addEventListener('click',()=>{ S.gbpTab=b.dataset.gtab; renderGbp(); }));
   document.querySelectorAll('[data-gtab2]').forEach(b=>b.addEventListener('click',()=>{ S.gbpTab=b.dataset.gtab2; renderGbp(); }));
@@ -9531,7 +9543,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.230.0';
+const CLIENT_BUILD = '3.231.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

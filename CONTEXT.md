@@ -1,5 +1,24 @@
 ### Recent (August 2026)
 
+**v3.231.0 — the GBP tab prints as Monthly-Report slides.**
+
+MW, on the v3.230 output: "this is not." Correct — I had fixed the page count
+and shipped a page with no header, no pill, no range and no logo, having just
+been told the template is standing.
+
+`slideShell` is the deck's own shell and it takes `(title, body, opts)`, so this
+is two calls, not a new layout: page one is the listing's numbers, page two is
+Customers Voices. The tab inherits the header instead of growing a second copy
+of it.
+
+Verified: 2 pages, both with title, BHQ pill, date range and logo.
+
+**THE RULE, WRITTEN WHERE I WILL HIT IT: "PDF version" ALWAYS MEANS
+`slideShell`.** Not a print stylesheet, not a page-break tweak — the deck's
+shell, or it is not the template.
+
+### Recent (August 2026)
+
 **v3.230.0 — GBP PDF is two pages; Star distribution joins page one.**
 
 `.gbp-chart{height:196px}` in print. The chart gives back the height that was
