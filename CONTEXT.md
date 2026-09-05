@@ -1,5 +1,27 @@
 ### Recent (August 2026)
 
+**v3.232.0 — GBP slides use `pn`, the solution this project already had.**
+
+MW: "we have passed this issue and found solution before." Right — v3.166 built
+`.slide.pn` for exactly this: opt out of the print density pass, keep desktop
+styling, and let `fitNativeSlides()` measure the slide and zoom it to the sheet.
+I had instead hand-tuned a chart height, which is the thing `pn` exists to avoid.
+
+`cls: 'quiet pn'` on both slides. The hand-tuned `.gbp-chart{height:196px}` is
+deleted — with zoom-to-fit it was fighting the mechanism.
+
+One extra rule: `All listings` is `no-print`, so its half of the `g-2-1` grid
+left Star distribution at half width beside a blank column. One column on `pn`
+slides.
+
+Verified: 2 pages, zoom 0.549 applied, distribution full width.
+
+**STILL NOT RIGHT: the chart card keeps a large dead area below the plot**, so
+the page zooms out further than it should. Not chased — saying so rather than
+calling it done.
+
+### Recent (August 2026)
+
 **v3.231.0 — the GBP tab prints as Monthly-Report slides.**
 
 MW, on the v3.230 output: "this is not." Correct — I had fixed the page count

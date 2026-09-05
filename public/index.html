@@ -502,7 +502,9 @@
        The chart gives back the height that pushed Star distribution onto a
        sheet of its own — cards, chart and distribution now share page one. */
     .gbp-voices{break-before:page;}
-    .gbp-chart{height:196px!important;}
+    /* All listings is screen-only, so its column would leave the distribution
+       at half width on a blank half page. One column when it is gone. */
+    .slide.pn .grid.g-2-1{grid-template-columns:1fr!important;}
     .mr{border:0;border-radius:0;}
     /* Tints can vanish on a mono printer, so the ghost bars keep their outline
        and the panels lose their fill. */
@@ -8393,8 +8395,8 @@ function renderGbp() {
       </div>` : '';
   $('viewRoot').innerHTML = tabStrip
     + slideShell(`Google Business Profile \u00b7 ${L.title}`, gbpPage1,
-        { first: true, scope: 'BHQ', cls: 'quiet' })
-    + slideShell('Customers Voices', gbpVoices, { scope: 'BHQ', cls: 'quiet' });
+        { first: true, scope: 'BHQ', cls: 'quiet pn' })
+    + slideShell('Customers Voices', gbpVoices, { scope: 'BHQ', cls: 'quiet pn' });
 
   document.querySelectorAll('[data-gtab]').forEach(b=>b.addEventListener('click',()=>{ S.gbpTab=b.dataset.gtab; renderGbp(); }));
   document.querySelectorAll('[data-gtab2]').forEach(b=>b.addEventListener('click',()=>{ S.gbpTab=b.dataset.gtab2; renderGbp(); }));
@@ -9543,7 +9545,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.231.0';
+const CLIENT_BUILD = '3.232.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
