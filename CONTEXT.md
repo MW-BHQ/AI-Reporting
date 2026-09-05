@@ -1,5 +1,27 @@
 ### Recent (August 2026)
 
+**v3.236.0 — the SVG twin is allowed to scale, but it still does not fill.**
+
+MW remembered right: the chart prints as an SVG twin (v3.167) precisely so its
+proportions can be controlled. `.chart-svg svg{width:100%;height:100%}` lets it
+scale into its box rather than sitting at the size it was emitted.
+
+**IT DID NOT FIX IT, AND THE REASON IS THE ORDER OF OPERATIONS.**
+`buildPrintSvgs` measures `wrap.getBoundingClientRect()` and bakes that size
+into the twin — but it runs BEFORE the print rules grow the wrapper, so the twin
+is built at the 300px on-screen height. Then `.gbp-chart` is `height:auto` with
+`flex:1 1 auto`, so its height comes from its content, which is that 300px
+twin. Nothing forces it taller; the card grows and the chart floats in the
+middle.
+
+**THE FIX IS SEQUENCING, NOT CSS:** build the twins after the print layout has
+settled, or give the wrapper a definite height before measuring. Same shape of
+bug as v3.185 — a percentage or a measurement taken against something that is
+not definite yet. Two CSS attempts have now failed on it; the next attempt
+should be in `buildPrintSvgs`.
+
+### Recent (August 2026)
+
 **v3.235.0 — the GBP second row stretches into the page.**
 
 `flex:1 1 auto` on `.gbp-row`, both columns as flex columns, and the chart wrap

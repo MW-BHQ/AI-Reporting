@@ -1293,6 +1293,17 @@
        dashboard stays interactive — MW: "keep the desktop version interactive". */
     .chart-wrap canvas{display:none!important;}
     .chart-svg{display:block!important;width:100%;height:100%;}
+    /**
+     * THE TWIN SCALES INTO ITS BOX.
+     *
+     * `buildPrintSvgs` measures the wrapper BEFORE the print rules grow it, so
+     * the SVG carries the on-screen size — 300px tall — and sat in the middle
+     * of a much taller card. The viewBox already has
+     * `preserveAspectRatio="xMidYMid meet"`, so overriding the width and height
+     * attributes lets it scale up to the printed box instead of re-measuring
+     * and re-emitting it.
+     */
+    .chart-svg svg{width:100%!important;height:100%!important;}
     .slide-range{display:inline-block!important;font-size:9.5px;font-weight:600;
       letter-spacing:.02em;color:var(--faint);white-space:nowrap;vertical-align:middle;}
     /**
@@ -9556,7 +9567,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.235.0';
+const CLIENT_BUILD = '3.236.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
