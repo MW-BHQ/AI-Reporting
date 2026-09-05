@@ -5223,7 +5223,23 @@ async function buildGbp(from, to) {
   const blankMonth = () => ({ s1: 0, s2: 0, s3: 0, s4: 0, s5: 0, count: 0, ratingSum: 0 });
   const per = new Map(listings.map((l) => [l.title, {
     ...l,
-    months: new Map(months.map((m) => [m.key, { ...m, ...blankMonth() }])),
+    /**
+     * THE MONTH IS A STRING HERE, NOT AN OBJECT (v3.224.0).
+     *
+     * `{ ...m }` on the string "2026-08" spreads it CHARACTER BY CHARACTER, so
+     * every row came out as `{"0":"2","1":"0","2":"2","3":"6",...}` with no
+     * `month` field at all — and `m.key` was undefined, so the Map was keyed on
+     * `undefined` and every lookup missed. That is why MW's chart drew nothing
+     * against 492 reviews: the labels were undefined and every bar read a
+     * property that was not there.
+     *
+     * `monthKeyOf` accepts either shape, so this survives whichever the caller
+     * passes. The row now carries `month`, which is what the client reads.
+     */
+    months: new Map(months.map((m) => {
+      const k = typeof m === "string" ? m : (m && m.key) || String(m);
+      return [k, { month: k, ...blankMonth() }];
+    })),
     periodCount: 0, periodRatingSum: 0,
     stars: { s1: 0, s2: 0, s3: 0, s4: 0, s5: 0 },
     allTimeCount: null, allTimeRating: null,
@@ -5286,8 +5302,12 @@ async function buildGbp(from, to) {
      * gap emptied the whole chart, which is what MW was looking at: 5,000
      * reviews in the period and a blank panel with a 0-to-1 axis.
      */
-    const series = months.map((m) => L.months.get(m.key)
-      || { month: m.key, count: 0, sum: 0, s1: 0, s2: 0, s3: 0, s4: 0, s5: 0 });
+    const series = months.map((m) => {
+      const k = typeof m === "string" ? m : (m && m.key) || String(m);
+      // A month with no reviews is a ZERO ROW, not `undefined`: one gap used to
+      // leave every downstream read undefined and empty the whole chart.
+      return L.months.get(k) || { month: k, ...blankMonth() };
+    });
 
     /**
      * Running all-time rating at the END of each month — the number that shows

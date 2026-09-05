@@ -1,5 +1,37 @@
 ### Recent (August 2026)
 
+**v3.224.0 — the GBP chart draws. The month was a STRING being object-spread.**
+
+`months: new Map(months.map((m) => [m.key, { ...m, ...blankMonth() }]))`. On this
+endpoint `months` is an array of STRINGS, so:
+ - `m.key` was `undefined`, so the Map was keyed on `undefined` and every lookup
+   missed;
+ - `{ ...m }` spread `"2026-08"` CHARACTER BY CHARACTER, giving rows shaped
+   `{"0":"2","1":"0","2":"2","3":"6",...}` with no `month` at all.
+
+Every bar then read a property that did not exist and every label was
+`undefined`. 492 reviews, blank panel, no error anywhere — the shape was valid
+JavaScript throughout.
+
+**THE PAYLOAD IS WHERE I SHOULD HAVE LOOKED FIRST.** I spent v3.223 editing the
+REPORT's GBP block while the GBP TAB has its own builder, then verified in the
+browser and drew the wrong conclusion ("the instance drawn is not the path I
+edited"). One `curl` of `/api/gbp` printed the malformed row immediately and
+named the bug. **When a chart is blank, print the payload before reading the
+drawing code.**
+
+Both month sites now accept either shape (`typeof m === "string" ? m : m.key`),
+so this survives whichever the caller passes, and every row carries `month` —
+which is what the client reads for its labels since v3.223.
+
+Verified: labels "Jun 2026 / Jul 2026 / Aug 2026", bars non-zero, rating line
+populated, no console errors.
+
+**Also in v3.223 and worth keeping:** the six-line footnote under this chart is
+gone (MW), and quiet months are zero rows rather than gaps.
+
+### Recent (August 2026)
+
 **v3.223.0 — GBP footnote removed; two real defects fixed in the reviews chart;
 the blank chart itself NOT yet proven fixed.**
 
