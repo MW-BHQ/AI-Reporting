@@ -5224,7 +5224,18 @@ async function buildGbp(from, to) {
       ["location_title", "impressions", "call_clicks", "website_clicks", "direction_requests"], from, to),
     recent: windsor("google_my_business",
       ["review_create_time", "location_title", "review_star_rating", "review_comment", "review_reviewer", "review_reply_comment"],
-      recentFrom, to),
+      /**
+       * TWELVE MONTHS, NOT SIXTY DAYS (v3.227.0).
+       *
+       * Customers Voices takes one sample per star, and MW got 5★ and 1★ only:
+       * BGH simply had no 2, 3 or 4-star review in the last sixty days. The
+       * sample pool has to be as wide as the question — "what does each rating
+       * sound like" is not a sixty-day question.
+       *
+       * `recentFrom` still exists and is still sixty days: it is what the
+       * unreplied count means, and that IS a recency question.
+       */
+      chartFrom, to),
   });
 
   if (data.reviews === null) {
@@ -5409,7 +5420,13 @@ async function buildGbp(from, to) {
       recent: recent.slice(0, 25),
       samples,
       recentNegatives: negatives.length,
-      recentUnreplied: recent.filter((r) => !r.replied).length,
+      /**
+       * STILL SIXTY DAYS, deliberately. The sample pool widened to twelve
+       * months in v3.227.0; this figure did not follow it, because "reviews
+       * without a reply" is a recency question — a year of unanswered reviews
+       * is a different, and much less actionable, number.
+       */
+      recentUnreplied: recent.filter((r) => !r.replied && String(r.at || "").slice(0, 10) >= recentFrom).length,
     };
   }).sort((a, b) => n(b.allTimeCount) - n(a.allTimeCount));
 

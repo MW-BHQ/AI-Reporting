@@ -1,5 +1,29 @@
 ### Recent (August 2026)
 
+**v3.227.0 — Customers Voices samples from twelve months, not sixty days.**
+
+MW: "you miss 2, 3, 4 stars." BGH had no 2, 3 or 4-star review in the last sixty
+days, and that is the window the review-detail pull used. **The sample pool has
+to be as wide as the question** — "what does each rating sound like" is not a
+sixty-day question. The pull now runs from the same `chartFrom` the chart uses.
+
+**THE UNREPLIED COUNT DID NOT FOLLOW IT.** "Reviews without a reply" IS a
+recency question; a year of unanswered reviews is a different and much less
+actionable number. It is filtered back to sixty days explicitly — the same
+mistake as v3.225, where widening a pull silently widened every count built on
+it, caught this time before shipping rather than after.
+
+**THE CLIENT NOW USES THE SERVER'S `samples`** instead of re-deriving the
+per-star pick from `L.recent`. v3.226 had the rule implemented in both places;
+two implementations of one rule is how the page and the payload quietly come to
+disagree.
+
+Verified on the fixture: a listing with 5/4/2-star reviews renders three rows
+and skips the levels it has none of, and the unreplied count stays on the
+sixty-day window.
+
+### Recent (August 2026)
+
 **v3.226.0 — GBP fine-tuning, and a regression of mine from v3.225.**
 
 **THE REGRESSION FIRST: v3.225 broke "Reviews in period".** Widening the review
