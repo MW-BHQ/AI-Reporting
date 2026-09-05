@@ -498,8 +498,11 @@
   .mr-foot{margin-top:18px;padding-top:11px;border-top:1px solid var(--line);
     font-size:10.5px;color:var(--faint);display:flex;justify-content:space-between;gap:10px;}
   @media print{
-    /* Customers Voices gets its own sheet; All listings is screen-only. */
+    /* Customers Voices gets its own sheet; All listings is screen-only.
+       The chart gives back the height that pushed Star distribution onto a
+       sheet of its own — cards, chart and distribution now share page one. */
     .gbp-voices{break-before:page;}
+    .gbp-chart{height:196px!important;}
     .mr{border:0;border-radius:0;}
     /* Tints can vanish on a mono printer, so the ghost bars keep their outline
        and the panels lose their fill. */
@@ -8326,7 +8329,7 @@ function renderGbp() {
 
     <div class="card mt">
       <h2>Reviews by month &middot; stars stacked, rating overlaid</h2>
-      <div style="height:300px;"><canvas id="gbpChart"></canvas></div>
+      <div class="gbp-chart" style="height:300px;"><canvas id="gbpChart"></canvas></div>
       <!-- Footnote removed (MW). It ran to six lines under a chart whose
            axis now labels itself. -->
     </div>
@@ -9528,7 +9531,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.229.0';
+const CLIENT_BUILD = '3.230.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

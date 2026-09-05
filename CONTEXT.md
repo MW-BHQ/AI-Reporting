@@ -1,5 +1,21 @@
 ### Recent (August 2026)
 
+**v3.230.0 — GBP PDF is two pages; Star distribution joins page one.**
+
+`.gbp-chart{height:196px}` in print. The chart gives back the height that was
+pushing the distribution onto a sheet of its own. Verified: 2 pages, "star
+distribution" on page 1, Customers Voices on page 2.
+
+**STANDING RULE MW RESTATED: "when I say do the PDF version, I mean use Monthly
+Report as the template and follow it always."** 16:9 slide, header carrying the
+section title, the scope pill, the date range and the logo.
+
+**NOT YET TRUE OF THIS TAB.** The GBP pages print without that shell — no title,
+no pill, no range, no logo. Saying so rather than implying the template is
+applied: the page-count fix is done, the template is not.
+
+### Recent (August 2026)
+
 **v3.229.0 — GBP PDF: All listings dropped, Customers Voices on its own page.**
 
 Two class changes and one CSS line. `All listings` gains `no-print`;
