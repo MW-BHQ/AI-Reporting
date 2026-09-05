@@ -4329,7 +4329,7 @@ function renderReport() {
           <div class="note i18n" style="margin:0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">
             ${v ? esc(v.caption || '(no caption)') : 'nothing in range'}</div>
           ${v ? `<div style="font-size:var(--text-3xs);color:var(--faint);margin-top:3px">${num(v.views)} views${
-            v.posted ? ` \u00b7 posted ${esc(v.posted)}` : ''}</div>` : ''}
+            v.posted ? ` \u00b7 posted ${esc(humanDate(v.posted) || v.posted)}` : ''}</div>` : ''}
         </div>
       </div>`;
     const ratePct = (v) => (v.rate * 100).toFixed(2) + '%';
@@ -5424,7 +5424,7 @@ function renderCampaignBody(d) {
         <td class="num">${num(o.impressions)}</td><td class="num">${num(o.clicks)}</td><td class="num">${num(o.engagements)}</td></tr>`).join('')}
       </tbody></table>`:`<div style="font-size:var(--text-xs);color:var(--muted);">No organic posts carried this campaign's short links in this date range.</div>`}
       ${d.lineSameDay?`<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
-        <div style="font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:10px;">LINE sends on campaign date · ${esc(d.lineSameDay.date)}</div>
+        <div style="font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:10px;">LINE sends on campaign date · ${esc(humanDate(d.lineSameDay.date) || d.lineSameDay.date)}</div>
         <div class="grid g-2">
           <div class="stat"><div class="lab">Broadcast messages delivered</div><div class="val">${num(d.lineSameDay.broadcasts)}</div></div>
           <div class="stat"><div class="lab">Targeted / API messages delivered</div><div class="val">${num(d.lineSameDay.targeted)}</div></div>
@@ -6155,7 +6155,7 @@ function renderPages() {
     <div class="grid g-4 mt" style="margin-bottom:14px;">
       <div class="stat"><div class="lab">Sessions</div><div class="val">${num(t.sessions)}</div>
         <div class="sub2">${d.compare && d.compare.prev ? delta(d.compare.prev.change, `${num(d.compare.prev.sessions)} in the previous ${num(d.windows.days)} days`) + ' MoM' : ''}
-          ${d.compare && d.compare.yoy ? delta(d.compare.yoy.change, `${num(d.compare.yoy.sessions)} in ${esc(d.windows.yoy.from)} → ${esc(d.windows.yoy.to)}`) + ' YoY' : ''}</div></div>
+          ${d.compare && d.compare.yoy ? delta(d.compare.yoy.change, `${num(d.compare.yoy.sessions)} in ${esc(humanDate(d.windows.yoy.from))} → ${esc(humanDate(d.windows.yoy.to))}`) + ' YoY' : ''}</div></div>
       <div class="stat"><div class="lab">Engaged</div><div class="val">${num(t.engaged)}</div>
         <div class="sub2">${pct(t.engagementRate)} of sessions</div></div>
       <div class="stat"><div class="lab">Key events</div><div class="val">${num(t.keyEvents)}</div>
@@ -6167,7 +6167,7 @@ function renderPages() {
 
     ${d.compare && (d.compare.yoy || d.compare.prev) ? `<div class="note" style="margin:0 0 14px;">
       <b>MoM</b> compares the ${num(d.windows.days)} days before this range; <b>YoY</b> compares
-      ${esc(d.windows.yoy.from)} → ${esc(d.windows.yoy.to)}. A page published recently will show no prior figure rather
+      ${esc(humanDate(d.windows.yoy.from))} → ${esc(humanDate(d.windows.yoy.to))}. A page published recently will show no prior figure rather
       than a fall.</div>` : ''}
 
     ${d.monthly.length > 1 ? `<div class="card mt">
@@ -8006,7 +8006,7 @@ function renderEcom() {
       if (!v) return;
       const hgt = (v / maxDay) * HH;
       y -= hgt;
-      seg += `<rect x="${(i*bw).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1,bw-gap).toFixed(1)}" height="${hgt.toFixed(1)}" fill="${colour(ch)}"><title>${esc(day.date)} · ${esc(ch)}: ฿${num(Math.round(v))}</title></rect>`;
+      seg += `<rect x="${(i*bw).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1,bw-gap).toFixed(1)}" height="${hgt.toFixed(1)}" fill="${colour(ch)}"><title>${esc(humanDate(day.date) || day.date)} · ${esc(ch)}: ฿${num(Math.round(v))}</title></rect>`;
     });
     return seg;
   }).join('');
@@ -8031,7 +8031,7 @@ function renderEcom() {
       <div class="card-title">Daily revenue by channel</div>
       <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${bars}</svg>
       <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
-        <span>${esc(d.daily[0].date)}</span><span>${esc(d.daily[d.daily.length-1].date)}</span>
+        <span>${esc(humanDate(d.daily[0].date) || d.daily[0].date)}</span><span>${esc(humanDate(d.daily[d.daily.length-1].date) || d.daily[d.daily.length-1].date)}</span>
       </div>
       <div class="legend">${legend}</div>
       <div class="note">Each bar is one day, split by the channel that earned the revenue. Hover any segment for the exact figure.</div>
@@ -8146,7 +8146,7 @@ function renderAudiences() {
     </div>
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
-        <div class="card-title" style="margin:0;">Audience sets · ${esc($('from').value)} → ${esc($('to').value)}</div>
+        <div class="card-title" style="margin:0;">Audience sets · ${esc(humanDate($('from').value))} → ${esc(humanDate($('to').value))}</div>
         <select id="audSort" style="font-size:var(--text-xs);padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--glass-2);color:var(--ink);">
           <option value="primary"${S.audienceSort==='primary'?' selected':''}>Cheapest result first</option>
           <option value="spend"${S.audienceSort==='spend'?' selected':''}>Highest spend</option>
@@ -8295,7 +8295,7 @@ function renderGbp() {
         <div class="sub">${num(L.allTimeCount)} reviews total</div></div>
       <div class="stat card"><div class="lab">Reviews in period</div>
         <div class="val">${num(L.periodCount)}</div>
-        <div class="sub">${esc(d.range.from)} → ${esc(d.range.to)}</div></div>
+        <div class="sub">${esc(humanDate(d.range.from))} → ${esc(humanDate(d.range.to))}</div></div>
       <div class="stat card"><div class="lab">Rating in period</div>
         <div class="val">${L.periodRating!=null?L.periodRating.toFixed(2)+' ★':'—'}</div>
         <div class="sub">${L.allTimeRating!=null&&L.periodRating!=null?(L.periodRating>=L.allTimeRating?'at or above':'below')+' all-time':''}</div></div>
@@ -8304,7 +8304,7 @@ function renderGbp() {
         <div class="sub">${num(L.calls)} calls · ${num(L.directions)} directions</div></div>
       <div class="stat card"><div class="lab">1–3★ recently</div>
         <div class="val" style="${L.recentNegatives?'color:var(--rose)':''}">${num(L.recentNegatives)}</div>
-        <div class="sub">since ${esc(d.recentFrom)}</div></div>
+        <div class="sub">since ${esc(humanDate(d.recentFrom))}</div></div>
     </div>
 
     <div class="card mt">
@@ -8329,13 +8329,13 @@ function renderGbp() {
     </div>
 
     ${(L.recent||[]).length?`<div class="card mt no-print">
-      <h2>Recent reviews &middot; since ${esc(d.recentFrom)}${L.recentUnreplied?` &middot; ${L.recentUnreplied} without a reply`:''}</h2>
+      <h2>Recent reviews &middot; since ${esc(humanDate(d.recentFrom))}${L.recentUnreplied?` &middot; ${L.recentUnreplied} without a reply`:''}</h2>
       <table><thead><tr><th style="width:52px;">Stars</th><th>Review</th><th style="width:92px;">Date</th><th style="width:66px;">Replied</th></tr></thead><tbody>
       ${L.recent.map(r=>`<tr>
         <td class="strong" style="color:${r.star>=4?'var(--green)':(r.star==3?'var(--amber)':'var(--rose)')};">${r.star?r.star+' ★':'—'}</td>
         <td class="i18n" style="white-space:normal;font-size:var(--text-xs);">${r.comment?esc(r.comment):'<span style="color:var(--faint)">rating only, no comment</span>'}
           ${r.reviewer?`<div style="font-size:var(--text-3xs);color:var(--faint);margin-top:3px;">${esc(r.reviewer)}</div>`:''}</td>
-        <td style="font-size:var(--text-2xs);color:var(--muted)">${esc(String(r.at||'').slice(0,10))}</td>
+        <td style="font-size:var(--text-2xs);color:var(--muted)">${esc(humanDate(String(r.at||'').slice(0,10)))}</td>
         <td>${r.replied?'<span class="pill">yes</span>':'<span class="pill warn">no</span>'}</td>
       </tr>`).join('')}
       </tbody></table>
@@ -8813,7 +8813,15 @@ function drawChart(canvasId, rows, series, opts = {}) {
       type: 'line',
       plugins: opts.labels ? [bcPointLabels] : [],
       data: {
-        labels: rows.map(r => r.d),
+        /**
+         * DATES READ "31 Aug 2026", NOT "2026-08-31" (MW, everywhere).
+         *
+         * The axis was printing the raw key. `humanDate` returns '' for
+         * anything that is not a plain ISO date, so month keys, week labels and
+         * category names fall through to the original string untouched — the
+         * axis is not always a date and must not assume it is.
+         */
+        labels: rows.map(r => humanDate(r.d) || r.d),
         datasets: series.map(s => ({
           label: s.label, data: rows.map(r => r[s.key]),
           borderColor: s.color, backgroundColor: s.color + '22',
@@ -9469,7 +9477,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.218.0';
+const CLIENT_BUILD = '3.219.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

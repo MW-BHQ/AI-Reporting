@@ -1,5 +1,35 @@
 ### Recent (August 2026)
 
+**v3.219.0 — user-facing dates read "31 Aug 2026" everywhere. Ten sites fixed.**
+
+MW: "check if date format for users goes 31 Aug 2026 not 2026-08-31 everywhere."
+ISO is the right INTERNAL format — it sorts, carries no timezone, and every key
+in this codebase uses it. It is the wrong thing to show a hospital executive.
+
+Ten places were printing it raw: the TikTok publish date I added in v3.218, the
+CHART X-AXIS on every date-series chart, both GBP ranges, the reviews table, the
+audiences header, a year-on-year note, the LINE same-day label, an e-commerce
+daily tooltip and its axis ends.
+
+**THE AXIS WAS THE BIG ONE** — it appears on every chart with a date series, so
+one line covered more of the deck than the other nine together. `humanDate`
+returns '' for anything that is not a plain ISO date, so month keys, week labels
+and category names fall through untouched; the axis is not always a date and
+must not assume it is.
+
+**`dates:human` IS A TRIPWIRE, AND ITS LIMITS ARE THE POINT.** It matches an ISO
+date interpolated next to visible text with a variable named like a date. It
+cannot see a date built at runtime, so a clean run is NOT proof — I verified by
+walking the rendered text of ten tabs for the ISO pattern and finding none.
+Written down because a green rule that only covers the easy case is exactly the
+kind of thing that gets mistaken for coverage, as `type:scale` was for a dozen
+releases.
+
+It earned its keep immediately: it caught three sites my manual sweep had missed,
+because they only render on states the mock does not reach.
+
+### Recent (August 2026)
+
 **v3.218.0 — TikTok top posts show their publish date. There was no bug; there
 was no way to tell five identical posts apart.**
 

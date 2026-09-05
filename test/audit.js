@@ -371,6 +371,38 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
     : ok("type:scale", "report font sizes all come from the rem scale");
 }
 
+// ------------------------------------------------ user-facing dates are human
+/**
+ * "31 Aug 2026", NEVER "2026-08-31" (MW: check it everywhere).
+ *
+ * ISO is the right INTERNAL format — it sorts, it has no timezone, and every
+ * key in this codebase uses it. It is the wrong thing to show a hospital
+ * executive. Seven places were printing it raw: the TikTok publish date, the
+ * chart x-axis, both GBP ranges, the reviews table, the audiences header and a
+ * year-on-year note.
+ *
+ * This catches only the OBVIOUS shape — an ISO date inside a template literal
+ * next to visible text. It cannot see a date built at runtime, so a clean run
+ * is not proof. It is a tripwire for the easy case, which is how all seven got
+ * in.
+ */
+{
+  const styleStart = html.indexOf("<style>");
+  const styleEnd = html.indexOf("</style>");
+  const jsPart = styleStart === -1 ? html
+    : html.slice(0, styleStart) + html.slice(styleEnd === -1 ? styleStart : styleEnd);
+  // `${esc(x.from)}` style interpolations whose variable name says "date" or
+  // "from"/"to"/"at", printed without going through `humanDate`.
+  const bad = [];
+  const re = /\$\{esc\((?!humanDate)[^)]*\b(?:date|dateFrom|dateTo|recentFrom|posted)\b[^)]*\)\}/g;
+  let m;
+  while ((m = re.exec(jsPart))) bad.push(m[0].slice(0, 60));
+  bad.length
+    ? fail("dates:human", `${bad.length} date(s) printed without humanDate() — readers get ` +
+        `2026-08-31 instead of 31 Aug 2026. At: ${bad[0]}`)
+    : ok("dates:human", "no raw ISO date interpolated into user-facing markup");
+}
+
 // --------------------------------------- scorecard rows must not sit in a card
 /**
  * A LAYOUT CONVENTION THE CONSISTENCY SCAN MISSED.
