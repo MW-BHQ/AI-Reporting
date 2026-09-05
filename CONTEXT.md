@@ -1,5 +1,38 @@
 ### Recent (August 2026)
 
+**v3.220.0 — dates read "09 Aug 2026" and "Aug 2026". Nineteen sites, and my
+first sweep missed nine of them.**
+
+MW: "you haven't changed the date format everywhere yet... make it 09 Aug 2026
+or Aug 2026." He was right — v3.219 fixed ten and left nine, including two he
+found by eye: a review timestamp on Customers Voices and the Published column on
+YouTube Top videos.
+
+**TWO DIGITS ON THE DAY**, so a column of dates lines up instead of ragging by a
+character. The deck's slide range now reads "01 Aug 2026 – 31 Aug 2026".
+
+**`humanDate` NOW ALSO TAKES A MONTH KEY**: `2026-08` -> "Aug 2026". That is
+what unlocked the second half — most of what remained was not day-dates at all
+but MONTH keys in chart tooltips, axis end-labels and table headers across the
+e-commerce tabs, which the first pass never looked for.
+
+**MY TRIPWIRE WAS THE PROBLEM, TWICE.** v3.219's version matched a list of
+variable NAMES I had thought of — a list wrong by construction, which is why
+`sm.when` and `v.published` walked past it. Widening it to any temporal-looking
+word then matched the word "to" inside string literals: 25 false positives.
+Requiring a PROPERTY ACCESS (`\.when`, `\.published`) fixed both. The name list
+is still mine, so the rule is documented as "the known shapes are clean", never
+as proof.
+
+**WHAT ACTUALLY FOUND THEM was walking the rendered text of sixteen tabs** for
+the ISO pattern, including `data-tip` attributes — tooltips are invisible to
+both a source grep and a DOM text walk unless you ask for them specifically.
+That sweep is the check worth repeating, not the audit rule.
+
+ISO stays internally: it sorts, has no timezone, and every key uses it.
+
+### Recent (August 2026)
+
 **v3.219.0 — user-facing dates read "31 Aug 2026" everywhere. Ten sites fixed.**
 
 MW: "check if date format for users goes 31 Aug 2026 not 2026-08-31 everywhere."

@@ -2343,9 +2343,21 @@ const countryFlag = (name) => {
  * headers and the e-commerce report's header need the identical string.
  */
 const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+/**
+ * "09 Aug 2026" for a day, "Aug 2026" for a month (MW). Two digits on the day,
+ * so a column of dates lines up instead of ragging by one character.
+ *
+ * Returns '' for anything else, which is what lets every caller write
+ * `humanDate(x) || x` and leave category labels, week keys and free text
+ * untouched. An axis is not always a date and must not assume it is.
+ */
 function humanDate(v) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ''));
-  return m ? `${Number(m[3])} ${MONTH_ABBR[Number(m[2]) - 1]} ${m[1]}` : '';
+  const s = String(v || '');
+  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (d) return `${d[3]} ${MONTH_ABBR[Number(d[2]) - 1]} ${d[1]}`;
+  const mo = /^(\d{4})-(\d{2})$/.exec(s);
+  if (mo) return `${MONTH_ABBR[Number(mo[2]) - 1]} ${mo[1]}`;
+  return '';
 }
 /**
  * THE PRINTED SLIDE SHELL, SHARED (v3.189.0).
@@ -4081,7 +4093,7 @@ function renderReport() {
                    font-size:var(--text-xs);padding-top:3px">${stars5(sm.stars)}</td>
         ${sm.comment ? `<td><div class="i18n" style="white-space:normal;font-size:var(--text-xs)">${esc(sm.comment)}</div>
           <div style="font-size:var(--text-3xs);color:var(--faint);margin-top:2px">
-            ${esc(sm.reviewer)} \u00b7 ${esc(sm.when)}${sm.replied?'':' \u00b7 no reply yet'}</div></td>`
+            ${esc(sm.reviewer)} \u00b7 ${esc(humanDate(String(sm.when || '').slice(0, 10)) || sm.when)}${sm.replied?'':' \u00b7 no reply yet'}</div></td>`
         : `<td><div style="font-size:var(--text-xs);color:var(--faint)">${num(sm.count)} review${sm.count===1?'':'s'}
             at this rating, none with a comment</div></td>`}
       </tr>`).join('')}
@@ -4638,7 +4650,7 @@ function renderReport() {
       ${vids.map(v => `<tr>
         <td class="strong i18n" title="${esc(v.id)}"><div class="yt-vid">${thumb(v)}
           <span>${esc(v.title || v.id)}</span></div></td>
-        ${anyPub ? `<td class="num">${v.published ? esc(v.published) : '\u2014'}</td>` : ''}
+        ${anyPub ? `<td class="num">${v.published ? esc(humanDate(v.published) || v.published) : '\u2014'}</td>` : ''}
         <td class="num strong">${num(v.views)}</td>
         <td style="width:22%"><div style="height:7px;border-radius:4px;background:var(--violet);
           width:${Math.max(3, Math.round(((v.views || 0) / vmx) * 100))}%"></div></td>
@@ -6148,7 +6160,7 @@ function renderPages() {
   const bw = W / Math.max(d.monthly.length, 1);
   const bars = d.monthly.map((m, i) => `<rect x="${(i*bw).toFixed(1)}" y="${(HH - m.sessions/maxM*HH).toFixed(1)}"
       width="${Math.max(1,bw-4).toFixed(1)}" height="${(m.sessions/maxM*HH).toFixed(1)}" rx="2" fill="var(--violet)" opacity=".85"
-      data-tip="${esc(m.month)}\n${num(m.sessions)} sessions · ${num(m.keyEvents)} key events" style="cursor:pointer;"></rect>`).join('');
+      data-tip="${esc(humanDate(m.month) || m.month)}\n${num(m.sessions)} sessions · ${num(m.keyEvents)} key events" style="cursor:pointer;"></rect>`).join('');
   const maxS = Math.max(...d.sources.map(s => s.sessions), 1);
 
   $('viewRoot').innerHTML = box(`
@@ -6313,7 +6325,7 @@ function renderGads() {
   const bw = W / Math.max(d.monthly.length, 1);
   const bars = d.monthly.map((m, i) => `<rect x="${(i*bw).toFixed(1)}" y="${(HH - m.spend/maxM*HH).toFixed(1)}"
       width="${Math.max(1,bw-4).toFixed(1)}" height="${(m.spend/maxM*HH).toFixed(1)}" rx="2" fill="var(--blue)" opacity=".85"
-      data-tip="${esc(m.month)}\n฿${num(Math.round(m.spend))} · ${num(m.clicks)} clicks" style="cursor:pointer;"></rect>`).join('');
+      data-tip="${esc(humanDate(m.month) || m.month)}\n฿${num(Math.round(m.spend))} · ${num(m.clicks)} clicks" style="cursor:pointer;"></rect>`).join('');
   const maxA = Math.max(...d.accounts.map(a => a.spend), 1);
   const maxC = Math.max(...d.campaigns.map(c => c.spend), 1);
 
@@ -7446,12 +7458,12 @@ function renderEcomChurn() {
   const W = 760, HH = 120;
   const maxLS = Math.max(...ls.map(x => x.customers), 1);
   const bw = W / Math.max(ls.length, 1);
-  const bars = ls.map((x, i) => `<rect x="${(i*bw).toFixed(1)}" y="${(HH - x.customers/maxLS*HH).toFixed(1)}" width="${Math.max(1,bw-3).toFixed(1)}" height="${(x.customers/maxLS*HH).toFixed(1)}" fill="#E8724F" opacity=".8" data-tip="${esc(x.month)}\n${num(x.customers)} customers last bought in this month and have not returned" style="cursor:pointer;"></rect>`).join('');
+  const bars = ls.map((x, i) => `<rect x="${(i*bw).toFixed(1)}" y="${(HH - x.customers/maxLS*HH).toFixed(1)}" width="${Math.max(1,bw-3).toFixed(1)}" height="${(x.customers/maxLS*HH).toFixed(1)}" fill="#E8724F" opacity=".8" data-tip="${esc(humanDate(x.month) || x.month)}\n${num(x.customers)} customers last bought in this month and have not returned" style="cursor:pointer;"></rect>`).join('');
 
   $('viewRoot').innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-      <div class="note" style="margin:0;">Counted as of <b>${esc(d.referenceDate)}</b> — a customer is lost if their last
-      purchase was before <b>${esc(d.cutoff)}</b>.</div>
+      <div class="note" style="margin:0;">Counted as of <b>${esc(humanDate(d.referenceDate) || d.referenceDate)}</b> — a customer is lost if their last
+      purchase was before <b>${esc(humanDate(d.cutoff) || d.cutoff)}</b>.</div>
       ${win}
     </div>
 
@@ -7476,7 +7488,7 @@ function renderEcomChurn() {
       <div class="card-title">Where they were last seen</div>
       <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${bars}</svg>
       <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
-        <span>${esc((ls[0]||{}).month||'')}</span><span>${esc((ls[ls.length-1]||{}).month||'')}</span>
+        <span>${esc(humanDate((ls[0]||{}).month||'') || (ls[0]||{}).month||'')}</span><span>${esc(humanDate((ls[ls.length-1]||{}).month||'') || (ls[ls.length-1]||{}).month||'')}</span>
       </div>
       <div class="note">The month of each lost customer's final purchase. A tall recent bar is not necessarily bad —
       those customers may simply be inside their normal repurchase cycle, which is what the window control adjusts.</div>
@@ -7523,7 +7535,7 @@ function renderEcomMigration() {
       const v = (m.byType || {})[t] || 0;
       if (!v) return;
       const hgt = (v / maxM) * HH; y -= hgt;
-      seg += `<rect x="${(i*bw).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1,bw-3).toFixed(1)}" height="${hgt.toFixed(1)}" fill="${typeColour(t)}" data-tip="${esc(m.month)}\n${v} customer${v===1?'':'s'} moved to ${esc(t)}" style="cursor:pointer;"></rect>`;
+      seg += `<rect x="${(i*bw).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1,bw-3).toFixed(1)}" height="${hgt.toFixed(1)}" fill="${typeColour(t)}" data-tip="${esc(humanDate(m.month) || m.month)}\n${v} customer${v===1?'':'s'} moved to ${esc(t)}" style="cursor:pointer;"></rect>`;
     });
     return seg;
   }).join('');
@@ -7562,7 +7574,7 @@ function renderEcomMigration() {
         customer's first purchase with their later ones inside this range.</div>` : `
       <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${bars}</svg>
       <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
-        <span>${esc(d.months[0]||'')}</span><span>${esc(d.months[d.months.length-1]||'')}</span>
+        <span>${esc(humanDate(d.months[0]||'') || d.months[0]||'')}</span><span>${esc(humanDate(d.months[d.months.length-1]||'') || d.months[d.months.length-1]||'')}</span>
       </div>
       <div class="legend">${destTypes.map(t=>`<span class="lg"><i style="background:${typeColour(t)}"></i>moved to ${esc(t)}</span>`).join('')}</div>
       `}
@@ -7660,7 +7672,7 @@ function renderEcomChannels() {
       const v = m.byChannel[c.channel] || 0;
       if (!v) return;
       const hgt = (v / denom) * HH; y -= hgt;
-      seg += `<rect x="${(i*bw).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1,bw-4).toFixed(1)}" height="${hgt.toFixed(1)}" fill="${colour(c.channel)}"><title>${esc(m.month)} · ${esc(c.channel)}: ฿${num(Math.round(v))}${share?` · ${pct(v/(m.total||1))}`:''}</title></rect>`;
+      seg += `<rect x="${(i*bw).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1,bw-4).toFixed(1)}" height="${hgt.toFixed(1)}" fill="${colour(c.channel)}"><title>${esc(humanDate(m.month) || m.month)} · ${esc(c.channel)}: ฿${num(Math.round(v))}${share?` · ${pct(v/(m.total||1))}`:''}</title></rect>`;
     });
     return seg;
   }).join('');
@@ -7698,7 +7710,7 @@ function renderEcomChannels() {
       </div>
       <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${stack}</svg>
       <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
-        <span>${esc(months[0]||'')}</span><span>${esc(months[months.length-1]||'')}</span>
+        <span>${esc(humanDate(months[0]||'') || months[0]||'')}</span><span>${esc(humanDate(months[months.length-1]||'') || months[months.length-1]||'')}</span>
       </div>
       <div class="legend">${d.channels.map(c=>`<span class="lg"><i style="background:${colour(c.channel)}"></i>${esc(c.channel)}</span>`).join('')}</div>
     </div>
@@ -8527,7 +8539,7 @@ function renderBenchmark() {
       </tbody></table>
     </div>
 
-    <div class="note" style="margin-top:12px;">Computed ${esc((d.computedAt||'').slice(0,16).replace('T',' '))} · stored for ${esc(d.storedFor||'')} (${esc(d.store||'memory')}) · reused until the month rolls over. Press Load to force a recompute.</div>
+    <div class="note" style="margin-top:12px;">Computed ${esc(humanDate((d.computedAt||'').slice(0,10)) || '')} ${esc((d.computedAt||'').slice(11,16))} · stored for ${esc(humanDate(d.storedFor||'') || d.storedFor||'')} (${esc(d.store||'memory')}) · reused until the month rolls over. Press Load to force a recompute.</div>
   `;
 
   document.querySelectorAll('.acct-tab').forEach(b => b.addEventListener('click', () => {
@@ -9477,7 +9489,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.219.0';
+const CLIENT_BUILD = '3.220.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

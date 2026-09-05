@@ -394,7 +394,24 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
   // `${esc(x.from)}` style interpolations whose variable name says "date" or
   // "from"/"to"/"at", printed without going through `humanDate`.
   const bad = [];
-  const re = /\$\{esc\((?!humanDate)[^)]*\b(?:date|dateFrom|dateTo|recentFrom|posted)\b[^)]*\)\}/g;
+  /**
+   * MW found two the first pattern missed — a review timestamp called `when`
+   * and a YouTube column called `published`. The rule was matching variable
+   * NAMES I had thought of, which is a list that is wrong by construction. Now
+   * it matches any interpolation whose name looks temporal, and the name list
+   * is documented as incomplete rather than trusted.
+   */
+  /**
+   * MATCHES A PROPERTY ACCESS, NOT ANY WORD. The first attempt listed bare
+   * words and matched the "to" inside a string literal — 25 false positives.
+   * Requiring a dot before the name means it sees `sm.when` and `v.published`
+   * but not prose.
+   *
+   * The name list is still a list I thought of, which is wrong by construction:
+   * MW found two the first version missed. Treat a green run as "the known
+   * shapes are clean", never as proof.
+   */
+  const re = /\$\{esc\((?!humanDate)[^)]*\.(?:date|when|posted|published|recentFrom|createdAt|created|updatedAt|at)\b[^)]*\)\}/g;
   let m;
   while ((m = re.exec(jsPart))) bad.push(m[0].slice(0, 60));
   bad.length
