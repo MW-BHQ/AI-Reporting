@@ -1,5 +1,34 @@
 ### Recent (August 2026)
 
+**v3.225.0 — the GBP reviews chart is the last 12 months, whatever the range.**
+
+MW: "I expect the stack chart to be last 12 months by default." With a
+month-long range it drew a single bar, which is a bar chart with nothing to
+compare.
+
+**THE SCORECARDS AND THE CHART ANSWER DIFFERENT QUESTIONS, and now the page lets
+them.** The cards answer "this period" — 492 reviews, 01 Aug to 31 Aug. The
+chart answers "what has the trend been", which needs twelve months regardless of
+what the picker says.
+
+**THE PULL WIDENED WITH THE AXIS, deliberately.** `chartFrom` feeds BOTH the
+review pull and `monthsBetween`, so the axis can never be wider than the data
+behind it — the failure mode where a chart shows twelve slots and eleven of them
+are empty because only one month was fetched.
+
+**A LONGER RANGE STILL WINS.** `chartFrom` is never later than `from`, so a
+two-year selection draws thirty-two months. Narrowing a chart below the range
+the reader explicitly asked for would be worse than a crowded axis.
+
+Twelve months back from the FIRST of `to`'s month, so it is twelve whole months
+rather than eleven and a fragment.
+
+Verified: 1-31 Aug gives 12 bars (Sep 2025 -> Aug 2026) with the period card
+still reading 01 Aug -> 31 Aug; a 25-31 Aug range gives the same 12; a
+2024-2026 range gives 32.
+
+### Recent (August 2026)
+
 **v3.224.0 — the GBP chart draws. The month was a STRING being object-spread.**
 
 `months: new Map(months.map((m) => [m.key, { ...m, ...blankMonth() }]))`. On this

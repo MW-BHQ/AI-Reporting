@@ -5183,6 +5183,21 @@ function monthsBetween(fromISO, toISO) {
 }
 
 async function buildGbp(from, to) {
+  /**
+   * Twelve months back from the FIRST of `to`'s month, so the axis always shows
+   * twelve whole months rather than eleven and a fragment. Never later than
+   * `from`: if someone picks a two-year range the chart follows them, because
+   * narrowing a chart below the range the reader asked for would be worse than
+   * a crowded axis.
+   */
+  const chartFrom = (() => {
+    const y = +to.slice(0, 4), m = +to.slice(5, 7);
+    const d = new Date(Date.UTC(y, m - 1, 1));
+    d.setUTCMonth(d.getUTCMonth() - 11);
+    const f = d.toISOString().slice(0, 10);
+    return f < from ? f : from;
+  })();
+
   const recentFrom = (() => {
     const d = new Date(to + "T00:00:00Z");
     d.setUTCDate(d.getUTCDate() - 60);
@@ -5191,8 +5206,18 @@ async function buildGbp(from, to) {
   })();
 
   const { data, errors } = await runJobs({
+    /**
+     * REVIEWS ARE PULLED FOR TWELVE MONTHS, NOT THE SELECTED RANGE (MW: "I
+     * expect the stack chart to be last 12 months by default").
+     *
+     * The scorecards answer "this period"; the stacked chart answers "what has
+     * the trend been", and a trend needs more than the one bar a month-long
+     * range produces. Widening the PULL is what makes that possible — the
+     * in-period figures are then a filter over the same rows, so the two do not
+     * disagree.
+     */
     reviews: windsor("google_my_business",
-      ["review_create_time", "location_title", "review_star_rating"], from, to),
+      ["review_create_time", "location_title", "review_star_rating"], chartFrom, to),
     totals: windsor("google_my_business",
       ["location_title", "review_total_count", "review_average_rating_total"], from, to),
     profile: windsor("google_my_business",
@@ -5207,7 +5232,12 @@ async function buildGbp(from, to) {
     e.status = 502; throw e;
   }
 
-  const months = monthsBetween(from, to);
+  /**
+   * The chart's axis is the last twelve months ending at `to`, independent of
+   * the selected range. `chartFrom` is also what the review pull uses, so the
+   * axis can never be wider than the data behind it.
+   */
+  const months = monthsBetween(chartFrom, to);
   const titleToKey = new Map(GBP_LISTINGS.map((l) => [l.title, l.key]));
 
   // Any listing the account returns that isn't in the configured list still gets
