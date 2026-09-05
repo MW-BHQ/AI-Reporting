@@ -1,5 +1,49 @@
 ### Recent (August 2026)
 
+**v3.217.0 — the SEARCH pages were the truncated ones. v3.216 fixed a block MW
+was not looking at.**
+
+MW summed BGH across its ten locales: 7.4M here, 16.9M in Looker Studio for the
+same scope. I had just shipped v3.216 fixing `languages` — and the Search pages
+do not read `languages`. They read `searchByLanguage`, built from `gscQueries`,
+a query x page pull capped at 25,000 rows a page with `maxPages: 3`. Query x page
+is a cross-product running to millions of rows; 75,000 of it is a sample.
+
+**TWO CONSUMERS, TWO TRUNCATIONS, AND I FIXED THE ONE THAT WAS NOT ON SCREEN.**
+MW said "nothing changed" and was right. The lesson is not about row caps: it is
+that I identified the mechanism correctly and never checked WHICH block rendered
+the figure being questioned. **Trace the number on the screen back to its
+source before fixing anything.**
+
+**TOTALS AND KEYWORDS NOW COME FROM DIFFERENT PLACES, AND MUST.** Headline
+impressions and clicks come from `gscLocaleTotals`, which asks Search Console
+for the figure directly — no dimensions, one row, no ceiling to truncate
+against. The keyword table still comes from `gscQueries`, because a list of
+terms genuinely needs query-level rows, and truncation there costs only the tail
+of a list already labelled "top keywords".
+
+**THE KEYWORD ROWS WILL NOT ADD UP TO THE HEADLINE, and that is correct.** They
+never did — the headline was simply wrong in the same direction, which is what
+hid it.
+
+**FORTY QUERIES, NOT TEN.** The Search pages are per hospital, so the totals are
+keyed by brand AND locale, the regex naming one branch segment instead of
+alternating four. They run concurrently and return a single row each. BHQ is
+summed from the four rather than queried again: a fifth query would be a second
+source of truth for the same number.
+
+**THE MOCK EARNED ITS KEEP.** Its fixtures hold `bangkok-heart` and
+`bangkok-cancer` pages but none under `/bangkok/`, so BGH correctly returns
+nothing while BHT and WSH return data — proving the `bangkok` regex does not
+swallow `bangkok-heart`. That is the exact mistake the fixture set was built to
+catch, and it caught it.
+
+Still unverifiable here: Search Console is unreachable from the build
+environment. On the first real run BGH summed across its locales should read
+about 16.9M.
+
+### Recent (August 2026)
+
 **v3.216.0 — the per-language Search figures were less than half. Search Console
 now does the summing.**
 

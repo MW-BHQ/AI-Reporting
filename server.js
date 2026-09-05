@@ -541,22 +541,53 @@ function gscQuery(dimensions, from, to, opts = {}) {
  * branch, and `en` is not one.
  */
 async function gscLocaleTotals(from, to) {
-  const branches = `(${BRANCH_SEGMENTS.join("|")})`;
+  /**
+   * PER HOSPITAL AS WELL AS PER LOCALE — forty queries, not ten (v3.217.0).
+   *
+   * The Search pages are per hospital: MW's 7.4M was BGH summed across its ten
+   * locales, against 16.9M for the same scope in Looker Studio. So the totals
+   * have to be keyed by brand AND locale, which the regex does directly by
+   * naming ONE branch segment instead of alternating four.
+   *
+   * Forty is still cheap: each returns a single row, they run concurrently, and
+   * Search Console's quota is per minute in the thousands. BHQ is summed from
+   * the four rather than queried again — a fifth query would double-count
+   * nothing but would be a second source of truth for the same number.
+   */
   const out = {};
-  await Promise.all(Object.keys(LOCALES).map(async (code) => {
-    const prefix = code === DEFAULT_LOCALE ? `(${code}/)?` : `${code}/`;
-    const rx = `^https?://[^/]+/${prefix}${branches}([/?]|$)`;
-    try {
-      const rows = await gscQuery([], from, to, { localeRegex: rx, rowLimit: 1 });
-      const r = rows[0] || {};
-      out[code] = { impressions: n(r.impressions), clicks: n(r.clicks) };
-    } catch (e) {
-      // One locale failing must not empty the other nine. `null` is not zero:
-      // the row is left absent so the consumer can tell "no data" from "none".
-      logJson("WARN", "gsc_locale_failed", { code, error: String(e.message || e) });
-      out[code] = null;
+  const jobs = [];
+  for (const brand of BRAND_KEYS) {
+    out[brand] = {};
+    const seg = BRAND_SEGMENT[brand];
+    if (!seg) continue;
+    for (const code of Object.keys(LOCALES)) {
+      const prefix = code === DEFAULT_LOCALE ? `(${code}/)?` : `${code}/`;
+      const rx = `^https?://[^/]+/${prefix}${seg}([/?]|$)`;
+      jobs.push((async () => {
+        try {
+          const rows = await gscQuery([], from, to, { localeRegex: rx, rowLimit: 1 });
+          const r = rows[0] || {};
+          out[brand][code] = { impressions: n(r.impressions), clicks: n(r.clicks) };
+        } catch (e) {
+          // One cell failing must not empty the other thirty-nine. Absent, not
+          // zero, so a consumer can tell "no data" from "none".
+          logJson("WARN", "gsc_locale_failed", { brand, code, error: String(e.message || e) });
+          out[brand][code] = null;
+        }
+      })());
     }
-  }));
+  }
+  await Promise.all(jobs);
+  out.BHQ = {};
+  for (const code of Object.keys(LOCALES)) {
+    let imp = 0, clk = 0, any = false;
+    for (const brand of BRAND_KEYS) {
+      const c = (out[brand] || {})[code];
+      if (!c) continue;
+      imp += c.impressions; clk += c.clicks; any = true;
+    }
+    out.BHQ[code] = any ? { impressions: imp, clicks: clk } : null;
+  }
   return out;
 }
 
@@ -757,6 +788,8 @@ const BRANDS = [
     meta: ["WSH x ADA", "WSH x EGG"] },
 ];
 const BRAND_KEYS = BRANDS.map((b) => b.key);
+/** Brand key -> URL path segment, for building per-hospital page filters. */
+const BRAND_SEGMENT = Object.fromEntries(BRANDS.map((b) => [b.key, b.segment]));
 
 /** Serve all four; reported separately, never folded into a brand. */
 const SHARED_ASSETS = {
@@ -2206,8 +2239,8 @@ async function buildReport(from, to) {
    * The genuine no-fallback case is the one below at `byQuery`, where the row
    * really is a search term with no URL.
    */
-  // Straight from Search Console, one exact total per locale.
-  for (const [code, t] of Object.entries(data.gscLangTotals || {})) {
+  // Straight from Search Console, exact. This block is BHQ-wide.
+  for (const [code, t] of Object.entries((data.gscLangTotals || {}).BHQ || {})) {
     if (!t || !byLang[code]) continue;
     byLang[code].impressions += n(t.impressions);
     byLang[code].clicks += n(t.clicks);
@@ -3353,12 +3386,27 @@ async function buildReport(from, to) {
     SL[k] = {};
     for (const l of Object.keys(LOCALES)) SL[k][l] = { impressions: 0, clicks: 0, terms: new Map() };
   }
+  /**
+   * TOTALS AND KEYWORDS COME FROM DIFFERENT PLACES, AND MUST (v3.217.0).
+   *
+   * `gscQueries` is a query x page pull, which Search Console caps at 25,000
+   * rows a page — three pages here, so 75,000 of a cross-product that runs to
+   * millions. Summing it gave BGH 7.4M against 16.9M in Looker Studio.
+   *
+   * So the headline impressions and clicks now come from `gscLangTotals`, which
+   * asks Search Console for the figure directly and cannot truncate. The
+   * keyword table still comes from `gscQueries`, because a list of terms
+   * genuinely needs query-level rows — and truncation there costs only the tail
+   * of a list already labelled "top keywords", which is honest.
+   *
+   * The consequence to know: the keyword rows will NOT add up to the headline.
+   * They never did; the headline was simply wrong in the same direction, which
+   * is what hid it.
+   */
   for (const r of (data.gscQueries || [])) {
     const bk = brandFromUrl(r.page); if (!bk) continue;
     const lc = localeFromUrl(r.page); if (!lc || !SL[bk][lc]) continue;
     for (const t of [SL[bk][lc], SL.BHQ[lc]]) {
-      t.impressions += n(r.impressions);
-      t.clicks += n(r.clicks);
       const q = String(r.query || "");
       const e = t.terms.get(q) || { query: q, impressions: 0, clicks: 0, posSum: 0, posN: 0 };
       e.impressions += n(r.impressions); e.clicks += n(r.clicks);
@@ -3366,6 +3414,17 @@ async function buildReport(from, to) {
       t.terms.set(q, e);
     }
   }
+  // Headline totals overwrite whatever the keyword loop happened to accumulate.
+  for (const k of [...BRAND_KEYS, "BHQ"]) {
+    const brandTotals = (data.gscLangTotals || {})[k] || {};
+    for (const l of Object.keys(LOCALES)) {
+      const t = brandTotals[l];
+      if (!t || !SL[k][l]) continue;
+      SL[k][l].impressions = n(t.impressions);
+      SL[k][l].clicks = n(t.clicks);
+    }
+  }
+
   const searchByLanguage = Object.fromEntries([...BRAND_KEYS, "BHQ"].map((k) => [k,
     LANG_ORDER.map((l) => {
       const t = SL[k][l];
