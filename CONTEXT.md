@@ -1,5 +1,27 @@
 ### Recent (August 2026)
 
+**v3.233.0 — the GBP chart prints via its SVG twin; Replied is off the PDF.**
+
+**THE COLLAPSE WAS A MISSING CLASS.** `buildPrintSvgs` finds charts by
+`.chart-wrap`, and the GBP chart's div was `.gbp-chart` only — so no SVG twin
+was built and the canvas printed, collapsed, exactly as v3.167 described. Adding
+`chart-wrap` was the whole fix: 1 twin built, chart full width, dead space gone.
+
+Third time in this run that the existing mechanism was already right and the
+element simply was not wired into it (`pn`, `slideShell`, now `chart-wrap`).
+**When print output is wrong, check the element carries the class the print
+machinery looks for before writing anything.**
+
+`Replied` column is `no-print` on the header, the value cell and the empty-level
+placeholder cell — all three, or the columns misalign.
+
+**STILL OPEN: the slide zooms to 0.549**, so the whole page renders at about
+half type size. `fitNativeSlides` is doing what it is told; the content is
+simply ~1310px tall against a 718px sheet. The honest fix is less content per
+slide, not more zoom.
+
+### Recent (August 2026)
+
 **v3.232.0 — GBP slides use `pn`, the solution this project already had.**
 
 MW: "we have passed this issue and found solution before." Right — v3.166 built

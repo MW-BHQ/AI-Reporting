@@ -8339,7 +8339,7 @@ function renderGbp() {
 
     <div class="card mt">
       <h2>Reviews by month &middot; stars stacked, rating overlaid</h2>
-      <div class="gbp-chart" style="height:300px;"><canvas id="gbpChart"></canvas></div>
+      <div class="gbp-chart chart-wrap" style="height:300px;"><canvas id="gbpChart"></canvas></div>
       <!-- Footnote removed (MW). It ran to six lines under a chart whose
            axis now labels itself. -->
     </div>
@@ -8371,7 +8371,7 @@ function renderGbp() {
         kind only when that level has no commented review at all.
       -->
       <h2>Customers Voices</h2>
-      <table><thead><tr><th style="width:52px;">Stars</th><th>Review</th><th style="width:92px;">Date</th><th style="width:66px;">Replied</th></tr></thead><tbody>
+      <table><thead><tr><th style="width:52px;">Stars</th><th>Review</th><th style="width:92px;">Date</th><th class="no-print" style="width:66px;">Replied</th></tr></thead><tbody>
       ${/* `L.samples` is the SERVER's per-star pick, not a client re-derivation:
             it applies the comment-first rule over the full twelve-month pool,
             where `L.recent` is only what the list below needs. Doing it twice
@@ -8382,13 +8382,13 @@ function renderGbp() {
         if (r.empty) return `<tr>
           <td class="strong" style="color:var(--faint);">${r.star} \u2605</td>
           <td style="color:var(--faint);font-size:var(--text-xs);">No review at this rating in the period</td>
-          <td></td><td></td></tr>`;
+          <td></td><td class="no-print"></td></tr>`;
         return `<tr>
         <td class="strong" style="color:${r.star>=4?'var(--green)':(r.star==3?'var(--amber)':'var(--rose)')};">${r.star?r.star+' ★':'—'}</td>
         <td class="i18n" style="white-space:normal;font-size:var(--text-xs);">${r.comment?esc(r.comment):'<span style="color:var(--faint)">rating only, no comment</span>'}
           ${r.reviewer?`<div style="font-size:var(--text-3xs);color:var(--faint);margin-top:3px;">${esc(r.reviewer)}</div>`:''}</td>
         <td style="font-size:var(--text-2xs);color:var(--muted)">${esc(humanDate(String(r.at||'').slice(0,10)))}</td>
-        <td>${r.replied?'<span class="pill">yes</span>':'<span class="pill warn">no</span>'}</td>
+        <td class="no-print">${r.replied?'<span class="pill">yes</span>':'<span class="pill warn">no</span>'}</td>
         </tr>`;
       }).join('')}
       </tbody></table>
@@ -9545,7 +9545,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.232.0';
+const CLIENT_BUILD = '3.233.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
