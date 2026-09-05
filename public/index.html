@@ -505,6 +505,9 @@
     /* All listings is screen-only, so its column would leave the distribution
        at half width on a blank half page. One column when it is gone. */
     .slide.pn .grid.g-2-1{grid-template-columns:1fr!important;}
+    /* Chart left, star distribution right: side by side halves the slide's
+       height, which is what was forcing the 0.549 zoom. Screen stays stacked. */
+    .slide.pn .gbp-row{display:grid;grid-template-columns:1.2fr .8fr;gap:12px;align-items:start;}
     .mr{border:0;border-radius:0;}
     /* Tints can vanish on a mono printer, so the ghost bars keep their outline
        and the panels lose their fill. */
@@ -8337,6 +8340,7 @@ function renderGbp() {
 
     </div>
 
+      <div class="gbp-row">
     <div class="card mt">
       <h2>Reviews by month &middot; stars stacked, rating overlaid</h2>
       <div class="gbp-chart chart-wrap" style="height:300px;"><canvas id="gbpChart"></canvas></div>
@@ -8358,6 +8362,7 @@ function renderGbp() {
         </tbody></table>
       </div>
     </div>
+      </div>
 
   `;
   const gbpVoices = (L.recent||[]).length ? `<div class="card mt gbp-voices">
@@ -9545,7 +9550,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.233.0';
+const CLIENT_BUILD = '3.234.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

@@ -1,5 +1,17 @@
 ### Recent (August 2026)
 
+**v3.234.0 — GBP page one: chart left, star distribution right.**
+
+One wrapper div and one print rule. `.slide.pn .gbp-row` is a 1.2fr/0.8fr grid;
+screen stays stacked because the rule lives in `@media print`.
+
+**STILL 0.549 ZOOM.** Side by side halved the content height and the zoom did
+not move, so `fitNativeSlides` is measuring something other than the visible
+content — most likely the centring spacers, which stretch to fill the slide
+before it is measured. That is the thread to pull next, not more layout.
+
+### Recent (August 2026)
+
 **v3.233.0 — the GBP chart prints via its SVG twin; Replied is off the PDF.**
 
 **THE COLLAPSE WAS A MISSING CLASS.** `buildPrintSvgs` finds charts by
