@@ -1,5 +1,39 @@
 ### Recent (August 2026)
 
+**v3.218.0 — TikTok top posts show their publish date. There was no bug; there
+was no way to tell five identical posts apart.**
+
+MW was sure a clip in the August deck had gone out in September. **He was
+looking at a real ambiguity and I could finally check it directly** — the
+Windsor MCP tools reach the connector from the tool layer even though the build
+container's egress proxy blocks it, which is worth remembering: `get_fields` and
+`get_data` are available for exactly this kind of question.
+
+The account posted the SAME clip five times — 31 Aug, then 1, 2, 3 and 4
+September — one caption, one thumbnail, five video IDs:
+
+    31 Aug 10:23   2,023 views   19 comments   <- the one in the August deck
+     1 Sep 09:30   1,667 views   20 comments
+     2 Sep 09:30   3,178 views   10 comments
+
+The August card matched the 31 Aug upload exactly. **The date filter was
+correct.** What was missing was any way for a reader to tell which upload a card
+referred to, which is a defect of its own — and one that would have cost this
+argument again every month.
+
+`video_create_datetime` was VERIFIED against the live connector before use, not
+guessed from a plausible name. That is the rule this project has broken most
+often; the MCP makes keeping it cheap.
+
+**AND A SEPARATE THING WORTH KNOWING, NOT YET SURFACED:** the Video table's
+metrics are LIFETIME totals — "Total number of likes on the video" — not
+in-window figures. A clip posted on 31 August shows the views it has accrued
+since, including September's. The date range selects WHICH videos appear, not
+what their numbers cover. The footnote already says rates are ours; it does not
+yet say the counts are lifetime.
+
+### Recent (August 2026)
+
 **v3.217.0 — the SEARCH pages were the truncated ones. v3.216 fixed a block MW
 was not looking at.**
 

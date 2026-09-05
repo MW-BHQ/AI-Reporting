@@ -4328,7 +4328,8 @@ function renderReport() {
           <div class="val" style="margin:2px 0 4px">${v ? big(v) : '\u2014'}</div>
           <div class="note i18n" style="margin:0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">
             ${v ? esc(v.caption || '(no caption)') : 'nothing in range'}</div>
-          ${v ? `<div style="font-size:var(--text-3xs);color:var(--faint);margin-top:3px">${num(v.views)} views</div>` : ''}
+          ${v ? `<div style="font-size:var(--text-3xs);color:var(--faint);margin-top:3px">${num(v.views)} views${
+            v.posted ? ` \u00b7 posted ${esc(v.posted)}` : ''}</div>` : ''}
         </div>
       </div>`;
     const ratePct = (v) => (v.rate * 100).toFixed(2) + '%';
@@ -9468,7 +9469,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.217.0';
+const CLIENT_BUILD = '3.218.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

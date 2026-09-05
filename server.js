@@ -1908,8 +1908,22 @@ async function buildReport(from, to) {
    * is the ACCOUNT total. Summing the two together would double count, so they
    * are deliberately never mixed.
    */
+  /**
+   * `video_create_datetime` IS ON THE CARD BECAUSE THE CAPTIONS REPEAT.
+   *
+   * MW saw a clip in the August deck he was sure had gone out in September. It
+   * had not — but five uploads share one caption and one thumbnail (31 Aug,
+   * then 1, 2, 3 and 4 September), so on screen they are indistinguishable.
+   * The 31 Aug post was correctly in range and there was no bug to fix; there
+   * was no way for a reader to tell WHICH upload they were looking at, which is
+   * its own defect. The date settles it at a glance.
+   *
+   * Verified against the live connector before use, not guessed: `get_fields`
+   * on `tiktok_organic` lists it as "Date and time when the video was posted".
+   */
   jobs.ttVideos = windsor("tiktok_organic",
     ["video_id", "video_caption", "video_thumbnail_url", "video_share_url",
+      "video_create_datetime",
       "video_views_count", "video_reach", "video_likes", "video_comments",
       "video_shares", "video_favorites"], from, to);
   jobs.gbp = windsor("google_my_business",
@@ -3200,6 +3214,9 @@ async function buildReport(from, to) {
         id, caption: String(r.video_caption || "").trim(),
         thumb: String(r.video_thumbnail_url || "").trim(),
         url: String(r.video_share_url || "").trim(),
+        // "2026-08-31T10:23:23" -> "2026-08-31". The time of day is noise on a
+        // card; the DATE is what tells five uploads of one clip apart.
+        posted: String(r.video_create_datetime || "").slice(0, 10),
         views: n(r.video_views_count), reach: n(r.video_reach),
         likes: n(r.video_likes), comments: n(r.video_comments),
         shares: n(r.video_shares), favorites: n(r.video_favorites),
