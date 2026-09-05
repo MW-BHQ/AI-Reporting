@@ -1,5 +1,16 @@
 ### Recent (August 2026)
 
+**v3.229.0 — GBP PDF: All listings dropped, Customers Voices on its own page.**
+
+Two class changes and one CSS line. `All listings` gains `no-print`;
+`Customers Voices` LOSES the `no-print` it already carried — it was never in
+the PDF at all — and gains `break-before:page`.
+
+Verified: 3 pages, "all listings" appears 0 times in the extracted text,
+Customers Voices is page 3.
+
+### Recent (August 2026)
+
 **v3.228.0 — Customers Voices always shows five rows; an empty level says so.**
 
 MW: "if in the period is really have no review on which star, just put it as no

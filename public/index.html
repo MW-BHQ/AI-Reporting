@@ -498,6 +498,8 @@
   .mr-foot{margin-top:18px;padding-top:11px;border-top:1px solid var(--line);
     font-size:10.5px;color:var(--faint);display:flex;justify-content:space-between;gap:10px;}
   @media print{
+    /* Customers Voices gets its own sheet; All listings is screen-only. */
+    .gbp-voices{break-before:page;}
     .mr{border:0;border-radius:0;}
     /* Tints can vanish on a mono printer, so the ghost bars keep their outline
        and the panels lose their fill. */
@@ -8334,7 +8336,7 @@ function renderGbp() {
         <table><tbody>${['s5','s4','s3','s2','s1'].map(k=>starRow(k,L.stars[k])).join('')}</tbody></table>
         <div class="note">${num(totalStars)} reviews in the selected range.</div>
       </div>
-      <div class="card"><h2>All listings</h2>
+      <div class="card no-print"><h2>All listings</h2>
         <table><thead><tr><th>Listing</th><th class="num">Rating</th><th class="num">Total</th></tr></thead><tbody>
         ${list.map(l=>`<tr style="${l.key===S.gbpTab?'background:rgba(124,107,245,.05)':''}">
           <td class="strong" style="cursor:pointer" data-gtab2="${esc(l.key)}">${esc(l.key)}<div style="font-size:var(--text-3xs);color:var(--faint);font-weight:400;">${esc(l.title.slice(0,32))}</div></td>
@@ -8344,7 +8346,7 @@ function renderGbp() {
       </div>
     </div>
 
-    ${(L.recent||[]).length?`<div class="card mt no-print">
+    ${(L.recent||[]).length?`<div class="card mt gbp-voices">
       <!--
         ONE SAMPLE PER STAR, HIGHEST FIRST (MW), matching Customers Voices on
         the monthly report. A raw recent list is dominated by five-star
@@ -9526,7 +9528,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.228.0';
+const CLIENT_BUILD = '3.229.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
