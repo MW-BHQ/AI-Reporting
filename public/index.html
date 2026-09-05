@@ -4786,7 +4786,7 @@ function renderReport() {
       const cols = { BGH:'#1B3A7A', BIH:'#9AA3B2', BHT:'#C2185B', WSH:'#F2882B' };
       el._chart = new Chart(el.getContext('2d'), {
         type:'bar',
-        data:{ labels:U.months, datasets:U.series.map(sx=>({
+        data:{ labels:U.months.map(l => humanDate(l) || l), datasets:U.series.map(sx=>({
           label:sx.label, data:sx.data, backgroundColor:cols[sx.key]||C.a, borderRadius:2 })) },
         options:{ responsive:true, maintainAspectRatio:false, animation:false,
           // Stacked: the months chart is about the group total AND its mix.
@@ -4827,7 +4827,7 @@ function renderReport() {
         const band = (k, color, lab) => ({ type:'bar', label:lab, data: mm.map(m=>m[k]||0),
           backgroundColor: color, stack:'s', borderRadius:2, order:2 });
         el._chart = new Chart(el.getContext('2d'), {
-          data:{ labels: mm.map(m=>m.month), datasets:[
+          data:{ labels: mm.map(m=>humanDate(m.month) || m.month), datasets:[
             { type:'line', label:'Average rating', data: mm.map(m=>m.avg), yAxisID:'y1',
               borderColor:'#6C5CE7', backgroundColor:'#6C5CE7', tension:.3, order:1, pointRadius:3 },
             // 5-star at the base so the small low-rating bands stay visible.
@@ -8365,7 +8365,7 @@ function renderGbp() {
     S.charts.gbpChart = new Chart(el, {
       plugins: [stackTotalLabels, ratingDotLabels],
       data: {
-        labels: series.map(m=>m.label),
+        labels: series.map(m=>humanDate(m.label) || m.label),
         // 5★ first puts it at the base of the stack, so the low ratings sit on
         // top where they're actually visible instead of buried under the green.
         datasets: [
@@ -8676,7 +8676,7 @@ function drawFunnelChart(canvasId, stages) {
     S.charts[canvasId] = new Chart(el, {
       type: 'bar',
       plugins: [barValueLabels],
-      data: { labels: usable.map(s=>s.label), datasets: [{
+      data: { labels: usable.map(s=>humanDate(s.label) || s.label), datasets: [{
         data: usable.map(s=>s.value),
         backgroundColor: usable.map(s=>s.color),
         borderRadius: 6, borderSkipped: false, barPercentage: .72,
@@ -8770,7 +8770,16 @@ function drawBars(canvasId, labels, datasets, opts = {}) {
   };
   el._chart = new Chart(el.getContext('2d'), {
     type: 'bar',
-    data: { labels, datasets: datasets.map(ds => ({
+    /**
+     * LABELS ARE HUMANISED HERE, at the one point every caller passes through
+     * (v3.221.0). MW found "2026-01" still on Sessions by month after two
+     * releases of date work — because v3.219 fixed `drawChart`'s labels and
+     * `drawBars` has its own, and I fixed the one I happened to be looking at.
+     *
+     * `humanDate` returns '' for anything that is not a date, so hospital
+     * codes, channel names and package titles pass through untouched.
+     */
+    data: { labels: (labels || []).map(l => humanDate(l) || l), datasets: datasets.map(ds => ({
       label: ds.label, data: ds.data, backgroundColor: ds.color,
       borderRadius: 3, barPercentage: 0.82, categoryPercentage: 0.78,
     })) },
@@ -9489,7 +9498,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.220.0';
+const CLIENT_BUILD = '3.221.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

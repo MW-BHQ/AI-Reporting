@@ -1,5 +1,33 @@
 ### Recent (August 2026)
 
+**v3.221.0 — chart axis labels, at all five entry points this time.**
+
+MW: "I don't think you have scanned the whole war room report." He was right for
+the third release running. Sessions by month still read "2026-01" because
+v3.219 humanised `drawChart`'s labels and `drawBars` has its OWN — plus three
+hand-built Chart.js instances with theirs. **I fixed the one I happened to be
+looking at, twice, and called it done.**
+
+Now humanised at every point that hands labels to Chart.js: `drawChart`,
+`drawBars`, the two combos in `renderReport` and the benchmark chart. `drawBars`
+is the important one — it takes labels as an argument, so doing it inside the
+helper covers every caller including ones added later.
+
+**THE METHOD THAT FINALLY WORKED, and it is not grep.** Walking the rendered
+page finds text and tooltips but NOT canvas labels, because a chart is pixels.
+The sweep now reads `chart.data.labels` off each Chart.js instance directly.
+Three passes: source grep missed the helpers, DOM text missed the canvases, and
+only reading the chart objects saw them.
+
+**STILL OUTSTANDING, and I would rather name them than let a green run imply
+otherwise:** one column header on E-commerce Channels, and two note strings on
+E-commerce and Churn that are built SERVER-side ("no purchase in the 365 days
+before ...", "vs previous 365 days (2024-09-05 ...)"). They are payload text,
+so no client-side formatter reaches them — they need fixing where the sentence
+is composed, which is a server change.
+
+### Recent (August 2026)
+
 **v3.220.0 — dates read "09 Aug 2026" and "Aug 2026". Nineteen sites, and my
 first sweep missed nine of them.**
 
