@@ -1,5 +1,35 @@
 ### Recent (August 2026)
 
+**v3.226.0 — GBP fine-tuning, and a regression of mine from v3.225.**
+
+**THE REGRESSION FIRST: v3.225 broke "Reviews in period".** Widening the review
+PULL to twelve months so the chart had a trend also widened everything that
+counted those rows — the card jumped from 492 to 5.0K for the same 1-31 August
+and silently started reporting the year. The in-period slice is now bounded at
+both ends (`on >= from && on <= to`). **Widening a pull is never only a pull
+change: every consumer of those rows inherits the new window unless it filters.**
+
+MW's four:
+
+ 1. `1-3★ recently` card removed.
+ 2. `All-time reviews` promoted to its own card between the rating and the
+    period count. It was a sub-line under the rating, where a 9,000-review base
+    read as a footnote to a 4.7.
+ 3. `Star distribution · period` now names the dates it covers, so the panel is
+    readable on its own in a PDF.
+ 4. `Recent reviews` becomes `Customers Voices`: **one sample per star, five
+    down to one.** A raw recent list is dominated by five-star reviews, so the
+    two-star a manager actually needs to read is buried. Within a level the pick
+    is the most recent review CARRYING A COMMENT — a bare rating says nothing —
+    falling back to the latest of any kind only when that level has none.
+
+Verified: five cards in the right order, the distribution heading reads
+"01 Jun 2026 – 31 Aug 2026", Customers Voices shows one row per star present
+(5★ and 2★ in the fixture, correctly skipping levels with no reviews), no
+console errors.
+
+### Recent (August 2026)
+
 **v3.225.0 — the GBP reviews chart is the last 12 months, whatever the range.**
 
 MW: "I expect the stack chart to be last 12 months by default." With a

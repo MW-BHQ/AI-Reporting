@@ -5290,9 +5290,21 @@ async function buildGbp(from, to) {
       bucket.count += 1;
       bucket.ratingSum += star;
     }
-    L.stars[`s${star}`] += 1;
-    L.periodCount += 1;
-    L.periodRatingSum += star;
+    /**
+     * IN-PERIOD FIGURES STAY IN PERIOD (v3.226.0).
+     *
+     * v3.225 widened the review PULL to twelve months so the chart has a trend
+     * to draw. Everything below counted every row it received, so "Reviews in
+     * period" jumped from 492 to 5.0K for the same 1-31 August — the card
+     * silently started reporting the year. The chart needs twelve months; the
+     * cards need the selected range; the same rows serve both, filtered here.
+     */
+    const on = String(r.review_create_time || "").slice(0, 10);
+    if (on >= from && on <= to) {
+      L.stars[`s${star}`] += 1;
+      L.periodCount += 1;
+      L.periodRatingSum += star;
+    }
   }
 
   for (const r of data.totals || []) {
@@ -5368,6 +5380,21 @@ async function buildGbp(from, to) {
       m.cumCount = runCount;
     }
     const recent = L.recent.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    /**
+     * ONE SAMPLE PER STAR (MW), the same rule the Monthly Report uses.
+     *
+     * A COMMENT FIRST, then recency: a five-star with no words tells the reader
+     * nothing, and the point of this block is what people SAID. Only when no
+     * review at that rating carries a comment does the latest bare rating stand
+     * in, with its count, so "nothing to quote" is visible rather than an empty
+     * row.
+     */
+    const samples = [5, 4, 3, 2, 1].map((star) => {
+      const all = recent.filter((r) => r.star === star);
+      if (!all.length) return null;
+      const withText = all.find((r) => String(r.comment || "").trim());
+      return { star, count: all.length, ...(withText || all[0]) };
+    }).filter(Boolean);
     const negatives = recent.filter((r) => r.star && r.star <= 3);
     return {
       key: l.key, title: l.title, unlisted: Boolean(l.unlisted),
@@ -5380,6 +5407,7 @@ async function buildGbp(from, to) {
       impressions: L.impressions, calls: L.calls,
       websiteClicks: L.websiteClicks, directions: L.directions,
       recent: recent.slice(0, 25),
+      samples,
       recentNegatives: negatives.length,
       recentUnreplied: recent.filter((r) => !r.replied).length,
     };
