@@ -505,6 +505,10 @@
     /* On a one-page export nothing breaks and nothing is a fixed-height sheet:
        the page IS the content. Slides keep their header and padding. */
     body.pp-onepage .slide{height:auto!important;min-height:0!important;
+      /* `pn` slides clip to a fixed sheet. With the page sized to the content
+         there is no sheet to clip to, and hidden overflow simply ate the
+         tables below the fold. */
+      overflow:visible!important;
       break-after:auto!important;break-before:auto!important;}
     body.pp-onepage .gbp-voices{break-before:auto!important;}
     body.pp-onepage .slide::before,body.pp-onepage .slide::after{display:none!important;}
@@ -5579,9 +5583,18 @@ function renderCampaignBody(d) {
             <td class="num">${num(v.costPerVisit,{money:true})}</td>
             <td class="num">${num(v.costPerContact,{money:true})}</td>
             <td class="num">${num(v.revenue,{money:true})}</td>
-          </tr>${v.adNames&&v.adNames.length?`<tr class="adrow no-print" data-adfor="${esc(v.code)}" hidden>
+          </tr>${v.adNames&&v.adNames.length?`<tr class="adrow" data-adfor="${esc(v.code)}" hidden>
             <td colspan="11"><div style="font-size:var(--text-2xs);color:var(--ink-2);line-height:1.7;">
-            ${v.adNames.map(nm=>`<div>${esc(nm)}</div>`).join('')}</div></td></tr>`:''}`).join('')||((d.orphanAdCampaigns||[]).length?'':'<tr><td colspan="11" class="num">no traffic matched this code</td></tr>')}
+            <table style="width:100%"><thead><tr>
+              <th>Ad campaign</th><th class="num">Impr</th><th class="num">Link clicks</th>
+              <th class="num">Landing views</th><th class="num">Spend</th></tr></thead><tbody>
+            ${(v.adRows||v.adNames.map(nm=>({name:nm}))).map(a2=>`<tr>
+              <td class="i18n">${esc(a2.name)}</td>
+              <td class="num">${a2.impressions==null?'\u2014':num(a2.impressions)}</td>
+              <td class="num">${a2.clicks==null?'\u2014':num(a2.clicks)}</td>
+              <td class="num">${a2.lpv==null?'\u2014':num(a2.lpv)}</td>
+              <td class="num">${a2.spend==null?'\u2014':num(a2.spend,{money:true})}</td>
+            </tr>`).join('')}</tbody></table></div></td></tr>`:''}`).join('')||((d.orphanAdCampaigns||[]).length?'':'<tr><td colspan="11" class="num">no traffic matched this code</td></tr>')}
 
           ${(d.orphanAdCampaigns||[]).map(c=>`<tr>
             <td class="strong i18n trunc" title="${esc(c.name)}">${esc(c.name)}</td>
@@ -9550,6 +9563,12 @@ function clearPrintSvgs() {
 
 function fitNativeSlides() {
   /**
+   * NOT ON A CANVA-STYLE EXPORT. The page is already being sized to the
+   * content, so zooming the slide down to fit a fixed sheet shrinks everything
+   * a second time — which is why the campaign PDF came out unreadable.
+   */
+  if (document.body.classList.contains('pp-onepage')) return;
+  /**
    * `.mr` joins the list. The e-commerce report is one page of fixed-height
    * panels that comes to more than a sheet, and it needs exactly what the `pn`
    * slides need: measure the natural height at print width, zoom to fit, and
@@ -9724,7 +9743,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.248.0';
+const CLIENT_BUILD = '3.249.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

@@ -4080,7 +4080,8 @@ async function buildCampaign(code, from, to) {
      */
     const bySource = variants.filter((v) => hints.some((re) => re.test(v.source)));
     const owned = bySource.length ? bySource : variants;
-    const names = adCampaigns.filter((c) => c.platform === p.platform).map((c) => c.name);
+    const mine = adCampaigns.filter((c) => c.platform === p.platform);
+    const names = mine.map((c) => c.name);
     if (!owned.length) {
       // Nothing in GA4 carries this platform's source, so the media can't fold
       // into a traffic row. Keep it visible rather than silently dropping spend.
@@ -4094,6 +4095,17 @@ async function buildCampaign(code, from, to) {
       v.impressions = n(v.impressions) + p.impressions * share;
       v.clicks = n(v.clicks) + p.clicks * share;
       v.adNames = [...v.adNames, ...names];
+      /**
+       * THE AD CAMPAIGNS WITH THEIR NUMBERS, not just their names (MW: the
+       * reveal "didn't tell anything"). Spend, impressions and link clicks are
+       * per ad campaign and unsplit — the share above divides a platform total
+       * across traffic rows, but each ad campaign's own figures are known
+       * exactly, and a name on its own answers nothing.
+       */
+      v.adRows = [...(v.adRows || []), ...mine.map((c) => ({
+        name: c.name, spend: c.spend, impressions: c.impressions,
+        clicks: c.linkClicks || c.clicks, lpv: c.landingPageViews,
+      }))];
       v.platform = p.platform;
       if (owned.length > 1) v.spendEstimated = true;
     }

@@ -1,5 +1,29 @@
 ### Recent (August 2026)
 
+**v3.249.0 — the reveal carries numbers; the canva PDF is readable and complete.**
+
+**The reveal was a list of names, which answers nothing.** It now shows each ad
+campaign with impressions, link clicks, landing page views and spend — the
+figures are known exactly per ad campaign, unlike the platform total the traffic
+rows split by visit share. It also prints now (`no-print` removed), since a
+reader of the PDF needs it more than a reader of the screen.
+
+**TWO BUGS MADE THE PDF UNREADABLE, and both were one line each.**
+ - `fitNativeSlides` was still zooming the slide to fit a FIXED sheet while
+   `onePageIfAsked` was sizing the page to the content. Everything shrank twice.
+   Skipped on `pp-onepage`.
+ - `.slide` keeps `overflow:hidden` for the fixed-sheet layout, so with the page
+   sized to content it ATE everything below the fold — the whole campaign detail
+   table was missing from the export.
+
+That second one is the failure I hit on GBP in v3.245 and backed away from. It
+was one property. **When a fixed-size layout is reused as a flowing one, the
+things to change are the height AND the overflow — every time.**
+
+Verified: 31.4in page, one page, campaign detail and totals both present.
+
+### Recent (August 2026)
+
 **v3.248.0 — campaign names expand; Campaigns gets the slide shell.**
 
 **Click to expand.** The ad campaign names were in a `title` tooltip: hover
