@@ -1,5 +1,19 @@
 ### Recent (August 2026)
 
+**v3.242.0 — listing tabs out of the PDF; chart 3.5 of 5 columns.**
+
+The tab strip was rendered TWICE: once outside the slides for the screen, and
+once inside page one. Only the second showed up in the PDF, where a nav control
+is not content. Removed from the slide; the screen copy is untouched.
+
+Pill: it was already `L.key`, and the mock had an unlisted profile selected so
+it read "Some Other Cli". On a real listing it reads WSH. Verified.
+
+Chart width matched to 3.5 of the five cards above it: `3.5fr 1.5fr`, in both
+the print rule and `print-prep`.
+
+### Recent (August 2026)
+
 **v3.241.0 — chart gets the width, and the pill names the listing.**
 
 `1.2fr .8fr` -> `1.75fr 1fr` (MW: the rating mix does not need that much

@@ -507,7 +507,7 @@
     .slide.pn .grid.g-2-1{grid-template-columns:1fr!important;}
     /* Chart left, star distribution right: side by side halves the slide's
        height, which is what was forcing the 0.549 zoom. Screen stays stacked. */
-    .slide.pn .gbp-row{display:grid;grid-template-columns:1.75fr 1fr;gap:12px;
+    .slide.pn .gbp-row{display:grid;grid-template-columns:3.5fr 1.5fr;gap:12px;
       align-items:stretch;flex:1 1 auto;min-height:0;}
     /* Both columns take the height the row was given, and the chart grows into
        it — otherwise the row stretches and its contents sit at the top. */
@@ -1697,7 +1697,7 @@
     /* Same height the print rule uses, so the SVG twin is measured at the size
        it will actually be printed at. See `.slide.pn .gbp-row .gbp-chart`. */
     body.print-prep .gbp-chart{height:560px!important;}
-    body.print-prep .gbp-row{display:grid;grid-template-columns:1.75fr 1fr;gap:12px;align-items:stretch;}
+    body.print-prep .gbp-row{display:grid;grid-template-columns:3.5fr 1.5fr;gap:12px;align-items:stretch;}
     body.print-prep{overflow:hidden!important;}
   }
   /**
@@ -8355,7 +8355,6 @@ function renderGbp() {
    * Two sheets: the listing's numbers, then Customers Voices.
    */
   const gbpPage1 = `
-    ${tabStrip}
     ${d.unparsedStars?`<div class="warnbox">${d.unparsedStars} review(s) had a star rating this build couldn't read, so they're excluded from the breakdown.</div>`:''}
     ${L.unlisted?`<div class="warnbox">This listing wasn't in the five you specified, but the account returns it — showing it rather than dropping data.</div>`:''}
 
@@ -9656,7 +9655,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.241.0';
+const CLIENT_BUILD = '3.242.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
