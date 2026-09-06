@@ -517,6 +517,10 @@
     .slide.pn .grid.g-2-1{grid-template-columns:1fr!important;}
     /* Chart left, star distribution right: side by side halves the slide's
        height, which is what was forcing the 0.549 zoom. Screen stays stacked. */
+    /* Campaign: the funnel and its key-events list are a pair, and the detail
+       table must not split. */
+    body.pp-onepage .grid.g-2-1{grid-template-columns:2fr 1fr!important;}
+    body.pp-onepage table{break-inside:avoid;}
     .slide.pn .gbp-row{display:grid;grid-template-columns:3.5fr 1.5fr;gap:12px;
       align-items:stretch;flex:1 1 auto;min-height:0;}
     /* Both columns take the height the row was given, and the chart grows into
@@ -5345,7 +5349,7 @@ function renderCampaigns() {
       <button class="btn btn-primary" id="campGo"><span class="spin"></span><span>Analyse</span></button>
       <button class="btn btn-ghost" id="campBrowse">Browse codes</button>
     </div>
-    <p class="hint">Prefix match, case-insensitive. Type <b>260501</b> to roll up every <b>260501-*</b> variant, or a fuller code to narrow it. Visits and key events come from GA4; impressions are matched from Meta Ads campaign names.</p>
+    <p class="hint no-print">Prefix match, case-insensitive. Type <b>260501</b> to roll up every <b>260501-*</b> variant, or a fuller code to narrow it. Visits and key events come from GA4; impressions are matched from Meta Ads campaign names.</p>
     <div id="campBody">${d ? '' : `<div class="card"><div class="state"><div class="big">No campaign loaded</div>
       <div style="max-width:420px;font-size:var(--text-xs);">Enter a code above, or press <b>Browse codes</b> to see what ran in this date range.</div></div></div>`}</div>
   `;
@@ -5467,6 +5471,10 @@ function renderCampaignBody(d) {
     <div class="grid g-2-1 mt">
       <div class="card">
         <h2>${d.topic?esc(d.topic):'Campaign funnel'} <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--faint);">· ${esc(d.code)}${d.launchDate?` · dated ${esc(d.launchDate)}`:''}</span></h2>
+        <!-- NOT a chart-wrap: chartToSvg reads one backgroundColor per dataset,
+     and this funnel colours each BAR separately, so the twin drew every bar
+     black. The canvas prints correctly; the twin is the wrong tool here
+     until chartToSvg handles per-point colour arrays. -->
         <div style="height:230px;"><canvas id="funnelChart"></canvas></div>
         ${d.offSiteGoal?`<div class="note">Only the ad-platform stages appear: a ${esc((d.goalLabel||'').toLowerCase())} campaign's clicks open a ${d.goal==='leads'?'lead form':'chat'} on Meta, so no website stages follow. A logarithmic axis is used so stages of very different size stay readable.</div>`
           :t.costPerKeyEvent!=null?`<div class="note">Cost per key event: <b>${num(t.costPerKeyEvent,{money:true})}</b> · ${num(t.spend,{money:true})} ÷ ${num(t.keyEvents)} key events. A logarithmic axis keeps impressions and key events readable together.</div>`
@@ -5477,7 +5485,7 @@ function renderCampaignBody(d) {
       </div>
     </div>
 
-    <div class="mt no-print">
+    <div class="mt">
       <div class="card"><h2>Landing pages &middot; what this campaign pointed at</h2>
         <table><thead><tr><th>Page</th><th>Locale</th><th class="num">Visits</th></tr></thead><tbody>
         ${(d.landingPages||[]).map(l=>`<tr>
@@ -5620,7 +5628,7 @@ function renderCampaignBody(d) {
       <div class="note">One row per utm_campaign + source. Ad impressions, clicks and spend are folded onto the matching paid row via utm_source, so organic rows are blank rather than zero; a <span class="pill grey">~</span> means spend was split across variants by visit share. Hover a campaign name for the full string and its underlying ad campaign names. A row marked <b>no GA4 match</b> is ad spend with no matching tagged traffic &mdash; usually a tagging gap worth fixing.${d.notConnected&&d.notConnected.length?` Not authorised in Windsor: ${d.notConnected.map(esc).join(', ')}.`:''}</div>
     </div>
 
-    ${(d.trend||[]).length?`<div class="card mt no-print"><h2>Daily</h2><div class="chart-wrap"><canvas id="campChart"></canvas></div></div>`
+    ${(d.trend||[]).length?`<div class="card mt"><h2>Daily</h2><div class="chart-wrap"><canvas id="campChart"></canvas></div></div>`
       :`<div class="card mt no-print"><h2>Daily</h2><div class="state" style="padding:34px 20px;">
         <div class="big">No daily website activity</div>
         <div style="max-width:420px;font-size:var(--text-xs);">${d.offSiteGoal?'Expected for this campaign type — the results happen on Meta, so there is no day-by-day site traffic to plot.':'No sessions carry this campaign code, so there is nothing to chart.'}</div>
@@ -9743,7 +9751,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.249.0';
+const CLIENT_BUILD = '3.250.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

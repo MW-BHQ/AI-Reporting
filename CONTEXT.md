@@ -1,5 +1,31 @@
 ### Recent (August 2026)
 
+**v3.250.0 — six campaign-PDF fixes. Four clean, two partial, one reverted.**
+
+ 1. **Hint text out of the PDF.** `no-print` on the prefix-match help — input
+    instructions are not report content.
+ 4. **Landing pages back.** It was `no-print`. Verified present.
+ 6. **Daily back.** Same cause, same fix. Verified present.
+ 5. **One ad list, not three.** `adRows` was appended to EVERY traffic row the
+    platform's spend folded onto, so all three sources showed the same pill of
+    13 and the same list. Spend IS split by visit share; the ad campaigns are
+    not divisible. The list now attaches to the row with the largest share.
+    Verified: 1 pill, not 3. `break-inside:avoid` on tables stops the detail
+    block splitting.
+ 2. **PARTIAL.** Key events still prints below the funnel rather than beside it.
+    The `g-2-1` override did not take; the wrapper is not the grid I assumed.
+ 3. **REVERTED.** Giving the funnel a `chart-wrap` produced an SVG twin with
+    every bar BLACK: `chartToSvg` reads ONE `backgroundColor` per dataset, and
+    this funnel colours each bar separately. The canvas prints correctly, so the
+    twin is the wrong tool here until `chartToSvg` handles per-point colour
+    arrays. **A twin that renders is not a twin that renders correctly — look at
+    it.**
+
+**`js:comment-backtick`, again, on the comment explaining the revert.** Caught by
+boot.js. That rule has now paid for itself five times in this project.
+
+### Recent (August 2026)
+
 **v3.249.0 — the reveal carries numbers; the canva PDF is readable and complete.**
 
 **The reveal was a list of names, which answers nothing.** It now shows each ad

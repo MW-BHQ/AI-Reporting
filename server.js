@@ -4102,10 +4102,20 @@ async function buildCampaign(code, from, to) {
        * across traffic rows, but each ad campaign's own figures are known
        * exactly, and a name on its own answers nothing.
        */
-      v.adRows = [...(v.adRows || []), ...mine.map((c) => ({
+      /**
+       * THE AD LIST GOES ON ONE ROW ONLY (MW: all three showed the same 13).
+       *
+       * Spend is SPLIT across the traffic rows by visit share, but the ad
+       * campaigns themselves are not divisible — repeating the same thirteen
+       * under every source read as three different sets of thirteen. It
+       * attaches to the row carrying the largest share, which is the one a
+       * reader opens.
+       */
+      v.adRows = (v !== owned[0]) ? (v.adRows || []) : [...(v.adRows || []), ...mine.map((c) => ({
         name: c.name, spend: c.spend, impressions: c.impressions,
         clicks: c.linkClicks || c.clicks, lpv: c.landingPageViews,
       }))];
+      v.adNames = (v !== owned[0]) ? [] : v.adNames;
       v.platform = p.platform;
       if (owned.length > 1) v.spendEstimated = true;
     }
