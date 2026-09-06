@@ -1,5 +1,26 @@
 ### Recent (August 2026)
 
+**v3.239.0 — star distribution: the label stops wrapping, the count stops
+colliding with the percent.**
+
+MW circled both ends of the row. Left: `5 \u2605` was wrapping onto two lines in
+a 70px cell. Right: `477` and `97.0%` printed as `47797.0%`.
+
+**PADDING BETWEEN TWO RIGHT-ALIGNED CELLS IS NOT SEPARATION.** The first attempt
+put `padding-right:14px` on the count cell — the number is right-aligned to the
+padding edge and the next cell begins immediately after, so the digits still
+touched. They are one cell now with a spaced muted span, which cannot collide
+whatever the column widths do.
+
+Label cell 70px -> 46px with `nowrap`.
+
+**Bar data labels are still NOT in the SVG twin.** The canvas draws them from
+the `stackTotalLabels` plugin, and `chartToSvg` replicates geometry, not
+plugins — the same omission class as the axis titles in v3.238. Porting it is
+the next step if MW wants the per-bar totals in the PDF.
+
+### Recent (August 2026)
+
 **v3.238.0 — taller cards, and the SVG twin finally draws its axis titles.**
 
 Chart 430px -> 560px in both `print-prep` and print (one number, two places —
