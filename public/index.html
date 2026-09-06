@@ -527,6 +527,13 @@
      * box the same box.
      */
     .slide.pn .gbp-row .gbp-chart{height:560px!important;min-height:0;}
+    /* The five star rows spread down the card instead of bunching at the top,
+       and the bar column keeps a fixed gutter from the figures beside it. */
+    .slide.pn .gbp-row > :last-child .card,
+    .slide.pn .gbp-row > :last-child{justify-content:flex-start;}
+    .slide.pn .gbp-row > :last-child table{height:520px;}
+    .slide.pn .gbp-row > :last-child tbody{height:100%;}
+    .slide.pn .gbp-row > :last-child tbody tr{height:20%;}
     .mr{border:0;border-radius:0;}
     /* Tints can vanish on a mono printer, so the ghost bars keep their outline
        and the panels lose their fill. */
@@ -9260,6 +9267,28 @@ function chartToSvg(chart, W, H) {
         + svgEsc(d.backgroundColor || d.borderColor || '#999') + '"/>');
     });
   });
+  /**
+   * STACK TOTALS AND POINT VALUES (MW: "make it similar to the desktop
+   * version").
+   *
+   * The canvas draws these from the `stackTotalLabels` and `ratingDotLabels`
+   * plugins, and `chartToSvg` replicates GEOMETRY, not plugins — so the PDF has
+   * always been missing the numbers the screen shows. Same omission class as
+   * the axis titles in v3.238.
+   *
+   * `stackBase` already holds each column's running total after the bar loop,
+   * so the total is free: no re-summing, and it cannot disagree with the bars
+   * it sits above.
+   */
+  if (stacked && bars.length) {
+    const f0 = yOf(bars[0].yAxisID || 'y');
+    stackBase.forEach((tot, i) => {
+      if (!(tot > 0)) return;
+      out.push('<text x="' + xAt(i).toFixed(1) + '" y="' + (f0(tot) - 6).toFixed(1)
+        + '" text-anchor="middle" font-size="10" font-weight="700" fill="#4C5878">'
+        + svgEsc(String(Math.round(tot))) + '</text>');
+    });
+  }
   ds.filter((d) => (d.type || chart.config.type) !== 'bar').forEach((d) => {
     const f = yOf(d.yAxisID || 'y');
     /**
@@ -9285,6 +9314,23 @@ function chartToSvg(chart, W, H) {
     });
     if (run.length) runs.push(run);
     if (!runs.length) return;
+
+    /**
+     * POINT VALUES, for the series that ask for them. `_showPointLabels` is the
+     * flag the canvas plugin reads, so the twin honours the same one rather
+     * than inventing a second rule that could drift from it.
+     */
+    if (d._showPointLabels) {
+      (d.data || []).forEach((v, i2) => {
+        if (v === null || v === undefined || !isFinite(Number(v))) return;
+        const y = f(v);
+        if (!isFinite(y)) return;
+        out.push('<text x="' + xAt(i2).toFixed(1) + '" y="' + (y - 8).toFixed(1)
+          + '" text-anchor="middle" font-size="9.5" font-weight="700" fill="'
+          + svgEsc(d.borderColor || '#6C5CE7') + '">'
+          + svgEsc(Number(v).toFixed(2)) + '</text>');
+      });
+    }
 
     runs.forEach((pts) => {
       const path = svgSmooth(pts, d.tension || 0);
@@ -9608,7 +9654,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.239.0';
+const CLIENT_BUILD = '3.240.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

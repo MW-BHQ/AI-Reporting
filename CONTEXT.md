@@ -1,5 +1,28 @@
 ### Recent (August 2026)
 
+**v3.240.0 — the SVG twin draws its data labels; star rows distribute evenly.**
+
+**PLUGINS, PORTED AT LAST.** `chartToSvg` replicates geometry, so everything the
+canvas drew from a PLUGIN was missing from every PDF: axis titles (fixed
+v3.238), and now stack totals and point values. Ported both:
+ - Stack totals reuse `stackBase`, which already holds each column's running
+   total after the bar loop — free, and it cannot disagree with the bars it sits
+   above.
+ - Point values honour `_showPointLabels`, the SAME flag the canvas plugin
+   reads, rather than a second rule that could drift from it.
+
+Verified in the render: `1` and `2` above the bars, `4.70` above each rating
+dot — the desktop chart.
+
+**The right block distributes**: the five star rows take 20% of the card each
+instead of bunching at the top.
+
+**THE PATTERN WORTH REMEMBERING: when the PDF is missing something the screen
+has, ask whether a Chart.js PLUGIN draws it.** Three separate omissions, one
+cause, and each was invisible until someone compared the two side by side.
+
+### Recent (August 2026)
+
 **v3.239.0 — star distribution: the label stops wrapping, the count stops
 colliding with the percent.**
 
