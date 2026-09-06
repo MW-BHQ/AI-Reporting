@@ -1,5 +1,32 @@
 ### Recent (August 2026)
 
+**v3.247.0 — the utm_campaign code is the source of truth for ad matching.**
+
+The join required the GA4 row's SOURCE to look like the platform AND its MEDIUM
+to look paid. Both are typed by hand by an agency. On 260811-03 the traffic came
+in as `facebook / social` and `instagram / linkinbio`, so the paid-medium test
+failed, `owned` was empty, and 4.8M impressions with THB 93K of spend printed as
+"Meta Ads · no GA4 match" — while the campaign code matched on every row.
+
+**The code is the one field BHQ sets itself, so it decides.** Every variant in
+scope already matched the searched code by prefix, so all of them are
+candidates. The platform hint only NARROWS, and only when it finds something:
+Meta spend prefers facebook/instagram rows when they exist, otherwise it spreads
+across the code's rows. `utm_medium` is no longer consulted.
+
+`PAID_MEDIUM_RE` is retired from the join and marked "do not reintroduce as a
+match condition".
+
+**The lesson: never gate a join on a field someone else types.** The code was
+right the whole time; the report blamed the campaign for the agency's medium.
+
+**Also true and worth telling MW separately:** `social` and `linkinbio` mean GA4
+classifies that paid traffic as Organic Social everywhere else in the product.
+Fixing the tagging still matters — this change stops it destroying the campaign
+view, not everything else.
+
+### Recent (August 2026)
+
 **v3.246.0 — Campaigns joins the canva-style exports.**
 
 One entry in `ONE_PAGE_VIEWS`. The tab is a single long scroll of tables, so a

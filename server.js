@@ -1333,6 +1333,12 @@ const PLATFORM_SOURCE_HINTS = {
   // youtube or the auto-tagged gclid source.
   "Google Ads": [/^google$/i, /googleads/i, /youtube/i, /(^|[^a-z])gclid([^a-z]|$)/i],
 };
+/**
+ * NO LONGER USED IN THE CAMPAIGN JOIN (v3.247.0) — kept only so the pattern is
+ * on record. It gated ad spend on `utm_medium` looking paid, which is a
+ * hand-typed field and was wrong on the campaign that exposed this. The
+ * utm_campaign code decides now. Do not reintroduce it as a match condition.
+ */
 const PAID_MEDIUM_RE = /(cpc|ppc|paid|display|video|banner)/i;
 
 // ------------------------------------------------------------- /api/overview
@@ -4055,9 +4061,25 @@ async function buildCampaign(code, from, to) {
   for (const p of byPlatform) {
     if (!p.connected || !(p.spend || p.impressions)) continue;
     const hints = PLATFORM_SOURCE_HINTS[p.platform] || [];
-    const owned = variants.filter((v) =>
-      hints.some((re) => re.test(v.source)) && (PAID_MEDIUM_RE.test(v.medium) || PAID_MEDIUM_RE.test(v.source))
-    );
+    /**
+     * THE utm_campaign CODE IS THE SOURCE OF TRUTH (MW, v3.247.0).
+     *
+     * This used to require the GA4 row's SOURCE to look like the platform AND
+     * its MEDIUM to look paid. Both are fields an agency types by hand, and
+     * both were wrong on 260811-03: the traffic arrived as `facebook / social`
+     * and `instagram / linkinbio`, so the paid-medium test failed, `owned` came
+     * back empty, and 4.8M impressions with THB 93K of spend were reported as
+     * "no GA4 match" — while the campaign code matched perfectly on every row.
+     *
+     * The code is the one field BHQ sets itself, so it decides. Every variant
+     * here already matched the searched code by prefix, so they are all
+     * candidates. The platform hint only NARROWS, and only when it finds
+     * something: Meta spend prefers the facebook/instagram rows when they
+     * exist, and otherwise spreads across the code's rows rather than being
+     * orphaned. The medium is no longer consulted at all.
+     */
+    const bySource = variants.filter((v) => hints.some((re) => re.test(v.source)));
+    const owned = bySource.length ? bySource : variants;
     const names = adCampaigns.filter((c) => c.platform === p.platform).map((c) => c.name);
     if (!owned.length) {
       // Nothing in GA4 carries this platform's source, so the media can't fold
