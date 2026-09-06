@@ -5420,7 +5420,13 @@ function renderCampaignBody(d) {
   const engPct = !t.engagement ? 0 : Math.min(100, t.impressions ? Math.max((t.engagement/t.impressions)*100, 0.4)
                                : (t.visits ? Math.max((t.engagement/t.visits)*100,0.4) : 0));
 
-  $('campBody').innerHTML = `
+  /**
+   * PDF MEANS THE SHELL (MW, standing). `slideShell` gives this tab the deck's
+   * header — title, scope pill, date range, logo — and `pn` keeps its desktop
+   * styling. `canva style` is already on for this view, so the sheet is sized
+   * to the content rather than paginated.
+   */
+  $('campBody').innerHTML = slideShell(`Campaign \u00b7 ${d.code || ''}`, `
     ${d.notes ? `<div class="warnbox">${d.offSiteGoal?'<b>This campaign doesn\'t send traffic to the website.</b> ':''}${esc(d.notes)}</div>` : ''}
     <div class="grid g-3">
       <div class="stat card"><div class="lab"><span class="chip" style="background:var(--amber)"></span>Ad spend</div>
@@ -5559,7 +5565,10 @@ function renderCampaignBody(d) {
         </tr></thead>
         <tbody>
           ${(d.variants||[]).map(v=>`<tr>
-            <td class="strong i18n trunc" title="${esc(v.code)}${v.adNames&&v.adNames.length?' \u2014 ad campaigns: '+esc(v.adNames.join(' | ')):''}">${esc(v.code)}</td>
+            <td class="strong i18n trunc" style="${v.adNames&&v.adNames.length?'cursor:pointer;':''}"
+              ${v.adNames&&v.adNames.length?`data-adrow="${esc(v.code)}"`:''}
+              title="${esc(v.code)}">${esc(v.code)}${
+              v.adNames&&v.adNames.length?` <span class="pill grey">${v.adNames.length}</span>`:''}</td>
             <td>${esc(v.source||'—')}${v.medium?' <span style="color:var(--faint)">/ '+esc(v.medium)+'</span>':''}</td>
             <td class="num">${num(v.impressions)}${v.organicSource?' <span class="pill grey" title="From organic Facebook posts matched by short link — not ad-platform data">org</span>':''}${v.lineSent?' <span class="pill grey" title="LINE messages delivered on the campaign date — delivery volume, not views. LINE never reports views or clicks for OA Manager sends.">sent</span>':''}</td>
             <td class="num">${num(v.clicks)}${v.organicSource?' <span class="pill grey" title="From organic Facebook posts matched by short link — not ad-platform data">org</span>':''}</td>
@@ -5570,7 +5579,9 @@ function renderCampaignBody(d) {
             <td class="num">${num(v.costPerVisit,{money:true})}</td>
             <td class="num">${num(v.costPerContact,{money:true})}</td>
             <td class="num">${num(v.revenue,{money:true})}</td>
-          </tr>`).join('')||((d.orphanAdCampaigns||[]).length?'':'<tr><td colspan="11" class="num">no traffic matched this code</td></tr>')}
+          </tr>${v.adNames&&v.adNames.length?`<tr class="adrow no-print" data-adfor="${esc(v.code)}" hidden>
+            <td colspan="11"><div style="font-size:var(--text-2xs);color:var(--ink-2);line-height:1.7;">
+            ${v.adNames.map(nm=>`<div>${esc(nm)}</div>`).join('')}</div></td></tr>`:''}`).join('')||((d.orphanAdCampaigns||[]).length?'':'<tr><td colspan="11" class="num">no traffic matched this code</td></tr>')}
 
           ${(d.orphanAdCampaigns||[]).map(c=>`<tr>
             <td class="strong i18n trunc" title="${esc(c.name)}">${esc(c.name)}</td>
@@ -5601,7 +5612,7 @@ function renderCampaignBody(d) {
         <div class="big">No daily website activity</div>
         <div style="max-width:420px;font-size:var(--text-xs);">${d.offSiteGoal?'Expected for this campaign type — the results happen on Meta, so there is no day-by-day site traffic to plot.':'No sessions carry this campaign code, so there is nothing to chart.'}</div>
       </div></div>`}
-  `;
+  `, { first: true, scope: 'BHQ', cls: 'quiet pn' });
   drawFunnelChart('funnelChart', [
     { label:'Impressions', value:t.impressions, color:'#7C6BF5' },
     { label:'Clicks',      value:t.clicks,      color:'#A9B4CE' },
@@ -5609,6 +5620,17 @@ function renderCampaignBody(d) {
     { label:'Engaged',     value:t.engagement,  color:'#9FC8C2' },
     { label:'Key events',  value:t.keyEvents,   color:'#3BC97F' },
   ]);
+
+  /**
+   * CLICK A CAMPAIGN NAME TO SEE ITS AD CAMPAIGNS (MW).
+   *
+   * The names were already in a `title` tooltip — hover-only, unreadable at
+   * that length, and invisible in the PDF. Same data, in a row that opens.
+   */
+  document.querySelectorAll('[data-adrow]').forEach((td) => td.addEventListener('click', () => {
+    const row = document.querySelector('[data-adfor="' + CSS.escape(td.dataset.adrow) + '"]');
+    if (row) row.hidden = !row.hidden;
+  }));
   if ((d.trend||[]).length) drawChart('campChart', d.trend, [
     { label:'Visits', key:'visits', color:'#4B8DF8', axis:'y' },
     { label:'Key events', key:'keyEvents', color:'#7C6BF5', axis:'y1' },
@@ -9702,7 +9724,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.247.0';
+const CLIENT_BUILD = '3.248.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

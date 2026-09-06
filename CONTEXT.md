@@ -1,5 +1,22 @@
 ### Recent (August 2026)
 
+**v3.248.0 — campaign names expand; Campaigns gets the slide shell.**
+
+**Click to expand.** The ad campaign names were in a `title` tooltip: hover
+only, a wall of text at that length, and absent from the PDF. Now the name cell
+carries a count pill and toggles a row underneath, one ad campaign per line.
+Verified: 4 clickable names, row hidden -> shown on click.
+
+**PDF means the shell.** `slideShell` wraps the campaign body, so this tab gets
+the deck's title, scope pill, date range and logo, with `pn` for desktop
+styling. `canva style` was already on for the view, so the sheet is sized to the
+content.
+
+**Recorded again because I keep needing it: "PDF" is never a print stylesheet.
+It is `slideShell` + `pn`, and `canva style` adds the content-sized page.**
+
+### Recent (August 2026)
+
 **v3.247.0 — the utm_campaign code is the source of truth for ad matching.**
 
 The join required the GA4 row's SOURCE to look like the platform AND its MEDIUM
