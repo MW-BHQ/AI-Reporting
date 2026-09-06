@@ -1,5 +1,15 @@
 ### Recent (August 2026)
 
+**v3.246.0 — Campaigns joins the canva-style exports.**
+
+One entry in `ONE_PAGE_VIEWS`. The tab is a single long scroll of tables, so a
+content-sized page suits it better than anything paginated. Verified: 1 page,
+height from the content.
+
+The trailing-space limitation from v3.245 still applies to both one-page tabs.
+
+### Recent (August 2026)
+
 **v3.245.0 — one-page export measures the last slide's bottom. Trailing space
 NOT fully gone.**
 
