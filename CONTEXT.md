@@ -1,5 +1,27 @@
 ### Recent (August 2026)
 
+**v3.243.0 — the star-distribution figures finally have room.**
+
+Count and percent were printing as `266.7%`. **Three attempts failed before the
+right one, and the reason is worth keeping:**
+
+ 1. `padding-right` on the count — a right-aligned number sits AT the padding
+    edge, so its own box grew and the digits did not move apart.
+ 2. `padding-left` on the percent — same trap from the other side: the content
+    is right-aligned, so left padding grows the box and leaves the text where
+    it was.
+ 3. Explicit `width` on both cells — the table is `auto` layout and collapsed
+    them to content width, so the widths were never honoured.
+
+What works is a **fixed inline-block spacer inside one cell**, plus a
+fixed-width right-aligned span for the percent. It depends on nothing the table
+layout can override.
+
+**THE RULE: to separate two right-aligned figures, put a spacer BETWEEN them.**
+Padding on either side moves a box, not the number inside it.
+
+### Recent (August 2026)
+
 **v3.242.0 — listing tabs out of the PDF; chart 3.5 of 5 columns.**
 
 The tab strip was rendered TWICE: once outside the slides for the screen, and

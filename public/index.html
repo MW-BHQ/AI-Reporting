@@ -8342,7 +8342,7 @@ function renderGbp() {
       <td class="strong" style="width:46px;white-space:nowrap;">${k.slice(1)} \u2605</td>
       <td style="width:100%"><div style="background:rgba(140,155,190,.13);border-radius:5px;height:9px;overflow:hidden;">
         <div style="width:${pct}%;height:100%;background:${STAR_COLORS[k]};"></div></div></td>
-      <td class="num" style="width:118px;white-space:nowrap;">${num(n_)}<span style="color:var(--muted);margin-left:10px;">${totalStars?pct.toFixed(1)+'%':'\u2014'}</span></td>
+      <td class="num" style="white-space:nowrap;">${num(n_)}<span style="display:inline-block;width:26px;"></span><span style="color:var(--muted);display:inline-block;width:52px;text-align:right;">${totalStars?pct.toFixed(1)+'%':'\u2014'}</span></td>
     </tr>`;
   };
 
@@ -9655,7 +9655,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.242.0';
+const CLIENT_BUILD = '3.243.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
