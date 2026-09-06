@@ -513,7 +513,20 @@
        it — otherwise the row stretches and its contents sit at the top. */
     .slide.pn .gbp-row > *,
     .slide.pn .gbp-row .card{display:flex;flex-direction:column;min-height:0;}
-    .slide.pn .gbp-row .gbp-chart{flex:1 1 auto;height:auto!important;min-height:0;}
+    /**
+     * A DEFINITE HEIGHT, NOT `flex:1` (v3.237.0).
+     *
+     * `buildPrintSvgs` measures the wrapper and bakes that size into the twin.
+     * With `height:auto` the wrapper's height came from its content — the twin
+     * itself — so it could never grow: card stretches, chart floats in the
+     * middle. And the measurement happens on SCREEN during `print-prep`, where
+     * `@media print` is not active, so a print-only rule cannot influence it
+     * either.
+     *
+     * One number in both places is what makes the measured box and the printed
+     * box the same box.
+     */
+    .slide.pn .gbp-row .gbp-chart{height:430px!important;min-height:0;}
     .mr{border:0;border-radius:0;}
     /* Tints can vanish on a mono printer, so the ghost bars keep their outline
        and the panels lose their fill. */
@@ -1674,6 +1687,10 @@
        SCREEN measure like a page, never to constrain the page itself. */
     body.print-prep .rail{display:none!important;}
     body.print-prep .main{width:12.493in!important;max-width:none!important;padding:0!important;}
+    /* Same height the print rule uses, so the SVG twin is measured at the size
+       it will actually be printed at. See `.slide.pn .gbp-row .gbp-chart`. */
+    body.print-prep .gbp-chart{height:430px!important;}
+    body.print-prep .gbp-row{display:grid;grid-template-columns:1.2fr .8fr;gap:12px;align-items:stretch;}
     body.print-prep{overflow:hidden!important;}
   }
   /**
@@ -9567,7 +9584,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.236.0';
+const CLIENT_BUILD = '3.237.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

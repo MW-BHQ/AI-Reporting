@@ -1,5 +1,29 @@
 ### Recent (August 2026)
 
+**v3.237.0 — the GBP chart fills its card. Definite height, in BOTH places.**
+
+Two things had to be true at once, and each had defeated a separate attempt:
+
+ - **`height:auto` with `flex:1` can never grow**, because `buildPrintSvgs`
+   bakes the measured size into the twin and the wrapper's height then comes
+   from that twin. Card stretches, chart floats. A definite height breaks the
+   circle.
+ - **The measurement happens on SCREEN**, during `print-prep`, where
+   `@media print` is not active — so a print-only height cannot influence what
+   gets measured. The same number has to exist in `body.print-prep` too.
+
+That is exactly what `print-prep` is for (v3.164): make the on-screen box the
+size the printed box will be, THEN measure. I had been writing print-only rules
+and measuring a screen layout that knew nothing about them.
+
+Result: chart fills its card, zoom improved 0.549 -> 0.602.
+
+**THE GENERAL RULE, now written down: any element whose size is MEASURED before
+printing needs its print height mirrored in `body.print-prep`.** A print-only
+rule is invisible to the measurement.
+
+### Recent (August 2026)
+
 **v3.236.0 — the SVG twin is allowed to scale, but it still does not fill.**
 
 MW remembered right: the chart prints as an SVG twin (v3.167) precisely so its
