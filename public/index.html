@@ -526,7 +526,7 @@
      * One number in both places is what makes the measured box and the printed
      * box the same box.
      */
-    .slide.pn .gbp-row .gbp-chart{height:430px!important;min-height:0;}
+    .slide.pn .gbp-row .gbp-chart{height:560px!important;min-height:0;}
     .mr{border:0;border-radius:0;}
     /* Tints can vanish on a mono printer, so the ghost bars keep their outline
        and the panels lose their fill. */
@@ -1689,7 +1689,7 @@
     body.print-prep .main{width:12.493in!important;max-width:none!important;padding:0!important;}
     /* Same height the print rule uses, so the SVG twin is measured at the size
        it will actually be printed at. See `.slide.pn .gbp-row .gbp-chart`. */
-    body.print-prep .gbp-chart{height:430px!important;}
+    body.print-prep .gbp-chart{height:560px!important;}
     body.print-prep .gbp-row{display:grid;grid-template-columns:1.2fr .8fr;gap:12px;align-items:stretch;}
     body.print-prep{overflow:hidden!important;}
   }
@@ -9423,6 +9423,31 @@ function chartToSvg(chart, W, H) {
       });
     });
   }
+  /**
+   * AXIS TITLES (MW: "don't forget the axis names").
+   *
+   * `chartToSvg` reads ticks and geometry; it never looked at
+   * `scale.options.title`, so the twin printed without the words the canvas
+   * shows. Read from the live scales rather than passed in, so every chart
+   * that has titles gets them and none that lack them gain an empty label.
+   */
+  Object.values(chart.scales || {}).forEach((sc) => {
+    const t = sc.options && sc.options.title;
+    if (!t || !t.display || !t.text) return;
+    const label = String(t.text);
+    const mid = sc.top + (sc.bottom - sc.top) / 2;
+    if (sc.axis === 'y') {
+      const x = sc.position === 'right' ? Math.min(W - 6, sc.right + 12) : Math.max(10, sc.left - 12);
+      out.push('<text x="' + x.toFixed(1) + '" y="' + mid.toFixed(1)
+        + '" transform="rotate(-90 ' + x.toFixed(1) + ' ' + mid.toFixed(1) + ')"'
+        + ' text-anchor="middle" font-size="10" fill="#8A94AD">' + esc(label) + '</text>');
+    } else {
+      const y = Math.min(H - 4, sc.bottom + 26);
+      out.push('<text x="' + (sc.left + (sc.right - sc.left) / 2).toFixed(1) + '" y="' + y.toFixed(1)
+        + '" text-anchor="middle" font-size="10" fill="#8A94AD">' + esc(label) + '</text>');
+    }
+  });
+
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H
     + '" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">' + out.join('') + '</svg>';
 }
@@ -9584,7 +9609,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.237.0';
+const CLIENT_BUILD = '3.238.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

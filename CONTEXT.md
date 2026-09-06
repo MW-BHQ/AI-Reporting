@@ -1,5 +1,30 @@
 ### Recent (August 2026)
 
+**v3.238.0 — taller cards, and the SVG twin finally draws its axis titles.**
+
+Chart 430px -> 560px in both `print-prep` and print (one number, two places —
+the v3.237 rule).
+
+**THE AXIS NAMES WERE NEVER IN THE TWIN.** `chartToSvg` reads ticks, bars, lines
+and legend hitboxes off the live chart and had no idea `scale.options.title`
+existed, so every `pn` chart has printed without its axis names since v3.167.
+MW spotted it on the one chart where the names carry real meaning — "Reviews" on
+the left, "Rating (all-time)" on the right, two different scales that are
+unreadable without labels.
+
+Read from the live scales rather than passed in, so any chart with titles gets
+them and none without gain an empty label. Verified both strings present in the
+emitted SVG.
+
+**This benefits every `pn` chart, not just GBP** — the same omission was on all
+of them.
+
+**Bottom whitespace remains** (~10%): the slide box is sized by
+`fitNativeSlides` at 0.602 and taller content did not change the zoom. Same
+open item as v3.235.
+
+### Recent (August 2026)
+
 **v3.237.0 — the GBP chart fills its card. Definite height, in BOTH places.**
 
 Two things had to be true at once, and each had defeated a separate attempt:
