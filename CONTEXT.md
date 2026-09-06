@@ -1,5 +1,31 @@
 ### Recent (August 2026)
 
+**v3.245.0 — one-page export measures the last slide's bottom. Trailing space
+NOT fully gone.**
+
+**MW's standing instruction, recorded:** "canva style" means free page
+dimensions on the tab he names, and the 16:9 slide format does not apply there.
+`ONE_PAGE_VIEWS` is the list.
+
+Measurement moved from `root.scrollHeight` to the last slide's bottom edge, and
+the slack from 24px to 8px. 18.36in -> 18.21in, so **the container was not the
+main culprit.**
+
+**WHAT IS: `fitNativeSlides` sets an inline `height` and `zoom` on every `pn`
+slide to fit a FIXED sheet, which is the opposite of what a content-sized page
+wants.** I tried skipping it for one-page views and the first slide's content
+was CLIPPED instead — `.slide` keeps `overflow:hidden` from the page-box rules,
+so with no height it clips rather than grows. Reverted: a page with a third
+blank is worse than a page missing its chart, but only just, and shipping the
+clipped version would have been worse than admitting the limit.
+
+**THE REAL FIX IS TO SEPARATE TWO JOBS THAT ARE CURRENTLY ONE.** `.slide` is
+both "a fixed 16:9 sheet" and "a titled section". A one-page export needs the
+second without the first: no `overflow:hidden`, no fixed height, no zoom. That
+is a `pn`/page-box refactor, not another line in `onePageIfAsked`.
+
+### Recent (August 2026)
+
 **v3.244.0 — the GBP tab exports as ONE tall page. Canva style.**
 
 A PDF page has no fixed paper size; every page carries its own dimensions, which

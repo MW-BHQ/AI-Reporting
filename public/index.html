@@ -9585,10 +9585,22 @@ function onePageIfAsked() {
   if (!ONE_PAGE_VIEWS.has(S.view)) { st.textContent = ''; document.body.classList.remove('pp-onepage'); return; }
   document.body.classList.add('pp-onepage');
   const root = $('viewRoot');
-  const h = Math.max(400, Math.ceil(root.scrollHeight));
+  /**
+   * MEASURE THE LAST SLIDE'S BOTTOM, NOT THE CONTAINER.
+   *
+   * `scrollHeight` on the view root overshot by about a third: it includes
+   * trailing margin and whatever the container reserves, none of which is
+   * visible content, so the page ended a long way below the last thing on it.
+   * The bottom edge of the last slide IS where the content ends.
+   */
+  const slides = root.querySelectorAll('.slide');
+  const last = slides[slides.length - 1];
+  const h = Math.max(400, Math.ceil(last
+    ? last.getBoundingClientRect().bottom - root.getBoundingClientRect().top
+    : root.scrollHeight));
   // 96 CSS px to the inch, plus a little slack so a sub-pixel spill cannot
   // emit a second, near-empty page — the v3.162 lesson.
-  st.textContent = '@media print{@page{size:13.333in ' + ((h + 24) / 96).toFixed(2) + 'in;margin:0;}}';
+  st.textContent = '@media print{@page{size:13.333in ' + ((h + 8) / 96).toFixed(2) + 'in;margin:0;}}';
 }
 
 function sizeForPrint() {
@@ -9690,7 +9702,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.244.0';
+const CLIENT_BUILD = '3.245.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
