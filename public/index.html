@@ -502,6 +502,12 @@
        The chart gives back the height that pushed Star distribution onto a
        sheet of its own — cards, chart and distribution now share page one. */
     .gbp-voices{break-before:page;}
+    /* On a one-page export nothing breaks and nothing is a fixed-height sheet:
+       the page IS the content. Slides keep their header and padding. */
+    body.pp-onepage .slide{height:auto!important;min-height:0!important;
+      break-after:auto!important;break-before:auto!important;}
+    body.pp-onepage .gbp-voices{break-before:auto!important;}
+    body.pp-onepage .slide::before,body.pp-onepage .slide::after{display:none!important;}
     /* All listings is screen-only, so its column would leave the distribution
        at half width on a blank half page. One column when it is gone. */
     .slide.pn .grid.g-2-1{grid-template-columns:1fr!important;}
@@ -9559,16 +9565,45 @@ function clearNativeSlides() {
   });
 }
 
+/**
+ * ONE TALL PAGE, CANVA STYLE (MW), for the tabs that ask for it.
+ *
+ * A PDF page has no fixed paper size — every page carries its own dimensions,
+ * which is all Canva is doing when it exports a design of any shape. So instead
+ * of paginating, measure the content and make the page that tall.
+ *
+ * Runs AFTER `resizeChartsForPrint` and BEFORE `fitNativeSlides`: the charts
+ * must already be at print width for the measurement to mean anything, and the
+ * zoom-to-fit must not then squash a page that is now the right height.
+ * `ONE_PAGE_VIEWS` keeps it opt-in — the monthly deck is deliberately paginated
+ * and must not inherit this.
+ */
+const ONE_PAGE_VIEWS = new Set(['gbp']);
+function onePageIfAsked() {
+  let st = document.getElementById('printPageSize');
+  if (!st) { st = document.createElement('style'); st.id = 'printPageSize'; document.head.appendChild(st); }
+  if (!ONE_PAGE_VIEWS.has(S.view)) { st.textContent = ''; document.body.classList.remove('pp-onepage'); return; }
+  document.body.classList.add('pp-onepage');
+  const root = $('viewRoot');
+  const h = Math.max(400, Math.ceil(root.scrollHeight));
+  // 96 CSS px to the inch, plus a little slack so a sub-pixel spill cannot
+  // emit a second, near-empty page — the v3.162 lesson.
+  st.textContent = '@media print{@page{size:13.333in ' + ((h + 24) / 96).toFixed(2) + 'in;margin:0;}}';
+}
+
 function sizeForPrint() {
   const body = document.body;
   if (!body) return Promise.resolve();
   body.classList.add('print-prep');
   return new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)))
-    .then(() => { resizeChartsForPrint(); fitNativeSlides(); buildPrintSvgs();
+    .then(() => { resizeChartsForPrint(); onePageIfAsked(); fitNativeSlides(); buildPrintSvgs();
                   return new Promise((r) => setTimeout(r, 150)); });
 }
 function clearPrintPrep() {
   document.body.classList.remove('print-prep');
+  document.body.classList.remove('pp-onepage');
+  var ps = document.getElementById('printPageSize');
+  if (ps) ps.textContent = '';
 
   clearNativeSlides();
   clearPrintSvgs();
@@ -9655,7 +9690,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.243.0';
+const CLIENT_BUILD = '3.244.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

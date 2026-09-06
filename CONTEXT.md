@@ -1,5 +1,30 @@
 ### Recent (August 2026)
 
+**v3.244.0 — the GBP tab exports as ONE tall page. Canva style.**
+
+A PDF page has no fixed paper size; every page carries its own dimensions, which
+is all Canva does when it exports a design of any shape. So `onePageIfAsked()`
+measures the content and writes `@page{size:13.333in <H>in}` — 18.36in on the
+test render, one page, both sections, no split.
+
+**ORDER MATTERS AND IS LOAD-BEARING:** it runs AFTER `resizeChartsForPrint`, so
+the charts are already at print width when measured, and BEFORE
+`fitNativeSlides`, so the zoom-to-fit does not then squash a page that is now
+exactly the right height.
+
+**OPT-IN VIA `ONE_PAGE_VIEWS`.** The monthly deck is deliberately paginated —
+one slide per section is the format — and must not inherit this.
+
+`body.pp-onepage` drops the fixed slide height, the page breaks and the centring
+spacers. Headers and padding stay, so it still reads as the deck.
+
+**KNOWN: the measured height overshoots**, leaving roughly a third of the page
+blank at the bottom. `scrollHeight` on the view root is picking up more than the
+visible content. The fix is to measure the last slide's bottom edge rather than
+the container.
+
+### Recent (August 2026)
+
 **v3.243.0 — the star-distribution figures finally have room.**
 
 Count and percent were printing as `266.7%`. **Three attempts failed before the
