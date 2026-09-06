@@ -507,7 +507,7 @@
     .slide.pn .grid.g-2-1{grid-template-columns:1fr!important;}
     /* Chart left, star distribution right: side by side halves the slide's
        height, which is what was forcing the 0.549 zoom. Screen stays stacked. */
-    .slide.pn .gbp-row{display:grid;grid-template-columns:1.2fr .8fr;gap:12px;
+    .slide.pn .gbp-row{display:grid;grid-template-columns:1.75fr 1fr;gap:12px;
       align-items:stretch;flex:1 1 auto;min-height:0;}
     /* Both columns take the height the row was given, and the chart grows into
        it — otherwise the row stretches and its contents sit at the top. */
@@ -1697,7 +1697,7 @@
     /* Same height the print rule uses, so the SVG twin is measured at the size
        it will actually be printed at. See `.slide.pn .gbp-row .gbp-chart`. */
     body.print-prep .gbp-chart{height:560px!important;}
-    body.print-prep .gbp-row{display:grid;grid-template-columns:1.2fr .8fr;gap:12px;align-items:stretch;}
+    body.print-prep .gbp-row{display:grid;grid-template-columns:1.75fr 1fr;gap:12px;align-items:stretch;}
     body.print-prep{overflow:hidden!important;}
   }
   /**
@@ -8439,9 +8439,11 @@ function renderGbp() {
       </tbody></table>
       </div>` : '';
   $('viewRoot').innerHTML = tabStrip
+    /* The pill names the LISTING the page is about (MW). "BHQ" was the group
+       scope, which is wrong on a page showing one profile's reviews. */
     + slideShell(`Google Business Profile \u00b7 ${L.title}`, gbpPage1,
-        { first: true, scope: 'BHQ', cls: 'quiet pn' })
-    + slideShell('Customers Voices', gbpVoices, { scope: 'BHQ', cls: 'quiet pn' });
+        { first: true, scope: L.key, cls: 'quiet pn' })
+    + slideShell('Customers Voices', gbpVoices, { scope: L.key, cls: 'quiet pn' });
 
   document.querySelectorAll('[data-gtab]').forEach(b=>b.addEventListener('click',()=>{ S.gbpTab=b.dataset.gtab; renderGbp(); }));
   document.querySelectorAll('[data-gtab2]').forEach(b=>b.addEventListener('click',()=>{ S.gbpTab=b.dataset.gtab2; renderGbp(); }));
@@ -9654,7 +9656,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.240.0';
+const CLIENT_BUILD = '3.241.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

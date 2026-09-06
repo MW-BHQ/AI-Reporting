@@ -1,5 +1,22 @@
 ### Recent (August 2026)
 
+**v3.241.0 — chart gets the width, and the pill names the listing.**
+
+`1.2fr .8fr` -> `1.75fr 1fr` (MW: the rating mix does not need that much
+space). Changed in BOTH the print rule and `body.print-prep`, per the v3.237
+rule — the twin is measured under the prep layout, so a print-only column change
+would have been drawn at the old width.
+
+**THE PILL SAID `BHQ` ON A PAGE ABOUT ONE PROFILE.** It now carries `L.key`, so
+it reads BGH / BIH / BHT / WSH — the listing whose reviews are on the page. BHQ
+is the group scope and was simply the wrong label here.
+
+**One rough edge, known:** an UNLISTED profile has no short key, so its pill
+shows a truncated title ("Some Other Cli"). Fine for the five configured
+listings; worth a proper short name if unlisted profiles become common.
+
+### Recent (August 2026)
+
 **v3.240.0 — the SVG twin draws its data labels; star rows distribute evenly.**
 
 **PLUGINS, PORTED AT LAST.** `chartToSvg` replicates geometry, so everything the
