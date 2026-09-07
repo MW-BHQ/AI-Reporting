@@ -1,5 +1,33 @@
 ### Recent (August 2026)
 
+**v3.256.0 — THE SECOND PAGE WAS `clearPrintPrep` DELETING THE @page RULE
+MID-RENDER.**
+
+MW's console showed `printPageSize` as an empty string. That was the answer, not
+a red herring.
+
+`clearPrintPrep` runs on `afterprint` and again on a 1s timeout. **Chrome fires
+`afterprint` when the DIALOG closes, not when the PDF has finished rendering.**
+On a long document the tall `@page` size was deleted mid-render, the job fell
+back to the stylesheet's 13.333x7.5in slide, and the content paginated. Every
+inch of slack I added was fighting a rule that no longer existed by the time it
+mattered.
+
+**NO TEST COULD HAVE CAUGHT IT**: the headless renderer never calls
+`clearPrintPrep`. The only visible symptom was in MW's browser, in a field I
+asked him to read out — which is the check I should have asked for eight
+releases earlier.
+
+The rule now stays in place after printing. Harmless: `onePageIfAsked` rewrites
+it before every print and clears it for views that are not canva-style.
+
+**AND THE DISTORTED FUNNEL: a CSS height on a CANVAS stretches its bitmap.**
+v3.255 set `#funnelChart{height:380px}` directly, so Chart.js kept its 230px
+backing store and Chrome scaled it — which is why the labels looked smeared. The
+WRAPPER gets the height now and Chart.js redraws at 810x380.
+
+### Recent (August 2026)
+
 **v3.255.0 — funnel fills its card; more slack against the second page.**
 
 **The funnel was a 230px canvas inside a card stretched to match the nine-row

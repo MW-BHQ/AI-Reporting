@@ -519,8 +519,9 @@
     /* The funnel card is stretched to match the key-events list beside it, and a
        230px canvas then sat in the top quarter of it. Same number in print and
        in print-prep, because the twin/canvas is measured under prep. */
-    body.pp-onepage #funnelChart{height:380px!important;}
-    body.pp-onepage #funnelChart{max-height:380px!important;}
+    /* The WRAPPER gets the height, never the canvas: a CSS height on a canvas
+       stretches its bitmap, which is what distorted the funnel's labels. */
+    body.pp-onepage #funnelChart{height:100%!important;}
     body.pp-onepage .slide::before,body.pp-onepage .slide::after{display:none!important;}
     /* All listings is screen-only, so its column would leave the distribution
        at half width on a blank half page. One column when it is gone. */
@@ -1728,7 +1729,7 @@
     /* Same height the print rule uses, so the SVG twin is measured at the size
        it will actually be printed at. See `.slide.pn .gbp-row .gbp-chart`. */
     body.print-prep .gbp-chart{height:560px!important;}
-    body.print-prep #funnelChart{height:380px!important;}
+    body.print-prep .funnel-wrap,body.pp-onepage .funnel-wrap{height:380px!important;}
     body.print-prep .gbp-row{display:grid;grid-template-columns:3.5fr 1.5fr;gap:12px;align-items:stretch;}
     body.print-prep{overflow:hidden!important;}
   }
@@ -5496,7 +5497,7 @@ function renderCampaignBody(d) {
         <!-- Canvas, not a chart-wrap: chartToSvg has no notion of indexAxis, so
              the twin drew this horizontal funnel as vertical bars. Per-bar
              colour is fixed (v3.254.0); orientation is not. -->
-        <div style="height:230px;"><canvas id="funnelChart"></canvas></div>
+        <div class="funnel-wrap" style="height:230px;"><canvas id="funnelChart"></canvas></div>
         ${d.offSiteGoal?`<div class="note">Only the ad-platform stages appear: a ${esc((d.goalLabel||'').toLowerCase())} campaign's clicks open a ${d.goal==='leads'?'lead form':'chat'} on Meta, so no website stages follow. A logarithmic axis is used so stages of very different size stay readable.</div>`
           :t.costPerKeyEvent!=null?`<div class="note">Cost per key event: <b>${num(t.costPerKeyEvent,{money:true})}</b> · ${num(t.spend,{money:true})} ÷ ${num(t.keyEvents)} key events. A logarithmic axis keeps impressions and key events readable together.</div>`
           :`<div class="note">Stages with no data are omitted — a logarithmic axis can't plot zero. ${t.visits?'':'No website visits carry this code.'}</div>`}
@@ -9734,8 +9735,20 @@ function sizeForPrint() {
 function clearPrintPrep() {
   document.body.classList.remove('print-prep');
   document.body.classList.remove('pp-onepage');
-  var ps = document.getElementById('printPageSize');
-  if (ps) ps.textContent = '';
+  /**
+   * THE @page RULE IS NOT CLEARED HERE, and that was the whole bug.
+   *
+   * `clearPrintPrep` runs on `afterprint` and again on a 1s timeout. Chrome
+   * fires `afterprint` when the DIALOG closes, not when the PDF has finished
+   * rendering — so on a long document the tall `@page` size was being deleted
+   * mid-render and the job fell back to the stylesheet's 13.333x7.5in slide,
+   * producing the two pages MW kept getting. His console showed the rule as an
+   * empty string for exactly this reason.
+   *
+   * Leaving it in place is harmless: `onePageIfAsked` rewrites it before every
+   * print, and clears it for views that are not canva-style. No test caught
+   * this because the headless renderer never calls `clearPrintPrep`.
+   */
 
   clearNativeSlides();
   clearPrintSvgs();
@@ -9822,7 +9835,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.255.0';
+const CLIENT_BUILD = '3.256.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
