@@ -1,5 +1,39 @@
 ### Recent (August 2026)
 
+**TikTok MoM verified against TikTok's own dashboard — three of six match to two
+decimals, three do not. Accepted by MW; recorded so it is not re-discovered.**
+
+August 2026, BHQ:
+
+| | Ours | TikTok Studio | |
+|---|---|---|---|
+| Reach | 70.6K / +25.8% | 70,565 / +25.84% | matches |
+| Profile views | 2.0K / +7.9% | 2,016 / +7.92% | matches |
+| Shares | 447 / +25.2% | 447 / +25.21% | matches |
+| Views | 111.5K / +15.1% | 109,112 / +15.48% | **+2.2%** |
+| Likes | 2.3K / +21.4% | 2,098 / +20.78% | **+~200** |
+| Comments | 37 / +19.4% | 37 / +15.62% | total matches, **MoM differs** |
+
+The pattern is the useful part, and it rules things out. Reach, profile views
+and shares agreeing to the second decimal means the connector, the window, the
+field mapping and the arithmetic are all correct — a wrong `cwr.prev`, a
+duplicated pull or a second account folded into the sum would have moved ALL
+six, not three.
+
+So the divergence is per-metric and lives upstream: Windsor's `video_views` and
+`likes` do not count what TikTok Studio's "Video views" and "Likes" count, and
+Comments matches on the total while disagreeing on the prior month — which
+means the two disagree about the PREVIOUS window specifically, not about the
+definition.
+
+MW's call: close enough, move on. If it is ever worth chasing, the next step is
+`get_fields` on `tiktok_organic` to see whether a differently-named views and
+likes field exists, and a single-day pull compared against Studio for one date
+to find which side is including what. Do not touch the MoM plumbing — it is
+demonstrably right on three metrics out of three that agree.
+
+### Recent (August 2026)
+
 **v3.266.0 — TikTok gets MoM. It was the last channel on the deck without one.**
 
 MW has asked for this more than once. The reason it kept getting written down
