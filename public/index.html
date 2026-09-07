@@ -514,7 +514,11 @@
     body.pp-onepage .slide::before,body.pp-onepage .slide::after{display:none!important;}
     /* All listings is screen-only, so its column would leave the distribution
        at half width on a blank half page. One column when it is gone. */
-    .slide.pn .grid.g-2-1{grid-template-columns:1fr!important;}
+    /* SCOPED TO THE GBP ROW. Unscoped, this collapsed EVERY g-2-1 grid on every
+       pn slide to one column — which is why the campaign funnel and its key
+       events list kept printing stacked no matter what I set for them. The
+       single column is only right where All listings is hidden beside it. */
+    .slide.pn .gbp-row .grid.g-2-1{grid-template-columns:1fr!important;}
     /* Chart left, star distribution right: side by side halves the slide's
        height, which is what was forcing the 0.549 zoom. Screen stays stacked. */
     /* Campaign: the funnel and its key-events list are a pair, and the detail
@@ -9790,7 +9794,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.252.0';
+const CLIENT_BUILD = '3.253.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

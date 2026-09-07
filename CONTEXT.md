@@ -1,5 +1,29 @@
 ### Recent (August 2026)
 
+**v3.253.0 — the funnel and its key-events list finally print side by side.**
+
+Item 2 of MW's six, open for three releases. The cause was a rule I wrote for
+GBP in v3.232:
+
+    .slide.pn .grid.g-2-1{grid-template-columns:1fr!important;}
+
+Unscoped, it collapsed EVERY `g-2-1` grid on EVERY `pn` slide to one column. So
+the campaign funnel and key-events pair were being flattened by a fix aimed at a
+different tab, and nothing I set for them could win — my override sat earlier in
+the file at equal specificity.
+
+Now scoped to `.slide.pn .gbp-row .grid.g-2-1`, which is the only place the
+single column is right (All listings is hidden beside it there).
+
+**AN `!important` WITHOUT A SCOPE IS A TRAP FOR EVERY LATER TAB.** That rule was
+correct for its own page and wrong for the product, and it cost three attempts
+at the wrong problem.
+
+Verified in print media: 870px / 435px columns, campaigns 1 page, GBP still 1
+page.
+
+### Recent (August 2026)
+
 **v3.252.0 — MY TESTS WERE LYING. The canva export was two pages all along.**
 
 MW: "nothing changed, how can I help? you've been stuck here a long while."
