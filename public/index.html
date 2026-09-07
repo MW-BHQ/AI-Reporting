@@ -8855,7 +8855,14 @@ function drawFunnelChart(canvasId, stages) {
           x: { type: 'logarithmic', ticks: { color:'#A7B0C7', font:{family:'Poppins',size:10},
                  callback: (v) => { const l=Math.log10(v); return Number.isInteger(l) ? (v>=1000?(v/1000)+'k':v) : ''; } },
                grid: { color:'rgba(90,110,160,.09)' } },
-          y: { ticks: { color:'#4C5878', font:{family:'Poppins',size:11} }, grid: { display:false } },
+          /**
+           * `autoSkip:false` — there are FIVE stages and every one is named in
+           * the label, so dropping "Clicks" and "Engaged" to save vertical
+           * space left two unlabelled bars. A funnel with anonymous rungs is
+           * not a funnel.
+           */
+          y: { ticks: { color:'#4C5878', font:{family:'Poppins',size:11}, autoSkip:false },
+               grid: { display:false } },
         },
       },
     });
@@ -9710,7 +9717,9 @@ function onePageIfAsked() {
    * with row count, and I cannot reproduce his exact content. Blank tail on a
    * content-sized page is free; a second sheet is not.
    */
-  const tall = Math.ceil(h * 1.03) + 48;
+  // +72px, not +48: MW's last card was being shaved by a few pixels at the
+  // bottom edge. Over-reserving is invisible; a clipped card is not.
+  const tall = Math.ceil(h * 1.03) + 72;
   st.textContent = '@media print{@page{size:13.333in ' + (tall / 96).toFixed(2) + 'in;margin:0;}}';
 }
 
@@ -9835,7 +9844,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.256.0';
+const CLIENT_BUILD = '3.257.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

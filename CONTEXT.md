@@ -1,5 +1,23 @@
 ### Recent (August 2026)
 
+**v3.257.0 — the funnel names all five stages; the tail is not shaved.**
+
+**The funnel's missing bars were Chart.js `autoSkip`.** Two of the five category
+labels — Clicks and Engaged — were being dropped to save vertical space, leaving
+two anonymous bars. I had been treating this as a sizing problem for four
+releases; it was a tick option. `autoSkip:false` on the category axis. Verified:
+all five labels present in `scales.y.ticks`.
+
+Page slack +48 -> +72px: MW's last card was shaved by a few pixels. Over-
+reserving is invisible on a content-sized page; a clipped card is not.
+
+**Print pipeline is now settled for canva-style views.** For the record, in the
+order they must run: `resizeChartsForPrint` -> `markOnePage` -> `fitNativeSlides`
+(skipped when marked) -> `buildPrintSvgs` -> `onePageIfAsked`. The `@page` rule
+must survive `afterprint`. Wrapper heights, never canvas heights.
+
+### Recent (August 2026)
+
 **v3.256.0 — THE SECOND PAGE WAS `clearPrintPrep` DELETING THE @page RULE
 MID-RENDER.**
 
