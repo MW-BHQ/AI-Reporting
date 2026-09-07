@@ -1,5 +1,76 @@
 ### Recent (August 2026)
 
+**v3.267.0 — Google Ads Benchmarks. A new tab, and the answer to "should we
+spend more".**
+
+MW: "on Meta Ads, we have benchmark and audience. on Google Ads, we have
+nothing — let's do benchmark for it and other insightful that only us can
+pull."
+
+Two halves. The efficiency table is the Meta benchmark's twin — latest complete
+month against trailing 3/6/12-month norms, totals summed then divided rather
+than averaged from monthly ratios. The other half is the thing Meta has no
+equivalent for: **impression share**, the impressions we were eligible for and
+did not win.
+
+**THE SPLIT IS THE WHOLE POINT.** "Impression share 46%" invites "spend more".
+52% lost to RANK against 12% lost to BUDGET says the opposite: more money buys
+almost nothing and the bid, keyword or landing page is the constraint. Two
+opposite decisions, so they are never shown as one number.
+
+**IMPRESSION SHARE CANNOT BE SUMMED OR AVERAGED.** It is a ratio over an
+ELIGIBLE base that Google aggregates per request. The real August pull proves
+it: `BGH x ADA` returns won .6374 + budget-lost .106 + rank-lost .3325 =
+**1.0759**. Correct weighting does not fix that — each component has its own
+base, so they are individually right and mutually inconsistent.
+
+So eligible impressions are reconstructed per account (`impressions / share`)
+and the roll-up is `won / eligible`. On the fixture: correctly weighted 45.5%,
+naive mean of the three 43.9%, mean counting the null-share account as zero
+33.0%. All three look plausible on a card; one is right.
+
+Two consequences worth knowing:
+- **Each window needs its own pull.** A daily series cannot be re-aggregated
+  into a monthly share, so `/api/gads-benchmark` asks Google four times.
+- **The bar is drawn from won vs NOT won**, which do sum to 1 by construction,
+  with the miss divided in the RATIO of the two causes. Drawn from the three raw
+  shares it summed to 109.9%, overflowed its container and silently clipped the
+  rank segment — a chart contradicting the number printed beside it.
+
+**A NULL SHARE IS NOT A ZERO.** `BHQ Inter x ADA` is the biggest spender in the
+account and returns `search_impression_share: null` — Performance Max has no
+search auction to be in. Counted as 0 it drags the group share down and invents
+a budget problem. Excluded, and the excluded spend is named on the card so the
+roll-up cannot quietly cover a third of the budget.
+
+**"Spending without a recorded conversion", and who should fix it.** The August
+pull has THB 70,785 and THB 20,860 against 0 and 0.32 conversions — 40% of the
+month's Google Ads budget. GA4 key events for the same account separate the two
+causes: key events present means the traffic converts and Google cannot see it,
+which is a tracking fix that costs nothing; neither means unproductive spend or
+an account whose campaigns carry no code. Conversion counts stay FRACTIONAL —
+Google splits credit across attribution paths, and 0.32 rounded to 0 loses the
+fact that tracking fires at all.
+
+**`gadsbench` is a VIEW, NOT A PERMISSION.** `/api/gads-benchmark` is gated on
+`gads` server-side, so the server stays the single source of truth. Its own tab
+id would mean every user who already has `gads` silently loses the new page
+until someone re-ticks a box. The Monthly Reports nav does the same thing the
+other way round: four items share one `data-view` to stay one permission.
+
+**The audit caught three things, all fixed properly rather than exempted:** the
+comparison chip now routes through `changeText` so a runaway delta caps at
+">10x" (a cost-per-conversion norm of a fraction of a THB renders as +42867%,
+which shipped on the Pages tab once); the comparison row writes its six cells
+out instead of mapping, because the table-alignment rule counts cells and
+cannot evaluate a `.map()`; and two of my own comments quoted the forbidden
+idioms verbatim and flagged themselves.
+
+Guarded by nine endpoint assertions, the load-bearing one being that the
+weighted share is 45.5% and not 43.9% or 33.0%.
+
+### Recent (August 2026)
+
 **TikTok MoM verified against TikTok's own dashboard — three of six match to two
 decimals, three do not. Accepted by MW; recorded so it is not re-discovered.**
 

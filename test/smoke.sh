@@ -103,6 +103,34 @@ expect_field "sa bcm not a brand"  "$REPORT" "d.searchAds.byBrand.every(b=>b.imp
 # Cross-network guard was relaxed to match the channel on its own.
 expect_field "sa excludes x-network" "$REPORT" "${SA}'BGH').visits===400?400:undefined"
 
+echo "--- google ads benchmark: impression share must not be summed or averaged ---"
+GB="/api/gads-benchmark?to=$TO"
+GBS="d.all.windows.m1.share"
+expect_field "gb share available"  "$GB" "${GBS}.available===true?'ok':undefined"
+# THE ARITHMETIC ASSERTION. The fixture's three search accounts hold shares of
+# .6374, .5094 and .1711 over very different impression volumes, so:
+#   correctly weighted (won / reconstructed eligible) -> 0.455
+#   a naive mean of the three                         -> 0.439
+#   a mean that counted the null-share account as 0   -> 0.330
+# Only one of those is right and all three look plausible on a card.
+expect_field "gb share weighted"   "$GB" "Math.round(${GBS}.impressionShare*1000)===455?'ok':undefined"
+expect_field "gb share under 1"    "$GB" "${GBS}.impressionShare<1?'ok':undefined"
+# A NULL SHARE IS NOT A ZERO. The fixture's biggest spender is Performance Max
+# and returns null; it must be excluded from the roll-up and its spend named,
+# or the group share silently covers a third of the budget it never measured.
+expect_field "gb null share out"   "$GB" "${GBS}.searchAccounts===3?3:undefined"
+expect_field "gb excluded named"   "$GB" "${GBS}.noShareSpend>0?'ok':undefined"
+# won + missed must reconcile against eligible, since that pair is what the bar
+# is drawn from.
+expect_field "gb won plus missed"  "$GB" "${GBS}.wonImpressions+${GBS}.missedImpressions===${GBS}.eligibleImpressions?'ok':undefined"
+# Spend with no conversion is called out rather than left in a table.
+expect_field "gb silent listed"    "$GB" "d.silent.length>=1?d.silent.length:undefined"
+expect_field "gb silent spend"     "$GB" "d.silentSpend>0?'ok':undefined"
+# The trailing window must be a DIFFERENT window. June clicks are cheaper in the
+# fixture, so July's cost per click has to come out above the 3M norm; a 0 here
+# means every window was handed the same range.
+expect_field "gb window separated" "$GB" "d.all.comparison.find(m=>m.id==='cpc').vs.m3.deltaPct>1?'ok':undefined"
+
 echo "--- monthly report: TikTok MoM (v3.266.0) ---"
 # TikTok was the last channel on the deck with no comparison, and its absence
 # rendered perfectly, so these assert the COMPARISON and not just its presence.

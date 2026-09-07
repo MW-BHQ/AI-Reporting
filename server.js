@@ -7932,6 +7932,343 @@ async function buildGoogleAds(from, to) {
   };
 }
 
+// ------------------------------------------------- /api/gads-benchmark
+/**
+ * GOOGLE ADS BENCHMARKS — the Meta benchmark's twin, plus the thing Google Ads
+ * has that Meta does not: IMPRESSION SHARE.
+ *
+ * Meta tells you what you spent. Google tells you what you COULD have had, and
+ * splits the miss into two causes that call for opposite responses:
+ *   · lost to BUDGET  — the auction was winnable and we ran out of money.
+ *   · lost to RANK    — more money changes nothing; the bid, the keyword or the
+ *                       landing page is the problem.
+ * A single "impression share 51%" hides which one it is, which is why this
+ * reports the split rather than the headline.
+ *
+ * IMPRESSION SHARE CANNOT BE SUMMED, AND THIS IS THE WHOLE TRAP.
+ *
+ * It is a ratio of won to ELIGIBLE impressions, so adding it across accounts or
+ * across days is meaningless — the August pull already shows it: BGH x ADA
+ * returns won .6374 + budget-lost .106 + rank-lost .3325 = 1.0759, because
+ * Google aggregates each share over a different eligible base. Summing six
+ * accounts would produce a number over 100% and nobody would notice.
+ *
+ * So eligible impressions are RECONSTRUCTED per account (`impressions / share`)
+ * and the roll-up is `won / eligible` over those. That is the only way to
+ * combine it, and it is also why each window needs its OWN pull: a daily series
+ * cannot be re-aggregated into a monthly share either.
+ *
+ * A NULL SHARE IS NOT A ZERO. `BHQ Inter x ADA` spends the most of any account
+ * and returns `search_impression_share: null` — it is not a Search campaign, so
+ * it has no search auction to win. Counted as 0 it would drag the group share
+ * down and invent a budget problem. Excluded instead, and the excluded spend is
+ * reported so the roll-up cannot quietly cover a third of the budget.
+ */
+const GADS_MONTHLY_FIELDS = ["date", "account_name", "spend", "impressions", "clicks",
+  "conversions", "invalid_clicks"];
+/**
+ * Requested per WINDOW, never per date, for the reason above. `conversions` is
+ * FRACTIONAL in this connector (BGH x EGG returns 0.3245 for a month) because
+ * Google splits credit across attribution paths. It must not be rounded or
+ * treated as an integer count — 0.3245 conversions on THB 20,860 of spend is
+ * the finding, and rounding it to 0 loses the fact that tracking is live at all.
+ */
+const GADS_SHARE_FIELDS = ["account_name", "spend", "impressions", "clicks", "conversions",
+  "search_impression_share", "search_budget_lost_impression_share",
+  "search_rank_lost_impression_share", "search_absolute_top_impression_share"];
+
+const GADS_BLANK = () => ({
+  spend: 0, impressions: 0, clicks: 0, conversions: 0, invalidClicks: 0,
+  visits: 0, keyEvents: 0, contacts: 0, revenue: 0,
+});
+
+/**
+ * Cost-per-X and per-THB1,000 rates. `conversions` here is GOOGLE'S count and
+ * `keyEvents` is GA4's; they are never added together and never substituted for
+ * each other. They measure different things (Google credits a click within its
+ * lookback window, GA4 credits a session) and a reader who cannot tell them
+ * apart will mistake one for a correction of the other.
+ */
+const gadsDerive = (t) => {
+  const o = { ...t };
+  o.ctr = t.impressions ? t.clicks / t.impressions : null;
+  o.cpc = t.spend && t.clicks ? t.spend / t.clicks : null;
+  o.cpm = t.impressions ? (t.spend / t.impressions) * 1000 : null;
+  o.costPerConversion = t.spend && t.conversions ? t.spend / t.conversions : null;
+  o.costPerVisit = t.spend && t.visits ? t.spend / t.visits : null;
+  o.costPerKeyEvent = t.spend && t.keyEvents ? t.spend / t.keyEvents : null;
+  o.costPerContact = t.spend && t.contacts ? t.spend / t.contacts : null;
+  o.keyEventsPerK = t.spend ? t.keyEvents / (t.spend / 1000) : null;
+  o.visitsPerK = t.spend ? t.visits / (t.spend / 1000) : null;
+  // Clicks Google charged for and then discarded as invalid.
+  o.invalidRate = t.clicks + t.invalidClicks ? t.invalidClicks / (t.clicks + t.invalidClicks) : null;
+  o.roas = t.spend ? t.revenue / t.spend : null;
+  return o;
+};
+
+/**
+ * Combine per-account impression shares into one honest group figure.
+ *
+ * Returns null shares rather than zeros when nothing in the set had a search
+ * auction, and always reports how much spend was excluded.
+ */
+function rollUpShare(rows) {
+  let won = 0, eligible = 0, budgetLost = 0, rankLost = 0, absTop = 0;
+  let searchSpend = 0, noShareSpend = 0, accounts = 0;
+  for (const r of rows) {
+    const share = r.search_impression_share;
+    // Strictly null/undefined only. A genuine 0 share (eligible but never won)
+    // is real data and must stay in the denominator.
+    if (share === null || share === undefined) { noShareSpend += n(r.spend); continue; }
+    const imp = n(r.impressions);
+    const elig = share > 0 ? imp / share : 0;
+    if (!elig) { noShareSpend += n(r.spend); continue; }
+    won += imp; eligible += elig; searchSpend += n(r.spend); accounts++;
+    budgetLost += n(r.search_budget_lost_impression_share) * elig;
+    rankLost += n(r.search_rank_lost_impression_share) * elig;
+    absTop += n(r.search_absolute_top_impression_share) * elig;
+  }
+  if (!eligible) {
+    return { available: false, searchAccounts: 0, searchSpend: 0, noShareSpend,
+      impressionShare: null, budgetLostShare: null, rankLostShare: null,
+      absoluteTopShare: null, eligibleImpressions: 0, wonImpressions: 0, missedImpressions: 0 };
+  }
+  return {
+    available: true, searchAccounts: accounts, searchSpend, noShareSpend,
+    impressionShare: won / eligible,
+    budgetLostShare: budgetLost / eligible,
+    rankLostShare: rankLost / eligible,
+    absoluteTopShare: absTop / eligible,
+    eligibleImpressions: Math.round(eligible),
+    wonImpressions: Math.round(won),
+    missedImpressions: Math.round(eligible - won),
+  };
+}
+
+async function buildGadsBenchmark(anchorISO) {
+  const months = completeMonthsBack(anchorISO, 12);
+  if (!months.length) throw new Error("No complete months available before the anchor date.");
+  const from = months[0].from, to = months[months.length - 1].to;
+  const win = (count) => {
+    const slice = months.slice(-count);
+    return { from: slice[0].from, to: slice[slice.length - 1].to, months: slice.length };
+  };
+  // m1 is the LATEST COMPLETE MONTH — the figure every window is compared to.
+  const W = { m1: win(1), m3: win(3), m6: win(6), m12: win(12) };
+
+  const { data, errors } = await runJobs({
+    gadsMonthly: windsor("google_ads", GADS_MONTHLY_FIELDS, from, to),
+    gadsCampaigns: windsor("google_ads",
+      ["account_name", "campaign", "spend", "impressions", "clicks", "conversions"], from, to),
+    shareM1: windsor("google_ads", GADS_SHARE_FIELDS, W.m1.from, W.m1.to),
+    shareM3: windsor("google_ads", GADS_SHARE_FIELDS, W.m3.from, W.m3.to),
+    shareM6: windsor("google_ads", GADS_SHARE_FIELDS, W.m6.from, W.m6.to),
+    shareM12: windsor("google_ads", GADS_SHARE_FIELDS, W.m12.from, W.m12.to),
+    ga4m1: ga4Compat(["session_manual_campaign_name"], ["sessions", "purchase_revenue"], W.m1.from, W.m1.to),
+    ga4m3: ga4Compat(["session_manual_campaign_name"], ["sessions", "purchase_revenue"], W.m3.from, W.m3.to),
+    ga4m6: ga4Compat(["session_manual_campaign_name"], ["sessions", "purchase_revenue"], W.m6.from, W.m6.to),
+    ga4m12: ga4Compat(["session_manual_campaign_name"], ["sessions", "purchase_revenue"], W.m12.from, W.m12.to),
+    keM1: ga4KeyEvents(["session_manual_campaign_name"], W.m1.from, W.m1.to),
+    keM3: ga4KeyEvents(["session_manual_campaign_name"], W.m3.from, W.m3.to),
+    keM6: ga4KeyEvents(["session_manual_campaign_name"], W.m6.from, W.m6.to),
+    keM12: ga4KeyEvents(["session_manual_campaign_name"], W.m12.from, W.m12.to),
+  });
+
+  if (data.gadsMonthly === null) {
+    const e = new Error(`Google Ads unavailable: ${errors.gadsMonthly}`);
+    e.status = 502; throw e;
+  }
+
+  // ---- account -> code stems, so GA4 traffic can be attributed per account ----
+  const accountStems = new Map();
+  for (const r of data.gadsCampaigns || []) {
+    const stem = codeStem(r.campaign);
+    if (!stem) continue;
+    const acct = r.account_name || "Unknown";
+    if (!accountStems.has(acct)) accountStems.set(acct, new Set());
+    accountStems.get(acct).add(stem);
+  }
+
+  // ---- monthly series per account plus a roll-up ----
+  const monthIndex = new Map(months.map((m) => [m.key, m]));
+  const seriesByAccount = new Map();
+  const ensure = (acct) => {
+    if (!seriesByAccount.has(acct)) {
+      seriesByAccount.set(acct, new Map(months.map((m) => [m.key, { ...m, ...GADS_BLANK() }])));
+    }
+    return seriesByAccount.get(acct);
+  };
+  for (const r of data.gadsMonthly) {
+    const k = String(r.date || "").slice(0, 7);
+    if (!monthIndex.has(k)) continue;
+    for (const acct of [r.account_name || "Unknown", "__all__"]) {
+      const m = ensure(acct).get(k);
+      m.spend += n(r.spend); m.impressions += n(r.impressions); m.clicks += n(r.clicks);
+      m.conversions += n(r.conversions); m.invalidClicks += n(r.invalid_clicks);
+    }
+  }
+
+  const EMPTY_KE = { total: 0, byKey: new Map(), byName: new Map(), byKeyEvent: new Map(), rows: [], failed: true };
+  const windowRows = { m1: data.ga4m1, m3: data.ga4m3, m6: data.ga4m6, m12: data.ga4m12 };
+  const windowKe = {
+    m1: data.keM1 || EMPTY_KE, m3: data.keM3 || EMPTY_KE,
+    m6: data.keM6 || EMPTY_KE, m12: data.keM12 || EMPTY_KE,
+  };
+  const shareRows = {
+    m1: data.shareM1, m3: data.shareM3, m6: data.shareM6, m12: data.shareM12,
+  };
+
+  /** GA4 sessions and key events for a window, matched to an account by code stem. */
+  const siteFor = (rows, stems, kew) => {
+    const t = { visits: 0, keyEvents: 0, contacts: 0, revenue: 0 };
+    if (rows === null) return t;
+    for (const r of rows) {
+      const name = norm(r.session_manual_campaign_name);
+      if (!name) continue;
+      if (stems && ![...stems].some((st) => name.startsWith(st))) continue;
+      const ck = ga4JoinKey(["session_manual_campaign_name"], r, false);
+      t.visits += n(r.sessions);
+      t.keyEvents += kew.byKey.get(ck) || 0;
+      t.contacts += kew.byKeyEvent.get(`${ck}\u0000contact_us`) || 0;
+      t.revenue += n(r.purchase_revenue);
+    }
+    return t;
+  };
+
+  function buildAccount(acct) {
+    const isAll = acct === "__all__";
+    const stems = isAll ? null : (accountStems.get(acct) || new Set());
+    const series = months.map((m) => gadsDerive(ensure(acct).get(m.key)));
+    const active = series.filter((m) => m.spend > 0 || m.visits > 0);
+
+    const windows = {};
+    for (const [key, wdef] of Object.entries(W)) {
+      const slice = series.slice(-wdef.months).filter((m) => m.spend > 0);
+      if (!slice.length) { windows[key] = null; continue; }
+      const t = slice.reduce((a, m) => {
+        for (const f of Object.keys(GADS_BLANK())) a[f] += m[f];
+        return a;
+      }, GADS_BLANK());
+      const site = siteFor(windowRows[key], stems, windowKe[key]);
+      t.visits = site.visits; t.keyEvents = site.keyEvents;
+      t.contacts = site.contacts; t.revenue = site.revenue;
+      const rows = (shareRows[key] || []).filter((r) => isAll || (r.account_name || "Unknown") === acct);
+      windows[key] = {
+        months: slice.length, requested: wdef.months,
+        avgMonthlySpend: t.spend / slice.length,
+        share: rollUpShare(rows),
+        ...gadsDerive(t),
+      };
+    }
+
+    const latest = active.length ? active[active.length - 1] : null;
+    return {
+      account: isAll ? "All accounts" : acct, id: acct,
+      series, windows,
+      latestMonth: latest ? { key: latest.key, label: latest.label } : null,
+      spend1m: windows.m1 ? windows.m1.spend : 0,
+      spend3m: windows.m3 ? windows.m3.spend : 0,
+      spend12m: windows.m12 ? windows.m12.spend : 0,
+    };
+  }
+
+  const accountNames = [...seriesByAccount.keys()].filter((a) => a !== "__all__");
+  const accounts = accountNames.map(buildAccount)
+    .filter((a) => a.spend12m > 0)
+    .sort((a, b) => b.spend1m - a.spend1m || b.spend3m - a.spend3m);
+  const all = buildAccount("__all__");
+
+  /**
+   * `lowerIsBetter` drives the colour, and getting it wrong turns a warning
+   * green. Cost-per-anything and the invalid-click rate improve DOWNWARD;
+   * CTR, rates per THB1,000 and ROAS improve upward.
+   */
+  const GADS_METRICS = [
+    { id: "cpc", label: "Cost per click", money: true, lowerIsBetter: true },
+    { id: "cpm", label: "CPM", money: true, lowerIsBetter: true },
+    { id: "ctr", label: "CTR", pct: true, lowerIsBetter: false },
+    { id: "costPerConversion", label: "Cost per conversion (Google)", money: true, lowerIsBetter: true },
+    { id: "costPerVisit", label: "Cost per visit (GA4)", money: true, lowerIsBetter: true },
+    { id: "costPerKeyEvent", label: "Cost per key event (GA4)", money: true, lowerIsBetter: true },
+    { id: "costPerContact", label: "Cost per contact (GA4)", money: true, lowerIsBetter: true },
+    { id: "keyEventsPerK", label: "Key events per \u0e3f1,000", lowerIsBetter: false },
+    { id: "invalidRate", label: "Invalid click rate", pct: true, lowerIsBetter: true },
+  ];
+  const comparisonFor = (a) => {
+    const cur = a.windows.m1;
+    if (!cur) return null;
+    return GADS_METRICS.map((mt) => {
+      const vs = {};
+      for (const k of ["m3", "m6", "m12"]) {
+        const w = a.windows[k];
+        const base = w ? w[mt.id] : null;
+        vs[k] = (cur[mt.id] == null || base == null || base === 0)
+          ? null : { base, deltaPct: ((cur[mt.id] - base) / base) * 100 };
+      }
+      return { ...mt, current: cur[mt.id], vs };
+    }).filter((m) => m.current != null || Object.values(m.vs).some((v) => v));
+  };
+  all.comparison = comparisonFor(all);
+  for (const a of accounts) a.comparison = comparisonFor(a);
+
+  /**
+   * ACCOUNTS SPENDING WITH NOTHING TO SHOW, named rather than left for someone
+   * to spot in a table. The August pull had two: THB 70,785 and THB 20,860
+   * against 0 and 0.32 conversions — 40% of the month's Google Ads budget.
+   *
+   * GA4 is checked as well as Google's own count, because "no conversions" has
+   * two very different causes: the ads are not working, or the conversion
+   * import is broken. If GA4 recorded key events for the same account, it is
+   * the tracking, and the fix is free.
+   */
+  const latestSpend = all.windows.m1 ? all.windows.m1.spend : 0;
+  const silent = accounts
+    .filter((a) => a.windows.m1 && a.windows.m1.spend > 0 && a.windows.m1.conversions < 1)
+    .map((a) => ({
+      account: a.account,
+      spend: a.windows.m1.spend,
+      shareOfSpend: latestSpend ? a.windows.m1.spend / latestSpend : null,
+      conversions: a.windows.m1.conversions,
+      ga4KeyEvents: a.windows.m1.keyEvents,
+      ga4Visits: a.windows.m1.visits,
+      // The distinction that decides who fixes it.
+      likelyTrackingGap: a.windows.m1.keyEvents > 0,
+    }))
+    .sort((x, y) => y.spend - x.spend);
+
+  return {
+    anchor: anchorISO,
+    latestMonth: all.latestMonth,
+    windows: W,
+    coverage: {
+      from, to, completeMonths: months.length,
+      monthsWithData: all.series.filter((m) => m.spend > 0).length,
+    },
+    all, accounts,
+    silent, silentSpend: silent.reduce((s, x) => s + x.spend, 0),
+    latestSpend,
+    unavailable: Object.keys(errors), errors,
+    computedAt: new Date().toISOString(),
+  };
+}
+
+app.get("/api/gads-benchmark", requireTab("gads"), async (req, res) => {
+  const anchor = isoDate(req.query.to) ? req.query.to : new Date().toISOString().slice(0, 10);
+  const refresh = req.query.refresh === "1";
+  const ms = completeMonthsBack(anchor, 1);
+  const stamp = ms.length ? ms[0].key : anchor;
+  try {
+    // Keyed by MONTH, not by the anchor date: the answer only changes when a
+    // new month completes, so a week of anchors share one cached build.
+    const out = await withCache(`gadsbench:${stamp}`, refresh,
+      () => buildGadsBenchmark(anchor), 7 * 24 * 3600 * 1000);
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "gads_benchmark_failed", { error: String(err.message || err) });
+    res.status(err.status || 500).json({ error: err.message || "Google Ads benchmark failed" });
+  }
+});
+
 app.get("/api/google-ads", requireTab("gads"), async (req, res) => {
   const { from, to } = req.query;
   if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });

@@ -2126,6 +2126,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 3L3 15a3.5 3.5 0 006 3.5L16 6.5"/><circle cx="18.5" cy="17" r="3.2"/></svg>
         Overview
       </div>
+      <div class="nav-item sub" data-view="gadsbench">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></svg>
+        Benchmarks
+      </div>
 
       <div class="nav-sep"></div>
       <div class="nav-group">Better Club</div>
@@ -2753,7 +2757,7 @@ document.querySelectorAll('.nav-item').forEach(item => {
 });
 
 // Views where the toolbar date range has no meaning.
-const NO_DATE_VIEWS = new Set(['benchmark', 'users']);
+const NO_DATE_VIEWS = new Set(['benchmark', 'gadsbench', 'users']);
 
 /**
  * WHICH SCOPE EACH TAB IS SHOWING. Three kinds, and the distinction is the point:
@@ -2778,7 +2782,7 @@ const ECOM_VIEWS = new Set(['ecom', 'ecommonthly', 'ecomchannels', 'ecompackages
  * honest label. Only the two GA4 cards on its funnel page are BHQ, and those
  * say so themselves.
  */
-const UNSCOPED_VIEWS = new Set(['users', 'audit', 'benchmark', 'topics', 'campaigns', 'bclub']);
+const UNSCOPED_VIEWS = new Set(['users', 'audit', 'benchmark', 'gadsbench', 'topics', 'campaigns', 'bclub']);
 function scopeFor(view) {
   if (UNSCOPED_VIEWS.has(view)) return '';
   if (ECOM_VIEWS.has(view)) return S.ecomScope === 'online' ? 'Online only' : 'All channels';
@@ -2798,6 +2802,7 @@ const TITLES = {
   users: ['Users', 'Who can see which tab'],
   audit: ['Tagging audit', 'How much traffic and spend the campaign view cannot attribute'],
   benchmark: ['Benchmarks', 'Latest complete month against trailing 3, 6 and 12-month norms'],
+  gadsbench: ['Google Ads Benchmarks', 'Latest complete month against trailing norms, and the impressions we did not win'],
   gbp: ['Google Business Profile', 'Reviews and ratings by listing'],
   pages: ['Pages', 'How one page performs — paste the URL you want to look at'],
   gads: ['Google Ads', 'Spend, campaigns and accounts — newly connected, so start by looking'],
@@ -3045,6 +3050,22 @@ async function loadBenchmark(refresh = false) {
   return S.bench;
 }
 
+/**
+ * Keyed by the ANCHOR MONTH, not the anchor date, matching the server's cache
+ * key. The answer only changes when a month completes, so moving the date
+ * picker within one month must not trigger a rebuild.
+ */
+async function loadGadsBench(refresh = false) {
+  const key = ($('to').value || '').slice(0, 7);
+  if (!refresh && S.gadsbenchKey === key && S.gadsbench) return S.gadsbench;
+  setStatus('busy', 'building 12-month Google Ads benchmark\u2026');
+  const res = await fetch(`/api/gads-benchmark?to=${$('to').value}${refresh?'&refresh=1':''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,200)}`);
+  S.gadsbench = await res.json(); S.gadsbenchKey = key;
+  setStatus('ok', S.gadsbench.cached ? `cached ${S.gadsbench.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.gadsbench;
+}
+
 async function loadAudit(refresh = false) {
   const key = `${$('from').value}|${$('to').value}`;
   if (!refresh && S.auditKey === key && S.audit) return S.audit;
@@ -3095,6 +3116,7 @@ $('loadBtn').addEventListener('click', async () => {
     }
     else if (S.view === 'audit') { await loadAudit(true); }
     else if (S.view === 'benchmark') { await loadBenchmark(true); }
+    else if (S.view === 'gadsbench') { S.gadsbenchError = null; await loadGadsBench(true); }
     else if (S.view === 'gbp') { await loadGbp(true); }
     else if (S.view === 'audiences') { S.audiencesError = null; await loadAudiences(true); }
     else if (S.view === 'ecom') { S.ecomError = null; await loadEcom(true); }
@@ -3181,6 +3203,7 @@ function render() {
   else if (S.view === 'campaigns') renderCampaigns();
   else if (S.view === 'audit') renderAudit();
   else if (S.view === 'benchmark') renderBenchmark();
+  else if (S.view === 'gadsbench') renderGadsBench();
   else if (S.view === 'gbp') renderGbp();
   else if (S.view === 'audiences') renderAudiences();
   else if (S.view === 'ecom') renderEcom();
@@ -6333,6 +6356,7 @@ const VIEW_LOADERS = {
   ecommonthly:   { load: () => loadEcomMonthly(),   err: 'ecommonError',   busy: 'ecommonLoading',   what: 'the monthly report' },
   pages:         { load: () => loadPage(),          err: 'pageError',      busy: 'pageLoading',      what: 'page performance' },
   gads:          { load: () => loadGads(),          err: 'gadsError',      busy: 'gadsLoading',      what: 'Google Ads' },
+  gadsbench:     { load: () => loadGadsBench(),     err: 'gadsbenchError', busy: 'gadsbenchLoading', what: 'the Google Ads benchmark' },
   bclub:         { load: () => loadBclub(),         err: 'bclubError',     busy: 'bclubLoading',     what: 'the Better Club sheet' },
   ecomroas:      { load: () => loadEcomRoas(),      err: 'ecomroasError',  busy: 'ecomroasLoading',  what: 'marketplace ad performance' },
   users:         { load: () => loadUsers(),         err: 'usersError',     busy: 'usersLoading',     what: 'the access list' },
@@ -6563,6 +6587,220 @@ function wirePages() {
   };
   go.addEventListener('click', run);
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') run(); });
+}
+
+/**
+ * GOOGLE ADS BENCHMARKS.
+ *
+ * The efficiency table is the Meta benchmark's twin and deliberately reads the
+ * same way. The block above it is the part Meta cannot do: what we DIDN'T win.
+ *
+ * The split is the point. "Impression share 46%" invites "spend more"; 52% lost
+ * to RANK against 12% lost to BUDGET says more money would buy almost nothing
+ * and the bid, the keyword or the landing page is the constraint. Those are
+ * opposite decisions, so the two are never shown as one number.
+ */
+function renderGadsBench() {
+  const d = S.gadsbench;
+  if (!d) {
+    $('viewRoot').innerHTML = `<div class="card"><div class="state">
+      <div class="big">Ready to benchmark Google Ads</div>
+      <div style="max-width:520px;font-size:var(--text-xs);">Press <b>Load</b>. Reads the last 12 <b>complete</b> calendar months, so a partial month can't flatter the comparison, and asks Google for impression share once per window &mdash; share is a ratio over an eligible base and can't be re-summed from daily rows. Stored and reused until the month rolls over.</div>
+    </div></div>`;
+    return;
+  }
+  if (d.unavailable && d.unavailable.length && !d.all.windows.m1) {
+    $('viewRoot').innerHTML = errorState('Google Ads was unavailable this run \u2014 press Refresh to retry.');
+    return;
+  }
+  const tabs = [d.all, ...(d.accounts || [])];
+  if (!S.gbTab || !tabs.some(t => t.id === S.gbTab)) S.gbTab = d.all.id;
+  const a = tabs.find(t => t.id === S.gbTab) || d.all;
+  const isAll = a.id === '__all__';
+  const w = a.windows;
+
+  const tabStrip = `<div class="acct-tabs">${tabs.map(t => `
+    <button class="acct-tab ${t.id===S.gbTab?'active':''}" data-gbtab="${esc(t.id)}">
+      ${esc(t.account)}<small>${num(t.spend1m,{money:true})}</small>
+    </button>`).join('')}</div>`;
+
+  /**
+   * ROUTED THROUGH `changeText`, unlike the Meta benchmark's otherwise
+   * identical chip. `changeText` caps at ">10x", and these deltas need it: a
+   * cost-per-conversion norm can be a fraction of a THB when a month recorded
+   * 0.3 conversions, and the month-on-month change then renders as +42867%.
+   * That exact figure shipped on the Pages tab once already. `deltaPct` arrives
+   * pre-multiplied from the server, so it is divided back to a fraction here —
+   * `changeText` takes a ratio, not a percentage.
+   */
+  const chip = (cell, lowerIsBetter) => {
+    if (!cell) return '<span style="color:var(--faint)">\u2014</span>';
+    const p = cell.deltaPct;
+    const good = lowerIsBetter ? p < 0 : p > 0;
+    const flat = Math.abs(p) < 2;
+    const col = flat ? 'var(--muted)' : (good ? 'var(--green)' : 'var(--rose)');
+    const arrow = flat ? '' : (p > 0 ? '\u25b2' : '\u25bc');
+    return `<span style="color:${col};font-weight:600;">${arrow} ${esc(changeText(p / 100, 0) || '\u2014')}</span>`;
+  };
+  const val = (v, mt) => v == null ? '\u2014'
+    : (mt.money ? num(v,{money:true}) : (mt.pct ? num(v*100,{dp:2})+'%' : num(v,{dp:2})));
+
+  const sh = w.m1 ? w.m1.share : null;
+  /**
+   * A STACKED BAR, because the three parts are shares of ONE eligible base and
+   * three separate figures would not say that. Widths come from the rolled-up
+   * shares, which are weighted by reconstructed eligible impressions rather
+   * than averaged \u2014 Google's own per-account shares sum past 100%.
+   */
+  const shareBlock = (sh && sh.available) ? `
+    <div class="card mt">
+      <h2>Impressions we didn't win \u00b7 ${esc(a.latestMonth?a.latestMonth.label:'latest month')}</h2>
+      <div class="grid g-3" style="margin-bottom:14px;">
+        <div class="stat"><div class="lab">Impression share</div>
+          <div class="val">${num(sh.impressionShare*100,{dp:1})}%</div>
+          <div class="sub">${num(sh.wonImpressions)} won of ${num(sh.eligibleImpressions)} eligible</div></div>
+        <div class="stat"><div class="lab">Lost to budget</div>
+          <div class="val" style="color:${sh.budgetLostShare>0.15?'var(--rose)':'var(--ink)'}">${num(sh.budgetLostShare*100,{dp:1})}%</div>
+          <div class="sub">more money would have bought these</div></div>
+        <div class="stat"><div class="lab">Lost to ad rank</div>
+          <div class="val" style="color:${sh.rankLostShare>0.4?'var(--rose)':'var(--ink)'}">${num(sh.rankLostShare*100,{dp:1})}%</div>
+          <div class="sub">money alone would not</div></div>
+      </div>
+      ${(() => {
+        /**
+         * THE BAR IS BUILT FROM `won` AND `missed`, NOT FROM GOOGLE'S THREE
+         * SHARES, because those do not sum to 1 and never will.
+         *
+         * 45.5 + 12.4 + 52.0 = 109.9. Correct weighting does not fix it: each
+         * component is aggregated by Google over its own eligible base, so the
+         * three are individually right and mutually inconsistent. Laid out
+         * as-is the bar overflowed its own container and the rank segment was
+         * silently clipped — a chart quietly lying about the number printed
+         * beside it.
+         *
+         * won + missed DOES sum to 1 by construction (`won/eligible` and
+         * `(eligible-won)/eligible`), so that is the spine. The missed part is
+         * then divided in the RATIO of the two causes, which is the honest
+         * claim available: "roughly a fifth of the miss was budget", not "12.4%
+         * of all eligible impressions exactly".
+         */
+        const missed = Math.max(0, 1 - sh.impressionShare);
+        const causes = sh.budgetLostShare + sh.rankLostShare;
+        const bud = causes > 0 ? missed * (sh.budgetLostShare / causes) : 0;
+        const rank = causes > 0 ? missed * (sh.rankLostShare / causes) : missed;
+        // A WIDTH, not a change, and written so it cannot be mistaken for one.
+        // The scale-then-fixed-decimals idiom is reserved for percentage
+        // CHANGES, which must be capped by `changeText`; audit.js matches that
+        // idiom by shape, so a width has to be expressed some other way. (This
+        // comment used to quote the idiom verbatim and flagged itself.)
+        const widthPct = (v) => `${Math.round(v * 1000) / 10}%`;
+        const seg = (frac, bg, label, col) => frac <= 0 ? '' :
+          `<div style="width:${widthPct(frac)};background:${bg};display:flex;align-items:center;justify-content:center;color:${col};overflow:hidden;">${frac>0.08?label:''}</div>`;
+        return `<div style="display:flex;height:26px;border-radius:6px;overflow:hidden;font-size:var(--text-3xs);font-weight:600;">
+          ${seg(sh.impressionShare,'var(--green)','won','#fff')}
+          ${seg(bud,'#E8A33D','budget','#fff')}
+          ${seg(rank,'#C0C7D8','rank','var(--ink-2)')}
+        </div>`;
+      })()}
+      <div class="note">
+        <b>${num(sh.missedImpressions)} searches we were eligible for and did not appear on.</b>
+        Of those, <b>${num(sh.budgetLostShare*100,{dp:1})}%</b> were lost to budget \u2014 the auction was winnable and the money ran out \u2014 and <b>${num(sh.rankLostShare*100,{dp:1})}%</b> to ad rank, where a bigger budget changes nothing and the bid, keyword or landing page is the constraint. Absolute top share is ${num(sh.absoluteTopShare*100,{dp:1})}%: the share of our impressions in the very first position.
+        ${sh.noShareSpend>0?`<br><br><b>${num(sh.noShareSpend,{money:true})} of spend is excluded from these figures</b>, across ${num(sh.searchAccounts)} search account${sh.searchAccounts===1?'':'s'} measured out of the total. Google reports no search impression share for Display, Video and Performance Max \u2014 there is no search auction for them to be in \u2014 and counting that as a zero share would invent a budget problem out of an account that never had one.`:''}
+        <br><br>Shares are combined by reconstructing eligible impressions per account (<code>impressions \u00f7 share</code>) and dividing, not by averaging. Two things follow from how Google reports them. Its per-account shares can sum past 100% \u2014 each component is aggregated over its own eligible base, so they are individually right and mutually inconsistent; here they total ${num((sh.impressionShare+sh.budgetLostShare+sh.rankLostShare)*100,{dp:1})}%. The bar above is therefore drawn from <b>won</b> against <b>not won</b>, which do sum to 100%, with the miss divided in the ratio of the two causes rather than by their raw percentages.
+      </div>
+    </div>` : `
+    <div class="card mt"><h2>Impressions we didn't win</h2>
+      <div class="note">No search impression share for ${isAll?'any account':esc(a.account)} in this month. Google reports it only for Search campaigns${sh&&sh.noShareSpend?` \u2014 all ${num(sh.noShareSpend,{money:true})} of this month's spend is Display, Video or Performance Max`:''}.</div>
+    </div>`;
+
+  /**
+   * Spend with nothing to show, and WHO SHOULD FIX IT. "No conversions" has two
+   * causes with different owners: the ads are not working (media), or the
+   * conversion import is broken (tracking). GA4 key events for the same account
+   * separate them, so this names the likely one instead of leaving a reader to
+   * guess from two numbers.
+   */
+  const silentBlock = (isAll && (d.silent||[]).length) ? `
+    <div class="card mt">
+      <h2>Spending without a recorded conversion \u00b7 ${esc(d.latestMonth?d.latestMonth.label:'latest month')}</h2>
+      <table><thead><tr><th>Account</th><th class="num">Spend</th><th class="num">of month</th>
+        <th class="num">Conversions</th><th class="num">GA4 visits</th><th class="num">GA4 key events</th><th style="padding-left:16px;">Likely cause</th></tr></thead><tbody>
+      ${d.silent.map(x=>`<tr>
+        <td class="strong">${esc(x.account)}</td>
+        <td class="num">${num(x.spend,{money:true})}</td>
+        <td class="num">${x.shareOfSpend!=null?num(x.shareOfSpend*100,{dp:0})+'%':'\u2014'}</td>
+        <td class="num" style="color:var(--rose);font-weight:600;">${num(x.conversions,{dp:2})}</td>
+        <td class="num">${num(x.ga4Visits)}</td>
+        <td class="num">${num(x.ga4KeyEvents)}</td>
+        <td style="padding-left:16px;">${x.likelyTrackingGap
+          ? '<span class="pill warn">conversion import</span>'
+          : '<span class="pill grey">no measured outcome</span>'}</td>
+      </tr>`).join('')}
+      </tbody></table>
+      <div class="note">
+        <b>${num(d.silentSpend,{money:true})} of ${num(d.latestSpend,{money:true})}</b> went to accounts Google recorded fewer than one conversion for.
+        A row marked <b>conversion import</b> did produce GA4 key events, so the traffic is converting and Google cannot see it \u2014 that is a tracking fix, not a media one, and it costs nothing to make. A row marked <b>no measured outcome</b> has neither, which is either genuinely unproductive spend or an account whose campaigns carry no <code>utm_campaign</code> code for GA4 to match on.
+        Conversion counts are fractional because Google splits credit across attribution paths; 0.32 is not a rounding error and not a zero.
+      </div>
+    </div>` : '';
+
+  $('viewRoot').innerHTML = `
+    ${tabStrip}
+    ${d.coverage.monthsWithData < d.coverage.completeMonths ? `<div class="warnbox">Only <b>${d.coverage.monthsWithData}</b> of the last ${d.coverage.completeMonths} complete months carry Google Ads spend, so the longer windows cover less than they say. Empty months are treated as missing history, not as zeros.</div>` : ''}
+
+    <div class="grid g-4">
+      <div class="stat card"><div class="lab">Latest complete month</div>
+        <div class="val">${esc(a.latestMonth?a.latestMonth.label:'\u2014')}</div>
+        <div class="sub">compared against below</div></div>
+      <div class="stat card"><div class="lab">Spend \u00b7 latest month</div>
+        <div class="val">${w.m1?num(w.m1.spend,{money:true}):'\u2014'}</div>
+        <div class="sub">${w.m1?`${num(w.m1.clicks)} clicks`:''}</div></div>
+      <div class="stat card"><div class="lab">Avg monthly spend \u00b7 3M</div>
+        <div class="val">${w.m3?num(w.m3.avgMonthlySpend,{money:true}):'\u2014'}</div>
+        <div class="sub">${w.m3?`${w.m3.months} month${w.m3.months>1?'s':''} with data`:''}</div></div>
+      <div class="stat card"><div class="lab">Avg monthly spend \u00b7 12M</div>
+        <div class="val">${w.m12?num(w.m12.avgMonthlySpend,{money:true}):'\u2014'}</div>
+        <div class="sub">${w.m12?`${w.m12.months} months`:''}</div></div>
+    </div>
+
+    ${shareBlock}
+    ${silentBlock}
+
+    <div class="card mt">
+      ${/* The six comparison cells below are written out one by one rather than
+            mapped over the three window keys. audit.js counts header cells
+            against body cells in the first row to catch misaligned tables and
+            it cannot evaluate a .map(), so a mapped row reads as four cells
+            against eight headers and fails. Three tables shipped misaligned
+            before that rule existed, so the row is written to be countable
+            rather than the rule exempted. */''}
+      <h2>${esc(a.latestMonth?a.latestMonth.label:'Latest month')} vs trailing norms${isAll?'':' \u00b7 '+esc(a.account)}</h2>
+      <table><thead><tr>
+        <th>Metric</th><th class="num">Latest</th>
+        <th class="num">3M</th><th class="num">vs</th>
+        <th class="num">6M</th><th class="num">vs</th>
+        <th class="num">12M</th><th class="num">vs</th>
+      </tr></thead><tbody>
+      ${(a.comparison||[]).map(m=>`<tr>
+        <td class="strong">${esc(m.label)}</td>
+        <td class="num" style="font-weight:600;color:var(--ink)">${val(m.current,m)}</td>
+        <td class="num">${val(m.vs.m3?m.vs.m3.base:null,m)}</td>
+        <td class="num">${chip(m.vs.m3,m.lowerIsBetter)}</td>
+        <td class="num">${val(m.vs.m6?m.vs.m6.base:null,m)}</td>
+        <td class="num">${chip(m.vs.m6,m.lowerIsBetter)}</td>
+        <td class="num">${val(m.vs.m12?m.vs.m12.base:null,m)}</td>
+        <td class="num">${chip(m.vs.m12,m.lowerIsBetter)}</td>
+      </tr>`).join('')||'<tr><td colspan="8" class="num">No complete month with Google Ads spend to compare.</td></tr>'}
+      </tbody></table>
+      <div class="note">
+        <b>Cost per conversion (Google)</b> and <b>cost per key event (GA4)</b> are different measurements and are never mixed: Google credits a click inside its own lookback window, GA4 credits a session it can tie to a <code>utm_campaign</code>. They will not agree, and neither is a correction of the other. The GA4 rows only cover campaigns whose names carry a <code>YYMMDD-NN</code> code, so an account that doesn't use the convention shows spend with no site-side figures.
+        Window totals are summed and then divided, never averaged from monthly ratios \u2014 averaging lets a THB 500 month move the figure as much as a THB 50,000 one.
+      </div>
+    </div>`;
+
+  $('viewRoot').querySelectorAll('[data-gbtab]').forEach(b => b.addEventListener('click', () => {
+    S.gbTab = b.dataset.gbtab; renderGadsBench();
+  }));
 }
 
 function renderGads() {
@@ -10108,7 +10346,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.266.0';
+const CLIENT_BUILD = '3.267.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
@@ -10137,6 +10375,22 @@ fetch('/api/version').then(r => r.json()).then(v => {
 // Identity decides the nav before anything renders, so a user never glimpses a
 // tab they can't open.
 fetch('/api/me').then(r => r.json()).then(me => {
+  /**
+   * `gadsbench` IS A VIEW, NOT A PERMISSION.
+   *
+   * `/api/gads-benchmark` is gated on `gads` server-side, so the server stays
+   * the single source of truth for who may read Google Ads data. Registering
+   * `gadsbench` as its own tab would mean every user who already has `gads`
+   * silently loses the new page until someone re-ticks a box, and the two
+   * grants could then disagree about the same data.
+   *
+   * The Monthly Reports nav does the same thing the other way round: four items
+   * share `data-view="report"` to stay one permission. This is one permission
+   * carrying two views.
+   */
+  if (me && Array.isArray(me.tabs) && me.tabs.includes('gads') && !me.tabs.includes('gadsbench')) {
+    me.tabs = [...me.tabs, 'gadsbench'];
+  }
   S.me = me;
   document.querySelectorAll('.nav-item').forEach(item => {
     const allowed = me.tabs.includes(item.dataset.view);
@@ -10176,7 +10430,7 @@ fetch('/api/me').then(r => r.json()).then(me => {
   render();
 }).catch(() => {
   // Identity unavailable (local dev, or IAP not in front): show everything.
-  S.me = { email: null, isAdmin: true, tabs: ['overview','campaigns','gbp','benchmark','audit','topics','users'], allTabs: [] };
+  S.me = { email: null, isAdmin: true, tabs: ['overview','campaigns','gbp','benchmark','gads','gadsbench','audit','topics','users'], allTabs: [] };
   goTo(location.hash.slice(1) || 'overview', { push: false });
   render();
 });

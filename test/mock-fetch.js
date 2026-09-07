@@ -593,10 +593,72 @@ global.fetch = async (url, opts = {}) => {
         { campaign: "rightchoice-google-reserve", search_term: "bmi calculator", impressions: 56800, clicks: 4336, spend: 5100 },
       ]});
     }
+    /**
+     * IMPRESSION SHARE IS A THIRD SHAPE ON THIS CONNECTOR, and it has to be,
+     * because share is a ratio over an eligible base that Google aggregates
+     * per request. A daily series cannot be re-summed into a monthly share, so
+     * `/api/gads-benchmark` asks for it once per window and the stub answers
+     * per window too. Identified by the field, like the search-term branch.
+     *
+     * The numbers are copied from the real August 2026 pull, INCLUDING the two
+     * things that break a naive implementation:
+     *
+     *   · `BGH x ADA` returns won .6374 + budget-lost .106 + rank-lost .3325 =
+     *     1.0759. Over 100%, from Google, legitimately — each share is
+     *     aggregated over a different eligible base. Anything that sums shares
+     *     produces nonsense and this row proves it.
+     *   · `BHQ Inter x ADA` is the BIGGEST SPENDER and returns a NULL share:
+     *     it has no search auction to be in. Treated as 0 it would drag the
+     *     group share down and invent a budget problem out of nothing.
+     *
+     * `BGH x EGG` holds the other real finding: THB 20,860 for 0.3245
+     * conversions. Fractional on purpose — Google splits credit across
+     * attribution paths, and code that rounds to an integer reports 0 and
+     * loses the fact that tracking fires at all.
+     */
+    if (((new URL(u)).searchParams.get("fields") || "").includes("search_impression_share")) {
+      const scale = (() => {
+        // Longer windows hold more spend, so a window mix-up is visible rather
+        // than arithmetically invisible.
+        const f = (new URL(u)).searchParams.get("date_from") || "";
+        const t = (new URL(u)).searchParams.get("date_to") || "";
+        const days = (new Date(t) - new Date(f)) / 86400000 + 1;
+        return Math.max(1, Math.round(days / 31));
+      })();
+      return jsonRes({ data: [
+        { account_name:"BGH x ADA", spend:38495.7288*scale, impressions:80201*scale, clicks:2521*scale,
+          conversions:760.6618*scale, search_impression_share:0.6374,
+          search_budget_lost_impression_share:0.106, search_rank_lost_impression_share:0.3325,
+          search_absolute_top_impression_share:0.1174 },
+        { account_name:"BIH x ADA", spend:65711.1977*scale, impressions:502360*scale, clicks:7236*scale,
+          conversions:382.5592*scale, search_impression_share:0.5094,
+          search_budget_lost_impression_share:0.1051, search_rank_lost_impression_share:0.5149,
+          search_absolute_top_impression_share:0.0798 },
+        { account_name:"BHQ Inter x ADA", spend:70785.31*scale, impressions:1004819*scale, clicks:2470*scale,
+          conversions:0, search_impression_share:null,
+          search_budget_lost_impression_share:0, search_rank_lost_impression_share:0,
+          search_absolute_top_impression_share:0 },
+        { account_name:"BGH x EGG", spend:20859.6901*scale, impressions:46146*scale, clicks:3262*scale,
+          conversions:0.3245*scale, search_impression_share:0.1711,
+          search_budget_lost_impression_share:0.2029, search_rank_lost_impression_share:0.6267,
+          search_absolute_top_impression_share:0.0999 },
+      ]});
+    }
+    /**
+     * The daily series. Spread across TWO complete months so the benchmark has
+     * a latest month AND a trailing window to compare it against — one month of
+     * rows makes m1 and m3 identical and every delta 0%, which is the mock that
+     * cannot fail. `invalid_clicks` is present because the benchmark reports an
+     * invalid-click rate and a missing field would read as a clean 0%.
+     */
     return jsonRes({ data: [
-      { date:"2026-07-05", account_name:"BGH x ADA", campaign:"260701-08_BGH_Search", adgroup:"Brand", campaign_type:"SEARCH", conversions:4, spend:1200, impressions:5000, clicks:300 },
-      { date:"2026-07-05", account_name:"BGH x ADA", campaign:"260701-08_BGH_Search", adgroup:"Generic", campaign_type:"SEARCH", conversions:1, spend:400, impressions:2000, clicks:90 },
-      { date:"2026-07-06", account_name:"BHQ X AIQ", campaign:"aiq_bhq_gg_search_uae", adgroup:"UAE", campaign_type:"SEARCH", conversions:0, spend:800, impressions:2000, clicks:120 },
+      { date:"2026-07-05", account_name:"BGH x ADA", campaign:"260701-08_BGH_Search", adgroup:"Brand", campaign_type:"SEARCH", conversions:4, spend:1200, impressions:5000, clicks:300, invalid_clicks:9 },
+      { date:"2026-07-05", account_name:"BGH x ADA", campaign:"260701-08_BGH_Search", adgroup:"Generic", campaign_type:"SEARCH", conversions:1, spend:400, impressions:2000, clicks:90, invalid_clicks:3 },
+      { date:"2026-07-06", account_name:"BHQ X AIQ", campaign:"aiq_bhq_gg_search_uae", adgroup:"UAE", campaign_type:"SEARCH", conversions:0, spend:800, impressions:2000, clicks:120, invalid_clicks:2 },
+      // June, so the trailing windows are not just July repeated. Cheaper
+      // clicks last month means the July CPC delta is POSITIVE and visible.
+      { date:"2026-06-10", account_name:"BGH x ADA", campaign:"260701-08_BGH_Search", adgroup:"Brand", campaign_type:"SEARCH", conversions:6, spend:900, impressions:6000, clicks:400, invalid_clicks:5 },
+      { date:"2026-06-11", account_name:"BHQ X AIQ", campaign:"aiq_bhq_gg_search_uae", adgroup:"UAE", campaign_type:"SEARCH", conversions:1, spend:600, impressions:2500, clicks:150, invalid_clicks:1 },
     ]});
   }
   /**
