@@ -4553,8 +4553,18 @@ function monthWeekLabels(from, to) {
  *
  * The tabs are `Daily` (Studio's DATE view) and `Videos` (its CONTENT view with
  * a hand-added Month column). Columns are read BY NAME — see `buildYouTube`.
+ *
+ * REPOINTED v3.264.0 to the sheet MW is actually maintaining, and shared with
+ * the runtime service account. The old id
+ * (`1o0n44IioDyEvAlNt_Tf11SxD11mDpkzlfABbBSbJZus`) was the original Apps Script
+ * sheet and had been stale for some time.
+ *
+ * ONE SHEET THE TEAM PASTES OVER, never a fresh export. A new export creates a
+ * new file and a new id, and the dashboard then reads an unchanging old sheet
+ * with no error anywhere — the silent-failure shape that let a dead channel
+ * look like a quiet month for 400 days.
  */
-const YT_SHEET_ID = process.env.YT_SHEET_ID || "1o0n44IioDyEvAlNt_Tf11SxD11mDpkzlfABbBSbJZus";
+const YT_SHEET_ID = process.env.YT_SHEET_ID || "18dIkhWSyqcSVyVf9D07R-9R6Hkih4mpZ4c__WZbhyWs";
 
 const BETTERAI_SHEET_ID = process.env.BETTERAI_SHEET_ID || "1jOz2XYry-D28z_Eg6w3oIHao1c61OrGTa5jD7Hz21oQ";
 

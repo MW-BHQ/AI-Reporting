@@ -1,5 +1,41 @@
 ### Recent (August 2026)
 
+**v3.264.0 — `YT_SHEET_ID` finally points at the sheet MW maintains.**
+
+The default was still `1o0n44IioDyEvAlNt_Tf11SxD11mDpkzlfABbBSbJZus`, the
+original Apps Script sheet. v3.131 already recorded the correct id in this file
+and the code default was never changed with it, so the documentation and the
+running service disagreed for over a hundred releases. Now
+`18dIkhWSyqcSVyVf9D07R-9R6Hkih4mpZ4c__WZbhyWs`, confirmed by MW as the live
+sheet and already shared with the service account.
+
+Worth noting as a class: a documented decision that never reached a line of code
+is indistinguishable from no decision. The only reason this surfaced was MW
+asking what `YT_SHEET_ID` was.
+
+Cannot be verified from here — the container's egress does not reach
+`googleapis.com`, so the tab names (`Daily`, `Videos`) and the column headers
+are unchecked against the new file. Columns are read by NAME, so a renamed
+header reads as an absent column, which is silent. First live run on the YouTube
+tab settles it.
+
+**Two stale open items closed while answering MW's list:**
+
+`ga4Items` was recorded as failing on every run. That note predates its rewrite:
+it no longer requests item-scoped metrics at all, it counts `view_item` against
+`pageTitle` + `pagePath`, which IS page-scoped and therefore branch-filterable.
+It succeeds under the mock and `topProducts` populates. What remains is a
+labelling question, not a failure — the card is titled Top Products but shows
+most-viewed product PAGES by `view_item` count, and item revenue is gone for
+good since there is no page-scoped equivalent.
+
+Better Club Part 2 (revenue import) — MW does it manually and is happy with
+that. Not automating it.
+
+Better Club January cohort reading 0.00% — MW's decision: ignore.
+
+### Recent (August 2026)
+
 **v3.263.0 — copy, two lines of it (MW).**
 
 The funnel card's heading is now a plain static **Marketing Funnel**, like every
@@ -5338,7 +5374,9 @@ this passed against invented numbers, which is precisely why 400 days of zeros
 shipped: the tests proved the code could read a sheet, never that the sheet was
 true.
 
-**STILL OPEN.** `YT_SHEET_ID` points at the old Apps Script sheet and must be
+**CLOSED in v3.264.0** — the default is now the maintained sheet. Original note follows.
+
+**~~STILL OPEN~~.** `YT_SHEET_ID` points at the old Apps Script sheet and must be
 repointed at the permanent export sheet. Use ONE sheet that the team pastes over
 each month — a fresh export creates a new file and a new id, which breaks the
 dashboard silently. Share it with
