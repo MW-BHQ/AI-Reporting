@@ -1,5 +1,28 @@
 ### Recent (August 2026)
 
+**v3.262.0 — the campaign name leads the slide title, and `dated …` is gone.**
+
+The header read `Campaign · 260801-04`. A code identifies a campaign but does
+not say what it was, and the funnel card below it already led with the name, so
+the title now matches it: `HealthSaved 2026 · 260801-04`. Falls back to
+`Campaign · code` when a match carries no topic — a bare `· 260801-04` reads as
+a missing title.
+
+**`dated 2026-08-01` removed** (MW: "can we safely remove it?"). It was never
+data. `codeLaunchDate` decodes the code's own `YYMMDD` prefix, so
+`260801-04 · dated 2026-08-01` said the same thing twice, and the slide header's
+date range already states the period the figures cover.
+
+The decode itself stays: `dateHint` is the one place it says something you
+cannot otherwise see — that a code's date falls outside the selected range,
+which is why nothing matched. `launchDate` is still on the payload for that.
+
+Note: the topic now appears twice on the slide, once in the header and once in
+the funnel card's own heading. Left as MW asked for it; the card heading could
+go back to "Campaign funnel" if the repetition grates.
+
+### Recent (August 2026)
+
 **v3.261.0 — the campaign export's second page. It was never the charts.**
 
 `onePageIfAsked` sizes `@page` from a measurement taken on SCREEN under

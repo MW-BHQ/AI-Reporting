@@ -5529,7 +5529,15 @@ function renderCampaignBody(d) {
    * styling. `canva style` is already on for this view, so the sheet is sized
    * to the content rather than paginated.
    */
-  $('campBody').innerHTML = slideShell(`Campaign \u00b7 ${d.code || ''}`, `
+  /**
+   * THE NAME LEADS, THE CODE FOLLOWS (MW), matching the funnel card's own
+   * heading. `260801-04` identifies the campaign but does not say what it was;
+   * "HealthSaved 2026" does, and the code is still there to look it up by.
+   * Falls back to `Campaign · code` when a match carries no topic — a bare
+   * `· 260801-04` would read as a missing title.
+   */
+  $('campBody').innerHTML = slideShell(
+    d.topic ? `${d.topic} \u00b7 ${d.code || ''}` : `Campaign \u00b7 ${d.code || ''}`, `
     ${d.notes ? `<div class="warnbox">${d.offSiteGoal?'<b>This campaign doesn\'t send traffic to the website.</b> ':''}${esc(d.notes)}</div>` : ''}
     <div class="grid g-3">
       <div class="stat card"><div class="lab"><span class="chip" style="background:var(--amber)"></span>Ad spend</div>
@@ -5565,7 +5573,15 @@ function renderCampaignBody(d) {
 
     <div class="grid g-2-1 mt">
       <div class="card">
-        <h2>${d.topic?esc(d.topic):'Campaign funnel'} <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--faint);">· ${esc(d.code)}${d.launchDate?` · dated ${esc(d.launchDate)}`:''}</span></h2>
+        <!-- NO "dated …" HERE ANY MORE (MW: "can we safely remove it?" — yes).
+             It was never data: codeLaunchDate just decodes the code's own
+             YYMMDD prefix, so "260801-04 · dated 2026-08-01" said the same
+             thing twice, and the slide header's date range already states the
+             period the figures cover. The decode still earns its keep in
+             dateHint, the one place it says something you cannot otherwise
+             see — that a code's date falls outside the selected range, which
+             is why nothing matched. -->
+        <h2>${d.topic?esc(d.topic):'Campaign funnel'} <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--faint);">· ${esc(d.code)}</span></h2>
         <!-- A chart-wrap since v3.260.0, which is what lets this card fill the
              way the report deck's do. Both blockers are closed: per-bar colour
              (v3.254.0) and indexAxis (see hBarToSvg). The height is a CLASS, not
@@ -10051,7 +10067,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.261.0';
+const CLIENT_BUILD = '3.262.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
