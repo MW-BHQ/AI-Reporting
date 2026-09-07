@@ -1,5 +1,32 @@
 ### Recent (August 2026)
 
+**v3.254.0 — one page for real; per-bar colour in the twin; the funnel stays a
+canvas and here is why.**
+
+**THE SECOND PAGE WAS A TRAILING MARGIN.** The page was sized correctly and then
+a bottom margin below the last slide spilled past it, emitting a near-empty
+second sheet. `margin-bottom:0` on body, `.main`, `#viewRoot` and the last
+child. Verified with `prefer_css_page_size`: campaigns 1 page, GBP 1 page.
+
+**`chartToSvg` NOW READS PER-BAR COLOUR.** `backgroundColor` is a string on most
+datasets and an ARRAY on any chart that colours each bar — reading the array as
+a string produced an invalid fill and every bar came out black. That is why the
+funnel twin had to be reverted in v3.250. Fixed for every chart, not just this
+one.
+
+**THE FUNNEL IS STILL A CANVAS, and the reason is the real limit:
+`chartToSvg` HAS NO NOTION OF `indexAxis`.** With the colours fixed the twin
+drew the horizontal funnel as VERTICAL bars — right colours, transposed chart.
+Horizontal bar charts cannot use the twin until `chartToSvg` handles
+`indexAxis`, which is a rewrite of its bar geometry rather than a patch.
+
+**Two reverts of the same element for two different reasons.** Worth stating
+plainly: `chartToSvg` supports vertical bars, lines, points, stacks, axis
+titles, stack totals and now per-bar colour. It does NOT support horizontal
+bars. Check the orientation before adding `chart-wrap`.
+
+### Recent (August 2026)
+
 **v3.253.0 — the funnel and its key-events list finally print side by side.**
 
 Item 2 of MW's six, open for three releases. The cause was a rule I wrote for

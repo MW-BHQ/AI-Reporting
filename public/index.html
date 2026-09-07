@@ -511,6 +511,11 @@
       overflow:visible!important;
       break-after:auto!important;break-before:auto!important;}
     body.pp-onepage .gbp-voices{break-before:auto!important;}
+    /* Nothing may sit below the last slide: a trailing margin is enough to
+       spill past the sized page and emit a second, near-empty sheet. */
+    body.pp-onepage,body.pp-onepage .main,body.pp-onepage #viewRoot{
+      margin-bottom:0!important;padding-bottom:0!important;}
+    body.pp-onepage #viewRoot > :last-child{margin-bottom:0!important;}
     body.pp-onepage .slide::before,body.pp-onepage .slide::after{display:none!important;}
     /* All listings is screen-only, so its column would leave the distribution
        at half width on a blank half page. One column when it is gone. */
@@ -5482,6 +5487,9 @@ function renderCampaignBody(d) {
      and this funnel colours each BAR separately, so the twin drew every bar
      black. The canvas prints correctly; the twin is the wrong tool here
      until chartToSvg handles per-point colour arrays. -->
+        <!-- Canvas, not a chart-wrap: chartToSvg has no notion of indexAxis, so
+             the twin drew this horizontal funnel as vertical bars. Per-bar
+             colour is fixed (v3.254.0); orientation is not. -->
         <div style="height:230px;"><canvas id="funnelChart"></canvas></div>
         ${d.offSiteGoal?`<div class="note">Only the ad-platform stages appear: a ${esc((d.goalLabel||'').toLowerCase())} campaign's clicks open a ${d.goal==='leads'?'lead form':'chat'} on Meta, so no website stages follow. A logarithmic axis is used so stages of very different size stay readable.</div>`
           :t.costPerKeyEvent!=null?`<div class="note">Cost per key event: <b>${num(t.costPerKeyEvent,{money:true})}</b> · ${num(t.spend,{money:true})} ÷ ${num(t.keyEvents)} key events. A logarithmic axis keeps impressions and key events readable together.</div>`
@@ -9321,7 +9329,15 @@ function chartToSvg(chart, W, H) {
          instruction was to match it. */
       out.push('<rect x="' + (xAt(i) - bw / 2 + off).toFixed(1) + '" y="' + top.toFixed(1)
         + '" width="' + bw.toFixed(1) + '" height="' + hh.toFixed(1) + '" fill="'
-        + svgEsc(d.backgroundColor || d.borderColor || '#999') + '"/>');
+        /**
+         * PER-BAR COLOUR (v3.254.0). `backgroundColor` is a STRING on most
+         * datasets and an ARRAY on any chart that colours each bar separately —
+         * the campaign funnel does. Reading the array as a string yielded an
+         * invalid fill and the twin drew every bar BLACK, which is why the
+         * funnel had to keep printing from the canvas.
+         */
+        + svgEsc((Array.isArray(d.backgroundColor) ? d.backgroundColor[i] : d.backgroundColor)
+                 || d.borderColor || '#999') + '"/>');
     });
   });
   /**
@@ -9794,7 +9810,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.253.0';
+const CLIENT_BUILD = '3.254.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
