@@ -2792,7 +2792,7 @@ function scopeFor(view) {
 
 const TITLES = {
   overview: ['Overview', 'Impressions → Visits → Key Events across all channels'],
-  campaigns: ['Campaigns', 'Enter a utm_campaign code to see its funnel and every variant'],
+  campaigns: ['Campaigns', 'Enter a campaign code to see its campaign performances'],
   report: ['Monthly Reports', 'The four hospitals side by side \u2014 one view instead of four exports'],
   topics: ['Topic Explorer', 'Multilingual search demand across 10 site languages'],
   users: ['Users', 'Who can see which tab'],
@@ -5581,7 +5581,11 @@ function renderCampaignBody(d) {
              dateHint, the one place it says something you cannot otherwise
              see — that a code's date falls outside the selected range, which
              is why nothing matched. -->
-        <h2>${d.topic?esc(d.topic):'Campaign funnel'} <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--faint);">· ${esc(d.code)}</span></h2>
+        <!-- A PLAIN, STATIC HEADING, like every sibling card on this slide
+             ("Key events", "Landing pages", "Campaign detail"). It used to lead
+             with the topic and the code, and both now sit in the slide header
+             two rows above — the same duplication that took "dated ..." out. -->
+        <h2>Marketing Funnel</h2>
         <!-- A chart-wrap since v3.260.0, which is what lets this card fill the
              way the report deck's do. Both blockers are closed: per-bar colour
              (v3.254.0) and indexAxis (see hBarToSvg). The height is a CLASS, not
@@ -10067,7 +10071,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.262.0';
+const CLIENT_BUILD = '3.263.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

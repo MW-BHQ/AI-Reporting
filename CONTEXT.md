@@ -1,5 +1,20 @@
 ### Recent (August 2026)
 
+**v3.263.0 — copy, two lines of it (MW).**
+
+The funnel card's heading is now a plain static **Marketing Funnel**, like every
+sibling card on the slide ("Key events", "Landing pages", "Campaign detail").
+It used to lead with the topic and the code, and both now sit in the slide
+header two rows above — the same duplication that took "dated ..." out in
+v3.262. The v3.262 note about the topic appearing twice is closed by this.
+
+The Campaigns subtitle: "Enter a utm_campaign code to see its funnel and every
+variant" becomes "Enter a campaign code to see its campaign performances". The
+page is no longer only a funnel, and "utm_campaign" is jargon in a line whose
+job is to tell you what to type.
+
+### Recent (August 2026)
+
 **v3.262.0 — the campaign name leads the slide title, and `dated …` is gone.**
 
 The header read `Campaign · 260801-04`. A code identifies a campaign but does
