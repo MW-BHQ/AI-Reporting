@@ -9631,6 +9631,21 @@ function clearNativeSlides() {
  * and must not inherit this.
  */
 const ONE_PAGE_VIEWS = new Set(['gbp', 'campaigns']);
+/**
+ * TWO STEPS, AND THE ORDER OF EACH MATTERS (v3.252.0).
+ *
+ * `markOnePage` must run BEFORE `fitNativeSlides`, because that is what tells
+ * it not to zoom the slide to a fixed sheet. `sizeOnePage` must run AFTER
+ * `buildPrintSvgs`, or the page is sized to a layout that does not yet contain
+ * the chart twins and the content spills onto a second page. One function
+ * could not satisfy both.
+ */
+function markOnePage() {
+  const on = ONE_PAGE_VIEWS.has(S.view);
+  document.body.classList.toggle('pp-onepage', on);
+  return on;
+}
+
 function onePageIfAsked() {
   let st = document.getElementById('printPageSize');
   if (!st) { st = document.createElement('style'); st.id = 'printPageSize'; document.head.appendChild(st); }
@@ -9652,7 +9667,18 @@ function onePageIfAsked() {
     : root.scrollHeight));
   // 96 CSS px to the inch, plus a little slack so a sub-pixel spill cannot
   // emit a second, near-empty page — the v3.162 lesson.
-  st.textContent = '@media print{@page{size:13.333in ' + ((h + 8) / 96).toFixed(2) + 'in;margin:0;}}';
+  /**
+   * SLACK IS PROPORTIONAL, NOT A FIXED 8px.
+   *
+   * The measured height is taken from the live DOM; the print layout then
+   * reflows slightly (font metrics, table column widths) and a tall document
+   * accumulates more of that drift than a short one. A flat 8px was enough for
+   * the 13in GBP page and short by a hair on the 31in campaign page, which put
+   * it on two sheets. 1% plus 24px covers both, and blank tail on a
+   * content-sized page costs nothing next to an unwanted second page.
+   */
+  const tall = Math.ceil(h * 1.01) + 24;
+  st.textContent = '@media print{@page{size:13.333in ' + (tall / 96).toFixed(2) + 'in;margin:0;}}';
 }
 
 function sizeForPrint() {
@@ -9660,7 +9686,17 @@ function sizeForPrint() {
   if (!body) return Promise.resolve();
   body.classList.add('print-prep');
   return new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)))
-    .then(() => { resizeChartsForPrint(); onePageIfAsked(); fitNativeSlides(); buildPrintSvgs();
+    /**
+     * `onePageIfAsked` RUNS LAST (v3.252.0).
+     *
+     * It used to run before `buildPrintSvgs`, so the page was sized to a
+     * layout that did not yet contain the SVG chart twins. The printed content
+     * was then taller than the measurement and spilled onto a second page —
+     * which every test missed, because the tests passed the measured height
+     * straight into `page.pdf()` instead of letting the `@page` rule drive it
+     * the way the browser's Print dialog does.
+     */
+    .then(() => { resizeChartsForPrint(); markOnePage(); fitNativeSlides(); buildPrintSvgs(); onePageIfAsked();
                   return new Promise((r) => setTimeout(r, 150)); });
 }
 function clearPrintPrep() {
@@ -9754,7 +9790,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.251.0';
+const CLIENT_BUILD = '3.252.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

@@ -1,5 +1,39 @@
 ### Recent (August 2026)
 
+**v3.252.0 — MY TESTS WERE LYING. The canva export was two pages all along.**
+
+MW: "nothing changed, how can I help? you've been stuck here a long while."
+He was right, and the reason is the important part.
+
+**EVERY VERIFICATION PASSED BECAUSE I HANDED THE ANSWER TO THE TEST.** I called
+`page.pdf({ width, height })` with the height I had just measured, so of course
+it came out as one page — I was asserting my own arithmetic. The browser's Print
+dialog does not work that way: it reads the document's `@page` rule. Rendering
+with `prefer_css_page_size` — the honest equivalent — gave **2 pages**, exactly
+what MW kept getting.
+
+**THE RULE: verify a print change the way the user prints.** If the test tells
+the renderer what to do, it is testing the test.
+
+Two real bugs, once the measurement was honest:
+
+ 1. **`onePageIfAsked` ran before `buildPrintSvgs`**, so the page was sized to a
+    layout without the SVG chart twins. The printed content was taller and
+    spilled.
+ 2. **Fixing that broke the zoom.** `fitNativeSlides` skips when `pp-onepage` is
+    set, and that class was being set inside the function I had just moved to
+    the end. Split into `markOnePage()` (before `fitNativeSlides`) and
+    `sizeOnePage` measurement (after `buildPrintSvgs`). **One function could not
+    satisfy both orders.**
+
+Slack is now 1% + 24px rather than a flat 8px: the print layout reflows slightly
+and a 31in document accumulates more drift than a 13in one. Blank tail costs
+nothing next to a second sheet.
+
+Verified with `prefer_css_page_size`: campaigns 1 page, GBP 1 page.
+
+### Recent (August 2026)
+
 **v3.251.0 — the blank sheet in the middle of the campaign PDF is gone.**
 
 `break-inside:avoid` on tables, added in v3.250 to stop the detail block
