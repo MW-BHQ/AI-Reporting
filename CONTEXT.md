@@ -1,5 +1,28 @@
 ### Recent (August 2026)
 
+**v3.259.0 — v3.258 reverted. Back to the last state MW confirmed good.**
+
+v3.258 made the funnel card a flex column and unrotated the log ticks. It
+reintroduced the page break AND distorted the chart, so it is out.
+
+**WHY IT BROKE, for whoever tries this next:** `display:flex` on the card
+changes how the card contributes height, so the page measurement taken
+afterwards no longer matched the printed layout — that is the page break. And
+`flex:1` on the wrapper resizes the canvas AFTER Chart.js has drawn, which
+stretches the bitmap — the same trap as v3.255, arrived at from a different
+direction.
+
+**Current state, verified: 1 page, correct bottom padding, all five stage labels
+present.** The chart does not fill the card's full height — there is blank below
+it, because the card is stretched to match the nine-row key-events list.
+
+**That gap is cosmetic and it has cost five round trips.** Any further attempt
+must not touch the card's display mode or the wrapper's height after draw. The
+honest options are: shorten the key-events list so the cards match, or accept
+the blank. Not more flexbox.
+
+### Recent (August 2026)
+
 **v3.257.0 — the funnel names all five stages; the tail is not shaved.**
 
 **The funnel's missing bars were Chart.js `autoSkip`.** Two of the five category
