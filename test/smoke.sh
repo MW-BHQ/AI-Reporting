@@ -131,6 +131,40 @@ expect_field "gb silent spend"     "$GB" "d.silentSpend>0?'ok':undefined"
 # means every window was handed the same range.
 expect_field "gb window separated" "$GB" "d.all.comparison.find(m=>m.id==='cpc').vs.m3.deltaPct>1?'ok':undefined"
 
+echo "--- google ads: paid terms vs organic rank (v3.268.0) ---"
+OV="d.overlap"
+expect_field "ov available"        "$GB" "${OV}.available===true?'ok':undefined"
+# THE THREE MATCH PATHS, one assertion each, because each fails differently.
+# Exact Thai: the term IS the query, and it sits at position 2.1 -> top3. This
+# is the finding the card exists for, so if only one thing works it is this.
+expect_field "ov exact thai top3"  "$GB" "${OV}.buckets.find(b=>b.id==='top3').terms===1?'ok':undefined"
+# Space-stripped Thai: the paid term has spaces, the organic query does not.
+# Nothing else in the fixture lands in page1, so a 0 here means Thai matching
+# collapsed to exact-only and every tokenised term went unmatched.
+expect_field "ov thai spaces"      "$GB" "${OV}.buckets.find(b=>b.id==='page1').terms===1?'ok':undefined"
+# Latin at position 14.8, matched on the plain key.
+expect_field "ov latin deep"       "$GB" "${OV}.buckets.find(b=>b.id==='deep').terms===1?'ok':undefined"
+# A paid term with no organic row must land in "none", never be attached to the
+# nearest-looking query. Two of the five fixture terms have no organic match.
+expect_field "ov unmatched kept"   "$GB" "${OV}.buckets.find(b=>b.id==='none').terms===2?2:undefined"
+# Every paid term lands in exactly one bucket \u2014 no double count, none dropped.
+expect_field "ov buckets total"    "$GB" "${OV}.buckets.reduce((a,b)=>a+b.terms,0)===${OV}.paidTerms?'ok':undefined"
+# Coverage is quoted in SPEND, not in terms: 3 of 5 terms is 60%, but those
+# three carry 78.5% of the spend. A 60% here means it reverted to counting terms.
+expect_field "ov coverage in spend" "$GB" "Math.round(${OV}.matchedSpendShare*1000)===785?'ok':undefined"
+# Exactly three of the five terms match, so anything that starts matching more
+# of them \u2014 stemming, substring containment, edit distance \u2014 fails here.
+#
+# NOT VERIFIED, and stated rather than implied: that space-stripping is confined
+# to Thai. It is a design rule (in Latin a space is a word boundary, so removing
+# it can join two different words into a false match; in Thai it is not) and
+# this fixture cannot demonstrate it, because no realistic pair of hospital
+# search terms in Latin collides when spaces are removed. Applying the strip to
+# Latin as well leaves every assertion here green. If a plausible colliding pair
+# ever turns up in live data, add it to the fixture and this becomes a real
+# guard.
+expect_field "ov no over-matching" "$GB" "${OV}.matchedTerms===3?3:undefined"
+
 echo "--- monthly report: TikTok MoM (v3.266.0) ---"
 # TikTok was the last channel on the deck with no comparison, and its absence
 # rendered perfectly, so these assert the COMPARISON and not just its presence.

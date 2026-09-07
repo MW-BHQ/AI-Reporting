@@ -8060,6 +8060,22 @@ async function buildGadsBenchmark(anchorISO) {
     gadsMonthly: windsor("google_ads", GADS_MONTHLY_FIELDS, from, to),
     gadsCampaigns: windsor("google_ads",
       ["account_name", "campaign", "spend", "impressions", "clicks", "conversions"], from, to),
+    /**
+     * PAID SEARCH TERMS AND ORGANIC QUERIES FOR THE SAME MONTH — the join
+     * neither platform can do. Google Ads has no idea where we rank organically;
+     * Search Console has no idea what we paid. Only this project holds both.
+     */
+    terms: windsor("google_ads",
+      ["search_term", "campaign", "impressions", "clicks", "spend", "conversions"],
+      W.m1.from, W.m1.to),
+    /**
+     * Branch-filtered by default, which is what BHQ scope means — the four
+     * hospitals, not the 27-branch property. `maxPages` walks past the
+     * 25,000-row ceiling: rows arrive sorted by clicks, so a single page would
+     * quietly drop the long tail, and the long tail is where paid terms with
+     * weak organic rank live.
+     */
+    gsc: gscQuery(["query"], W.m1.from, W.m1.to, { maxPages: 3 }),
     shareM1: windsor("google_ads", GADS_SHARE_FIELDS, W.m1.from, W.m1.to),
     shareM3: windsor("google_ads", GADS_SHARE_FIELDS, W.m3.from, W.m3.to),
     shareM6: windsor("google_ads", GADS_SHARE_FIELDS, W.m6.from, W.m6.to),
@@ -8240,6 +8256,13 @@ async function buildGadsBenchmark(anchorISO) {
     anchor: anchorISO,
     latestMonth: all.latestMonth,
     windows: W,
+    overlap: (() => {
+      const o = buildPaidOrganicOverlap(data.terms, data.gsc);
+      // The window belongs to the caller, which is the only place that knows
+      // which month "latest complete" resolved to.
+      if (o.available) o.window = W.m1;
+      return o;
+    })(),
     coverage: {
       from, to, completeMonths: months.length,
       monthsWithData: all.series.filter((m) => m.spend > 0).length,
@@ -8249,6 +8272,152 @@ async function buildGadsBenchmark(anchorISO) {
     latestSpend,
     unavailable: Object.keys(errors), errors,
     computedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * WHERE WE PAY FOR TRAFFIC WE ALREADY RANK FOR.
+ *
+ * The one question neither platform can answer on its own: Google Ads does not
+ * know our organic position, Search Console does not know what we paid. Joining
+ * them per search term is the whole value, and the join is also the risk — a
+ * wrong match tells someone to cut spend on a term they do not actually rank
+ * for, so the matching rules are deliberately narrow and the miss rate is
+ * reported rather than hidden.
+ *
+ * TWO KEYS, AND THE SECOND ONE IS NOT FUZZY MATCHING.
+ *   1. Exact, on lowercased text with runs of whitespace collapsed.
+ *   2. For Thai only, the same text with ALL spaces removed.
+ *
+ * The second exists because the two sources disagree about a real property of
+ * the language, not because a near-miss was worth guessing at. Thai is written
+ * without spaces between words; Google Ads reports search terms tokenised
+ * ("เอ็น หัว เข่า พลิก") while Search Console reports the query as typed
+ * ("เอ็นหัวเข่าพลิก"). Stripping spaces from a Thai string is an identity
+ * operation on the language, so the two forms are the same query. It is applied
+ * ONLY to strings containing Thai characters — in Latin text a space is a word
+ * boundary and removing it would join two different words into a false match.
+ *
+ * NOTHING ELSE IS ATTEMPTED. No stemming, no edit distance, no substring
+ * containment. An unmatched paid term is reported as unmatched, which is
+ * honest, rather than attached to whichever organic query looked closest.
+ *
+ * POSITION IS AN AVERAGE, and that matters for reading the buckets. Search
+ * Console's `position` is the mean over every impression, so 3.4 can mean
+ * "always fourth" or "first half the time and eighth the rest". The buckets are
+ * therefore wide and named for the decision they inform, not for a rank.
+ */
+function buildPaidOrganicOverlap(termRows, gscRows) {
+  const THAI = /[\u0E00-\u0E7F]/;
+  const key1 = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const key2 = (s) => (THAI.test(String(s || "")) ? key1(s).replace(/\s+/g, "") : null);
+
+  if (termRows === null || gscRows === null) {
+    return {
+      available: false,
+      reason: termRows === null
+        ? "Google Ads search terms were unavailable this run."
+        : "Search Console was unavailable this run.",
+    };
+  }
+
+  // Organic side, indexed on both keys. Search Console can return the same
+  // normalised query more than once (different casing), so metrics accumulate
+  // and position is weighted by impressions rather than overwritten.
+  const organic = new Map();
+  const put = (k, r) => {
+    if (!k) return;
+    if (!organic.has(k)) organic.set(k, { clicks: 0, impressions: 0, posWeight: 0 });
+    const o = organic.get(k);
+    o.clicks += n(r.clicks); o.impressions += n(r.impressions);
+    o.posWeight += n(r.position) * n(r.impressions);
+  };
+  for (const r of gscRows) {
+    put(key1(r.query), r);
+    const k2 = key2(r.query);
+    // Only index the stripped form when it actually differs, or a Thai query
+    // with no spaces would be counted into the same bucket twice.
+    if (k2 && k2 !== key1(r.query)) put(k2, r);
+  }
+  const organicFor = (term) => {
+    const a = organic.get(key1(term));
+    if (a) return a;
+    const k2 = key2(term);
+    return k2 ? organic.get(k2) || null : null;
+  };
+
+  // Paid side, folded per term: Google returns one row per term per campaign.
+  const paid = new Map();
+  for (const r of termRows) {
+    const k = key1(r.search_term);
+    if (!k) continue;
+    if (!paid.has(k)) paid.set(k, { term: String(r.search_term), spend: 0, clicks: 0, impressions: 0, conversions: 0, campaigns: new Set() });
+    const p = paid.get(k);
+    p.spend += n(r.spend); p.clicks += n(r.clicks);
+    p.impressions += n(r.impressions); p.conversions += n(r.conversions);
+    if (r.campaign) p.campaigns.add(String(r.campaign));
+  }
+
+  /**
+   * Named for the decision, not the rank. "Top 3" is the only bucket where the
+   * spend is genuinely questionable, and even there it is a question and not a
+   * verdict — brand defence, competitor bidding on our terms, and a booking
+   * page that only ranks fourth are all good reasons to keep paying.
+   */
+  const BUCKETS = [
+    { id: "top3", label: "Already ranking 1\u20133", max: 3.5 },
+    { id: "page1", label: "Page one, below the top", max: 10.5 },
+    { id: "deep", label: "Page two or worse", max: Infinity },
+    { id: "none", label: "No organic data", max: null },
+  ];
+  const bucketOf = (pos) => pos == null ? "none"
+    : (pos <= 3.5 ? "top3" : (pos <= 10.5 ? "page1" : "deep"));
+
+  const rows = [];
+  for (const p of paid.values()) {
+    const o = organicFor(p.term);
+    const pos = o && o.impressions ? o.posWeight / o.impressions : null;
+    rows.push({
+      term: p.term, spend: p.spend, clicks: p.clicks, impressions: p.impressions,
+      conversions: p.conversions,
+      campaigns: [...p.campaigns].slice(0, 4),
+      organicPosition: pos,
+      organicClicks: o ? o.clicks : null,
+      organicImpressions: o ? o.impressions : null,
+      bucket: bucketOf(pos),
+    });
+  }
+
+  const paidSpend = rows.reduce((s, r) => s + r.spend, 0);
+  const buckets = BUCKETS.map((b) => {
+    const set = rows.filter((r) => r.bucket === b.id);
+    const spend = set.reduce((s, r) => s + r.spend, 0);
+    return {
+      id: b.id, label: b.label, terms: set.length, spend,
+      clicks: set.reduce((s, r) => s + r.clicks, 0),
+      conversions: set.reduce((s, r) => s + r.conversions, 0),
+      shareOfSpend: paidSpend ? spend / paidSpend : null,
+    };
+  });
+  const matched = rows.filter((r) => r.bucket !== "none");
+
+  return {
+    available: true,
+    window: null,                       // filled by the caller's m1 window
+    paidTerms: rows.length,
+    organicQueries: organic.size,
+    matchedTerms: matched.length,
+    // The share of PAID SPEND we could place organically, not the share of
+    // terms: a match rate counted in terms is flattered by the long tail.
+    matchedSpendShare: paidSpend ? matched.reduce((s, r) => s + r.spend, 0) / paidSpend : null,
+    paidSpend,
+    buckets,
+    /**
+     * Biggest spends first, and only the matched ones — an unmatched term has
+     * nothing to say beyond "we could not place it", which the match rate
+     * already reports.
+     */
+    top: matched.sort((a, b) => b.spend - a.spend).slice(0, 25),
   };
 }
 

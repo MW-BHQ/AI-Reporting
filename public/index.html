@@ -6744,6 +6744,75 @@ function renderGadsBench() {
       </div>
     </div>` : '';
 
+  /**
+   * PAYING FOR TRAFFIC WE ALREADY RANK FOR — the one card here that neither
+   * Google Ads nor Search Console could ever show, because it needs both.
+   *
+   * Shown on the roll-up tab only. The join is per SEARCH TERM and a term can
+   * be bid on by several accounts, so slicing it per account would double-count
+   * the organic side.
+   *
+   * Framed as a question, not a verdict. Brand defence, competitors bidding on
+   * our own name, and a booking page that only ranks fourth are all good
+   * reasons to keep paying for a term we rank for. The card's job is to put the
+   * number in front of someone who can judge it.
+   */
+  const ov = d.overlap;
+  const bucketNote = {
+    top3: 'Worth a look. We appear near the top of the free results for these already, so a paid click may be buying a visit we would have had \u2014 or defending it from a competitor bidding on the same term.',
+    page1: 'On page one but below the top. Paid is buying prominence rather than presence.',
+    deep: 'Paid is doing real work here. We are not findable on page one for these.',
+    none: 'No organic row for these in the month, so no comparison is possible \u2014 either we have no impressions at all, or the two sources spell the query differently.',
+  };
+  const overlapBlock = (isAll && ov && ov.available && ov.paidTerms) ? `
+    <div class="card mt">
+      <h2>Paid terms against our organic rank \u00b7 ${esc(d.latestMonth?d.latestMonth.label:'latest month')}</h2>
+      <table><thead><tr><th>Organic position</th><th class="num">Terms</th><th class="num">Spend</th>
+        <th class="num">of paid spend</th><th class="num">Paid clicks</th><th class="num">Conversions</th></tr></thead><tbody>
+      ${ov.buckets.map(b=>`<tr>
+        <td class="strong">${esc(b.label)}</td>
+        <td class="num">${num(b.terms)}</td>
+        <td class="num" style="${b.id==='top3'?'font-weight:600;color:var(--rose)':''}">${num(b.spend,{money:true})}</td>
+        <td class="num">${b.shareOfSpend!=null?num(b.shareOfSpend*100,{dp:0})+'%':'\u2014'}</td>
+        <td class="num">${num(b.clicks)}</td>
+        <td class="num">${num(b.conversions,{dp:2})}</td>
+      </tr>`).join('')}
+      </tbody></table>
+      <div class="note">
+        ${(() => {
+          const t3 = ov.buckets.find(b=>b.id==='top3');
+          return t3 && t3.spend > 0
+            ? `<b>${num(t3.spend,{money:true})} went to ${num(t3.terms)} search term${t3.terms===1?'':'s'} we already rank 1\u20133 for organically.</b> ${bucketNote.top3}`
+            : `<b>No paid spend landed on a term we already rank 1\u20133 for.</b> On this month's data the paid and organic sides are not competing with each other.`;
+        })()}
+        <br><br>
+        Matched <b>${num(ov.matchedTerms)}</b> of ${num(ov.paidTerms)} paid terms against ${num(ov.organicQueries)} organic queries, covering <b>${ov.matchedSpendShare!=null?num(ov.matchedSpendShare*100,{dp:0})+'%':'\u2014'} of paid spend</b>. Coverage is quoted in SPEND rather than in terms because a match rate counted in terms is flattered by the long tail.
+        <br><br>
+        Matching is exact on lowercased text, plus one extra rule for Thai only: the same text with spaces removed. Thai is written without word spaces and Google Ads reports search terms tokenised, while Search Console reports the query as typed \u2014 so <code>\u0e40\u0e2d\u0e47\u0e19 \u0e2b\u0e31\u0e27 \u0e40\u0e02\u0e48\u0e32 \u0e1e\u0e25\u0e34\u0e01</code> and <code>\u0e40\u0e2d\u0e47\u0e19\u0e2b\u0e31\u0e27\u0e40\u0e02\u0e48\u0e32\u0e1e\u0e25\u0e34\u0e01</code> are one query. It is <b>not</b> applied to Latin text, where a space is a word boundary. Nothing else is attempted \u2014 no stemming, no near-misses \u2014 because a wrong match here would tell you to cut spend on a term you do not rank for.
+        <br><br>
+        Organic position is Search Console's mean over every impression, so 3.4 can mean "always fourth" or "first half the time and eighth the rest". That is why the bands are wide and named for the decision rather than for a rank.
+      </div>
+    </div>
+
+    ${ov.top.length?`<div class="card mt">
+      <h2>Biggest paid spends where we also rank</h2>
+      <table><thead><tr><th>Search term</th><th class="num">Paid spend</th><th class="num">Paid clicks</th>
+        <th class="num">Organic pos.</th><th class="num">Organic clicks</th><th class="num">Conversions</th></tr></thead><tbody>
+      ${ov.top.map(t=>`<tr>
+        <td class="i18n trunc" title="${esc(t.term)}">${esc(t.term)}${t.campaigns.length?`<div style="font-size:var(--text-3xs);color:var(--faint);">${t.campaigns.map(esc).join(' \u00b7 ')}</div>`:''}</td>
+        <td class="num">${num(t.spend,{money:true})}</td>
+        <td class="num">${num(t.clicks)}</td>
+        <td class="num" style="font-weight:600;color:${t.organicPosition<=3.5?'var(--rose)':'var(--ink)'}">${t.organicPosition!=null?num(t.organicPosition,{dp:1}):'\u2014'}</td>
+        <td class="num">${t.organicClicks!=null?num(t.organicClicks):'\u2014'}</td>
+        <td class="num">${num(t.conversions,{dp:2})}</td>
+      </tr>`).join('')}
+      </tbody></table>
+      <div class="note">Largest paid spends first, matched terms only \u2014 an unmatched term has nothing to say beyond the coverage figure above. Organic clicks are free clicks the same query already delivered in the same month, at BHQ scope: the four hospitals, not the 27-branch property.</div>
+    </div>`:''}` : (isAll && ov && !ov.available ? `
+    <div class="card mt"><h2>Paid terms against our organic rank</h2>
+      <div class="note">${esc(ov.reason || 'Not available this run.')} This card needs both sides \u2014 Google Ads for what we paid, Search Console for where we rank \u2014 so one missing source means no comparison rather than a partial one.</div>
+    </div>` : '');
+
   $('viewRoot').innerHTML = `
     ${tabStrip}
     ${d.coverage.monthsWithData < d.coverage.completeMonths ? `<div class="warnbox">Only <b>${d.coverage.monthsWithData}</b> of the last ${d.coverage.completeMonths} complete months carry Google Ads spend, so the longer windows cover less than they say. Empty months are treated as missing history, not as zeros.</div>` : ''}
@@ -6764,6 +6833,7 @@ function renderGadsBench() {
     </div>
 
     ${shareBlock}
+    ${overlapBlock}
     ${silentBlock}
 
     <div class="card mt">
@@ -10346,7 +10416,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.267.0';
+const CLIENT_BUILD = '3.268.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

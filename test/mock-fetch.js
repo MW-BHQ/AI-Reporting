@@ -527,13 +527,51 @@ global.fetch = async (url, opts = {}) => {
     // A page filter with no surviving page means no data, even when the report
     // does not group by page (real GSC filters the underlying rows).
     if (pageRes.length && !pages.length) return jsonRes({ rows: [] });
+    /**
+     * QUERIES THAT OVERLAP THE GOOGLE ADS SEARCH TERMS, so the paid-vs-organic
+     * join has something to join. The first two are the originals and keep
+     * their old clicks/impressions/position, because assertions elsewhere read
+     * them; everything after exists to exercise one branch each.
+     *
+     *   · `\u0e1c\u0e48\u0e32\u0e15\u0e31\u0e14\u0e16\u0e38\u0e07\u0e19\u0e49\u0e33\u0e14\u0e35` at 2.1 \u2014 EXACT match against a paid
+     *     term, in the top-3 bucket. This is the finding the whole card exists
+     *     for: spend on a term we already rank first-page-top for.
+     *   · `\u0e40\u0e2d\u0e47\u0e19\u0e2b\u0e31\u0e27\u0e40\u0e02\u0e48\u0e32\u0e1e\u0e25\u0e34\u0e01` at 6.4 \u2014 NO SPACES, against a paid
+     *     term that has them ("\u0e40\u0e2d\u0e47\u0e19 \u0e2b\u0e31\u0e27 \u0e40\u0e02\u0e48\u0e32 \u0e1e\u0e25\u0e34\u0e01"). Thai is written
+     *     without word spaces and Google Ads tokenises it; the space-stripped
+     *     key is the only thing that matches these, and without this row that
+     *     branch is never executed.
+     *   · `bmi calculator` at 14.8 \u2014 page two or worse, where paid is doing
+     *     real work. Latin, so it must match on the plain key ONLY: if the
+     *     space-stripping were applied to Latin too, this would still match
+     *     here and the bug would surface only on live data.
+     *   · `\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e38\u0e02\u0e20\u0e32\u0e1e \u0e1a\u0e35\u0e0b\u0e35\u0e40\u0e2d\u0e47\u0e21` is deliberately ABSENT: a paid term with
+     *     no organic row must land in "no organic data", not be matched to
+     *     something adjacent.
+     *   · `heart checkup` has no paid counterpart, proving the join does not
+     *     invent paid spend for an organic-only query.
+     */
+    const QUERY_STATS = {
+      "heart checkup": { clicks: 10, impressions: 100, position: 4.2 },
+      "\u0e42\u0e23\u0e04\u0e2b\u0e31\u0e27\u0e43\u0e08": { clicks: 10, impressions: 100, position: 4.2 },
+      "\u0e1c\u0e48\u0e32\u0e15\u0e31\u0e14\u0e16\u0e38\u0e07\u0e19\u0e49\u0e33\u0e14\u0e35": { clicks: 880, impressions: 9100, position: 2.1 },
+      "\u0e40\u0e2d\u0e47\u0e19\u0e2b\u0e31\u0e27\u0e40\u0e02\u0e48\u0e32\u0e1e\u0e25\u0e34\u0e01": { clicks: 210, impressions: 5400, position: 6.4 },
+      "bmi calculator": { clicks: 90, impressions: 7700, position: 14.8 },
+    };
     const vals = (d) => d === "date" ? ["2026-07-15"]
       : d === "page" ? pages
-      : d === "query" ? ["heart checkup", "\u0e42\u0e23\u0e04\u0e2b\u0e31\u0e27\u0e43\u0e08"]
+      : d === "query" ? Object.keys(QUERY_STATS)
       : d === "country" ? ["tha"] : ["x"];
     const rows = [];
+    const stat = (keys) => {
+      const qi = dims.indexOf("query");
+      const s2 = qi >= 0 ? QUERY_STATS[keys[qi]] : null;
+      const base = s2 || { clicks: 10, impressions: 100, position: 4.2 };
+      return { keys, clicks: base.clicks, impressions: base.impressions,
+        ctr: base.impressions ? base.clicks / base.impressions : 0, position: base.position };
+    };
     const walk = (i, keys) => {
-      if (i === dims.length) { rows.push({ keys, clicks: 10, impressions: 100, ctr: 0.1, position: 4.2 }); return; }
+      if (i === dims.length) { rows.push(stat(keys)); return; }
       for (const v of vals(dims[i])) walk(i + 1, [...keys, v]);
     };
     if (!dims.length) rows.push({ keys: [], clicks: 10, impressions: 100, ctr: 0.1, position: 4.2 });

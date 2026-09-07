@@ -1,5 +1,60 @@
 ### Recent (August 2026)
 
+**v3.268.0 — paid search terms against our own organic rank. The join neither
+platform can do.**
+
+Google Ads does not know where we rank organically. Search Console does not know
+what we paid. This project holds both, so it can answer the question that only
+matters when you have both: **how much did we spend on terms we already rank
+1–3 for?** On the same Google Ads Benchmarks tab, roll-up tab only — a term can
+be bid on by several accounts, so slicing per account would double-count the
+organic side.
+
+Four bands, named for the decision rather than the rank: already ranking 1–3,
+page one below the top, page two or worse, no organic data.
+
+**THE MATCHING IS THE WHOLE RISK.** A wrong match tells someone to cut spend on
+a term they do not rank for, so there are exactly two keys and nothing else:
+
+1. Exact, on lowercased text with whitespace runs collapsed.
+2. **For Thai only**, the same text with all spaces removed.
+
+The second is not fuzzy matching. Thai is written without word spaces; Google
+Ads reports search terms TOKENISED (`เอ็น หัว เข่า พลิก`) while Search Console
+reports the query AS TYPED (`เอ็นหัวเข่าพลิก`). Stripping spaces from a Thai
+string is an identity operation on the language, so those are one query. It is
+confined to strings containing Thai characters because in Latin a space is a
+word boundary and removing it can join two different words.
+
+No stemming, no substring containment, no edit distance. An unmatched term is
+reported as unmatched.
+
+**Coverage is quoted in SPEND, not in terms** — 3 of 5 terms is 60% but those
+three carry 78.5% of the spend, and a match rate counted in terms is flattered
+by the long tail.
+
+**Position is a mean over impressions**, so 3.4 can be "always fourth" or "first
+half the time and eighth the rest". Hence wide bands, and the card frames top-3
+spend as a question rather than a verdict: brand defence, competitors bidding on
+our name, and a booking page that only ranks fourth are all good reasons to keep
+paying.
+
+**Nine assertions, one per match path.** Verified to fail when the Thai rule is
+dropped (page1 empties, matched falls to 2).
+
+**NOT VERIFIED, and written into the test rather than implied:** that
+space-stripping stays confined to Thai. Applying it to Latin as well leaves
+every assertion green, because no realistic pair of hospital search terms in
+Latin collides when spaces are removed. It is a design rule the fixture cannot
+demonstrate. If a colliding pair ever appears in live data, add it and the guard
+becomes real.
+
+The GSC mock grows per-query positions (2.1 / 6.4 / 14.8) so all three bands and
+both match paths execute; it previously returned 4.2 for every query, which
+exercised exactly one branch.
+
+### Recent (August 2026)
+
 **v3.267.0 — Google Ads Benchmarks. A new tab, and the answer to "should we
 spend more".**
 
