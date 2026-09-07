@@ -103,6 +103,23 @@ expect_field "sa bcm not a brand"  "$REPORT" "d.searchAds.byBrand.every(b=>b.imp
 # Cross-network guard was relaxed to match the channel on its own.
 expect_field "sa excludes x-network" "$REPORT" "${SA}'BGH').visits===400?400:undefined"
 
+echo "--- monthly report: TikTok MoM (v3.266.0) ---"
+# TikTok was the last channel on the deck with no comparison, and its absence
+# rendered perfectly, so these assert the COMPARISON and not just its presence.
+# The account mock scales volume by MONTH NUMBER, so the answer is fixed and
+# checkable. A 31-day July window compares against 2026-05-31 -> 2026-06-30,
+# whose `date_from` falls in month 5, so July is 7/5 - 1 = +40.0% and nothing
+# else. 0 means both pulls were handed the same range; -28.6% means they were
+# swapped.
+TK="d.tiktok.channel"
+expect_field "tk mom available"    "$REPORT" "${TK}.momAvailable===true?'ok':undefined"
+expect_field "tk mom views +40%"   "$REPORT" "Math.round(${TK}.mom.views*10000)===4000?'ok':undefined"
+# The window must be one BACK and the same length, not the current one again.
+expect_field "tk mom prev window"  "$REPORT" "${TK}.prevWindow.to<'$FROM'?'ok':undefined"
+# Reach reads unique_video_views; a fall back to video_views would make the two
+# MoMs identical and hide a wrong field behind a plausible percentage.
+expect_field "tk mom reach field"  "$REPORT" "${TK}.mom.reach!==null&&${TK}.reach!==${TK}.views?'ok':undefined"
+
 echo "--- monthly report: referral quality and the AI spotlight ---"
 expect_field "rf referrers found"  "$REPORT" "d.referral.byBrand[0].referrerCount>=2?d.referral.byBrand[0].referrerCount:undefined"
 # Only Referral-channel sources belong in this table.

@@ -1906,6 +1906,25 @@ async function buildReport(from, to) {
     ["date", "account_name", "video_views", "unique_video_views", "profile_views",
       "likes", "comments", "shares", "bio_link_clicks", "phone_number_clicks"], from, to);
   /**
+   * THE SAME WINDOW A MONTH BACK, FOR MoM (MW, standing ask).
+   *
+   * TikTok was the last channel on the deck with no comparison at all: every
+   * other one carries MoM, and this connector had a single pull. There is no
+   * way to derive a previous month from a current-month response — Windsor
+   * returns exactly the range asked for — so the comparison needs its own
+   * request, the same shape GBP uses one line below.
+   *
+   * IDENTICAL FIELD LIST, deliberately. Not a guess and not a subset: a
+   * comparison computed over different fields than the figure it sits under is
+   * worse than no comparison. `cwr.prev` is the same LENGTH of window one month
+   * back, so a 7-day range compares against the previous 7 days rather than a
+   * calendar month.
+   */
+  jobs.ttOrganicPrev = windsor("tiktok_organic",
+    ["date", "video_views", "unique_video_views", "profile_views",
+      "likes", "comments", "shares", "bio_link_clicks", "phone_number_clicks"],
+    cwr.prev.from, cwr.prev.to);
+  /**
    * Per-video, for Top performances. This is the connector's Video table rather
    * than its Account table, so it cannot share the pull above \u2014 the one place
    * in this report where a second request is genuinely unavoidable.
@@ -3201,6 +3220,39 @@ async function buildReport(from, to) {
       likes: sum("likes"), comments: sum("comments"), shares: sum("shares"),
       bioLinkClicks: sum("bio_link_clicks"), phoneClicks: sum("phone_number_clicks"),
       daily, accounts,
+    };
+
+    /**
+     * MoM, OR NULL FOR EVERY FIGURE — never a number the previous window did
+     * not supply.
+     *
+     * Three separate reasons the comparison can be absent, and they must not
+     * collapse into one:
+     *   · the prev JOB failed, so `ttOrganicPrev` is null. Nothing is known
+     *     about last month, and `momAvailable:false` says so.
+     *   · the prev window returned rows but a metric was 0. `chg` returns null
+     *     rather than dividing by zero, so the card shows a dash.
+     *   · the metric grew from 0. Also null: "up from nothing" is not a
+     *     percentage, and +Infinity on an executive slide is a bug report.
+     *
+     * A 0 in any of those cases would read as "flat month", which is a claim
+     * about TikTok rather than a statement about our data.
+     */
+    const prevRows = data.ttOrganicPrev;
+    const momAvailable = prevRows !== null;
+    const psum = (f) => (prevRows || []).reduce((a, r) => a + n(r[f]), 0);
+    const tchg = (now, before) => (before && before > 0) ? (now - before) / before : null;
+    channel.momAvailable = momAvailable;
+    channel.prevWindow = cwr.prev;
+    channel.mom = !momAvailable ? null : {
+      views: tchg(channel.views, psum("video_views")),
+      reach: tchg(channel.reach, psum("unique_video_views")),
+      profileViews: tchg(channel.profileViews, psum("profile_views")),
+      likes: tchg(channel.likes, psum("likes")),
+      comments: tchg(channel.comments, psum("comments")),
+      shares: tchg(channel.shares, psum("shares")),
+      bioLinkClicks: tchg(channel.bioLinkClicks, psum("bio_link_clicks")),
+      phoneClicks: tchg(channel.phoneClicks, psum("phone_number_clicks")),
     };
 
     /**

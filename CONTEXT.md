@@ -1,5 +1,57 @@
 ### Recent (August 2026)
 
+**v3.266.0 — TikTok gets MoM. It was the last channel on the deck without one.**
+
+MW has asked for this more than once. The reason it kept getting written down
+instead of shipped: `jobs.ttOrganic` was a SINGLE pull, and Windsor returns
+exactly the range asked for, so there was no earlier number anywhere in the
+response to compare against. A comparison had to be fetched, not derived.
+
+`jobs.ttOrganicPrev` is that fetch, at `cwr.prev` — the same LENGTH of window
+one month back, so a 7-day range compares against the previous 7 days rather
+than a calendar month. **Identical field list**, deliberately: a comparison
+computed over different fields than the figure above it is worse than none.
+
+**MoM appears under all eight account figures** — views, reach, profile views,
+likes, comments, shares, bio link clicks, phone clicks — as the deck's own `dlt`
+chip, so it reads and colours exactly like the MoM on Users, Channels and GBP
+instead of being a second dialect of the same idea.
+
+**THREE REASONS THE COMPARISON CAN BE ABSENT, AND THEY DO NOT COLLAPSE.** A 0
+would read as "flat month", which is a claim about TikTok rather than a
+statement about our data:
+
+| Cause | Payload | Tooltip says |
+|---|---|---|
+| prev pull failed | `momAvailable:false`, `mom:null` | last month's pull failed |
+| metric was 0 last month | `mom.x === null` | would divide by zero |
+| grew from 0 | `mom.x === null` | same — "up from nothing" is not a percentage |
+
+**THE FIXTURE WAS THE HARD PART, not the feature.** The TikTok account stub
+returned the same rows for every range, so every MoM computed to exactly 0.0% —
+indistinguishable from a flat month, and a swapped or duplicated window would
+have passed while looking healthy on screen.
+
+First attempt pivoted on a fixed date ("anything before July is the prev pull").
+That separated the two windows for the July report range and NOTHING else — open
+the deck on August and both pulls landed on the same side of the pivot, MoM read
+0.0%, and the fixture was lying again. The stub now scales volume by MONTH
+NUMBER, which separates any two adjacent windows. July is the factor-1 month so
+every existing assertion against the July figures still holds.
+
+Guarded at three levels, all three verified to FAIL when broken: the endpoint
+asserts +40.0% exactly (a 31-day July window compares against `2026-05-31`,
+month 5, so 7/5 - 1 and nothing else) — 0% catches a duplicated window, -28.6%
+catches a swap; `boot.js` asserts the CHIP and its tooltip, with `phoneClicks`
+null in the fixture so the divide-by-zero dash is rendered and not just the
+happy path; and `print-overflow` confirms the taller cards still fit at 900px.
+
+`boot.js` asserts against raw HTML for these, not the tag-stripped text — the
+reason lives in `data-tip`, and the chip's visible text is only "+14.3%", which
+proves nothing about what it compared to.
+
+### Recent (August 2026)
+
 **v3.265.0 — clicking any variant of a code opened the FIRST variant's ad list.**
 
 MW: "when i clicked, the second row google/cpc it expanded the facebook / paid".

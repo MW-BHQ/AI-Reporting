@@ -387,7 +387,19 @@ function reportFixture() {
       channel: { views: 96941, reach: 17897, profileViews: 1868,
         likes: 1855, comments: 30, shares: 357, bioLinkClicks: 30, phoneClicks: 8,
         daily: [{ d: "2026-07-15", views: 66941 }, { d: "2026-07-16", views: 30000 }],
-        accounts: ["Bangkok Hospital"] },
+        accounts: ["Bangkok Hospital"],
+        /**
+         * MoM (v3.266.0). `phoneClicks` is deliberately NULL while every
+         * other metric has a number: last month's zero cannot produce a
+         * percentage, and the card must show a dash for that one alone rather
+         * than falling back to "no comparison available" for the whole block.
+         * `shares` is negative so the down-colour is rendered too — an
+         * all-positive fixture proves only half the chip.
+         */
+        momAvailable: true,
+        prevWindow: { from: "2026-05-31", to: "2026-06-30" },
+        mom: { views: 1, reach: 0.42, profileViews: 0.11, likes: 0.9,
+          comments: 0, shares: -0.23, bioLinkClicks: 0.5, phoneClicks: null } },
       top: { available: true, videoCount: 4, minRateViews: 100,
         views: { id: "v1", caption: "clinic tour", thumb: "https://cdn.test/v1.jpg",
           views: 12608, likes: 210, comments: 11, shares: 46, favorites: 20 },
@@ -874,6 +886,28 @@ setTimeout(() => {
         ? fail(name, `fell through to "${needle}"`) : ok(name, "built from data");
       absent("search ads not fallback", "Google Ads is unavailable");
       absent("tiktok not fallback", "TikTok is unavailable");
+      /**
+       * MoM ON THE TIKTOK CARDS (v3.266.0). TikTok was the last channel on the
+       * deck with no comparison at all, so its absence rendered perfectly well
+       * — which is why this is asserted on the CHIP and its tooltip rather
+       * than on the numbers being present.
+       *
+       * The dash case is asserted too. `phoneClicks` is null in the fixture
+       * because last month's figure was 0, and the tooltip has to say THAT and
+       * not "the pull failed": one is a fact about TikTok, the other is a fact
+       * about us, and a reader who cannot tell them apart is being misled.
+       */
+      // Asserted against `html`, not `text`: the reason lives in `data-tip`
+      // and the tag-stripping above throws attributes away. The chip's own
+      // visible text is just "+100.0%", which proves nothing about WHAT it is
+      // comparing to.
+      const inHtml = (name, needle) => html.includes(needle)
+        ? ok(name, "rendered") : fail(name, `"${needle}" missing from the report`);
+      inHtml("tiktok mom chip", "MoM against 2026-05-31");
+      inHtml("tiktok mom divide-by-zero", "would divide by zero");
+      html.includes("TikTok pull failed")
+        ? fail("tiktok mom not degraded", "showing the failed-pull tooltip on a good fixture")
+        : ok("tiktok mom not degraded", "real comparison, not the fallback");
       /**
        * Scope is a PILL now (v3.124.0), not `\u00b7 BGH` text, so this checks the
        * pill next to the Search Ads title rather than a string in the heading.

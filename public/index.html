@@ -4442,14 +4442,36 @@ function renderReport() {
                       font-size:var(--text-2xs);font-weight:700">${num(val)}</div>
         </div>
       </div>`;
+    /**
+     * MoM UNDER EVERY ACCOUNT FIGURE (MW, standing ask). TikTok was the last
+     * channel on the deck without one.
+     *
+     * `dlt` is the deck's own delta chip, so this reads and colours exactly
+     * like the MoM on Users, Channels and GBP rather than being a second
+     * dialect of the same idea. Its default tooltip already states the rule —
+     * same length of window, one month back — which is what `cwr.prev` gives.
+     *
+     * A dash, never a zero, when there is nothing to compare against. The
+     * tooltip is switched to say WHICH of the three reasons applies: the pull
+     * failed, or the metric was 0 last month. "Flat" is a claim about TikTok;
+     * these are statements about our data.
+     */
+    const tkMom = (k) => {
+      if (!c.momAvailable) return dlt(null, 'Last month\u2019s TikTok pull failed, so there is nothing to compare against');
+      const v = c.mom ? c.mom[k] : null;
+      return dlt(v, v === null || v === undefined
+        ? `Nothing recorded for this metric in ${c.prevWindow ? c.prevWindow.from + ' \u2013 ' + c.prevWindow.to : 'the previous window'}, so a percentage change would divide by zero`
+        : `MoM against ${c.prevWindow ? c.prevWindow.from + ' \u2013 ' + c.prevWindow.to : 'the previous window'}`);
+    };
+    const tkKpi = (lab, val, k) => kpi(lab, val, `MoM ${tkMom(k)}`);
     return `
     <div class="grid g-2">
       <div class="card">
         <div class="card-title">Channel</div>
         <div class="grid g-3">
-          ${kpi('Views', num(c.views))}
-          ${kpi('Reach', num(c.reach))}
-          ${kpi('Profile views', num(c.profileViews))}
+          ${tkKpi('Views', num(c.views), 'views')}
+          ${tkKpi('Reach', num(c.reach), 'reach')}
+          ${tkKpi('Profile views', num(c.profileViews), 'profileViews')}
         </div>
       </div>
       <div class="card">
@@ -4461,9 +4483,9 @@ function renderReport() {
       <div class="card">
         <div class="card-title">Engagements</div>
         <div class="grid g-3" style="margin-bottom:12px">
-          ${kpi('Likes', num(c.likes))}
-          ${kpi('Comments', num(c.comments))}
-          ${kpi('Shares', num(c.shares))}
+          ${tkKpi('Likes', num(c.likes), 'likes')}
+          ${tkKpi('Comments', num(c.comments), 'comments')}
+          ${tkKpi('Shares', num(c.shares), 'shares')}
         </div>
         ${bar('Likes', c.likes, engMax, '#4B8DF8')}
         ${bar('Comments', c.comments, engMax, '#7FB0F5')}
@@ -4472,8 +4494,8 @@ function renderReport() {
       <div class="card">
         <div class="card-title">Clicks</div>
         <div class="grid g-2" style="margin-bottom:12px">
-          ${kpi('Bio link clicks', num(c.bioLinkClicks))}
-          ${kpi('Phone clicks', num(c.phoneClicks))}
+          ${tkKpi('Bio link clicks', num(c.bioLinkClicks), 'bioLinkClicks')}
+          ${tkKpi('Phone clicks', num(c.phoneClicks), 'phoneClicks')}
         </div>
         ${bar('Bio link clicks', c.bioLinkClicks, clkMax, '#4B8DF8')}
         ${bar('Phone clicks', c.phoneClicks, clkMax, '#7FB0F5')}
@@ -10086,7 +10108,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.265.0';
+const CLIENT_BUILD = '3.266.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

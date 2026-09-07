@@ -634,14 +634,44 @@ global.fetch = async (url, opts = {}) => {
     // Two accounts on two dates: a daily series that assumed one row per date
     // would halve the trend, and reach that read `reach` would be undefined.
     const day = (date, account_name, o) => ({ date, account_name, ...o });
-    return jsonRes({ data: [
+    /**
+     * THE ACCOUNT PULL HONOURS THE DATE RANGE, unlike most of this stub.
+     *
+     * TikTok MoM needs a second pull one window back, and a stub that returns
+     * the SAME rows for every range makes every MoM exactly 0% — which is
+     * indistinguishable from a genuinely flat month, and would let a
+     * swapped-window bug (both pulls handed the same range, or the two
+     * swapped) pass while looking perfectly healthy on screen.
+     *
+     * SCALED BY THE MONTH, not by a hardcoded "is this the earlier one".
+     * A pivot on a fixed date only separated the two windows for one report
+     * range — open the deck on any other month and both pulls landed on the
+     * same side of it, MoM read 0.0%, and the fixture was lying again. Volume
+     * proportional to the month number separates ANY two adjacent windows.
+     *
+     * July is the factor-1 month, so the July figures are unchanged and every
+     * assertion written against them still holds. July against June is
+     * 7/6 - 1 = +16.667%; the swap reads -14.286%.
+     */
+    const from = (new URL(u)).searchParams.get("date_from") || "";
+    const factor = (Number(from.slice(5, 7)) || 7) / 7;
+    const CUR = [
       day("2026-07-15", "Bangkok Hospital", { video_views: 60000, unique_video_views: 11000,
         profile_views: 1200, likes: 1200, comments: 20, shares: 240, bio_link_clicks: 20, phone_number_clicks: 5 }),
       day("2026-07-15", "Bangkok Hospital TH", { video_views: 6941, unique_video_views: 1897,
         profile_views: 168, likes: 155, comments: 4, shares: 37, bio_link_clicks: 4, phone_number_clicks: 1 }),
       day("2026-07-16", "Bangkok Hospital", { video_views: 30000, unique_video_views: 5000,
         profile_views: 500, likes: 500, comments: 6, shares: 80, bio_link_clicks: 6, phone_number_clicks: 2 }),
-    ]});
+    ];
+    if (factor === 1) return jsonRes({ data: CUR });
+    return jsonRes({ data: CUR.map((r) => {
+      const scaled = { date: r.date, account_name: r.account_name };
+      for (const [k, v] of Object.entries(r)) {
+        if (k === "date" || k === "account_name") continue;
+        scaled[k] = Math.round(v * factor);
+      }
+      return scaled;
+    }) });
   }
   // LINE is disconnected; any call reaching here is a regression.
   if (u.includes("connectors.windsor.ai/line")) {
