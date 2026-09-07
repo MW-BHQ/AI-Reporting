@@ -1,5 +1,36 @@
 ### Recent (August 2026)
 
+**v3.265.0 — clicking any variant of a code opened the FIRST variant's ad list.**
+
+MW: "when i clicked, the second row google/cpc it expanded the facebook / paid".
+
+The expander keyed on `v.code`, and the campaign detail table is ONE ROW PER
+`utm_campaign` + SOURCE — so `260707-02_bgh_tra` appears once for facebook/paid
+and again for google/cpc, both rows carrying the same `data-adfor`.
+`querySelector` returns the first match, so every variant of a code opened
+facebook's list. The more sources a code has, the more rows are wrong, and each
+one silently shows another platform's ad campaigns.
+
+**Fixed by adjacency, not by a better key.** The ad row is emitted directly
+after its own `<tr>`, so `closest('tr').nextElementSibling` IS the relationship:
+no key, no `CSS.escape`, and a duplicate code cannot collide by construction.
+A class check keeps a click on the last variant from toggling whatever follows
+the tbody. The keys are now `code::source` as well — the handler does not read
+them, but leaving a knowingly-colliding attribute in place invites the next
+person to look a row up by it again.
+
+**COVERAGE LIMIT, stated rather than hidden.** Ad names attach per platform to
+one traffic row each, so a code needs a Meta-matching AND a Google-matching
+source before TWO rows are expandable. The fixture has one, so the new check
+proves the mechanism and not the collision MW hit. Adding `google` to the
+fixture's `sessionManualSource` list DOES produce two rows — and breaks
+`sa excludes x-network`, which exists to prove cross-network is NOT counted as
+Search Ads when the source is not Google. Editing a guard to make a new fixture
+fit is how a suite stops meaning anything, so the fixture was left alone and the
+gap is printed in the test output.
+
+### Recent (August 2026)
+
 **v3.264.0 — `YT_SHEET_ID` finally points at the sheet MW maintains.**
 
 The default was still `1o0n44IioDyEvAlNt_Tf11SxD11mDpkzlfABbBSbJZus`, the

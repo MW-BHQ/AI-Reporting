@@ -152,6 +152,7 @@ with sync_playwright() as p:
                 ".find(x=>x.dataset.view==='campaigns'); n&&n.click();}")
     pg.wait_for_timeout(700)
     cf, cbad, pageRule, prepHidden = None, [], "", 0
+    adjacency = None
     try:
         pg.fill("#campInput", "260701-08", timeout=15000)
         pg.click("#campGo")
@@ -166,6 +167,42 @@ with sync_playwright() as p:
         # it wrong.
         prepHidden = pg.evaluate("""() => [...document.querySelectorAll('#viewRoot .slide.pn tbody tr')]
           .filter(t => getComputedStyle(t).display === 'none').length""")
+        # ------------------------------------------- ad row opens its OWN row
+        #
+        # The campaign detail table is ONE ROW PER utm_campaign + SOURCE, so the
+        # same code appears once per source. The expander used to look its ad
+        # row up by code, and `querySelector` returns the FIRST match — so every
+        # variant of a code opened the first variant's ad list (MW: clicking
+        # google/cpc expanded facebook/paid). It is adjacency now: the ad row is
+        # emitted directly after its own `<tr>`.
+        #
+        # Asserted on screen, before print media reveals every row anyway.
+        adjacency = pg.evaluate("""() => {
+          const tds = [...document.querySelectorAll('#campBody [data-adrow]')];
+          const out = { cells: tds.length, opened: 0, wrong: 0 };
+          for (const td of tds) {
+            const own = td.closest('tr').nextElementSibling;
+            if (!own || !own.classList.contains('adrow')) { out.wrong++; continue; }
+            const before = [...document.querySelectorAll('#campBody tr.adrow')]
+              .filter(r => !r.hidden);
+            td.click();
+            const after = [...document.querySelectorAll('#campBody tr.adrow')]
+              .filter(r => !r.hidden);
+            const changed = after.filter(r => !before.includes(r));
+            // Exactly one row may change, and it must be this cell's own.
+            if (changed.length !== 1 || changed[0] !== own) out.wrong++;
+            else out.opened++;
+            td.click();
+          }
+          // THE KEYS ARE UNIQUE TOO, belt and braces. The handler no longer
+          // reads them, but they identified a row by CODE ALONE and the table
+          // has one row per code + SOURCE, so they collided. Now code::source.
+          const keys = [...document.querySelectorAll('#campBody tr.adrow')]
+            .map(r => r.getAttribute('data-adfor') || '');
+          out.keys = keys.length;
+          out.distinct = new Set(keys).size;
+          return out;
+        }""")
         pg.emulate_media(media="print")
         pg.wait_for_timeout(600)
         cf = pg.evaluate("""() => {
@@ -307,6 +344,30 @@ else:
     #
     # Asserted end to end rather than per rule: whatever the next unmirrored
     # print rule turns out to be, this catches it.
+    if not adjacency or not adjacency["cells"]:
+        print("  no expandable ad rows in this fixture — adjacency unproven")
+    elif adjacency["wrong"]:
+        cbad.append(f"{adjacency['wrong']} ad row(s) opened the wrong variant")
+        print(f"  !! {adjacency['wrong']} of {adjacency['cells']} ad cells opened a row "
+              f"that was not their own")
+    elif adjacency.get("distinct", 0) != adjacency.get("keys", 0):
+        cbad.append("ad row keys collide across variants of one code")
+        print(f"  !! {adjacency['keys']} ad rows share only "
+              f"{adjacency['distinct']} distinct keys")
+    else:
+        print(f"  all {adjacency['opened']} ad row(s) opened their own variant, "
+              f"{adjacency['distinct']} distinct key(s)  ok")
+        if adjacency["cells"] < 2:
+            # HONEST LIMIT. Ad names attach per platform to one traffic row
+            # each, so a code needs a Meta-matching AND a Google-matching
+            # source before two rows are expandable. This fixture has one
+            # platform-matching source, so the check proves the mechanism, not
+            # the collision MW hit. Adding `google` to the fixture's source
+            # list DOES produce two — and breaks `sa excludes x-network`, which
+            # is guarding something else. Not worth trading one guard for
+            # another.
+            print("  note: only 1 expandable row here — multi-source case unproven")
+
     if prepHidden:
         cbad.append(f"{prepHidden} table row(s) hidden while the sheet was measured")
         print(f"  !! {prepHidden} row(s) were collapsed during the prep pass but print "

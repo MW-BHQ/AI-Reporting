@@ -5694,7 +5694,7 @@ function renderCampaignBody(d) {
         <tbody>
           ${(d.variants||[]).map(v=>`<tr>
             <td class="strong i18n trunc" style="${v.adNames&&v.adNames.length?'cursor:pointer;':''}"
-              ${v.adNames&&v.adNames.length?`data-adrow="${esc(v.code)}"`:''}
+              ${v.adNames&&v.adNames.length?`data-adrow="${esc(v.code)}::${esc(v.source||'')}"`:''}
               title="${esc(v.code)}">${esc(v.code)}${
               v.adNames&&v.adNames.length?` <span class="pill grey">${v.adNames.length}</span>`:''}</td>
             <td>${esc(v.source||'—')}${v.medium?' <span style="color:var(--faint)">/ '+esc(v.medium)+'</span>':''}</td>
@@ -5707,7 +5707,7 @@ function renderCampaignBody(d) {
             <td class="num">${num(v.costPerVisit,{money:true})}</td>
             <td class="num">${num(v.costPerContact,{money:true})}</td>
             <td class="num">${num(v.revenue,{money:true})}</td>
-          </tr>${v.adNames&&v.adNames.length?`<tr class="adrow" data-adfor="${esc(v.code)}" hidden>
+          </tr>${v.adNames&&v.adNames.length?`<tr class="adrow" data-adfor="${esc(v.code)}::${esc(v.source||'')}" hidden>
             <td colspan="11"><div style="font-size:var(--text-2xs);color:var(--ink-2);line-height:1.7;">
             <table style="width:100%"><thead><tr>
               <th>Ad campaign</th><th class="num">Impr</th><th class="num">Link clicks</th>
@@ -5764,9 +5764,24 @@ function renderCampaignBody(d) {
    * The names were already in a `title` tooltip — hover-only, unreadable at
    * that length, and invisible in the PDF. Same data, in a row that opens.
    */
+  /**
+   * THE ROW BELOW, NOT A LOOKUP BY CODE (MW: "when i clicked, the second row
+   * google/cpc it expanded the facebook / paid").
+   *
+   * This keyed on `v.code` and the table is ONE ROW PER utm_campaign + SOURCE —
+   * so `260707-02_bgh_tra` appears once for facebook/paid and again for
+   * google/cpc, both rows carrying the same `data-adfor`. `querySelector`
+   * returns the first match, so every variant of a code opened facebook's ad
+   * list. The more sources a code has, the more rows are wrong.
+   *
+   * The ad row is emitted immediately after its own `<tr>`, so adjacency IS the
+   * relationship. No key, no `CSS.escape`, and a duplicate code cannot collide
+   * by construction. The class check keeps a click on the last variant from
+   * toggling whatever follows the table body.
+   */
   document.querySelectorAll('[data-adrow]').forEach((td) => td.addEventListener('click', () => {
-    const row = document.querySelector('[data-adfor="' + CSS.escape(td.dataset.adrow) + '"]');
-    if (row) row.hidden = !row.hidden;
+    const row = td.closest('tr') && td.closest('tr').nextElementSibling;
+    if (row && row.classList.contains('adrow')) row.hidden = !row.hidden;
   }));
   if ((d.trend||[]).length) drawChart('campChart', d.trend, [
     { label:'Visits', key:'visits', color:'#4B8DF8', axis:'y' },
@@ -10071,7 +10086,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.264.0';
+const CLIENT_BUILD = '3.265.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
