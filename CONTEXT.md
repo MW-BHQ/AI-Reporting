@@ -1,31 +1,45 @@
 ### Recent (August 2026)
 
-**slide-fill CANNOT carry the campaign funnel, and here is the reason — do not
-try again.**
+**v3.260.0 — the campaign funnel fills its card. The route was the third one.**
 
-MW pointed at the Monthly Report, correctly: `slide-fill` is the deck's
-mechanism for exactly this, and `flex:1 1 0` with a ZEROED basis is the detail I
-got wrong in v3.258 with `1 1 auto`.
+MW pointed at the Monthly Report and was right that `slide-fill` is the deck's
+mechanism for this. The previous two attempts failed for a real reason, and the
+note that used to sit here said "do not try again". That note was right about
+the blocker and wrong about the conclusion.
 
-Applied properly it DID work as a layout: the slide reported
-`slide slide-fill quiet pn`, the wrapper `flex: 1 1 0px`, and 316px of height in
-print media. **And the chart printed BLANK.**
+**The blocker:** `slide-fill` sets `.chart-wrap{height:0!important}` and lets
+flex hand the leftover space back. Nothing redraws the CANVAS at that new size —
+the deck does not need it to, because on those slides the SVG TWIN is what
+prints. The funnel could not have a twin: `chartToSvg` maps category to x and
+value to y, so it drew a horizontal funnel as vertical bars.
 
-**WHY, and this is the load-bearing bit:** `slide-fill` sets
-`.chart-wrap{height:0!important}` and lets flex hand the leftover space back.
-Nothing redraws the CANVAS at that new size — the deck does not need it to,
-because on those slides the SVG TWIN is what prints. The funnel cannot have a
-twin (`chartToSvg` has no `indexAxis`, so it draws a horizontal funnel as
-vertical bars). So the funnel gets slide-fill's zero height and prints its
-un-redrawn canvas: empty.
+**What closed it:** `hBarToSvg`, a separate twin builder for `indexAxis:'y'`.
+Separate on purpose — transposing `chartToSvg` in place would touch all forty
+vertical charts to serve the one horizontal chart. Two things the vertical path
+does not do and this one must: LOG SCALES (linear interpolation puts 2.7K key
+events one pixel from the origin, which is the bug the log axis exists to fix)
+and BAR-END VALUE LABELS (drawn on screen by the `barValueLabels` plugin, and a
+twin replicates geometry, not plugins).
 
-**slide-fill and "canvas prints, not the twin" are mutually exclusive.** Every
-slide-fill chart in this project is a twin. Reverted; v3.259 stands.
+With a twin in place the funnel is a `.chart-wrap` like every other fill chart,
+and the card uses `flex:1 1 0` with a ZEROED basis. `1 1 auto` does not work:
+the wrapper's own content then sets its height and it can never grow.
 
-**The two honest options remain**: cap the key-events list so the cards match
-naturally, or accept the blank below the chart. The third — teach `chartToSvg`
-about `indexAxis` — would unlock slide-fill here, and is the only route that
-actually closes it.
+**The measured before/after.** The old rule was `height:380px!important` — and
+it lived in `@media screen`, so what actually reached the sheet was the inline
+`height:230px`. Print: funnel 230px in a 421px card, 105px of blank under the
+note. Now: funnel 316px, 19px of card padding, no gap. The 380px guess could not
+have been right either way — the row's height is set by whichever card is
+taller, and the key-events list grows a row whenever a campaign fires a new
+event, so 380px just moved the blank to the other card.
+
+**The rule is duplicated into `@media print` rather than shared**, for the
+reason already written up for `.gbp-chart`: `buildPrintSvgs` measures the
+wrapper on SCREEN under `print-prep`, where a print-only rule has no effect.
+One rule in both places is what makes the measured box and the printed box the
+same box.
+
+Screen is unchanged: 230px canvas, still interactive, no twin.
 
 ### Recent (August 2026)
 

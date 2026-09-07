@@ -522,6 +522,12 @@
     /* The WRAPPER gets the height, never the canvas: a CSS height on a canvas
        stretches its bitmap, which is what distorted the funnel's labels. */
     body.pp-onepage #funnelChart{height:100%!important;}
+    /* The twin of the `print-prep` rule in the `@media screen` block — see the
+       long note there for why the same rule has to exist in both media. */
+    body.pp-onepage .grid.g-2-1 > .card:has(> .funnel-wrap){
+      display:flex;flex-direction:column;min-height:0;}
+    body.pp-onepage .funnel-wrap{
+      flex:1 1 0;height:0!important;max-height:none!important;min-height:200px;}
     body.pp-onepage .slide::before,body.pp-onepage .slide::after{display:none!important;}
     /* All listings is screen-only, so its column would leave the distribution
        at half width on a blank half page. One column when it is gone. */
@@ -788,6 +794,10 @@
   /* `min-width:0` so a canvas can never hold its grid track open at a width the
      track does not have — see `clearPrintPrep`. */
   .chart-wrap{height:250px;min-width:0;}
+  /* Was an inline `height:230px`. Same number, but a class the print rules can
+     override — an inline style cannot be, and that was what pinned the funnel
+     to 230px on the sheet while its card stretched to 421px. */
+  .funnel-wrap{height:230px;}
   /* The print-only SVG twin never shows on screen. */
   .chart-svg{display:none;}
   /* The printed date stamp. Hidden on screen — the range is in the controls. */
@@ -1729,7 +1739,40 @@
     /* Same height the print rule uses, so the SVG twin is measured at the size
        it will actually be printed at. See `.slide.pn .gbp-row .gbp-chart`. */
     body.print-prep .gbp-chart{height:560px!important;}
-    body.print-prep .funnel-wrap,body.pp-onepage .funnel-wrap{height:380px!important;}
+    /**
+     * THE FUNNEL FILLS ITS CARD, THE WAY THE REPORT DECK'S CHARTS DO.
+     *
+     * This was `height:380px!important` — a guess, and a guess cannot be right:
+     * the row's height is set by whichever of the two cards is taller, and the
+     * key-events list beside it grows a row whenever a campaign fires a new
+     * event. At 230px (the old inline height, which is what actually reached
+     * the sheet, because this rule lives under `@media screen`) the card had
+     * 105px of blank under the note. At 380px the blank simply moved to the
+     * key-events card instead.
+     *
+     * `flex:1 1 0` with a ZEROED basis is the deck's mechanism — `slide-fill`
+     * does exactly this — and it needs no number at all: the chart takes
+     * whatever is left after the header and the note. `1 1 auto` does NOT work
+     * here; the basis has to be zero or the wrapper's own content sets its
+     * height and it can never grow.
+     *
+     * WHY THIS IS NOW POSSIBLE, having been reverted twice: fill zeroes the
+     * wrapper and nothing redraws the CANVAS at the new size, so a chart with
+     * no SVG twin prints blank. The funnel had no twin because `chartToSvg`
+     * could not draw a horizontal bar. `hBarToSvg` closes that, so the funnel
+     * is a twin like every other fill chart in the project.
+     *
+     * DUPLICATED into `@media print` below, not shared, and the reason is the
+     * same one written up for `.gbp-chart`: `buildPrintSvgs` measures the
+     * wrapper on SCREEN under `print-prep`, where a print-only rule has no
+     * effect. One rule in both places is what makes the measured box and the
+     * printed box the same box.
+     */
+    body.print-prep .grid.g-2-1 > .card:has(> .funnel-wrap),
+    body.pp-onepage .grid.g-2-1 > .card:has(> .funnel-wrap){
+      display:flex;flex-direction:column;min-height:0;}
+    body.print-prep .funnel-wrap,body.pp-onepage .funnel-wrap{
+      flex:1 1 0;height:0!important;max-height:none!important;min-height:200px;}
     body.print-prep .gbp-row{display:grid;grid-template-columns:3.5fr 1.5fr;gap:12px;align-items:stretch;}
     body.print-prep{overflow:hidden!important;}
   }
@@ -5490,14 +5533,12 @@ function renderCampaignBody(d) {
     <div class="grid g-2-1 mt">
       <div class="card">
         <h2>${d.topic?esc(d.topic):'Campaign funnel'} <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--faint);">· ${esc(d.code)}${d.launchDate?` · dated ${esc(d.launchDate)}`:''}</span></h2>
-        <!-- NOT a chart-wrap: chartToSvg reads one backgroundColor per dataset,
-     and this funnel colours each BAR separately, so the twin drew every bar
-     black. The canvas prints correctly; the twin is the wrong tool here
-     until chartToSvg handles per-point colour arrays. -->
-        <!-- Canvas, not a chart-wrap: chartToSvg has no notion of indexAxis, so
-             the twin drew this horizontal funnel as vertical bars. Per-bar
-             colour is fixed (v3.254.0); orientation is not. -->
-        <div class="funnel-wrap" style="height:230px;"><canvas id="funnelChart"></canvas></div>
+        <!-- A chart-wrap since v3.260.0, which is what lets this card fill the
+             way the report deck's do. Both blockers are closed: per-bar colour
+             (v3.254.0) and indexAxis (see hBarToSvg). The height is a CLASS, not
+             an inline style — an inline height cannot be overridden by the
+             print rules, which is the whole mechanism here. -->
+        <div class="chart-wrap funnel-wrap"><canvas id="funnelChart"></canvas></div>
         ${d.offSiteGoal?`<div class="note">Only the ad-platform stages appear: a ${esc((d.goalLabel||'').toLowerCase())} campaign's clicks open a ${d.goal==='leads'?'lead form':'chat'} on Meta, so no website stages follow. A logarithmic axis is used so stages of very different size stay readable.</div>`
           :t.costPerKeyEvent!=null?`<div class="note">Cost per key event: <b>${num(t.costPerKeyEvent,{money:true})}</b> · ${num(t.spend,{money:true})} ÷ ${num(t.keyEvents)} key events. A logarithmic axis keeps impressions and key events readable together.</div>`
           :`<div class="note">Stages with no data are omitted — a logarithmic axis can't plot zero. ${t.visits?'':'No website visits carry this code.'}</div>`}
@@ -9238,7 +9279,140 @@ function svgSmooth(pts, tension) {
   }
   return d;
 }
+/**
+ * A HORIZONTAL BAR IS A DIFFERENT GEOMETRY, NOT A FLAG (v3.260.0).
+ *
+ * `chartToSvg` is built around one mapping: category along x, value along y.
+ * `indexAxis:'y'` swaps both, so the funnel came out of the twin as vertical
+ * bars — which is why the campaign funnel had to keep printing from its canvas,
+ * and why `slide-fill` could never be used on it (see CONTEXT: slide-fill zeroes
+ * the wrapper and lets the twin print; a chart with no twin prints its
+ * un-redrawn canvas, blank). This is that twin, and it closes it.
+ *
+ * A SEPARATE FUNCTION, DELIBERATELY. Transposing `chartToSvg` in place would
+ * touch every one of the forty vertical charts in the deck to serve the one
+ * horizontal chart in it. Nothing here is shared, so nothing here can regress
+ * them.
+ *
+ * TWO THINGS THE VERTICAL PATH DOES NOT DO:
+ *   · LOG SCALES. `(v-min)/(max-min)` is linear, and the funnel's axis is
+ *     logarithmic precisely because 2.7K key events beside 2.7M impressions is
+ *     a one-pixel bar. Interpolating it linearly reproduces the bug the log
+ *     axis exists to fix, so the fraction is taken in log space.
+ *   · BAR-END VALUES. On screen these come from the `barValueLabels` plugin,
+ *     and a twin replicates geometry, not plugins — same omission class as the
+ *     axis titles in v3.238. Drawn here so the sheet carries the numbers the
+ *     screen does.
+ */
+function hBarToSvg(chart, W, H) {
+  const ds = (chart.data && chart.data.datasets) || [];
+  const labels = (chart.data && chart.data.labels) || [];
+  if (!ds.length || !labels.length) return '';
+  const sc = chart.scales || {};
+  const vx = sc.x, cy = sc.y;
+  const hidden = (a) => !!(a && a.options && a.options.display === false);
+  const FS = 10;
+  /**
+   * THE LEFT GUTTER IS MEASURED, NOT FIXED. These category labels are words
+   * ("Impressions", "Key events"), not the four-glyph numbers the vertical
+   * path's fixed 46px was sized for, so a constant either clipped them or
+   * stole a third of the plot.
+   */
+  const maxLab = labels.reduce((m, l) => Math.max(m, String(l).length), 0);
+  const padL = hidden(cy) ? 6 : Math.min(110, Math.max(46, 10 + maxLab * FS * 0.62));
+  const padR = 16, padT = 8;
+  const padB = hidden(vx) ? 6 : 22;
+  const pw = Math.max(10, W - padL - padR), ph = Math.max(10, H - padT - padB);
+  const n = labels.length;
+  const isLog = !!vx && (vx.type === 'logarithmic'
+    || (vx.options && vx.options.type === 'logarithmic'));
+  const vmin = vx ? Number(vx.min) : 0, vmax = vx ? Number(vx.max) : 1;
+  const lo = isLog ? Math.log10(vmin > 0 ? vmin : 1) : vmin;
+  const hi = isLog ? Math.log10(vmax > 0 ? vmax : 10) : vmax;
+  const span = (hi - lo) || 1;
+  const xOf = (v) => {
+    const raw = Number(v);
+    if (!isFinite(raw)) return padL;
+    const a = isLog ? Math.log10(Math.max(raw, vmin > 0 ? vmin : 1)) : raw;
+    return padL + Math.max(0, Math.min(1, (a - lo) / span)) * pw;
+  };
+  const catAt = (i) => padT + (ph / n) * (i + 0.5);
+  const out = [];
+  out.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="none"/>');
+  /**
+   * GRIDLINES ONLY WHERE A TICK IS LABELLED. The funnel's callback returns ''
+   * for every non-decade tick, so a line per tick drew eighteen rules behind
+   * five bars. The screen's faint grid reads as a handful; so does this.
+   */
+  if (!hidden(vx)) {
+    ((vx && vx.ticks) || []).forEach((t) => {
+      if (!t.label) return;
+      const x = xOf(t.value);
+      if (!isFinite(x)) return;
+      out.push('<line x1="' + x.toFixed(1) + '" y1="' + padT + '" x2="' + x.toFixed(1)
+        + '" y2="' + (padT + ph).toFixed(1) + '" stroke="rgba(90,110,160,.09)" stroke-width="1"/>');
+      out.push('<text x="' + x.toFixed(1) + '" y="' + (padT + ph + 14).toFixed(1)
+        + '" text-anchor="middle" font-family="Poppins,sans-serif" font-size="' + FS
+        + '" fill="#A7B0C7">' + svgEsc(String(t.label)) + '</text>');
+    });
+  }
+  const bars = ds.filter((d) => (d.type || chart.config.type) === 'bar');
+  const barN = Math.max(1, bars.length);
+  bars.forEach((d, bi) => {
+    const band = (ph / n) * 0.8 * (d.barPercentage != null ? d.barPercentage : 0.9);
+    const bh = band / barN;
+    const off = barN > 1 ? (bi - (barN - 1) / 2) * bh : 0;
+    const r = Math.min(Number(d.borderRadius) || 0, bh / 2);
+    (d.data || []).forEach((v, i) => {
+      if (v === null || v === undefined) return;   // absent, not zero
+      const x1 = xOf(v), w = x1 - padL;
+      if (!(w > 0)) return;
+      /* ROUNDED, unlike the vertical path — and for the reason the vertical
+         path is square: there it would round each block of a STACK and the
+         column reads as loose tiles. This is one bar per row with its own
+         colour, and on screen it has a 6px radius. Matching it is matching
+         the desktop, which is the standing instruction. */
+      out.push('<rect x="' + padL + '" y="' + (catAt(i) - bh / 2 + off).toFixed(1)
+        + '" width="' + w.toFixed(1) + '" height="' + bh.toFixed(1)
+        + '" rx="' + r.toFixed(1) + '" fill="'
+        + svgEsc((Array.isArray(d.backgroundColor) ? d.backgroundColor[i] : d.backgroundColor)
+                 || d.borderColor || '#999') + '"/>');
+    });
+  });
+  // Category names, right-aligned into the measured gutter.
+  if (!hidden(cy)) {
+    labels.forEach((l, i) => {
+      out.push('<text x="' + (padL - 8) + '" y="' + (catAt(i) + 3.5).toFixed(1)
+        + '" text-anchor="end" font-family="Poppins,sans-serif" font-size="' + (FS + 1)
+        + '" fill="#4C5878">' + svgEsc(String(l)) + '</text>');
+    });
+  }
+  /**
+   * THE VALUE AT EACH BAR'S END, exactly as `barValueLabels` draws it: outside
+   * in grey where it fits, inside in white where the bar reaches the edge.
+   */
+  bars.forEach((d, bi) => {
+    const band = (ph / n) * 0.8 * (d.barPercentage != null ? d.barPercentage : 0.9);
+    const bh = band / barN;
+    const off = barN > 1 ? (bi - (barN - 1) / 2) * bh : 0;
+    (d.data || []).forEach((v, i) => {
+      if (v === null || v === undefined) return;
+      const txt = Number(v).toLocaleString();
+      const x1 = xOf(v), w = 8 + String(txt).length * (FS * 0.6);
+      const outside = x1 + w < padL + pw - 2;
+      out.push('<text x="' + (outside ? x1 + 7 : x1 - 7).toFixed(1) + '" y="'
+        + (catAt(i) + off + 3.5).toFixed(1) + '" text-anchor="' + (outside ? 'start' : 'end')
+        + '" font-family="Poppins,sans-serif" font-size="' + (FS + 0.5)
+        + '" font-weight="600" fill="' + (outside ? '#4C5878' : '#fff') + '">'
+        + svgEsc(txt) + '</text>');
+    });
+  });
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H
+    + '" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">' + out.join('') + '</svg>';
+}
 function chartToSvg(chart, W, H) {
+  // Category on y, value on x — a different mapping end to end. See `hBarToSvg`.
+  if (chart.options && chart.options.indexAxis === 'y') return hBarToSvg(chart, W, H);
   const ds = (chart.data && chart.data.datasets) || [];
   const labels = (chart.data && chart.data.labels) || [];
   if (!ds.length || !labels.length) return '';
@@ -9844,7 +10018,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.259.0';
+const CLIENT_BUILD = '3.260.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

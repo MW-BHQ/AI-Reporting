@@ -120,6 +120,56 @@ with sync_playwright() as p:
                  .filter(t => (t.innerHTML||'').length > 200).length,
       };
     }""")
+    # ------------------------------------------------------- Campaign funnel
+    #
+    # TWO THINGS THAT HAVE BOTH SHIPPED BROKEN AND NEITHER OF WHICH SHOWS ON
+    # SCREEN.
+    #
+    # The funnel is the deck's only horizontal chart, so it is the only one
+    # whose twin comes from `hBarToSvg`. If that twin is missing the funnel
+    # prints BLANK, because the fill rule gives its wrapper a zero height and
+    # nothing redraws the canvas — the exact failure that got v3.258 reverted.
+    # And if the wrapper stops filling, the card goes back to a fixed-height
+    # chart floating above a stretched card with a wedge of blank under the
+    # note.
+    #
+    # Measured under the REAL export path (`sizeForPrint`, then print media),
+    # not an emulation of it: the fill rule exists twice, once per medium, and
+    # only the real path exercises both.
+    pg.emulate_media(media="screen")
+    pg.evaluate("()=>{const n=[...document.querySelectorAll('[data-view]')]"
+                ".find(x=>x.dataset.view==='campaigns'); n&&n.click();}")
+    pg.wait_for_timeout(700)
+    cf, cbad = None, []
+    try:
+        pg.fill("#campInput", "260701-08", timeout=15000)
+        pg.click("#campGo")
+        pg.wait_for_timeout(7000)
+        pg.evaluate("()=>sizeForPrint()")
+        pg.wait_for_timeout(1500)
+        pg.emulate_media(media="print")
+        pg.wait_for_timeout(600)
+        cf = pg.evaluate("""() => {
+          const w = document.querySelector('.funnel-wrap');
+          if (!w) return null;
+          const card = w.closest('.card');
+          const note = card && card.querySelector('.note');
+          const svg = w.querySelector('.chart-svg svg');
+          return {
+            wrapClass: w.className,
+            wrapH: Math.round(w.getBoundingClientRect().height),
+            cardH: card ? Math.round(card.getBoundingClientRect().height) : 0,
+            // blank between the last thing in the card and the card's own bottom
+            slack: (card && note)
+              ? Math.round(card.getBoundingClientRect().bottom
+                           - note.getBoundingClientRect().bottom)
+              : -1,
+            bars: svg ? svg.querySelectorAll('rect[rx]').length : 0,
+            canvasHidden: getComputedStyle(w.querySelector('canvas')).display === 'none',
+          };
+        }""")
+    except Exception as e:                                    # noqa: BLE001
+        cbad.append(f"could not load a campaign: {str(e)[:60]}")
     browser.close()
 
 bad = [r for r in rows if r["over"] > 2]
@@ -181,4 +231,36 @@ if bc["twins"] < bc["canvases"]:
 print(f"\n{len(bc['slides'])} Better Club slides, {bc['twins']}/{bc['canvases']} twins, "
       f"{len(bcbad)} problem(s)")
 
-sys.exit(1 if (bad or bcbad) else 0)
+print("\nCampaign funnel")
+if not cf:
+    cbad.append("no .funnel-wrap on the printed campaign")
+    print("  !! no funnel found — the campaign did not render")
+else:
+    if "chart-wrap" not in cf["wrapClass"]:
+        cbad.append("funnel is not a .chart-wrap, so no twin is built for it")
+        print("  !! funnel wrapper is not a .chart-wrap — it will print its canvas")
+    else:
+        print("  funnel is a .chart-wrap  ok")
+    # `rect[rx]` counts the rounded bars only, so the twin's background rect and
+    # its label plates cannot pad the number into looking healthy.
+    if cf["bars"] < 3:
+        cbad.append(f"twin has {cf['bars']} bars — the funnel will print blank or short")
+        print(f"  !! twin drew {cf['bars']} bars, expected one per funnel stage")
+    else:
+        print(f"  twin drew {cf['bars']} bars  ok")
+    if not cf["canvasHidden"]:
+        cbad.append("canvas still visible in print — the twin is not what prints")
+        print("  !! the canvas is still displayed in print media")
+    # 40px is a card's padding plus a little. More than that is the wedge of
+    # blank this check exists to catch.
+    if cf["slack"] > 40:
+        cbad.append(f"{cf['slack']}px of blank under the funnel note")
+        print(f"  !! {cf['slack']}px of blank between the note and the card's bottom "
+              f"— the chart is not filling")
+    else:
+        print(f"  chart fills its card, {cf['slack']}px of padding left  ok")
+    print(f"  funnel {cf['wrapH']}px in a {cf['cardH']}px card")
+
+print(f"\n{len(cbad)} campaign funnel problem(s)")
+
+sys.exit(1 if (bad or bcbad or cbad) else 0)
