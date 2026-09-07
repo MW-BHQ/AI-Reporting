@@ -1774,6 +1774,39 @@
     body.print-prep .funnel-wrap,body.pp-onepage .funnel-wrap{
       flex:1 1 0;height:0!important;max-height:none!important;min-height:200px;}
     body.print-prep .gbp-row{display:grid;grid-template-columns:3.5fr 1.5fr;gap:12px;align-items:stretch;}
+    /**
+     * A HIDDEN ROW IS STILL A PRINTED ROW, AND THE MEASUREMENT HAS TO SEE IT.
+     *
+     * THIS is the recurring page-break bug, and it is not the charts.
+     * `.slide.pn tbody tr{display:table-row!important}` in `@media print`
+     * un-hides every collapsed row on a `pn` slide — the campaign detail
+     * table's `.adrow` blocks carry `hidden`, one per utm variant, and they all
+     * appear on the sheet. `onePageIfAsked` measures the slide on SCREEN under
+     * `print-prep`, where that rule does not apply, so it sized the page for a
+     * document with NONE of them in it.
+     *
+     * Measured on the fixture: the detail card is 389px with the row collapsed
+     * and 532px with it open — 143px of unmeasured content from ONE row. A real
+     * campaign has ten, which is why the page kept spilling onto a second
+     * sheet, and why the @page slack had to be raised four times (8 -> 24 -> 48
+     * -> 72px) and still was not enough: the shortfall scales with the row
+     * count, so no constant can cover it.
+     *
+     * It was masked until v3.260 by an unrelated accident — the funnel's
+     * `height:380px` prep rule against the 230px that actually printed handed
+     * the estimate a free 150px cushion. Fixing the funnel removed the cushion
+     * and the real bug surfaced. The rows are what needed measuring.
+     */
+    body.print-prep .slide.pn tbody tr{display:table-row!important;}
+    /**
+     * The same reasoning for the grid tracks. `2fr 1fr` is print-only, so prep
+     * measured the campaign pair at `1.6fr 1fr` — 779/487 against the 790/395
+     * that prints — and every wrap in the narrower column was mis-measured.
+     * The `.gbp-row` override is mirrored with it, in the same order, or GBP
+     * measures two columns and prints one.
+     */
+    body.pp-onepage .grid.g-2-1{grid-template-columns:2fr 1fr!important;}
+    body.pp-onepage .slide.pn .gbp-row .grid.g-2-1{grid-template-columns:1fr!important;}
     body.print-prep{overflow:hidden!important;}
   }
   /**
@@ -10018,7 +10051,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.260.0';
+const CLIENT_BUILD = '3.261.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

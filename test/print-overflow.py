@@ -22,6 +22,7 @@ The server dies between shells, so start it and run this in the SAME command.
 Width defaults to 900 deliberately: the print layout can be narrower than the
 window, and a wide render hides the grid-collapse class of bug entirely.
 """
+import re
 import sys
 from playwright.sync_api import sync_playwright
 
@@ -137,16 +138,34 @@ with sync_playwright() as p:
     # not an emulation of it: the fill rule exists twice, once per medium, and
     # only the real path exercises both.
     pg.emulate_media(media="screen")
+    # A DESKTOP WIDTH, NOT THE 900px THE DECK IS MEASURED AT.
+    #
+    # `print-prep` sets `.main` to 12.493in to make the screen measure like a
+    # page, but the responsive breakpoints still see the WINDOW — at 900px
+    # `@media(max-width:1080px)` collapses the grids, so the prep pass measures
+    # a two-column layout that never prints and sizes the sheet a third too
+    # tall. 900px is deliberate for the report deck (it exposes grid collapse);
+    # for a measure-then-size export it just measures the wrong document.
+    pg.set_viewport_size({"width": 1440, "height": 900})
+    pg.wait_for_timeout(300)
     pg.evaluate("()=>{const n=[...document.querySelectorAll('[data-view]')]"
                 ".find(x=>x.dataset.view==='campaigns'); n&&n.click();}")
     pg.wait_for_timeout(700)
-    cf, cbad = None, []
+    cf, cbad, pageRule, prepHidden = None, [], "", 0
     try:
         pg.fill("#campInput", "260701-08", timeout=15000)
         pg.click("#campGo")
         pg.wait_for_timeout(7000)
         pg.evaluate("()=>sizeForPrint()")
         pg.wait_for_timeout(1500)
+        pageRule = pg.evaluate("()=>{const s=document.getElementById('printPageSize');"
+                               "return s ? s.textContent : ''}")
+        # Collapsed rows STILL PRINT (`.slide.pn tbody tr{display:table-row}`),
+        # so any row hidden during the prep pass is content the sheet was not
+        # sized for. Counted here, on screen, because that is the pass that gets
+        # it wrong.
+        prepHidden = pg.evaluate("""() => [...document.querySelectorAll('#viewRoot .slide.pn tbody tr')]
+          .filter(t => getComputedStyle(t).display === 'none').length""")
         pg.emulate_media(media="print")
         pg.wait_for_timeout(600)
         cf = pg.evaluate("""() => {
@@ -166,6 +185,21 @@ with sync_playwright() as p:
               : -1,
             bars: svg ? svg.querySelectorAll('rect[rx]').length : 0,
             canvasHidden: getComputedStyle(w.querySelector('canvas')).display === 'none',
+            /**
+             * THE WHOLE SLIDE, measured in PRINT media. `onePageIfAsked` sizes
+             * `@page` from a measurement taken on SCREEN under `print-prep`,
+             * and the two disagree whenever a print-only rule changes the
+             * layout — the `.adrow` reveal was worth 143px per collapsed row.
+             * Anything the estimate misses spills onto a second sheet.
+             */
+            printed: (() => {
+              const sl = w.closest('.slide');
+              if (!sl) return 0;
+              const kids = [...sl.children];
+              const lastKid = kids[kids.length - 1];
+              return Math.round(lastKid.getBoundingClientRect().bottom
+                                - sl.getBoundingClientRect().top);
+            })(),
           };
         }""")
     except Exception as e:                                    # noqa: BLE001
@@ -260,6 +294,41 @@ else:
     else:
         print(f"  chart fills its card, {cf['slack']}px of padding left  ok")
     print(f"  funnel {cf['wrapH']}px in a {cf['cardH']}px card")
+
+    # ---------------------------------------------------- one page, not two
+    #
+    # THE INVARIANT THAT MATTERS, and the one no constant can guarantee: the
+    # sheet `onePageIfAsked` sized must be at least as tall as the content that
+    # actually prints. It is measured on SCREEN under `print-prep`, so every
+    # print-only rule that changes the layout is a chance for the estimate to
+    # come in short — and a short estimate is a second, near-empty page. The
+    # slack was raised four times (8 -> 24 -> 48 -> 72px) chasing this; the
+    # shortfall scaled with the campaign's row count, so it never closed.
+    #
+    # Asserted end to end rather than per rule: whatever the next unmirrored
+    # print rule turns out to be, this catches it.
+    if prepHidden:
+        cbad.append(f"{prepHidden} table row(s) hidden while the sheet was measured")
+        print(f"  !! {prepHidden} row(s) were collapsed during the prep pass but print "
+              f"anyway — the sheet is sized short by all of them")
+    else:
+        print("  every printed row was visible to the measurement  ok")
+
+    m = re.search(r"size:[\d.]+in\s+([\d.]+)in", pageRule or "")
+    if not m:
+        cbad.append("no @page size rule was written for the campaign export")
+        print("  !! no @page size rule — the export will paginate to 13.333x7.5in sheets")
+    else:
+        sheet = float(m.group(1)) * 96          # CSS px to the inch
+        printed = cf["printed"]
+        if printed > sheet:
+            cbad.append(f"content is {round(printed - sheet)}px taller than the sized sheet")
+            print(f"  !! content prints {round(printed)}px against a {round(sheet)}px sheet "
+                  f"— {round(printed - sheet)}px spills onto a second page")
+        else:
+            tail = (sheet - printed) / sheet * 100
+            print(f"  content {round(printed)}px on a {round(sheet)}px sheet, "
+                  f"{round(tail)}% blank tail  ok")
 
 print(f"\n{len(cbad)} campaign funnel problem(s)")
 

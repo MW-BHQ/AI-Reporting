@@ -1,5 +1,51 @@
 ### Recent (August 2026)
 
+**v3.261.0 — the campaign export's second page. It was never the charts.**
+
+`onePageIfAsked` sizes `@page` from a measurement taken on SCREEN under
+`print-prep`. `@media print` carries rules that `print-prep` did not, and every
+one of them is a chance for the estimate to come in short — a short estimate is
+a second, near-empty sheet.
+
+**The one that mattered:** `.slide.pn tbody tr{display:table-row!important}`
+un-hides every collapsed row on a `pn` slide. The campaign detail table's
+`.adrow` blocks carry `hidden`, one per utm variant, and they ALL print. The
+prep pass never saw them, so the sheet was sized for a document with none of
+them in it. Measured on the fixture: that card is 389px with the row collapsed
+and 532px with it open — **143px of unmeasured content per row**, and a real
+campaign has ten. That is why the slack was raised four times (8 -> 24 -> 48 ->
+72px) and still was not enough: the shortfall scales with the row count, so no
+constant can cover it.
+
+**Why it surfaced now.** It was masked by an unrelated accident. The funnel's
+`height:380px` prep rule against the 230px that actually printed handed the
+estimate a free 150px cushion. v3.260 fixed the funnel, the cushion went, and
+the real bug appeared as MW's page break before the DAILY card.
+
+Also mirrored: `body.pp-onepage .grid.g-2-1{grid-template-columns:2fr 1fr}` and
+its `.gbp-row` override. Prep measured the campaign pair at 779/487 against the
+790/395 that prints, so every wrap in the narrower column was mis-measured.
+
+**THE RULE: any `@media print` rule that changes BLOCK HEIGHT on a
+measure-then-size view has to exist under `body.print-prep` too.** Same
+principle already written up for `.gbp-chart` and the funnel fill. The estimate
+is only as good as the layout it measures.
+
+**Guarded three ways** in `print-overflow.py`, under the real export path: no
+`.slide.pn tbody tr` may be hidden while the sheet is measured; the sized sheet
+must be at least as tall as the content that prints; and the campaign section
+is measured at 1440px, not the deck's 900px — `print-prep` widens `.main` but
+the responsive breakpoints still see the WINDOW, so at 900px the grids collapse
+and the prep pass measures a document that never prints. Both new checks were
+verified to FAIL when the fix is removed.
+
+**Still open:** the export's page height varies with the author's window width
+for that same breakpoint reason. At 1440px the tail is 16%; at 900px it was
+33%. Not a second page, so not urgent, but the measurement should not depend on
+the window at all.
+
+### Recent (August 2026)
+
 **v3.260.0 — the campaign funnel fills its card. The route was the third one.**
 
 MW pointed at the Monthly Report and was right that `slide-fill` is the deck's
