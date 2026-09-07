@@ -1729,13 +1729,7 @@
     /* Same height the print rule uses, so the SVG twin is measured at the size
        it will actually be printed at. See `.slide.pn .gbp-row .gbp-chart`. */
     body.print-prep .gbp-chart{height:560px!important;}
-    /* The funnel card is stretched by the grid to match the nine-row key events
-       list beside it. A fixed height left 300px of blank under the chart, so the
-       card becomes a flex column and the chart takes whatever is left. */
-    body.print-prep .funnel-card,body.pp-onepage .funnel-card{
-      display:flex!important;flex-direction:column!important;}
-    body.print-prep .funnel-wrap,body.pp-onepage .funnel-wrap{
-      flex:1 1 auto!important;height:auto!important;min-height:300px!important;}
+    body.print-prep .funnel-wrap,body.pp-onepage .funnel-wrap{height:380px!important;}
     body.print-prep .gbp-row{display:grid;grid-template-columns:3.5fr 1.5fr;gap:12px;align-items:stretch;}
     body.print-prep{overflow:hidden!important;}
   }
@@ -5494,7 +5488,7 @@ function renderCampaignBody(d) {
     </div>
 
     <div class="grid g-2-1 mt">
-      <div class="card funnel-card">
+      <div class="card">
         <h2>${d.topic?esc(d.topic):'Campaign funnel'} <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--faint);">· ${esc(d.code)}${d.launchDate?` · dated ${esc(d.launchDate)}`:''}</span></h2>
         <!-- NOT a chart-wrap: chartToSvg reads one backgroundColor per dataset,
      and this funnel colours each BAR separately, so the twin drew every bar
@@ -8858,10 +8852,7 @@ function drawFunnelChart(canvasId, stages) {
           tooltip: { callbacks: { label: (c) => ` ${c.parsed.x.toLocaleString()}` } },
         },
         scales: {
-          // Horizontal ticks: "1k 10k 100k 1000k" are short enough not to need
-          // rotating, and the 45-degree labels were eating chart height.
-          x: { type: 'logarithmic', ticks: { maxRotation:0, minRotation:0,
-               color:'#A7B0C7', font:{family:'Poppins',size:10},
+          x: { type: 'logarithmic', ticks: { color:'#A7B0C7', font:{family:'Poppins',size:10},
                  callback: (v) => { const l=Math.log10(v); return Number.isInteger(l) ? (v>=1000?(v/1000)+'k':v) : ''; } },
                grid: { color:'rgba(90,110,160,.09)' } },
           /**
@@ -9853,7 +9844,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.258.0';
+const CLIENT_BUILD = '3.257.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
