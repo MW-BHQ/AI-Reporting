@@ -1,5 +1,29 @@
 ### Recent (August 2026)
 
+**v3.258.0 — the funnel fills its card. Three causes, not one.**
+
+MW reported "the graph still not [fixed]" five times. It was never one bug:
+
+ 1. **v3.254** — the SVG twin drew it vertical (`chartToSvg` ignores
+    `indexAxis`). Reverted to canvas.
+ 2. **v3.255** — a CSS height on the CANVAS stretched its bitmap. Moved to the
+    wrapper.
+ 3. **v3.257** — `autoSkip` dropped two of five stage labels.
+ 4. **v3.258** — a FIXED wrapper height inside a card the grid stretches to
+    match the nine-row key-events list, leaving 300px of blank under the chart.
+    The card is a flex column now and the chart takes what is left.
+
+Also: the log axis ticks were rotated 45 degrees and eating height for
+"1k / 10k / 100k / 1000k", which fit horizontally. `maxRotation:0`.
+
+**THE LESSON IS ABOUT MY METHOD, NOT THE CSS.** Each fix was correct and each
+time I reported the chart fixed on the strength of one crop. Four separate
+causes stacked in one element, and MW paid for every round trip. **When a fix
+does not land, the next step is to enumerate the causes before changing
+anything, not to change one more thing.**
+
+### Recent (August 2026)
+
 **v3.257.0 — the funnel names all five stages; the tail is not shaved.**
 
 **The funnel's missing bars were Chart.js `autoSkip`.** Two of the five category
