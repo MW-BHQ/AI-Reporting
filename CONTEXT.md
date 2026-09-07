@@ -1,5 +1,34 @@
 ### Recent (August 2026)
 
+**slide-fill CANNOT carry the campaign funnel, and here is the reason — do not
+try again.**
+
+MW pointed at the Monthly Report, correctly: `slide-fill` is the deck's
+mechanism for exactly this, and `flex:1 1 0` with a ZEROED basis is the detail I
+got wrong in v3.258 with `1 1 auto`.
+
+Applied properly it DID work as a layout: the slide reported
+`slide slide-fill quiet pn`, the wrapper `flex: 1 1 0px`, and 316px of height in
+print media. **And the chart printed BLANK.**
+
+**WHY, and this is the load-bearing bit:** `slide-fill` sets
+`.chart-wrap{height:0!important}` and lets flex hand the leftover space back.
+Nothing redraws the CANVAS at that new size — the deck does not need it to,
+because on those slides the SVG TWIN is what prints. The funnel cannot have a
+twin (`chartToSvg` has no `indexAxis`, so it draws a horizontal funnel as
+vertical bars). So the funnel gets slide-fill's zero height and prints its
+un-redrawn canvas: empty.
+
+**slide-fill and "canvas prints, not the twin" are mutually exclusive.** Every
+slide-fill chart in this project is a twin. Reverted; v3.259 stands.
+
+**The two honest options remain**: cap the key-events list so the cards match
+naturally, or accept the blank below the chart. The third — teach `chartToSvg`
+about `indexAxis` — would unlock slide-fill here, and is the only route that
+actually closes it.
+
+### Recent (August 2026)
+
 **v3.259.0 — v3.258 reverted. Back to the last state MW confirmed good.**
 
 v3.258 made the funnel card a flex column and unrotated the log ticks. It
