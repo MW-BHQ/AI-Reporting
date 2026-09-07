@@ -520,7 +520,10 @@
     /* Campaign: the funnel and its key-events list are a pair, and the detail
        table must not split. */
     body.pp-onepage .grid.g-2-1{grid-template-columns:2fr 1fr!important;}
-    body.pp-onepage table{break-inside:avoid;}
+    /* NO `break-inside:avoid` here. On a content-sized single page it made
+       Chrome reserve a page boundary before the detail table and left a sheet's
+       worth of blank in the middle of the export. There are no page breaks to
+       avoid on a one-page document. */
     .slide.pn .gbp-row{display:grid;grid-template-columns:3.5fr 1.5fr;gap:12px;
       align-items:stretch;flex:1 1 auto;min-height:0;}
     /* Both columns take the height the row was given, and the chart grows into
@@ -9751,7 +9754,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.250.0';
+const CLIENT_BUILD = '3.251.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

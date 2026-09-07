@@ -1,5 +1,20 @@
 ### Recent (August 2026)
 
+**v3.251.0 — the blank sheet in the middle of the campaign PDF is gone.**
+
+`break-inside:avoid` on tables, added in v3.250 to stop the detail block
+splitting, made Chrome reserve a PAGE BOUNDARY before the table — so a
+content-sized single page got a sheet's worth of blank in the middle.
+
+**There are no page breaks to avoid on a one-page document.** The rule was
+solving a problem that only exists when the export is paginated, and creating a
+worse one when it is not. Removed, with a comment saying why so it does not come
+back.
+
+Verified: 32.77in, continuous, no gap.
+
+### Recent (August 2026)
+
 **v3.250.0 — six campaign-PDF fixes. Four clean, two partial, one reverted.**
 
  1. **Hint text out of the PDF.** `no-print` on the prefix-match help — input
