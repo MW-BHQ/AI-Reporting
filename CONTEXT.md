@@ -1,5 +1,26 @@
 ### Recent (August 2026)
 
+**v3.255.0 — funnel fills its card; more slack against the second page.**
+
+**The funnel was a 230px canvas inside a card stretched to match the nine-row
+key-events list beside it**, so it sat in the top quarter with dead space below
+and two category labels dropped. 380px in print AND `print-prep` — the canvas is
+measured under prep, so one number in two places (the v3.237 rule). Verified:
+380px, all five labels, bars fill the card.
+
+**Slack raised to 3% + 48px.** MW's export was still two pages at 1% + 24px on a
+document a couple of inches taller than my fixture. **I cannot reproduce his
+exact content**, so the honest move is to over-reserve: a blank tail on a
+content-sized page costs nothing, a second sheet costs the whole point of the
+feature.
+
+If it is STILL two pages, the measurement is wrong rather than tight, and the
+next step is to have the page report its own `scrollHeight` after printing
+rather than guess — but that needs MW to read a number off the screen, which is
+the check I should have asked for several releases ago.
+
+### Recent (August 2026)
+
 **v3.254.0 — one page for real; per-bar colour in the twin; the funnel stays a
 canvas and here is why.**
 

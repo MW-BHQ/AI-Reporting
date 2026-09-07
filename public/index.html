@@ -516,6 +516,11 @@
     body.pp-onepage,body.pp-onepage .main,body.pp-onepage #viewRoot{
       margin-bottom:0!important;padding-bottom:0!important;}
     body.pp-onepage #viewRoot > :last-child{margin-bottom:0!important;}
+    /* The funnel card is stretched to match the key-events list beside it, and a
+       230px canvas then sat in the top quarter of it. Same number in print and
+       in print-prep, because the twin/canvas is measured under prep. */
+    body.pp-onepage #funnelChart{height:380px!important;}
+    body.pp-onepage #funnelChart{max-height:380px!important;}
     body.pp-onepage .slide::before,body.pp-onepage .slide::after{display:none!important;}
     /* All listings is screen-only, so its column would leave the distribution
        at half width on a blank half page. One column when it is gone. */
@@ -1723,6 +1728,7 @@
     /* Same height the print rule uses, so the SVG twin is measured at the size
        it will actually be printed at. See `.slide.pn .gbp-row .gbp-chart`. */
     body.print-prep .gbp-chart{height:560px!important;}
+    body.print-prep #funnelChart{height:380px!important;}
     body.print-prep .gbp-row{display:grid;grid-template-columns:3.5fr 1.5fr;gap:12px;align-items:stretch;}
     body.print-prep{overflow:hidden!important;}
   }
@@ -9697,7 +9703,13 @@ function onePageIfAsked() {
    * it on two sheets. 1% plus 24px covers both, and blank tail on a
    * content-sized page costs nothing next to an unwanted second page.
    */
-  const tall = Math.ceil(h * 1.01) + 24;
+  /**
+   * 3% PLUS 48px. MW's export was still two pages at 1% + 24px on a document a
+   * couple of inches taller than my fixture — the drift scales with height and
+   * with row count, and I cannot reproduce his exact content. Blank tail on a
+   * content-sized page is free; a second sheet is not.
+   */
+  const tall = Math.ceil(h * 1.03) + 48;
   st.textContent = '@media print{@page{size:13.333in ' + (tall / 96).toFixed(2) + 'in;margin:0;}}';
 }
 
@@ -9810,7 +9822,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.254.0';
+const CLIENT_BUILD = '3.255.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
