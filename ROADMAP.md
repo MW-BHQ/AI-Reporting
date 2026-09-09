@@ -130,3 +130,39 @@ rate-limited LINE call was being displayed as a confident 0.
   bursts, paydays or seasonality.
 - Impression totals mix platform units by design (accepted trade for a single
   stacked view).
+
+## Backlog
+
+Kept short on purpose. MW's rule: if neither of us remembers an item, it was not
+important. Things land here only when he says to note them.
+
+### Shopee and LINE as first-class sources (MW, "one day")
+
+Both are already in the codebase in part, so the gap is narrower than "add
+Shopee and LINE" suggests. What is actually missing:
+
+**Shopee.** Present as a sales CHANNEL — the E-commerce Channels and Migration
+tabs colour it (`#EE4D2D`), and Meta's Shopee catalog supplies CPAS purchases,
+revenue and ROAS on the Audiences tab. Missing:
+- Shopee's own sales. GA4 revenue is web only, so Shopee and Lazada orders are
+  outside every revenue figure in the deck. Stated in the Overview note and in
+  §v3 above, deliberately, because a blended revenue number that silently
+  excluded the marketplaces would be worse than the omission.
+- Shopee Ads spend. CPAS spend arrives through Meta; spend inside Shopee's own
+  ad platform does not exist anywhere in the report, so marketplace ROAS is
+  computed against part of its cost.
+
+**LINE.** Present as MESSAGES — `lineMessages` and `lineSameDay` pull
+per-message delivered/opens/clicks. Missing:
+- Broadcasts in the funnel's awareness stage. Flagged in `server.js` at the
+  funnel's Impressions comment: LINE broadcasts and email sends belong there and
+  have no connector.
+- Automatic discovery of message request IDs. LINE only reports per-message
+  figures when the request ID is supplied, and the API will not list them, so
+  they are read from columns N-P of the UTM Builder sheet if somebody logged
+  them by hand. Unlogged broadcasts are invisible rather than zero.
+
+Neither is a small job, and neither is blocking anything today. The reason to
+write them down is that both are currently *partial* in a way that is easy to
+mistake for complete: Shopee appears on four tabs without its sales or its ad
+spend, and LINE reports on the messages it was told about.
