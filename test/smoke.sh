@@ -630,6 +630,28 @@ expect_field "yt source is export"   "$REPORT" "d.youtube.source==='studio-expor
 expect_field "yt secrets are inert"  "$REPORT" "d.youtube.apiError===undefined?'ok':undefined"
 expect_field "yt has data"           "$REPORT" "d.youtube.totals.views===1000?1000:undefined"
 
+echo "--- campaign: no internal clicks is UNKNOWN, not zero ---"
+# THE BRANCH THAT SHIPPED A LIE. With GTM not sending internal link clicks, the
+# card printed "Stayed on site 0%" beside a key events card showing 494
+# contact_us — which is what made MW ask why the block looked broken. 0% reads
+# as "nobody went deeper"; the truth is we cannot see it.
+#
+# The happy-path fixture HAS internal clicks, so this branch was never rendered.
+# Booted with them removed, `internal.total` must be 0 while `outbound.total`
+# stays populated, and `internal.share` must be 0 rather than null so the UI's
+# own `internal.total ? pct : dash` gate is the only thing deciding what shows.
+kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
+WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ADMIN_EMAILS=admin@bkh.test \
+MOCK_NO_INTERNAL_LINKS=1 PORT=$PORT node --require ./test/mock-fetch.js server.js >>/tmp/smoke.log 2>&1 &
+SRV=$!
+sleep 2.5
+expect_field "lc no internal at all" "$CAMP1" "${LC}.internal.total===0?'zero':undefined"
+expect_field "lc outbound survives"  "$CAMP1" "${LC}.outbound.total>0?'ok':undefined"
+expect_field "lc total is outbound"  "$CAMP1" "${LC}.total===${LC}.outbound.total?'ok':undefined"
+# No internal row may be invented from an outbound link when the internal ones
+# are gone — the section classifier must not be reached for them at all.
+expect_field "lc no phantom section" "$CAMP1" "${LC}.internal.rows.length===0?'zero':undefined"
+
 echo "--- degradation: one source failing must not 500 ---"
 kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
 WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ADMIN_EMAILS=admin@bkh.test \

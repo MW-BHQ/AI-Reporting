@@ -5706,9 +5706,18 @@ function renderCampaignBody(d) {
           <div class="stat"><div class="lab">Per 100 visits</div>
             <div class="val">${lc.per100Visits!=null?num(lc.per100Visits,{dp:1}):'\u2014'}</div>
             <div class="sub">comparable across campaign sizes</div></div>
+          ${/* A 0% HERE WAS A LIE, and it was mine (MW: "i dont get it").
+                With no internal clicks tracked, "Stayed on site 0%" reads as
+                "nobody went deeper", when what we know is that we cannot see
+                it. That is the silent-zero failure this project keeps hitting,
+                and printing it beside a card showing 494 contact events is
+                what made the whole block look broken. A dash and the reason
+                instead. */''}
           <div class="stat"><div class="lab">Stayed on site</div>
-            <div class="val">${lc.internal.share!=null?num(lc.internal.share*100,{dp:0})+'%':'\u2014'}</div>
-            <div class="sub">${num(lc.internal.total)} internal &middot; ${num(lc.outbound.total)} outbound</div></div>
+            <div class="val">${lc.internal.total ? num(lc.internal.share*100,{dp:0})+'%' : '\u2014'}</div>
+            <div class="sub">${lc.internal.total
+              ? `${num(lc.internal.total)} internal &middot; ${num(lc.outbound.total)} outbound`
+              : 'internal clicks not tracked \u2014 unknown, not zero'}</div></div>
         </div>
         <div class="grid g-2">
           ${sideTable(lc.internal, 'Deeper into the site',
@@ -5718,6 +5727,8 @@ function renderCampaignBody(d) {
         </div>
         <div class="note">
           <b>Internal</b> is decided from the link's host, so an absolute URL on our own domain and a relative <code>/th/bangkok/\u2026</code> href both count \u2014 while <code>tel:</code> and <code>mailto:</code>, which also have no host, do not. Internal destinations are grouped by SECTION rather than by URL: a hundred doctor profiles clicked once each is one fact, not a hundred rows. The locale prefix is stripped before the section is read, so a part of the site with no rule of its own is named after itself rather than after the hospital it sits under.
+          <br><br>
+          <b>This does not reconcile with the key events card above, and it is not meant to.</b> Those are events the site fires deliberately &mdash; <code>contact_us</code> counts contact intent however GTM defines it &mdash; while this counts LINK CLICKS the browser reported. The two barely overlap: the chat bubble and most on-page widgets are <code>div</code>s with JavaScript handlers, so they fire <code>contact_us</code> and <b>no link click at all</b>. That is a known property of this site, not a guess: the Chat Bubble slide reads its numbers from a GTM custom event precisely because enhanced measurement saw zero for the bubble button. So a campaign can show hundreds of <code>contact_us</code> events and a handful of link clicks with nothing wrong anywhere.
           <br><br>
           <b>Outbound</b> is grouped by what the destination IS, because the raw list is the same shortener a hundred times with different query strings. Anything unrecognised is labelled by its <b>host</b> instead of being swept into an "Other" row &mdash; a bucket called Other is where a new booking partner or a broken redirect goes to hide. Chat channels are identified by the <code>linkId</code> GTM puts on the bubble's buttons BEFORE the URL is considered, because several resolve through one shortener where the URL alone cannot tell LINE from WhatsApp.
         </div>
@@ -10495,7 +10506,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.270.0';
+const CLIENT_BUILD = '3.271.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

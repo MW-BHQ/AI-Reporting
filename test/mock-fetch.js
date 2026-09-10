@@ -410,7 +410,20 @@ function ga4Report(body) {
     ["", "https://www.bangkokhospital.com/en/bangkok/promotions/mid-year"],
   ];
   const chatOnly = JSON.stringify(body.dimensionFilter || {}).includes("chat-bubble");
-  const LINK_PAIRS = chatOnly ? CHAT_LINKS : [...CHAT_LINKS, ...OTHER_LINKS];
+  /**
+   * MOCK_NO_INTERNAL_LINKS=1 drops every internal href, reproducing the site as
+   * it actually is when GTM does not send internal link clicks.
+   *
+   * This is the branch that shipped a lie: with no internal clicks the campaign
+   * card printed "Stayed on site 0%", which reads as "nobody went deeper" when
+   * what we know is that we cannot see it. The happy-path fixture has internal
+   * clicks, so the branch was never rendered and never checked.
+   */
+  const noInternal = process.env.MOCK_NO_INTERNAL_LINKS === "1";
+  const OTHER = noInternal
+    ? OTHER_LINKS.filter(([, url]) => !/^\/|bangkokhospital\.com/i.test(url))
+    : OTHER_LINKS;
+  const LINK_PAIRS = chatOnly ? CHAT_LINKS : [...CHAT_LINKS, ...OTHER];
   const expand = (i, acc) => {
     if (i === dims.length) return emit(acc);
     const d = dims[i];

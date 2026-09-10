@@ -1,5 +1,51 @@
 ### Recent (August 2026)
 
+**v3.271.0 — "Stayed on site 0%" was a lie, and 494 contact_us against 31 link
+clicks is not a bug.**
+
+MW: "i dont get it — in key events, there's 494 contactus but the outbound click
+is very few."
+
+He was right to be confused and the card caused it. Two fixes.
+
+**THE 0% WAS MINE AND IT WAS WRONG.** With GTM not sending internal link
+clicks, the card printed "Stayed on site 0%", which reads as "nobody went
+deeper". What we actually know is that we cannot see it. Printed beside a key
+events card showing 494 `contact_us`, it made the whole block look broken. Now a
+dash and "internal clicks not tracked — unknown, not zero". Same silent-zero
+failure this project keeps hitting, this time introduced by me one release
+earlier.
+
+**THE TWO NUMBERS ARE NOT SUPPOSED TO RECONCILE**, and the card now says so
+instead of leaving the reader to work it out. `contact_us` is an event the site
+fires deliberately, counting contact intent however GTM defines the trigger.
+This block counts LINK CLICKS the browser reported. They barely overlap: the
+chat bubble and most on-page widgets are `div`s with JavaScript handlers, so
+they fire `contact_us` and **no link click at all**.
+
+That is not a guess about this site — it is already written up in the Chat
+Bubble block, which reads from a `click_chat_bubble` GTM custom event precisely
+because enhanced measurement saw zero for the bubble button. "Chat clicks 0" was
+that bug. So hundreds of `contact_us` beside a handful of link clicks is the
+expected shape here.
+
+**Guarded with a fixture flag rather than an argument.**
+`MOCK_NO_INTERNAL_LINKS=1` drops every internal href and reproduces the site as
+it actually is. Four assertions: internal total 0, outbound still populated,
+total equals outbound, and no phantom section row invented from an outbound
+link. The happy-path fixture has internal clicks, which is exactly why this
+branch shipped unrendered and unchecked.
+
+**Still not covered, and worth knowing:** the campaign block does not read
+`click_chat_bubble`, so bubble channel clicks are invisible to it. Adding them
+would explain much of the gap, but a LINE link inside the bubble can fire BOTH
+that event and an outbound `click`, and the Chat Bubble slide handles the
+overlap by letting the custom event win rather than summing. Merging naively
+here would double-count, so it needs the same treatment and a deliberate
+decision about which side owns the number.
+
+### Recent (August 2026)
+
 **v3.270.0 — "What they clicked on the page": internal links AND outbound.
 v3.269.0 was reverted for covering only half of it.**
 
