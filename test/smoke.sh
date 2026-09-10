@@ -630,6 +630,42 @@ expect_field "yt source is export"   "$REPORT" "d.youtube.source==='studio-expor
 expect_field "yt secrets are inert"  "$REPORT" "d.youtube.apiError===undefined?'ok':undefined"
 expect_field "yt has data"           "$REPORT" "d.youtube.totals.views===1000?1000:undefined"
 
+echo "--- campaign: chat bubble folded in without double counting (v3.272.0) ---"
+# THE BUBBLE'S CHANNEL BUTTONS FIRE BOTH EVENTS, so a naive merge inflates every
+# chat channel by the bubble's share of it. Per channel the HIGHER of the two is
+# taken, never the sum: both measure the same clicks, so max cannot double count
+# and cannot silently drop a channel either.
+#
+# The fixture's LINE arrives 3x from the link event and 2x from the custom event
+# (one bubble-tagged link has no custom-event counterpart). Max keeps 300. My
+# first version dropped the link rows outright and LINE fell to 200 — clicks
+# deleted and replaced by nothing, which in production is a channel reading zero
+# the moment GTM tags a button but stops sending the event.
+expect_field "lc chat source"      "$CAMP1" "${LC}.chatSource==='click_chat_bubble'?'ok':undefined"
+expect_field "lc line keeps max"   "$CAMP1" "${LC}.outbound.rows.find(r=>r.label==='LINE').clicks===300?300:undefined"
+# NO DOUBLE COUNT. Folding the bubble in must not move the total at all — the
+# custom event describes clicks the link event already reported.
+expect_field "lc total unmoved"    "$CAMP1" "${LC}.total===2000?2000:undefined"
+expect_field "lc rows sum"         "$CAMP1" "${LC}.internal.rows.concat(${LC}.outbound.rows).reduce((a,r)=>a+r.clicks,0)===${LC}.total?'ok':undefined"
+# OPENING THE BUBBLE IS NOT A DESTINATION. It is reported on its own and must be
+# out of the totals. It arrives in BOTH pulls, and filtering only one of them
+# put it in "On-page widget" and inflated the total by exactly the opens.
+expect_field "lc opens reported"   "$CAMP1" "${LC}.bubbleOpens===100?100:undefined"
+expect_field "lc opens not a row"  "$CAMP1" "${LC}.outbound.rows.some(r=>/bubble|top-parent/i.test(r.label))?undefined:'ok'"
+expect_field "lc widget not open"  "$CAMP1" "${LC}.outbound.rows.find(r=>r.label==='On-page widget').clicks===100?100:undefined"
+
+echo "--- isolation: the report's chat bubble slide must not move ---"
+# MW: "make sure it doesnt affect other pages." The campaign block uses its OWN
+# request — campaign-filtered, ungrouped — and shares no code with the report's
+# chat block, which is property-wide and grouped by pagePath. These pin the
+# report's numbers so a future edit to the shared classifier or to CHAT_LINKS
+# cannot move them unnoticed.
+expect_field "iso chat source"     "$REPORT" "d.chatBubble.source==='click_chat_bubble'?'ok':undefined"
+expect_field "iso chat bhq total"  "$REPORT" "d.chatBubble.byScope.BHQ.total===1700?1700:undefined"
+expect_field "iso chat bgh total"  "$REPORT" "d.chatBubble.byScope.BGH.total===900?900:undefined"
+expect_field "iso chat contactus"  "$REPORT" "d.chatBubble.byScope.BHQ.contactUs===9600?9600:undefined"
+expect_field "iso chat one event"  "$REPORT" "d.chatBubble.events.length===1?'ok':undefined"
+
 echo "--- campaign: no internal clicks is UNKNOWN, not zero ---"
 # THE BRANCH THAT SHIPPED A LIE. With GTM not sending internal link clicks, the
 # card printed "Stayed on site 0%" beside a key events card showing 494

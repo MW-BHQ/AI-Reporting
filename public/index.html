@@ -5699,7 +5699,10 @@ function renderCampaignBody(d) {
         </div>`;
       return `<div class="card mt">
         <h2>What they clicked on the page</h2>
-        <div class="grid g-3" style="margin-bottom:14px;">
+        <div class="grid ${lc.bubbleOpens?'g-4':'g-3'}" style="margin-bottom:14px;">
+          ${lc.bubbleOpens?`<div class="stat"><div class="lab">Chat bubble opened</div>
+            <div class="val">${num(lc.bubbleOpens)}</div>
+            <div class="sub">not counted below \u2014 it is the step before choosing</div></div>`:''}
           <div class="stat"><div class="lab">Link clicks</div>
             <div class="val">${num(lc.total)}</div>
             <div class="sub">internal and outbound</div></div>
@@ -5727,6 +5730,8 @@ function renderCampaignBody(d) {
         </div>
         <div class="note">
           <b>Internal</b> is decided from the link's host, so an absolute URL on our own domain and a relative <code>/th/bangkok/\u2026</code> href both count \u2014 while <code>tel:</code> and <code>mailto:</code>, which also have no host, do not. Internal destinations are grouped by SECTION rather than by URL: a hundred doctor profiles clicked once each is one fact, not a hundred rows. The locale prefix is stripped before the section is read, so a part of the site with no rule of its own is named after itself rather than after the hospital it sits under.
+          <br><br>
+          <b>Chat bubble clicks are included.</b> Its channel buttons are real links, so they fire both GA4's <code>click</code> and the <code>click_chat_bubble</code> GTM event; for each channel the HIGHER of the two is used, never the sum. Both count the same clicks, so the higher one is the more complete measurement &mdash; and a source that returns nothing for a channel loses to the one that did, so a channel can never silently drop to zero. Opening the bubble is reported on its own and is <b>not</b> in the totals below: it is the step before choosing a destination, not a destination.${lc.chatSource!=='click_chat_bubble'?` <b>The GTM event returned nothing this run</b>, so these are the link event's own bubble rows &mdash; channels are covered, bubble opens are not. That usually means <code>Click_ID</code> is not registered as a custom dimension in GA4.`:''}
           <br><br>
           <b>This does not reconcile with the key events card above, and it is not meant to.</b> Those are events the site fires deliberately &mdash; <code>contact_us</code> counts contact intent however GTM defines it &mdash; while this counts LINK CLICKS the browser reported. The two barely overlap: the chat bubble and most on-page widgets are <code>div</code>s with JavaScript handlers, so they fire <code>contact_us</code> and <b>no link click at all</b>. That is a known property of this site, not a guess: the Chat Bubble slide reads its numbers from a GTM custom event precisely because enhanced measurement saw zero for the bubble button. So a campaign can show hundreds of <code>contact_us</code> events and a handful of link clicks with nothing wrong anywhere.
           <br><br>
@@ -10506,7 +10511,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.271.0';
+const CLIENT_BUILD = '3.272.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

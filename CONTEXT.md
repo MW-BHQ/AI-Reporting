@@ -1,5 +1,50 @@
 ### Recent (August 2026)
 
+**v3.272.0 — the chat bubble folded into the campaign block, without touching
+the report.**
+
+MW: "do it, but make sure it doesnt affect other pages."
+
+The `click` pull cannot see the bubble: its open button is a `div` and fires no
+link click at all — the documented cause of "Chat clicks 0" — and its channel
+buttons fire BOTH events, so the merge is where all the risk is.
+
+**ISOLATION FIRST.** A separate request, campaign-filtered and ungrouped. The
+report's chat pulls are property-wide and grouped by `pagePath`; reusing either
+would mean editing a pull eight other cards read from. Two requests, no shared
+code, so the report's numbers cannot move. Pinned anyway: five assertions fix
+`chatBubble.byScope.BHQ.total` at 1700, BGH at 900, `contactUs` at 9600 and the
+event list at one entry, so a future edit to the shared classifier or to
+`CHAT_LINKS` cannot move them unnoticed.
+
+**PER CHANNEL, THE HIGHER OF THE TWO SOURCES — not "the custom event wins".**
+
+I wrote "custom event wins, drop the link rows" first and the fixture caught it
+immediately: LINE fell from 300 to 200, because a bubble-tagged link had no
+counterpart in the custom-event pull and its clicks were deleted and replaced by
+nothing. In production that happens the moment GTM tags a button but stops
+sending the event for it, and the channel then reads zero.
+
+MAX cannot double count, because both sources measure the SAME clicks —
+whichever is higher is the more complete measurement of one set, never a second
+set to add. And it cannot lose a channel, because a source returning nothing for
+it loses to the one that did. Body links are separate clicks and simply add;
+only the bubble side is reconciled, which `linkId` makes possible.
+
+**OPENING THE BUBBLE IS NOT A DESTINATION** and is reported on its own, outside
+the totals. It arrives in BOTH pulls, and I had filtered it out of the
+custom-event side only — so it landed in "On-page widget" and inflated the total
+by exactly the number of opens. That is the phantom row MW's rule on the report
+exists to prevent, reintroduced by filtering one source and not the other.
+
+Folding the bubble in leaves the campaign total at 2000, unchanged, which is the
+point: the custom event describes clicks the link event already reported.
+
+**Three merge rules, three negative tests, all verified to fail:** summing
+instead of max, dropping the link rows, and filtering opens from one pull only.
+
+### Recent (August 2026)
+
 **v3.271.0 — "Stayed on site 0%" was a lie, and 494 contact_us against 31 link
 clicks is not a bug.**
 

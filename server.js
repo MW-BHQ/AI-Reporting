@@ -3907,6 +3907,47 @@ async function buildCampaign(code, from, to) {
       logJson("WARNING", "campaign_link_clicks_unavailable", { error: String(e.message || e) });
       return null;
     }),
+    /**
+     * THE CHAT BUBBLE, CAMPAIGN-SCOPED (MW: "do it, but make sure it doesnt
+     * affect other pages").
+     *
+     * The `click` pull above cannot see the bubble. Its open button is a `div`
+     * and fires no link click at all — the documented cause of "Chat clicks 0"
+     * — and its channel buttons fire BOTH events, so naively adding this to the
+     * outbound tally would double-count every LINE click that came from the
+     * bubble.
+     *
+     * A SEPARATE REQUEST, NOT A SHARED ONE. The monthly report's chat pulls are
+     * property-wide and grouped by `pagePath`; this is filtered to one campaign
+     * and grouped by nothing else. Reusing either would mean changing a pull
+     * eight other cards read from, which is precisely what MW asked not to
+     * happen. Two requests, no shared state, and the report's numbers cannot
+     * move because nothing it reads was touched.
+     *
+     * NULL ON FAILURE, and the caller falls back to the link event's own
+     * bubble rows. `customEvent:` dimensions only resolve once the parameter is
+     * REGISTERED as a custom dimension in GA4; an unregistered name fails the
+     * whole request, and without the fallback the block would lose its chat
+     * numbers entirely rather than lose the bubble opens.
+     */
+    ga4ChatClicks: ga4RunReport({
+      dimensions: ["sessionManualCampaignName", "customEvent:Click_ID", "customEvent:Click_URL"],
+      metrics: ["eventCount"],
+      from, to, limit: 5000, orderBy: "eventCount",
+      dimensionFilter: withBranch({
+        andGroup: {
+          expressions: [
+            { filter: { fieldName: "sessionManualCampaignName",
+              stringFilter: { matchType: "BEGINS_WITH", value: code, caseSensitive: false } } },
+            { filter: { fieldName: "eventName",
+              stringFilter: { matchType: "EXACT", value: "click_chat_bubble" } } },
+          ],
+        },
+      }),
+    }).catch((e) => {
+      logJson("WARNING", "campaign_chat_clicks_unavailable", { error: String(e.message || e) });
+      return null;
+    }),
     // Organic posts, matched to the campaign by the short link in their text.
     // The pull window is widened to always include the campaign's code date
     // plus 45 days: posts are returned by publish date, so a post published
@@ -4515,23 +4556,118 @@ async function buildCampaign(code, from, to) {
     };
 
     const live = rows.filter((r) => n(r.eventCount) > 0);
-    const inRows = live.filter((r) => isInternal(r.linkUrl));
-    const outRows = live.filter((r) => !isInternal(r.linkUrl));
 
-    const internal = tally(inRows, (r) => section(r.linkUrl));
-    const outbound = tally(outRows, (r) => {
+    /**
+     * THE CHAT BUBBLE, FOLDED IN WITHOUT DOUBLE COUNTING.
+     *
+     * Its channel buttons are real outbound links, so they fire `click` AND
+     * `click_chat_bubble`. Summing both would inflate every LINE and WhatsApp
+     * figure by exactly the bubble's share of them. The bubble's OWN open
+     * button is a `div` and fires only the custom event, which is why the link
+     * pull alone read zero for it — the documented "Chat clicks 0" bug.
+     *
+     * PER CHANNEL, THE HIGHER OF THE TWO SOURCES — not "the custom event wins".
+     *
+     * `linkId` is what makes any of this possible: the bubble tags its buttons
+     * `chat-bubble-*`, so a bubble-originated LINE click is distinguishable
+     * from a LINE link sitting in the page body. Only the bubble's own rows are
+     * reconciled; body links are separate clicks and are simply added.
+     *
+     * I wrote this as "custom event wins, drop the link rows" first, and it was
+     * wrong in a way the fixture showed immediately: LINE fell from 300 to 200
+     * because a bubble-tagged link had no counterpart in the custom-event pull,
+     * so the clicks were deleted and replaced by nothing. In production that
+     * happens the moment GTM tags a button but stops sending the custom event
+     * for it — and the channel then reads zero, which is the silent-zero
+     * failure this project keeps hitting.
+     *
+     * MAX cannot double count, because both sources are measuring the SAME
+     * clicks: whichever is higher is the more complete measurement of one set,
+     * never a second set to be added. And it cannot silently lose a channel,
+     * because a source returning nothing for it loses to the one that did.
+     */
+    const isBubbleId = (id) => norm(id).includes("chat-bubble");
+    const chatRows = (data.ga4ChatClicks || [])
+      .filter((r) => norm(r.sessionManualCampaignName).startsWith(needle))
+      .filter((r) => n(r.eventCount) > 0)
+      .map((r) => ({
+        linkId: r["customEvent:Click_ID"],
+        linkUrl: r["customEvent:Click_URL"],
+        eventCount: r.eventCount,
+      }));
+    const haveChat = data.ga4ChatClicks !== null && chatRows.length > 0;
+
+    /**
+     * The bubble being OPENED is the headline, and MW's standing rule from the
+     * report applies here too: it must NOT be counted as a channel, or a
+     * matcher treating every `chat-bubble*` id as one adds a phantom row and
+     * the destination shares stop summing to the clicks.
+     */
+    const isOpen = (id) => norm(id).includes("top-parent");
+    const sumOpens = (list) => list.filter((r) => isOpen(r.linkId))
+      .reduce((a, r) => a + n(r.eventCount), 0);
+    const chatChannelRows = chatRows.filter((r) => !isOpen(r.linkId));
+
+    // An unrecognised destination is labelled by its HOST, never swept into
+    // "Other": a bucket called Other is where a new booking partner or a
+    // broken redirect goes to hide.
+    const destOf = (r) => {
       const c = classify(r.linkId, r.linkUrl);
-      // An unrecognised destination is labelled by its HOST, never swept into
-      // "Other": a bucket called Other is where a new booking partner or a
-      // broken redirect goes to hide.
       return c ? c.label : (host(r.linkUrl) || "On-page widget");
-    });
+    };
+    /**
+     * OPENS ARE REMOVED FROM BOTH SOURCES BEFORE ANYTHING IS TALLIED.
+     *
+     * The link pull returns `chat-bubble-top-parent` rows too, and I had only
+     * filtered them out of the custom-event side — so the open was being
+     * counted as a destination and landed in "On-page widget", inflating the
+     * total by exactly the number of opens. Precisely the phantom row MW's
+     * rule on the report exists to prevent, reintroduced here by filtering one
+     * source and not the other.
+     *
+     * The higher of the two sources again, for the same reason as the channels.
+     */
+    const bubbleOpens = Math.max(sumOpens(chatRows), sumOpens(live));
+    const clicks = live.filter((r) => !isOpen(r.linkId));
+
+    const inRows = clicks.filter((r) => isInternal(r.linkUrl));
+    const internal = tally(inRows, (r) => section(r.linkUrl));
+
+    const outRows = clicks.filter((r) => !isInternal(r.linkUrl));
+    // Body links and bubble links are DIFFERENT clicks, so they add. Only the
+    // bubble side is reconciled against the custom event.
+    const bodyOut = outRows.filter((r) => !isBubbleId(r.linkId));
+    const bubbleFromLink = outRows.filter((r) => isBubbleId(r.linkId));
+    const sumBy = (list) => {
+      const m = new Map();
+      for (const r of list) m.set(destOf(r), (m.get(destOf(r)) || 0) + n(r.eventCount));
+      return m;
+    };
+    const fromLink = sumBy(bubbleFromLink);
+    const fromCustom = haveChat ? sumBy(chatChannelRows) : new Map();
+    const bubbleMerged = new Map();
+    for (const label of new Set([...fromLink.keys(), ...fromCustom.keys()])) {
+      bubbleMerged.set(label, Math.max(fromLink.get(label) || 0, fromCustom.get(label) || 0));
+    }
+    const outMap = sumBy(bodyOut);
+    for (const [label, v] of bubbleMerged) outMap.set(label, (outMap.get(label) || 0) + v);
+    const outTotal = [...outMap.values()].reduce((a, v) => a + v, 0);
+    const outbound = {
+      total: outTotal,
+      rows: [...outMap.entries()].sort((a, b) => b[1] - a[1])
+        .map(([label, clicks]) => ({ label, clicks, share: outTotal ? clicks / outTotal : null })),
+    };
     const total = internal.total + outbound.total;
 
     // Exact links, both sides together, so "they clicked LINE" can be resolved
-    // to WHICH LINE account or WHICH doctor.
+    // to WHICH LINE account or WHICH doctor. Built from the SAME de-duplicated
+    // set the tallies use, or a bubble LINE click would appear twice here while
+    // being counted once above.
     const byUrl = new Map();
-    for (const r of live) {
+    // Link rows only. The custom event carries the same clicks under the same
+    // URLs, so including it here would list a bubble LINE click twice while the
+    // tally above counts it once.
+    for (const r of clicks) {
       const u = String(r.linkUrl || "").trim();
       if (!u) continue;
       if (!byUrl.has(u)) byUrl.set(u, { url: u, clicks: 0, internal: isInternal(u), host: host(u) });
@@ -4546,6 +4682,14 @@ async function buildCampaign(code, from, to) {
       per100Visits: totals.visits ? (total / totals.visits) * 100 : null,
       internal: { ...internal, share: total ? internal.total / total : null },
       outbound: { ...outbound, share: total ? outbound.total / total : null },
+      /**
+       * Bubble opens are reported BESIDE the destination rows, never inside
+       * them, and are not part of `total`. Opening the bubble is not a
+       * destination — it is the step before choosing one — so adding it would
+       * make the shares stop summing.
+       */
+      bubbleOpens: bubbleOpens || null,
+      chatSource: haveChat ? "click_chat_bubble" : "link-event backstop",
       urls: [...byUrl.values()].sort((a, b) => b.clicks - a.clicks).slice(0, 20)
         .map((u) => ({ ...u, share: total ? u.clicks / total : null })),
     };
