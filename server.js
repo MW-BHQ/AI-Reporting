@@ -4587,7 +4587,7 @@ async function buildCampaign(code, from, to) {
      * is itself, and it would otherwise top its own list. Reported rather than
      * silently dropped: the volume is the only observable proof the guard runs.
      */
-    const onMap = new Map();
+    const onMap = new Map(), onPaths = new Map();
     let onwardTotal = 0, selfViews = 0;
     for (const r of (nextRows || [])) {
       if (!norm(r.sessionManualCampaignName).startsWith(needle)) continue;
@@ -4596,8 +4596,12 @@ async function buildCampaign(code, from, to) {
       const v = n(r.screenPageViews);
       if (!v) continue;
       if (dest === ref) { selfViews += v; continue; }
-      const label = section(dest);
-      onMap.set(label, (onMap.get(label) || 0) + v);
+      onMap.set(section(dest), (onMap.get(section(dest)) || 0) + v);
+      // The exact paths as well as the sections (MW: "you may show the first 10
+      // exact urls"). Both, not one: the section roll-up is what makes a
+      // hundred doctor profiles readable, the paths are what make a single
+      // surprising row actionable.
+      onPaths.set(dest, (onPaths.get(dest) || 0) + v);
       onwardTotal += v;
     }
     const onward = {
@@ -4605,6 +4609,11 @@ async function buildCampaign(code, from, to) {
       total: onwardTotal, selfViews,
       rows: [...onMap.entries()].sort((a, b) => b[1] - a[1])
         .map(([label, views]) => ({ label, views, share: onwardTotal ? views / onwardTotal : null })),
+      // Capped at 50 — five pages of ten. Past that it is a site map, not a
+      // finding, and the whole list ships to the browser on every render.
+      pages: [...onPaths.entries()].sort((a, b) => b[1] - a[1]).slice(0, 50)
+        .map(([path, views]) => ({ path, views, share: onwardTotal ? views / onwardTotal : null })),
+      pathCount: onPaths.size,
     };
 
     // ------------------------------------------------------- outbound clicks

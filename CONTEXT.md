@@ -1,5 +1,44 @@
 ### Recent (August 2026)
 
+**v3.274.0 — the link-click card, trimmed to MW's shape.**
+
+Four changes, all his:
+
+- **"Went deeper" and "Left the site" stat cards removed.** They restated the
+  totals already printed on the two table headings. Only the chat bubble stat
+  survives, because it is the one figure with nowhere else to live: it belongs
+  to neither table, being the step BEFORE a destination is chosen.
+- **"Chat bubble opened" is now "Click Chat bubble".**
+- **"Onward pages 6 · sections of the site reached" removed.** MW asked what it
+  meant, which is the answer — it was a count of section rows presented as a
+  metric.
+- **"Deeper into the site" is "Internal Clicks", "Off to somewhere else" is
+  "Outbound Clicks".**
+
+**Internal clicks now list EXACT PATHS, ten at a time, with a pager.** The
+section roll-up is still on the payload and still the right shape for a
+hundred doctor profiles, but it hides the single surprising page — which is the
+row worth acting on. Capped at 50, five pages: past that it is a site map, not
+a finding, and the whole list ships on every render.
+
+Every row is rendered and pages past the first carry `hidden`, so paging toggles
+an attribute rather than re-rendering — a re-render would rebuild the campaign
+body and lose the ad-row expanders. The pager is `display:none` in print, where
+`.slide.pn tbody tr` reveals every row: the right answer for a sheet with no
+buttons, and it is measured under `print-prep` too, so the page height accounts
+for the full list. The export grew to 4,476px on a 5,855px sheet, still one
+page.
+
+**The notes were describing a card that no longer existed.** They still said
+"Went deeper", "Left the site", and "grouped by SECTION rather than by URL" —
+the last of which had just stopped being true. All three corrected, and the note
+now states plainly that **Internal Clicks is counted as page views**: MW's name
+is the one on the card, but a reload or a back-button return produces a view
+with no click behind it, and pretending otherwise is the kind of quiet
+mislabelling that took two releases to catch on the internal side already.
+
+### Recent (August 2026)
+
 **v3.273.0 — the internal side now uses `pageReferrer`, which the Pages tab
 had already solved. I built it from link clicks twice.**
 

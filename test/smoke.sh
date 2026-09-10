@@ -114,6 +114,13 @@ expect_field "lc available"        "$CAMP1" "${LC}.available===true?'ok':undefin
 # must be populated even though internal link clicks are not tracked.
 expect_field "lc onward populated" "$CAMP1" "${LC}.onward.total>0?'ok':undefined"
 expect_field "lc onward sections"  "$CAMP1" "${LC}.onward.rows.length>=3?'ok':undefined"
+# EXACT PATHS FOR THE PAGER (MW: "show the first 10 exact urls"). More than ten
+# in the fixture, or the pager renders and there is nothing to page to.
+expect_field "lc onward paths"     "$CAMP1" "${LC}.onward.pages.length>10?'ok':undefined"
+expect_field "lc paths capped"     "$CAMP1" "${LC}.onward.pages.length<=50?'ok':undefined"
+# Paths and sections must describe the SAME volume — one is a roll-up of the
+# other, so a divergence means one of the two loops dropped rows.
+expect_field "lc paths reconcile"  "$CAMP1" "${LC}.onward.pages.length<${LC}.onward.pathCount||${LC}.onward.pages.reduce((a,r)=>a+r.views,0)===${LC}.onward.total?'ok':undefined"
 expect_field "lc onward appt"      "$CAMP1" "${LC}.onward.rows.some(r=>r.label==='Doctor profiles')?'ok':undefined"
 # SELF-VIEWS EXCLUDED AND COUNTED, the Pages tab's rule. A reload arrives as a
 # view whose referrer is itself and would otherwise top its own list; the

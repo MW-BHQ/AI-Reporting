@@ -798,6 +798,13 @@
      override — an inline style cannot be, and that was what pinned the funnel
      to 230px on the sheet while its card stretched to 421px. */
   .funnel-wrap{height:230px;}
+  /* The internal-clicks pager. Small, quiet, and disabled-aware: a pager whose
+     arrows stay live at the ends invites a click that does nothing. */
+  .btn-mini{border:1px solid var(--line);background:#fff;color:var(--ink-2);border-radius:6px;
+    padding:3px 9px;cursor:pointer;font:inherit;line-height:1.4;}
+  .btn-mini:hover:not(:disabled){background:var(--bg-2);}
+  .btn-mini:disabled{opacity:.4;cursor:default;}
+  @media print{.ipg-nav{display:none!important;}}
   /* The print-only SVG twin never shows on screen. */
   .chart-svg{display:none;}
   /* The printed date stamp. Hidden on screen — the range is in the controls. */
@@ -5681,37 +5688,48 @@ function renderCampaignBody(d) {
       const on = lc.onward, ob = lc.outbound;
       if (!on.total && !ob.total) return `<div class="card mt"><h2>What they did on the page</h2>
         <div class="note">No onward navigation and no outbound clicks recorded for this campaign in range. Worth checking against the key events card above: if those fired, the visits were real and it is the measurement that is missing rather than the interest.</div></div>`;
-      const stat = (lab, val, sub) => `<div class="stat"><div class="lab">${lab}</div>
-        <div class="val">${val}</div><div class="sub">${sub}</div></div>`;
+      /**
+       * ONE STAT, NOT FOUR (MW). "Went deeper" and "Left the site" restated the
+       * totals already printed on the two table headings, and "Onward pages"
+       * was a count of section rows dressed up as a metric — he asked what it
+       * meant, which is the answer. The chat bubble stays because it is the one
+       * figure with nowhere else to live: it belongs to neither table, being
+       * the step BEFORE a destination is chosen.
+       */
       return `<div class="card mt">
         <h2>What they did on the page</h2>
-        <div class="grid ${lc.bubbleOpens?'g-4':'g-3'}" style="margin-bottom:14px;">
-          ${stat('Went deeper', on.available?num(on.total):'\u2014',
-            on.available?`page views \u00b7 ${on.per100Visits!=null?num(on.per100Visits,{dp:1}):'\u2014'} per 100 visits`
-              :'navigation pull unavailable this run')}
-          ${stat('Left the site', ob.available?num(ob.total):'\u2014',
-            ob.available?`clicks \u00b7 ${ob.per100Visits!=null?num(ob.per100Visits,{dp:1}):'\u2014'} per 100 visits`
-              :'click pull unavailable this run')}
-          ${lc.bubbleOpens?stat('Chat bubble opened', num(lc.bubbleOpens),
-            'the step before choosing a channel'):''}
-          ${stat('Onward pages', num(on.rows.length), 'sections of the site reached')}
-        </div>
+        ${lc.bubbleOpens?`<div class="grid g-3" style="margin-bottom:14px;">
+          <div class="stat"><div class="lab">Click Chat bubble</div>
+            <div class="val">${num(lc.bubbleOpens)}</div>
+            <div class="sub">the step before choosing a channel</div></div>
+        </div>`:''}
         <div class="grid g-2">
           <div class="card">
-            <div class="card-title">Deeper into the site ${on.total?`&middot; ${num(on.total)} page view${on.total===1?'':'s'}`:''}</div>
-            ${on.total?`<table><thead><tr><th>Section</th><th class="num">Page views</th><th class="num">Share</th><th class="num">Per 100 visits</th></tr></thead><tbody>
-            ${on.rows.slice(0,10).map(r=>`<tr>
-              <td class="strong i18n">${esc(r.label)}</td>
+            <div class="card-title">Internal Clicks ${on.total?`&middot; ${num(on.total)}`:''}</div>
+            ${/* EXACT PATHS, TEN AT A TIME (MW). Sections roll a hundred doctor
+                  profiles into one readable row but hide the single surprising
+                  page, which is the row worth acting on. All rows are rendered
+                  and pages beyond the first are `hidden`, so paging is a class
+                  toggle rather than a re-render — and the print rule that
+                  reveals hidden table rows makes the PDF carry the whole list,
+                  which is the right answer for a sheet with no buttons. */''}
+            ${on.pages && on.pages.length?`<table data-ipgtable><thead><tr><th>Page</th><th class="num">Clicks</th><th class="num">Share</th></tr></thead><tbody>
+            ${on.pages.map((r,i)=>`<tr class="ipg" data-ipg="${Math.floor(i/10)}"${i>=10?' hidden':''}>
+              <td class="i18n trunc" title="${esc(r.path)}">${esc(r.path)}</td>
               <td class="num">${num(r.views)}</td>
               <td class="num">${r.share!=null?num(r.share*100,{dp:1})+'%':'\u2014'}</td>
-              <td class="num">${d.totals&&d.totals.visits?num((r.views/d.totals.visits)*100,{dp:1}):'\u2014'}</td>
             </tr>`).join('')}
-            </tbody></table>`:`<div class="note" style="margin-top:0;">${on.available
+            </tbody></table>
+            ${on.pages.length>10?`<div class="ipg-nav" style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:var(--text-xs);">
+              <button class="btn-mini" data-ipgstep="-1" disabled>&larr;</button>
+              <span data-ipglabel>1\u201310 of ${num(on.pages.length)}${on.pathCount>on.pages.length?` (top ${num(on.pages.length)} of ${num(on.pathCount)})`:''}</span>
+              <button class="btn-mini" data-ipgstep="1">&rarr;</button>
+            </div>`:''}`:`<div class="note" style="margin-top:0;">${on.available
               ? 'No onward navigation recorded \u2014 every visit ended on the page it landed on.'
               : 'The navigation pull failed this run. Press Refresh.'}</div>`}
           </div>
           <div class="card">
-            <div class="card-title">Off to somewhere else ${ob.total?`&middot; ${num(ob.total)} click${ob.total===1?'':'s'}`:''}</div>
+            <div class="card-title">Outbound Clicks ${ob.total?`&middot; ${num(ob.total)}`:''}</div>
             ${ob.total?`<table><thead><tr><th>Destination</th><th class="num">Clicks</th><th class="num">Share</th><th class="num">Per 100 visits</th></tr></thead><tbody>
             ${ob.rows.slice(0,10).map(r=>`<tr>
               <td class="strong i18n">${esc(r.label)}</td>
@@ -5723,15 +5741,15 @@ function renderCampaignBody(d) {
           </div>
         </div>
         <div class="note">
-          <b>The two sides are different units and are never added.</b> <b>Went deeper</b> counts PAGE VIEWS whose referrer was one of our own pages &mdash; the same method the Pages tab uses, and it needs no click tracking, which is why it works here where a link-click measure does not. <b>Left the site</b> counts CLICKS on links leaving the domain. A view is not a click: reloads, back-button returns and parallel tabs all produce views. Per 100 visits is the one figure comparable across both.
+          <b>The two sides are different units and are never added.</b> <b>Internal Clicks</b> is counted as PAGE VIEWS whose referrer was one of our own pages &mdash; the same method the Pages tab uses. It needs no click tracking, which is why it works here where a link-click measure reads empty: GA4 only fires a click event for links LEAVING the site. So it is really the onward page a click landed on rather than the click itself, and a reload or a back-button return produces a view with no click behind it. <b>Outbound Clicks</b> is clicks proper, on links leaving the domain. There is no combined total anywhere on this card, because one figure summing views and clicks would measure neither.
           <br><br>
-          <b>Three limits on the onward side</b>, because it is a proxy and reads like a certainty. It uses the document referrer, so it is the page whose link was clicked rather than necessarily the page viewed immediately before; a single-page app does not update it between views and parallel tabs break the chain; and exits cannot appear at all, so these are shares of onward views, never of visitors. Views whose referrer was the same page &mdash; reloads and links back to itself &mdash; are excluded${on.selfViews?` (${num(on.selfViews)} of them)`:''} rather than allowed to top their own list.
+          <b>Three limits on the internal side</b>, because it is a proxy and reads like a certainty. It uses the document referrer, so it is the page whose link was clicked rather than necessarily the page viewed immediately before; a single-page app does not update it between views and parallel tabs break the chain; and exits cannot appear at all, so these are shares of onward views, never of visitors. Views whose referrer was the same page &mdash; reloads and links back to itself &mdash; are excluded${on.selfViews?` (${num(on.selfViews)} of them)`:''} rather than allowed to top their own list.
           <br><br>
           <b>Chat bubble clicks are included on the outbound side.</b> Its channel buttons are real links, so they fire both GA4's <code>click</code> and the <code>click_chat_bubble</code> GTM event; for each channel the HIGHER of the two is used, never the sum. Both count the same clicks, so the higher one is the more complete measurement, and a source returning nothing for a channel loses to the one that did, so a channel can never silently drop to zero. Opening the bubble is reported on its own and is not a destination.${lc.chatSource!=='click_chat_bubble'?` <b>The GTM event returned nothing this run</b>, so these are the link event's own bubble rows &mdash; channels covered, bubble opens not. That usually means <code>Click_ID</code> is not registered as a custom dimension in GA4.`:''}
           <br><br>
           <b>This does not reconcile with the key events card above, and it is not meant to.</b> Those are events the site fires deliberately &mdash; <code>contact_us</code> counts contact intent however GTM defines it &mdash; while these count navigation and link clicks the browser reported. Most on-page widgets are <code>div</code>s with JavaScript handlers, so they fire a key event and no link click at all. A campaign can show hundreds of <code>contact_us</code> events beside a handful of outbound clicks with nothing wrong anywhere.
           <br><br>
-          Onward destinations are grouped by SECTION rather than by URL, because a hundred doctor profiles viewed once each is one fact, not a hundred rows. Outbound is grouped by what the destination IS; anything unrecognised is labelled by its <b>host</b> rather than swept into an "Other" row, since a bucket called Other is where a new booking partner or a broken redirect goes to hide.
+          Internal pages are listed exactly, ten at a time, and ordered by volume; only the top ${num((lc.onward.pages||[]).length)} are kept, since past that it is a site map rather than a finding. Outbound is grouped by what the destination IS, because the raw list is the same shortener many times over with different query strings &mdash; the <b>Exact links clicked</b> table below resolves those. Anything unrecognised is labelled by its <b>host</b> rather than swept into an "Other" row, since a bucket called Other is where a new booking partner or a broken redirect goes to hide.
         </div>
       </div>
 
@@ -5914,6 +5932,40 @@ function renderCampaignBody(d) {
    * by construction. The class check keeps a click on the last variant from
    * toggling whatever follows the table body.
    */
+  /**
+   * THE INTERNAL-CLICKS PAGER.
+   *
+   * Every row is already in the DOM and pages past the first carry `hidden`, so
+   * this toggles an attribute rather than re-rendering the card — a re-render
+   * would rebuild the whole campaign body and lose the ad-row expanders.
+   *
+   * The pager itself is `display:none` in print. Every row is revealed there by
+   * the `.slide.pn tbody tr` rule, which is the right answer for a sheet with no
+   * buttons on it, and it is measured under `print-prep` too so the page height
+   * accounts for the full list.
+   */
+  document.querySelectorAll('.ipg-nav').forEach((nav) => {
+    const table = nav.parentElement.querySelector('[data-ipgtable]');
+    if (!table) return;
+    const rows = [...table.querySelectorAll('tr.ipg')];
+    const label = nav.querySelector('[data-ipglabel]');
+    const last = Math.max(0, Math.ceil(rows.length / 10) - 1);
+    let page = 0;
+    const draw = () => {
+      rows.forEach((r) => { r.hidden = Number(r.dataset.ipg) !== page; });
+      const from = page * 10 + 1, to = Math.min(rows.length, (page + 1) * 10);
+      if (label) label.textContent = `${from}\u2013${to} of ${rows.length}`;
+      nav.querySelectorAll('[data-ipgstep]').forEach((b) => {
+        b.disabled = Number(b.dataset.ipgstep) < 0 ? page === 0 : page === last;
+      });
+    };
+    nav.querySelectorAll('[data-ipgstep]').forEach((b) => b.addEventListener('click', () => {
+      page = Math.min(last, Math.max(0, page + Number(b.dataset.ipgstep)));
+      draw();
+    }));
+    draw();
+  });
+
   document.querySelectorAll('[data-adrow]').forEach((td) => td.addEventListener('click', () => {
     const row = td.closest('tr') && td.closest('tr').nextElementSibling;
     if (row && row.classList.contains('adrow')) row.hidden = !row.hidden;
@@ -10506,7 +10558,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.273.0';
+const CLIENT_BUILD = '3.274.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
