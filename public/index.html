@@ -5660,96 +5660,91 @@ function renderCampaignBody(d) {
 
     ${(() => {
       /**
-       * WHAT THEY CLICKED ON THE PAGE (MW), internal and outbound both.
+       * WHAT THEY DID ON THE PAGE (MW), and the internal side finally uses the
+       * right mechanism.
        *
-       * Sits under the landing pages on purpose: that card says where they
-       * arrived, this says what they reached for once there. The funnel stops
-       * at "engaged" and the key events card lists outcomes we tagged
-       * deliberately; neither tells you a visitor went for the phone number
-       * instead of the booking form.
+       * I built it from link clicks twice. GA4's `click` event fires for
+       * OUTBOUND links only, so the internal side read empty on this site and
+       * I blamed GTM. The Pages tab had already solved it with `pageReferrer` —
+       * the pages a visitor went on to are the pages whose referrer is one of
+       * ours, which needs no click tracking at all.
        *
-       * THE TWO SIDES ANSWER DIFFERENT QUESTIONS and are never added into one
-       * headline. Internal says the page worked \u2014 they went on to the
-       * appointment form, a doctor, a package. Outbound says they left, which
-       * for a hospital is usually the good kind of leaving.
-       *
-       * AN EMPTY INTERNAL SIDE IS EXPLAINED, NOT SHOWN AS A ZERO. GA4 enhanced
-       * measurement fires `click` for outbound links only; internal clicks
-       * appear where GTM tracks them, as it already does for the chat bubble.
-       * A bare 0 there would read as "nobody clicked anything on the page",
-       * which is a claim about visitors rather than about our tagging.
+       * TWO UNITS, NEVER ADDED. Onward is PAGE VIEWS, outbound is CLICKS. A
+       * view is not a click, so there is no combined headline anywhere here;
+       * one figure summing them would measure nothing. Both are also shown per
+       * 100 visits, which IS comparable across the two and across campaigns.
        */
       const lc = d.linkClicks;
       if (!lc) return '';
-      if (!lc.available) return `<div class="card mt"><h2>What they clicked on the page</h2>
+      if (!lc.available) return `<div class="card mt"><h2>What they did on the page</h2>
         <div class="note">${esc(lc.reason || 'Not available this run.')}</div></div>`;
-      if (!lc.total) return `<div class="card mt"><h2>What they clicked on the page</h2>
-        <div class="note">No link clicks recorded for this campaign in range. Worth checking against the key events card above: if those fired, the visits were real and it is the click tracking that is missing rather than the interest.</div></div>`;
-      const sideTable = (side, title, empty) => `
-        <div class="card">
-          <div class="card-title">${title} ${side.total?`&middot; ${num(side.total)} click${side.total===1?'':'s'}${side.share!=null?` &middot; ${num(side.share*100,{dp:0})}%`:''}`:''}</div>
-          ${side.total ? `<table><thead><tr><th>Destination</th><th class="num">Clicks</th><th class="num">Share of side</th><th class="num">Per 100 visits</th></tr></thead><tbody>
-          ${side.rows.slice(0,10).map(r=>`<tr>
-            <td class="strong i18n">${esc(r.label)}</td>
-            <td class="num">${num(r.clicks)}</td>
-            <td class="num">${r.share!=null?num(r.share*100,{dp:1})+'%':'\u2014'}</td>
-            <td class="num">${d.totals&&d.totals.visits?num((r.clicks/d.totals.visits)*100,{dp:1}):'\u2014'}</td>
-          </tr>`).join('')}
-          </tbody></table>` : `<div class="note" style="margin-top:0;">${empty}</div>`}
-        </div>`;
+      const on = lc.onward, ob = lc.outbound;
+      if (!on.total && !ob.total) return `<div class="card mt"><h2>What they did on the page</h2>
+        <div class="note">No onward navigation and no outbound clicks recorded for this campaign in range. Worth checking against the key events card above: if those fired, the visits were real and it is the measurement that is missing rather than the interest.</div></div>`;
+      const stat = (lab, val, sub) => `<div class="stat"><div class="lab">${lab}</div>
+        <div class="val">${val}</div><div class="sub">${sub}</div></div>`;
       return `<div class="card mt">
-        <h2>What they clicked on the page</h2>
+        <h2>What they did on the page</h2>
         <div class="grid ${lc.bubbleOpens?'g-4':'g-3'}" style="margin-bottom:14px;">
-          ${lc.bubbleOpens?`<div class="stat"><div class="lab">Chat bubble opened</div>
-            <div class="val">${num(lc.bubbleOpens)}</div>
-            <div class="sub">not counted below \u2014 it is the step before choosing</div></div>`:''}
-          <div class="stat"><div class="lab">Link clicks</div>
-            <div class="val">${num(lc.total)}</div>
-            <div class="sub">internal and outbound</div></div>
-          <div class="stat"><div class="lab">Per 100 visits</div>
-            <div class="val">${lc.per100Visits!=null?num(lc.per100Visits,{dp:1}):'\u2014'}</div>
-            <div class="sub">comparable across campaign sizes</div></div>
-          ${/* A 0% HERE WAS A LIE, and it was mine (MW: "i dont get it").
-                With no internal clicks tracked, "Stayed on site 0%" reads as
-                "nobody went deeper", when what we know is that we cannot see
-                it. That is the silent-zero failure this project keeps hitting,
-                and printing it beside a card showing 494 contact events is
-                what made the whole block look broken. A dash and the reason
-                instead. */''}
-          <div class="stat"><div class="lab">Stayed on site</div>
-            <div class="val">${lc.internal.total ? num(lc.internal.share*100,{dp:0})+'%' : '\u2014'}</div>
-            <div class="sub">${lc.internal.total
-              ? `${num(lc.internal.total)} internal &middot; ${num(lc.outbound.total)} outbound`
-              : 'internal clicks not tracked \u2014 unknown, not zero'}</div></div>
+          ${stat('Went deeper', on.available?num(on.total):'\u2014',
+            on.available?`page views \u00b7 ${on.per100Visits!=null?num(on.per100Visits,{dp:1}):'\u2014'} per 100 visits`
+              :'navigation pull unavailable this run')}
+          ${stat('Left the site', ob.available?num(ob.total):'\u2014',
+            ob.available?`clicks \u00b7 ${ob.per100Visits!=null?num(ob.per100Visits,{dp:1}):'\u2014'} per 100 visits`
+              :'click pull unavailable this run')}
+          ${lc.bubbleOpens?stat('Chat bubble opened', num(lc.bubbleOpens),
+            'the step before choosing a channel'):''}
+          ${stat('Onward pages', num(on.rows.length), 'sections of the site reached')}
         </div>
         <div class="grid g-2">
-          ${sideTable(lc.internal, 'Deeper into the site',
-            'No internal link clicks recorded. GA4 tracks outbound clicks on its own but internal ones only where GTM is set to send them, so this is most likely a tagging gap rather than a page nobody navigated from.')}
-          ${sideTable(lc.outbound, 'Off to somewhere else',
-            'No outbound link clicks recorded \u2014 nobody left the page for LINE, a phone number or a map.')}
+          <div class="card">
+            <div class="card-title">Deeper into the site ${on.total?`&middot; ${num(on.total)} page view${on.total===1?'':'s'}`:''}</div>
+            ${on.total?`<table><thead><tr><th>Section</th><th class="num">Page views</th><th class="num">Share</th><th class="num">Per 100 visits</th></tr></thead><tbody>
+            ${on.rows.slice(0,10).map(r=>`<tr>
+              <td class="strong i18n">${esc(r.label)}</td>
+              <td class="num">${num(r.views)}</td>
+              <td class="num">${r.share!=null?num(r.share*100,{dp:1})+'%':'\u2014'}</td>
+              <td class="num">${d.totals&&d.totals.visits?num((r.views/d.totals.visits)*100,{dp:1}):'\u2014'}</td>
+            </tr>`).join('')}
+            </tbody></table>`:`<div class="note" style="margin-top:0;">${on.available
+              ? 'No onward navigation recorded \u2014 every visit ended on the page it landed on.'
+              : 'The navigation pull failed this run. Press Refresh.'}</div>`}
+          </div>
+          <div class="card">
+            <div class="card-title">Off to somewhere else ${ob.total?`&middot; ${num(ob.total)} click${ob.total===1?'':'s'}`:''}</div>
+            ${ob.total?`<table><thead><tr><th>Destination</th><th class="num">Clicks</th><th class="num">Share</th><th class="num">Per 100 visits</th></tr></thead><tbody>
+            ${ob.rows.slice(0,10).map(r=>`<tr>
+              <td class="strong i18n">${esc(r.label)}</td>
+              <td class="num">${num(r.clicks)}</td>
+              <td class="num">${r.share!=null?num(r.share*100,{dp:1})+'%':'\u2014'}</td>
+              <td class="num">${d.totals&&d.totals.visits?num((r.clicks/d.totals.visits)*100,{dp:1}):'\u2014'}</td>
+            </tr>`).join('')}
+            </tbody></table>`:`<div class="note" style="margin-top:0;">No outbound clicks recorded \u2014 nobody left the page for LINE, a phone number or a map.</div>`}
+          </div>
         </div>
         <div class="note">
-          <b>Internal</b> is decided from the link's host, so an absolute URL on our own domain and a relative <code>/th/bangkok/\u2026</code> href both count \u2014 while <code>tel:</code> and <code>mailto:</code>, which also have no host, do not. Internal destinations are grouped by SECTION rather than by URL: a hundred doctor profiles clicked once each is one fact, not a hundred rows. The locale prefix is stripped before the section is read, so a part of the site with no rule of its own is named after itself rather than after the hospital it sits under.
+          <b>The two sides are different units and are never added.</b> <b>Went deeper</b> counts PAGE VIEWS whose referrer was one of our own pages &mdash; the same method the Pages tab uses, and it needs no click tracking, which is why it works here where a link-click measure does not. <b>Left the site</b> counts CLICKS on links leaving the domain. A view is not a click: reloads, back-button returns and parallel tabs all produce views. Per 100 visits is the one figure comparable across both.
           <br><br>
-          <b>Chat bubble clicks are included.</b> Its channel buttons are real links, so they fire both GA4's <code>click</code> and the <code>click_chat_bubble</code> GTM event; for each channel the HIGHER of the two is used, never the sum. Both count the same clicks, so the higher one is the more complete measurement &mdash; and a source that returns nothing for a channel loses to the one that did, so a channel can never silently drop to zero. Opening the bubble is reported on its own and is <b>not</b> in the totals below: it is the step before choosing a destination, not a destination.${lc.chatSource!=='click_chat_bubble'?` <b>The GTM event returned nothing this run</b>, so these are the link event's own bubble rows &mdash; channels are covered, bubble opens are not. That usually means <code>Click_ID</code> is not registered as a custom dimension in GA4.`:''}
+          <b>Three limits on the onward side</b>, because it is a proxy and reads like a certainty. It uses the document referrer, so it is the page whose link was clicked rather than necessarily the page viewed immediately before; a single-page app does not update it between views and parallel tabs break the chain; and exits cannot appear at all, so these are shares of onward views, never of visitors. Views whose referrer was the same page &mdash; reloads and links back to itself &mdash; are excluded${on.selfViews?` (${num(on.selfViews)} of them)`:''} rather than allowed to top their own list.
           <br><br>
-          <b>This does not reconcile with the key events card above, and it is not meant to.</b> Those are events the site fires deliberately &mdash; <code>contact_us</code> counts contact intent however GTM defines it &mdash; while this counts LINK CLICKS the browser reported. The two barely overlap: the chat bubble and most on-page widgets are <code>div</code>s with JavaScript handlers, so they fire <code>contact_us</code> and <b>no link click at all</b>. That is a known property of this site, not a guess: the Chat Bubble slide reads its numbers from a GTM custom event precisely because enhanced measurement saw zero for the bubble button. So a campaign can show hundreds of <code>contact_us</code> events and a handful of link clicks with nothing wrong anywhere.
+          <b>Chat bubble clicks are included on the outbound side.</b> Its channel buttons are real links, so they fire both GA4's <code>click</code> and the <code>click_chat_bubble</code> GTM event; for each channel the HIGHER of the two is used, never the sum. Both count the same clicks, so the higher one is the more complete measurement, and a source returning nothing for a channel loses to the one that did, so a channel can never silently drop to zero. Opening the bubble is reported on its own and is not a destination.${lc.chatSource!=='click_chat_bubble'?` <b>The GTM event returned nothing this run</b>, so these are the link event's own bubble rows &mdash; channels covered, bubble opens not. That usually means <code>Click_ID</code> is not registered as a custom dimension in GA4.`:''}
           <br><br>
-          <b>Outbound</b> is grouped by what the destination IS, because the raw list is the same shortener a hundred times with different query strings. Anything unrecognised is labelled by its <b>host</b> instead of being swept into an "Other" row &mdash; a bucket called Other is where a new booking partner or a broken redirect goes to hide. Chat channels are identified by the <code>linkId</code> GTM puts on the bubble's buttons BEFORE the URL is considered, because several resolve through one shortener where the URL alone cannot tell LINE from WhatsApp.
+          <b>This does not reconcile with the key events card above, and it is not meant to.</b> Those are events the site fires deliberately &mdash; <code>contact_us</code> counts contact intent however GTM defines it &mdash; while these count navigation and link clicks the browser reported. Most on-page widgets are <code>div</code>s with JavaScript handlers, so they fire a key event and no link click at all. A campaign can show hundreds of <code>contact_us</code> events beside a handful of outbound clicks with nothing wrong anywhere.
+          <br><br>
+          Onward destinations are grouped by SECTION rather than by URL, because a hundred doctor profiles viewed once each is one fact, not a hundred rows. Outbound is grouped by what the destination IS; anything unrecognised is labelled by its <b>host</b> rather than swept into an "Other" row, since a bucket called Other is where a new booking partner or a broken redirect goes to hide.
         </div>
       </div>
 
       ${lc.urls.length?`<div class="card mt">
         <h2>Exact links clicked</h2>
-        <table><thead><tr><th>Link</th><th></th><th class="num">Clicks</th><th class="num">Share</th></tr></thead><tbody>
+        <table><thead><tr><th>Link</th><th></th><th class="num">Clicks</th></tr></thead><tbody>
         ${lc.urls.map(u=>`<tr>
           <td class="i18n trunc" title="${esc(u.url)}">${esc(u.url)}</td>
           <td>${u.internal?'<span class="pill grey">internal</span>':`<span class="pill">${esc(u.host||'outbound')}</span>`}</td>
           <td class="num">${num(u.clicks)}</td>
-          <td class="num">${u.share!=null?num(u.share*100,{dp:1})+'%':'\u2014'}</td>
         </tr>`).join('')}
         </tbody></table>
-        <div class="note">Top 20 by clicks, ungrouped. The tables above tell you visitors reached for LINE or for a doctor; this one tells you which LINE account and which doctor \u2014 useful when a campaign points at per-language or per-hospital variants of the same thing.</div>
+        <div class="note">Top 20 clicked links. The table above tells you visitors reached for LINE; this tells you which LINE account &mdash; useful when a campaign points at per-language or per-hospital variants of the same thing. Rows marked <b>internal</b> are on-site links GTM happens to send as clicks; they are listed here but NOT counted in "Went deeper", because that side already counts the same step as a page view and one step under two units would be counted twice.</div>
       </div>`:''}`;
     })()}
 
@@ -10511,7 +10506,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.272.0';
+const CLIENT_BUILD = '3.273.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

@@ -3948,6 +3948,52 @@ async function buildCampaign(code, from, to) {
       logJson("WARNING", "campaign_chat_clicks_unavailable", { error: String(e.message || e) });
       return null;
     }),
+    /**
+     * WHERE THEY WENT NEXT, ON THE SITE (MW: "check Page tab you already figure
+     * out how to report where the users go next").
+     *
+     * He is right, and I had the wrong mechanism. GA4's `click` event fires for
+     * OUTBOUND links only, so an internal side built from link clicks reads
+     * empty unless GTM is configured to send them — which on this site it is
+     * not. The Pages tab solved this months ago and I did not look.
+     *
+     * `pageReferrer` is the way round it: it holds the URL whose link was
+     * clicked to reach the current page, and it populates for INTERNAL
+     * navigation as well as external traffic. So the pages a visitor went on to
+     * are the pages whose referrer is one of ours — no click tracking required,
+     * and nothing for GTM to be missing.
+     *
+     * SCOPED BY SESSION CAMPAIGN, not by referring path. The Pages tab filters
+     * `pageReferrer CONTAINS <that page>` because it is about ONE page; a
+     * campaign has many landing pages and CONTAINS cannot express "any of
+     * these". Filtering on the campaign instead gives every onward step inside
+     * the campaign's sessions, which is the question anyway.
+     *
+     * THIS COUNTS PAGE VIEWS, NOT CLICKS, and the two are not added anywhere.
+     * A view is not a click: reloads, back-button returns and parallel tabs all
+     * produce views. Summing them into one "link clicks" figure would invent a
+     * number that measures nothing.
+     */
+    ga4NextPages: ga4RunReport({
+      dimensions: ["sessionManualCampaignName", "pagePath", "pageReferrer"],
+      metrics: ["screenPageViews"],
+      from, to, limit: 5000, orderBy: "screenPageViews",
+      dimensionFilter: withBranch({
+        andGroup: {
+          expressions: [
+            { filter: { fieldName: "sessionManualCampaignName",
+              stringFilter: { matchType: "BEGINS_WITH", value: code, caseSensitive: false } } },
+            // An internal referrer only. Without this the rows are dominated by
+            // the ad click itself arriving from facebook.com.
+            { filter: { fieldName: "pageReferrer",
+              stringFilter: { matchType: "CONTAINS", value: "bangkokhospital.com", caseSensitive: false } } },
+          ],
+        },
+      }),
+    }).catch((e) => {
+      logJson("WARNING", "campaign_next_pages_unavailable", { error: String(e.message || e) });
+      return null;
+    }),
     // Organic posts, matched to the campaign by the short link in their text.
     // The pull window is widened to always include the campaign's code date
     // plus 45 days: posts are returned by publish date, so a post published
@@ -4436,49 +4482,39 @@ async function buildCampaign(code, from, to) {
   }
 
   /**
-   * WHAT THEY CLICKED ON THE PAGE — both sides of the link.
+   * WHAT THEY DID ON THE PAGE — where they went next on the site, and where
+   * they left to.
    *
-   * Split INTERNAL from OUTBOUND because they answer different questions.
-   * Internal says the page worked: they went on to the appointment form, a
-   * doctor profile, a package. Outbound says they left, which for a hospital is
-   * usually the good kind of leaving — LINE, a phone number, a map.
+   * TWO SOURCES, TWO UNITS, NEVER ADDED.
    *
-   * Grouped rather than listed raw. Outbound by DESTINATION, because the raw
-   * list is the same shortener a hundred times with different query strings;
-   * internal by SECTION of the site, because a hundred doctor profiles clicked
-   * once each is one fact ("they went looking for doctors"), not a hundred.
+   *   · ONWARD is PAGE VIEWS, from `pageReferrer` — the pages whose referrer is
+   *     one of ours. Needs no click tracking, which is the point: GA4's `click`
+   *     event fires for OUTBOUND links only, so the internal side built from
+   *     clicks read empty on this site. The Pages tab already solved this and I
+   *     used the wrong mechanism twice before MW pointed at it.
+   *   · OUTBOUND is CLICKS, from `click` plus the chat bubble's GTM event.
    *
-   * ORDER MATTERS in the outbound classifier and the specific rules come first.
-   * `linkId` is checked before the URL because GTM tags the chat bubble's
-   * buttons `chat-bubble-channel-<name>` and several channels resolve through
-   * the site's own shortener, where the URL says `bkhos.co` and tells you
-   * nothing about which channel it was.
+   * A view is not a click — reloads, back-button returns and parallel tabs all
+   * produce views — so there is no combined total anywhere on this card. One
+   * figure summing the two would measure nothing.
+   *
+   * Grouped, not listed raw: onward by SECTION of the site, because a hundred
+   * doctor profiles viewed once each is one fact; outbound by DESTINATION,
+   * because the raw list is the same shortener a hundred times over.
    */
   const linkClicks = (() => {
-    if (data.ga4LinkClicks === null) {
-      return { available: false, reason: "GA4 link clicks were unavailable this run." };
+    const clickRows = data.ga4LinkClicks;
+    const nextRows = data.ga4NextPages;
+    if (clickRows === null && nextRows === null) {
+      return { available: false, reason: "GA4 was unavailable for both the click and the navigation pull this run." };
     }
-    const rows = data.ga4LinkClicks
+    const rows = (clickRows || [])
       .filter((r) => norm(r.sessionManualCampaignName).startsWith(needle));
 
     const host = (u) => {
       const m = String(u || "").match(/^[a-z][a-z0-9+.-]*:\/\/([^/?#]+)/i);
       return m ? m[1].replace(/^www\./i, "").toLowerCase() : null;
     };
-    // A relative href has NO host and is internal by definition. `tel:` and
-    // `mailto:` have no host either but are not internal, so the scheme is
-    // checked before falling back to "no host means same site".
-    const SCHEME_RE = /^([a-z][a-z0-9+.-]*):/i;
-    const isInternal = (u) => {
-      const raw = String(u || "").trim();
-      if (!raw) return false;                       // an on-page widget, not a link
-      const h = host(raw);
-      if (h) return h.endsWith("bangkokhospital.com");
-      const sch = raw.match(SCHEME_RE);
-      if (sch && !/^https?$/i.test(sch[1])) return false;   // tel:, mailto:, weixin:
-      return raw.startsWith("/");
-    };
-
     const CHANNELS = [
       { id: "line", label: "LINE", ids: ["channel-line"], urls: ["line.me", "lin.ee", "liff.line"] },
       { id: "phone", label: "Phone call", urls: ["tel:"] },
@@ -4501,17 +4537,25 @@ async function buildCampaign(code, from, to) {
       for (const c of CHANNELS) if ((c.urls || []).some((x) => url.includes(x))) return c;
       return null;
     };
+    // An internal href is not an outbound click and must not be tallied as one.
+    // A relative link has no host at all; `tel:` and `mailto:` have no host
+    // either but are not internal, so the scheme is checked first.
+    const SCHEME_RE = /^([a-z][a-z0-9+.-]*):/i;
+    const isInternal = (u) => {
+      const raw = String(u || "").trim();
+      if (!raw) return false;                       // an on-page widget, not a link
+      const h = host(raw);
+      if (h) return h.endsWith("bangkokhospital.com");
+      const sch = raw.match(SCHEME_RE);
+      if (sch && !/^https?$/i.test(sch[1])) return false;
+      return raw.startsWith("/");
+    };
 
     /**
-     * Internal destinations by the section they live in.
-     *
-     * The locale prefix is stripped first, and it matters for the FALLBACK
-     * rather than for the named sections: those match `/doctor/` anywhere in
-     * the path, so a prefix cannot break them. The fallback reads the segment
-     * AFTER the branch, and with `/en/` still attached it reads the branch
-     * instead — every unruled section on the site then collapses into one row
-     * called `/bangkok/`. The fallback exists so a section nobody has written
-     * a rule for is still named rather than pooled into "Other".
+     * Sections of the site, for the onward side. The locale prefix is stripped
+     * before the section is read: the fallback takes the segment AFTER the
+     * branch, and with `/en/` still attached it would read the branch instead
+     * and collapse every unruled part of the site into one `/bangkok/` row.
      */
     const SECTIONS = [
       { re: /\/(appointment|book|booking)(\/|$|\?)/i, label: "Appointment / booking" },
@@ -4527,9 +4571,7 @@ async function buildCampaign(code, from, to) {
     ];
     const LOCALES = /^\/(th|en|my|zh|ja|de|ar|km|vn|id)(?=\/)/i;
     const section = (u) => {
-      let path = String(u || "");
-      const h = host(path);
-      if (h) path = path.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "");
+      let path = pagePath(u) || "/";
       if (!path.startsWith("/")) path = `/${path}`;
       const bare = path.replace(LOCALES, "");
       for (const sec of SECTIONS) if (sec.re.test(bare)) return sec.label;
@@ -4538,55 +4580,48 @@ async function buildCampaign(code, from, to) {
       return seg[1] ? `/${seg[1]}/` : (seg[0] ? `/${seg[0]}` : "Home");
     };
 
-    const tally = (list, labelOf) => {
-      const m = new Map();
-      let total = 0;
-      for (const r of list) {
-        const clicks = n(r.eventCount);
-        if (!clicks) continue;
-        total += clicks;
-        const label = labelOf(r);
-        m.set(label, (m.get(label) || 0) + clicks);
-      }
-      return {
-        total,
-        rows: [...m.entries()].sort((a, b) => b[1] - a[1])
-          .map(([label, clicks]) => ({ label, clicks, share: total ? clicks / total : null })),
-      };
+    // ---------------------------------------------------------- onward views
+    /**
+     * SELF-VIEWS ARE EXCLUDED AND COUNTED, the same rule the Pages tab applies.
+     * A reload or a link back to the same page arrives as a view whose referrer
+     * is itself, and it would otherwise top its own list. Reported rather than
+     * silently dropped: the volume is the only observable proof the guard runs.
+     */
+    const onMap = new Map();
+    let onwardTotal = 0, selfViews = 0;
+    for (const r of (nextRows || [])) {
+      if (!norm(r.sessionManualCampaignName).startsWith(needle)) continue;
+      const dest = pagePath(r.pagePath), ref = pagePath(r.pageReferrer);
+      if (!dest) continue;
+      const v = n(r.screenPageViews);
+      if (!v) continue;
+      if (dest === ref) { selfViews += v; continue; }
+      const label = section(dest);
+      onMap.set(label, (onMap.get(label) || 0) + v);
+      onwardTotal += v;
+    }
+    const onward = {
+      available: nextRows !== null,
+      total: onwardTotal, selfViews,
+      rows: [...onMap.entries()].sort((a, b) => b[1] - a[1])
+        .map(([label, views]) => ({ label, views, share: onwardTotal ? views / onwardTotal : null })),
     };
 
-    const live = rows.filter((r) => n(r.eventCount) > 0);
-
+    // ------------------------------------------------------- outbound clicks
     /**
      * THE CHAT BUBBLE, FOLDED IN WITHOUT DOUBLE COUNTING.
      *
      * Its channel buttons are real outbound links, so they fire `click` AND
-     * `click_chat_bubble`. Summing both would inflate every LINE and WhatsApp
-     * figure by exactly the bubble's share of them. The bubble's OWN open
-     * button is a `div` and fires only the custom event, which is why the link
-     * pull alone read zero for it — the documented "Chat clicks 0" bug.
+     * `click_chat_bubble`; its open button is a `div` and fires only the custom
+     * event, which is why the link pull alone read zero for it.
      *
-     * PER CHANNEL, THE HIGHER OF THE TWO SOURCES — not "the custom event wins".
-     *
-     * `linkId` is what makes any of this possible: the bubble tags its buttons
-     * `chat-bubble-*`, so a bubble-originated LINE click is distinguishable
-     * from a LINE link sitting in the page body. Only the bubble's own rows are
-     * reconciled; body links are separate clicks and are simply added.
-     *
-     * I wrote this as "custom event wins, drop the link rows" first, and it was
-     * wrong in a way the fixture showed immediately: LINE fell from 300 to 200
-     * because a bubble-tagged link had no counterpart in the custom-event pull,
-     * so the clicks were deleted and replaced by nothing. In production that
-     * happens the moment GTM tags a button but stops sending the custom event
-     * for it — and the channel then reads zero, which is the silent-zero
-     * failure this project keeps hitting.
-     *
-     * MAX cannot double count, because both sources are measuring the SAME
-     * clicks: whichever is higher is the more complete measurement of one set,
-     * never a second set to be added. And it cannot silently lose a channel,
-     * because a source returning nothing for it loses to the one that did.
+     * PER CHANNEL, THE HIGHER OF THE TWO SOURCES. Both measure the SAME clicks,
+     * so max cannot double count, and a source returning nothing for a channel
+     * loses to the one that did, so a channel cannot silently drop to zero.
+     * Body links are DIFFERENT clicks and simply add.
      */
     const isBubbleId = (id) => norm(id).includes("chat-bubble");
+    const isOpen = (id) => norm(id).includes("top-parent");
     const chatRows = (data.ga4ChatClicks || [])
       .filter((r) => norm(r.sessionManualCampaignName).startsWith(needle))
       .filter((r) => n(r.eventCount) > 0)
@@ -4596,17 +4631,18 @@ async function buildCampaign(code, from, to) {
         eventCount: r.eventCount,
       }));
     const haveChat = data.ga4ChatClicks !== null && chatRows.length > 0;
-
-    /**
-     * The bubble being OPENED is the headline, and MW's standing rule from the
-     * report applies here too: it must NOT be counted as a channel, or a
-     * matcher treating every `chat-bubble*` id as one adds a phantom row and
-     * the destination shares stop summing to the clicks.
-     */
-    const isOpen = (id) => norm(id).includes("top-parent");
     const sumOpens = (list) => list.filter((r) => isOpen(r.linkId))
       .reduce((a, r) => a + n(r.eventCount), 0);
     const chatChannelRows = chatRows.filter((r) => !isOpen(r.linkId));
+
+    const live = rows.filter((r) => n(r.eventCount) > 0);
+    /**
+     * Opens are removed from BOTH sources before anything is tallied. They
+     * arrive in each, and filtering one only put the open into "On-page widget"
+     * and inflated the total by exactly the number of opens.
+     */
+    const bubbleOpens = Math.max(sumOpens(chatRows), sumOpens(live));
+    const clicks = live.filter((r) => !isOpen(r.linkId));
 
     // An unrecognised destination is labelled by its HOST, never swept into
     // "Other": a bucket called Other is where a new booking partner or a
@@ -4616,26 +4652,13 @@ async function buildCampaign(code, from, to) {
       return c ? c.label : (host(r.linkUrl) || "On-page widget");
     };
     /**
-     * OPENS ARE REMOVED FROM BOTH SOURCES BEFORE ANYTHING IS TALLIED.
-     *
-     * The link pull returns `chat-bubble-top-parent` rows too, and I had only
-     * filtered them out of the custom-event side — so the open was being
-     * counted as a destination and landed in "On-page widget", inflating the
-     * total by exactly the number of opens. Precisely the phantom row MW's
-     * rule on the report exists to prevent, reintroduced here by filtering one
-     * source and not the other.
-     *
-     * The higher of the two sources again, for the same reason as the channels.
+     * Internal link clicks are NOT tallied here even when GTM sends them: the
+     * onward side already counts that navigation from `pageReferrer`, and
+     * showing the same step twice under two units is worse than showing it
+     * once. They are kept in the exact-links table, flagged, where the unit is
+     * unambiguous.
      */
-    const bubbleOpens = Math.max(sumOpens(chatRows), sumOpens(live));
-    const clicks = live.filter((r) => !isOpen(r.linkId));
-
-    const inRows = clicks.filter((r) => isInternal(r.linkUrl));
-    const internal = tally(inRows, (r) => section(r.linkUrl));
-
     const outRows = clicks.filter((r) => !isInternal(r.linkUrl));
-    // Body links and bubble links are DIFFERENT clicks, so they add. Only the
-    // bubble side is reconciled against the custom event.
     const bodyOut = outRows.filter((r) => !isBubbleId(r.linkId));
     const bubbleFromLink = outRows.filter((r) => isBubbleId(r.linkId));
     const sumBy = (list) => {
@@ -4645,28 +4668,23 @@ async function buildCampaign(code, from, to) {
     };
     const fromLink = sumBy(bubbleFromLink);
     const fromCustom = haveChat ? sumBy(chatChannelRows) : new Map();
-    const bubbleMerged = new Map();
-    for (const label of new Set([...fromLink.keys(), ...fromCustom.keys()])) {
-      bubbleMerged.set(label, Math.max(fromLink.get(label) || 0, fromCustom.get(label) || 0));
-    }
     const outMap = sumBy(bodyOut);
-    for (const [label, v] of bubbleMerged) outMap.set(label, (outMap.get(label) || 0) + v);
+    for (const label of new Set([...fromLink.keys(), ...fromCustom.keys()])) {
+      const merged = Math.max(fromLink.get(label) || 0, fromCustom.get(label) || 0);
+      outMap.set(label, (outMap.get(label) || 0) + merged);
+    }
     const outTotal = [...outMap.values()].reduce((a, v) => a + v, 0);
     const outbound = {
+      available: clickRows !== null,
       total: outTotal,
       rows: [...outMap.entries()].sort((a, b) => b[1] - a[1])
-        .map(([label, clicks]) => ({ label, clicks, share: outTotal ? clicks / outTotal : null })),
+        .map(([label, clicks2]) => ({ label, clicks: clicks2, share: outTotal ? clicks2 / outTotal : null })),
     };
-    const total = internal.total + outbound.total;
 
-    // Exact links, both sides together, so "they clicked LINE" can be resolved
-    // to WHICH LINE account or WHICH doctor. Built from the SAME de-duplicated
-    // set the tallies use, or a bubble LINE click would appear twice here while
-    // being counted once above.
+    // Exact links, so "they clicked LINE" resolves to WHICH LINE account.
+    // Link rows only: the custom event carries the same clicks under the same
+    // URLs, so including it would list a bubble click twice.
     const byUrl = new Map();
-    // Link rows only. The custom event carries the same clicks under the same
-    // URLs, so including it here would list a bubble LINE click twice while the
-    // tally above counts it once.
     for (const r of clicks) {
       const u = String(r.linkUrl || "").trim();
       if (!u) continue;
@@ -4674,24 +4692,15 @@ async function buildCampaign(code, from, to) {
       byUrl.get(u).clicks += n(r.eventCount);
     }
 
+    const per100 = (v) => (totals.visits ? (v / totals.visits) * 100 : null);
     return {
       available: true,
-      total,
-      // Clicks per 100 visits, so a campaign that bought ten times the traffic
-      // is comparable with one that did not.
-      per100Visits: totals.visits ? (total / totals.visits) * 100 : null,
-      internal: { ...internal, share: total ? internal.total / total : null },
-      outbound: { ...outbound, share: total ? outbound.total / total : null },
-      /**
-       * Bubble opens are reported BESIDE the destination rows, never inside
-       * them, and are not part of `total`. Opening the bubble is not a
-       * destination — it is the step before choosing one — so adding it would
-       * make the shares stop summing.
-       */
+      onward: { ...onward, per100Visits: per100(onwardTotal) },
+      outbound: { ...outbound, per100Visits: per100(outTotal) },
       bubbleOpens: bubbleOpens || null,
       chatSource: haveChat ? "click_chat_bubble" : "link-event backstop",
       urls: [...byUrl.values()].sort((a, b) => b.clicks - a.clicks).slice(0, 20)
-        .map((u) => ({ ...u, share: total ? u.clicks / total : null })),
+        .map((u) => ({ ...u, share: outTotal + onwardTotal ? u.clicks / (outTotal + onwardTotal) : null })),
     };
   })();
 

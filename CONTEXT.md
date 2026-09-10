@@ -1,5 +1,55 @@
 ### Recent (August 2026)
 
+**v3.273.0 — the internal side now uses `pageReferrer`, which the Pages tab
+had already solved. I built it from link clicks twice.**
+
+MW: "still no internal links? please check Page tab you already figure out how
+to report where the users go next."
+
+He was right and the fix was already in the codebase. GA4's `click` event fires
+for OUTBOUND links only, so an internal side built from clicks reads empty
+unless GTM sends them — which on this site it does not. I shipped that in
+v3.269, blamed GTM for it in v3.271 with a note saying "most likely a tagging
+gap", and only looked at the Pages tab when told to. **`pageReferrer` needs no
+click tracking at all**: the pages a visitor went on to are the pages whose
+referrer is one of ours.
+
+**SCOPED BY SESSION CAMPAIGN, not by referring path.** The Pages tab filters
+`pageReferrer CONTAINS <that page>` because it is about ONE page. A campaign has
+many landing pages and CONTAINS cannot express "any of these", so the filter is
+the campaign plus an internal-referrer clause — without the latter the rows are
+dominated by the ad click itself arriving from facebook.com.
+
+**TWO UNITS, NEVER ADDED, and no combined total exists on the payload.** Onward
+is PAGE VIEWS, outbound is CLICKS. A view is not a click — reloads, back-button
+returns and parallel tabs all produce views — so a figure summing them would
+measure nothing. Per 100 visits is the one number comparable across both. The
+old "Link clicks 39" headline and the "Stayed on site %" it fed are gone.
+
+Self-views are excluded and counted, the Pages tab's rule: a reload arrives as a
+view whose referrer is itself and would otherwise top its own list.
+
+Internal link clicks, where GTM does send them, stay OUT of both tallies and
+appear in the exact-links table flagged `internal`. The onward side already
+counts that step as a page view, and one step under two units is counted twice.
+
+**Five negative tests, and two of them were decorative until I checked.**
+
+- Reverting the onward side to clicks → `lc onward populated` fails. Real.
+- Keeping self-views → `rows sum === total` did NOT fail, because a kept
+  self-view is added to a row AND to the total, so the identity still holds.
+  Replaced with a pinned "Content pages = 1400"; keeping them makes it 1500.
+- Counting internal clicks as outbound → a leading-slash test never fired,
+  because an internal absolute URL falls through the channel rules to `host()`
+  and arrives as `bangkokhospital.com`. Now checked on that label.
+
+The three limits of the referrer proxy are stated on the card, not just in code:
+it is the document referrer rather than necessarily the previous page, SPAs and
+parallel tabs break the chain, and exits cannot appear at all — so these are
+shares of onward views, never of visitors.
+
+### Recent (August 2026)
+
 **v3.272.0 — the chat bubble folded into the campaign block, without touching
 the report.**
 

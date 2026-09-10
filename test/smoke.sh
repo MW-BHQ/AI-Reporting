@@ -103,46 +103,69 @@ expect_field "sa bcm not a brand"  "$REPORT" "d.searchAds.byBrand.every(b=>b.imp
 # Cross-network guard was relaxed to match the channel on its own.
 expect_field "sa excludes x-network" "$REPORT" "${SA}'BGH').visits===400?400:undefined"
 
-echo "--- campaign: what they clicked on the page, internal AND outbound (v3.270.0) ---"
+echo "--- campaign: onward navigation and outbound clicks (v3.273.0) ---"
 CAMP1="/api/campaign?code=260701-08&from=$FROM&to=$TO"
 LC="d.linkClicks"
 expect_field "lc available"        "$CAMP1" "${LC}.available===true?'ok':undefined"
-# BOTH SIDES POPULATED. v3.269.0 shipped outbound only; an internal side that
-# quietly reads 0 is the failure this whole block was corrected for.
-expect_field "lc internal side"    "$CAMP1" "${LC}.internal.total>0?'ok':undefined"
-expect_field "lc outbound side"    "$CAMP1" "${LC}.outbound.total>0?'ok':undefined"
-expect_field "lc sides reconcile"  "$CAMP1" "${LC}.internal.total+${LC}.outbound.total===${LC}.total?'ok':undefined"
-# THE THREE INTERNAL SHAPES, each of which fails differently. Absolute URL on
-# our own host, relative href with NO host, and a locale-prefixed path that must
-# not become its own section per language. The fixture has one of each and they
-# must land in three named sections, not in a fallback.
-expect_field "lc internal named"   "$CAMP1" "${LC}.internal.rows.length===4?4:undefined"
-# THE LOCALE PREFIX IS STRIPPED, and this is the assertion that proves it. The
-# named sections match `/doctor/` anywhere so a prefix cannot break them; the
-# FALLBACK reads the segment after the branch, and with `/en/` attached it reads
-# the branch instead \u2014 every unruled section collapsing into one `/bangkok/` row.
-expect_field "lc locale stripped"  "$CAMP1" "${LC}.internal.rows.some(r=>r.label==='/promotions/')?'ok':undefined"
-expect_field "lc internal appt"    "$CAMP1" "${LC}.internal.rows.some(r=>r.label==='Appointment / booking')?'ok':undefined"
-expect_field "lc internal doctor"  "$CAMP1" "${LC}.internal.rows.some(r=>r.label==='Doctor profiles')?'ok':undefined"
-# The relative href. Decided by "no host means same site", which must NOT also
-# catch tel: and mailto: \u2014 those have no host either.
-expect_field "lc relative href"    "$CAMP1" "${LC}.internal.rows.some(r=>r.label==='Packages')?'ok':undefined"
+# THE INTERNAL SIDE COMES FROM `pageReferrer`, NOT FROM LINK CLICKS. I built it
+# from clicks twice; GA4's `click` fires for OUTBOUND links only, so on this
+# site it read empty. The Pages tab already used the referrer and this is the
+# assertion that stops it regressing to clicks: onward volume is page views and
+# must be populated even though internal link clicks are not tracked.
+expect_field "lc onward populated" "$CAMP1" "${LC}.onward.total>0?'ok':undefined"
+expect_field "lc onward sections"  "$CAMP1" "${LC}.onward.rows.length>=3?'ok':undefined"
+expect_field "lc onward appt"      "$CAMP1" "${LC}.onward.rows.some(r=>r.label==='Doctor profiles')?'ok':undefined"
+# SELF-VIEWS EXCLUDED AND COUNTED, the Pages tab's rule. A reload arrives as a
+# view whose referrer is itself and would otherwise top its own list; the
+# counter is the only observable proof the guard runs.
+expect_field "lc self views out"   "$CAMP1" "${LC}.onward.selfViews>0?'ok':undefined"
+expect_field "lc rows sum onward"  "$CAMP1" "${LC}.onward.rows.reduce((a,r)=>a+r.views,0)===${LC}.onward.total?'ok':undefined"
+# The self-view lands on the campaign's own landing page, which is "Content
+# pages". Pinned at 1400 because the sum-equals-total check above CANNOT catch a
+# self-view being kept: it is added to a row and to the total together, so both
+# grow and the identity still holds. Keeping them puts this row at 1500.
+expect_field "lc self excluded"    "$CAMP1" "${LC}.onward.rows.find(r=>r.label==='Content pages').views===1400?1400:undefined"
+# TWO UNITS, NEVER ADDED. There must be no combined total on the payload at all
+# — a single figure summing page views and clicks measures nothing.
+expect_field "lc no combined total" "$CAMP1" "${LC}.total===undefined?'ok':undefined"
+expect_field "lc outbound clicks"  "$CAMP1" "${LC}.outbound.total>0?'ok':undefined"
+expect_field "lc outbound sums"    "$CAMP1" "${LC}.outbound.rows.reduce((a,r)=>a+r.clicks,0)===${LC}.outbound.total?'ok':undefined"
+# The outbound classifier's branches, each a separate rule.
 expect_field "lc tel not internal" "$CAMP1" "${LC}.outbound.rows.some(r=>r.label==='Phone call')?'ok':undefined"
 expect_field "lc maps branch"      "$CAMP1" "${LC}.outbound.rows.some(r=>r.label==='Maps / directions')?'ok':undefined"
-# AN UNKNOWN DESTINATION IS LABELLED BY ITS HOST, never swept into "Other" \u2014
-# that bucket is where a new booking partner or a broken redirect would hide.
+# AN UNKNOWN DESTINATION IS LABELLED BY ITS HOST, never swept into "Other".
 expect_field "lc host fallback"    "$CAMP1" "${LC}.outbound.rows.some(r=>r.label==='partner-booking.example.co.th')?'ok':undefined"
 expect_field "lc no other bucket"  "$CAMP1" "${LC}.outbound.rows.some(r=>r.label==='Other')?undefined:'ok'"
-# CHAT CHANNELS BY `linkId` BEFORE THE URL. The fixture has a LINE link behind
-# the site's own shortener: the URL says `bkhos.co` and only the id says LINE.
-# A URL-first matcher files it as "Short link" and undercounts LINE silently,
-# so the ABSENCE of that row is the test.
-expect_field "lc line one row"     "$CAMP1" "${LC}.outbound.rows.filter(r=>r.label==='LINE').length===1?'ok':undefined"
-expect_field "lc id beats url"     "$CAMP1" "${LC}.outbound.rows.some(r=>r.label==='Short link')?undefined:'ok'"
-expect_field "lc per 100 visits"   "$CAMP1" "${LC}.per100Visits>0?'ok':undefined"
-# The exact-links table carries the side flag, so a reader can tell an internal
-# doctor page from an outbound partner without re-deriving it.
-expect_field "lc urls flagged"     "$CAMP1" "${LC}.urls.some(u=>u.internal===true)&&${LC}.urls.some(u=>u.internal===false)?'ok':undefined"
+# INTERNAL LINK CLICKS ARE NOT DOUBLE COUNTED. GTM sends some, and the onward
+# side already counts the same step as a page view. They stay in the urls table,
+# flagged, and out of the outbound tally.
+# Checked on the HOST label, not on a leading slash: an internal absolute URL
+# falls through the channel rules to `host()` and arrives as
+# "bangkokhospital.com", so a leading-slash test never fired and the guard was
+# decorative. Verified to fail when the internal filter is removed.
+expect_field "lc internal not out" "$CAMP1" "${LC}.outbound.rows.some(r=>/bangkokhospital/i.test(r.label))?undefined:'ok'"
+expect_field "lc internal in urls" "$CAMP1" "${LC}.urls.some(u=>u.internal===true)?'ok':undefined"
+# CHAT BUBBLE: per channel the HIGHER of the two sources, never the sum. The
+# fixture's LINE arrives 3x from the link event and 2x from the custom event, so
+# max keeps 300. Summing gives 500; dropping the link rows gives 200.
+expect_field "lc chat source"      "$CAMP1" "${LC}.chatSource==='click_chat_bubble'?'ok':undefined"
+expect_field "lc line keeps max"   "$CAMP1" "${LC}.outbound.rows.find(r=>r.label==='LINE').clicks===300?300:undefined"
+# OPENING THE BUBBLE IS NOT A DESTINATION. It arrives in BOTH pulls, and
+# filtering only one put it in "On-page widget" and inflated the total.
+expect_field "lc opens reported"   "$CAMP1" "${LC}.bubbleOpens===100?100:undefined"
+expect_field "lc opens not a row"  "$CAMP1" "${LC}.outbound.rows.some(r=>/bubble|top-parent/i.test(r.label))?undefined:'ok'"
+expect_field "lc widget not open"  "$CAMP1" "${LC}.outbound.rows.find(r=>r.label==='On-page widget').clicks===100?100:undefined"
+
+echo "--- isolation: the report's chat bubble slide must not move ---"
+# MW: "make sure it doesnt affect other pages." The campaign block uses its OWN
+# requests and shares no code with the report's chat block, which is
+# property-wide and grouped by pagePath. These pin the report's numbers so a
+# future edit to the shared classifier or to CHAT_LINKS cannot move them.
+expect_field "iso chat source"     "$REPORT" "d.chatBubble.source==='click_chat_bubble'?'ok':undefined"
+expect_field "iso chat bhq total"  "$REPORT" "d.chatBubble.byScope.BHQ.total===1700?1700:undefined"
+expect_field "iso chat bgh total"  "$REPORT" "d.chatBubble.byScope.BGH.total===900?900:undefined"
+expect_field "iso chat contactus"  "$REPORT" "d.chatBubble.byScope.BHQ.contactUs===9600?9600:undefined"
+expect_field "iso chat one event"  "$REPORT" "d.chatBubble.events.length===1?'ok':undefined"
 
 echo "--- google ads benchmark: impression share must not be summed or averaged ---"
 GB="/api/gads-benchmark?to=$TO"
@@ -630,63 +653,20 @@ expect_field "yt source is export"   "$REPORT" "d.youtube.source==='studio-expor
 expect_field "yt secrets are inert"  "$REPORT" "d.youtube.apiError===undefined?'ok':undefined"
 expect_field "yt has data"           "$REPORT" "d.youtube.totals.views===1000?1000:undefined"
 
-echo "--- campaign: chat bubble folded in without double counting (v3.272.0) ---"
-# THE BUBBLE'S CHANNEL BUTTONS FIRE BOTH EVENTS, so a naive merge inflates every
-# chat channel by the bubble's share of it. Per channel the HIGHER of the two is
-# taken, never the sum: both measure the same clicks, so max cannot double count
-# and cannot silently drop a channel either.
-#
-# The fixture's LINE arrives 3x from the link event and 2x from the custom event
-# (one bubble-tagged link has no custom-event counterpart). Max keeps 300. My
-# first version dropped the link rows outright and LINE fell to 200 — clicks
-# deleted and replaced by nothing, which in production is a channel reading zero
-# the moment GTM tags a button but stops sending the event.
-expect_field "lc chat source"      "$CAMP1" "${LC}.chatSource==='click_chat_bubble'?'ok':undefined"
-expect_field "lc line keeps max"   "$CAMP1" "${LC}.outbound.rows.find(r=>r.label==='LINE').clicks===300?300:undefined"
-# NO DOUBLE COUNT. Folding the bubble in must not move the total at all — the
-# custom event describes clicks the link event already reported.
-expect_field "lc total unmoved"    "$CAMP1" "${LC}.total===2000?2000:undefined"
-expect_field "lc rows sum"         "$CAMP1" "${LC}.internal.rows.concat(${LC}.outbound.rows).reduce((a,r)=>a+r.clicks,0)===${LC}.total?'ok':undefined"
-# OPENING THE BUBBLE IS NOT A DESTINATION. It is reported on its own and must be
-# out of the totals. It arrives in BOTH pulls, and filtering only one of them
-# put it in "On-page widget" and inflated the total by exactly the opens.
-expect_field "lc opens reported"   "$CAMP1" "${LC}.bubbleOpens===100?100:undefined"
-expect_field "lc opens not a row"  "$CAMP1" "${LC}.outbound.rows.some(r=>/bubble|top-parent/i.test(r.label))?undefined:'ok'"
-expect_field "lc widget not open"  "$CAMP1" "${LC}.outbound.rows.find(r=>r.label==='On-page widget').clicks===100?100:undefined"
-
-echo "--- isolation: the report's chat bubble slide must not move ---"
-# MW: "make sure it doesnt affect other pages." The campaign block uses its OWN
-# request — campaign-filtered, ungrouped — and shares no code with the report's
-# chat block, which is property-wide and grouped by pagePath. These pin the
-# report's numbers so a future edit to the shared classifier or to CHAT_LINKS
-# cannot move them unnoticed.
-expect_field "iso chat source"     "$REPORT" "d.chatBubble.source==='click_chat_bubble'?'ok':undefined"
-expect_field "iso chat bhq total"  "$REPORT" "d.chatBubble.byScope.BHQ.total===1700?1700:undefined"
-expect_field "iso chat bgh total"  "$REPORT" "d.chatBubble.byScope.BGH.total===900?900:undefined"
-expect_field "iso chat contactus"  "$REPORT" "d.chatBubble.byScope.BHQ.contactUs===9600?9600:undefined"
-expect_field "iso chat one event"  "$REPORT" "d.chatBubble.events.length===1?'ok':undefined"
-
-echo "--- campaign: no internal clicks is UNKNOWN, not zero ---"
-# THE BRANCH THAT SHIPPED A LIE. With GTM not sending internal link clicks, the
-# card printed "Stayed on site 0%" beside a key events card showing 494
-# contact_us — which is what made MW ask why the block looked broken. 0% reads
-# as "nobody went deeper"; the truth is we cannot see it.
-#
-# The happy-path fixture HAS internal clicks, so this branch was never rendered.
-# Booted with them removed, `internal.total` must be 0 while `outbound.total`
-# stays populated, and `internal.share` must be 0 rather than null so the UI's
-# own `internal.total ? pct : dash` gate is the only thing deciding what shows.
+echo "--- campaign: the navigation pull is what carries the internal side ---"
+# GTM DOES NOT SEND INTERNAL LINK CLICKS ON THIS SITE, which is exactly why the
+# onward side reads `pageReferrer` instead. Booted with every internal href
+# removed from the click fixture, the onward figure must be UNCHANGED — if it
+# moves, the internal side has quietly gone back to counting clicks.
 kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
 WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ADMIN_EMAILS=admin@bkh.test \
 MOCK_NO_INTERNAL_LINKS=1 PORT=$PORT node --require ./test/mock-fetch.js server.js >>/tmp/smoke.log 2>&1 &
 SRV=$!
 sleep 2.5
-expect_field "lc no internal at all" "$CAMP1" "${LC}.internal.total===0?'zero':undefined"
-expect_field "lc outbound survives"  "$CAMP1" "${LC}.outbound.total>0?'ok':undefined"
-expect_field "lc total is outbound"  "$CAMP1" "${LC}.total===${LC}.outbound.total?'ok':undefined"
-# No internal row may be invented from an outbound link when the internal ones
-# are gone — the section classifier must not be reached for them at all.
-expect_field "lc no phantom section" "$CAMP1" "${LC}.internal.rows.length===0?'zero':undefined"
+expect_field "lc onward survives"  "$CAMP1" "${LC}.onward.total>0?'ok':undefined"
+expect_field "lc onward unmoved"   "$CAMP1" "${LC}.onward.rows.some(r=>r.label==='Doctor profiles')?'ok':undefined"
+expect_field "lc outbound still"   "$CAMP1" "${LC}.outbound.total>0?'ok':undefined"
+expect_field "lc urls no internal" "$CAMP1" "${LC}.urls.some(u=>u.internal===true)?undefined:'ok'"
 
 echo "--- degradation: one source failing must not 500 ---"
 kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
