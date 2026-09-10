@@ -1,5 +1,43 @@
 ### Recent (August 2026)
 
+**v3.275.0 — "On-page widget" was the web chat, and the empty stat row is
+filled.**
+
+MW: "what is On-page widget / we got blank space beside Click Chat Bubble, what
+other insight should we put".
+
+**"On-page widget" was a mislabel, not a category.** Web chat opens IN the page
+rather than navigating, so its click arrives with an empty `linkUrl` and fell
+through every URL rule into the no-URL fallback. A real, named channel —
+`webchat`, "Webchat (TH/EN)" in the report's own channel list — was being
+reported as an anonymous widget. Now matched on its `linkId`, which is the only
+thing a no-URL click has. The fallback is renamed **Unidentified widget** and
+should now be empty; if a row ever appears there it is genuinely unrecognised
+and worth looking at.
+
+**The blank space: three stats, and the bar for each was that it must NOT
+restate a table.** "Went deeper" and "Left the site" were deleted in v3.274 for
+exactly that, so the replacements each need a join or a comparison the two
+tables do not make:
+
+- **Click Chat bubble** — belongs to neither table, being the step before a
+  destination is chosen.
+- **Reached booking** — the one onward section that is a funnel step rather
+  than a browse, lifted out of the roll-up with a per-100-visits rate so
+  campaigns of different sizes compare. This also gives the section grouping a
+  job again, now that the table below lists exact paths.
+- **Contact us** — the site's own key event, placed deliberately beside the
+  click figures because MW compared the two and they did not reconcile. Stating
+  its unit here answers that in place rather than leaving a reader to scroll up
+  and guess.
+
+The `lc widget not open` assertion became `lc webchat named` plus `lc no widget
+row`. The second still catches the bubble-open leak it was written for — the
+open has no URL either, so filtering it from one pull only lands it in the
+no-URL bucket — verified by removing the filter and watching it fail.
+
+### Recent (August 2026)
+
 **v3.274.0 — the link-click card, trimmed to MW's shape.**
 
 Four changes, all his:

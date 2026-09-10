@@ -161,7 +161,16 @@ expect_field "lc line keeps max"   "$CAMP1" "${LC}.outbound.rows.find(r=>r.label
 # filtering only one put it in "On-page widget" and inflated the total.
 expect_field "lc opens reported"   "$CAMP1" "${LC}.bubbleOpens===100?100:undefined"
 expect_field "lc opens not a row"  "$CAMP1" "${LC}.outbound.rows.some(r=>/bubble|top-parent/i.test(r.label))?undefined:'ok'"
-expect_field "lc widget not open"  "$CAMP1" "${LC}.outbound.rows.find(r=>r.label==='On-page widget').clicks===100?100:undefined"
+# WEB CHAT IS A NAMED CHANNEL, not an anonymous widget. It opens in the page
+# rather than navigating, so its click has an empty `linkUrl` and used to fall
+# through every URL rule into "On-page widget" — a real channel from the
+# report's own list reported as unidentified. Matched on its id instead.
+#
+# Pinned at 100 because it is also the row that catches the bubble OPEN leaking
+# in: the open has no URL either, and filtering it from one pull only put it
+# here and inflated the total by exactly the opens.
+expect_field "lc webchat named"    "$CAMP1" "${LC}.outbound.rows.find(r=>r.label==='Web chat').clicks===100?100:undefined"
+expect_field "lc no widget row"    "$CAMP1" "${LC}.outbound.rows.some(r=>/widget/i.test(r.label))?undefined:'ok'"
 
 echo "--- isolation: the report's chat bubble slide must not move ---"
 # MW: "make sure it doesnt affect other pages." The campaign block uses its OWN

@@ -4523,6 +4523,16 @@ async function buildCampaign(code, from, to) {
       { id: "email", label: "Email", urls: ["mailto:"] },
       { id: "maps", label: "Maps / directions", urls: ["goo.gl/maps", "maps.google", "maps.app.goo.gl"] },
       { id: "wechat", label: "WeChat", ids: ["channel-wechat"], urls: ["weixin", "wechat"] },
+      /**
+       * WEB CHAT HAS NO URL, WHICH IS NOT THE SAME AS HAVING NO IDENTITY.
+       *
+       * It opens in the page rather than navigating, so the click arrives with
+       * an empty `linkUrl` and fell through every URL rule to the "On-page
+       * widget" fallback — a real, named channel (`webchat`, "Webchat (TH/EN)"
+       * in the report's own list) reported as an anonymous widget. Matched on
+       * the id, which is the only thing it has.
+       */
+      { id: "webchat", label: "Web chat", ids: ["channel-webchat"] },
       { id: "telegram", label: "Telegram", ids: ["channel-telegram"], urls: ["t.me/"] },
       { id: "zalo", label: "Zalo", ids: ["channel-zalo"], urls: ["zalo.me"] },
       { id: "facebook", label: "Facebook", urls: ["facebook.com", "fb.com", "fb.me"] },
@@ -4658,7 +4668,9 @@ async function buildCampaign(code, from, to) {
     // broken redirect goes to hide.
     const destOf = (r) => {
       const c = classify(r.linkId, r.linkUrl);
-      return c ? c.label : (host(r.linkUrl) || "On-page widget");
+      // The fallback is now only for a click with NO url and NO recognised id —
+      // genuinely unidentifiable, and worth looking at rather than assuming.
+      return c ? c.label : (host(r.linkUrl) || "Unidentified widget");
     };
     /**
      * Internal link clicks are NOT tallied here even when GTM sends them: the

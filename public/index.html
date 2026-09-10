@@ -5696,13 +5696,43 @@ function renderCampaignBody(d) {
        * figure with nowhere else to live: it belongs to neither table, being
        * the step BEFORE a destination is chosen.
        */
+      /**
+       * THREE STATS, EACH ANSWERING SOMETHING THE TWO TABLES CANNOT (MW: "we
+       * got blank space beside Click Chat Bubble, what other insight should we
+       * put").
+       *
+       * The bar for a stat here is that it must NOT restate a table. "Went
+       * deeper" and "Left the site" were removed for exactly that. These
+       * three each need a join or a comparison the tables do not make:
+       *
+       *   · CHAT BUBBLE — belongs to neither table, being the step before a
+       *     destination is chosen.
+       *   · BOOKING OR APPOINTMENT — the only onward section that is a funnel
+       *     step rather than a browse, pulled out of the roll-up and given a
+       *     per-100-visits rate so campaigns of different sizes compare. This
+       *     is also what the section grouping is now FOR, since the table below
+       *     lists exact paths.
+       *   · CONTACT US — the site's own key event, sitting deliberately beside
+       *     the click figures because MW compared the two and they did not
+       *     reconcile. Showing it here with its unit stated answers that in
+       *     place, rather than leaving a reader to scroll up and guess.
+       */
+      const booking = (on.rows || []).find(r => /appointment|booking/i.test(r.label));
+      const per100 = (v) => (d.totals && d.totals.visits) ? num((v / d.totals.visits) * 100, {dp:1}) : '\u2014';
+      const stats = [
+        lc.bubbleOpens ? { lab: 'Click Chat bubble', val: num(lc.bubbleOpens),
+          sub: 'the step before choosing a channel' } : null,
+        { lab: 'Reached booking', val: booking ? num(booking.views) : '0',
+          sub: booking ? `${per100(booking.views)} per 100 visits` : 'no appointment page reached' },
+        { lab: 'Contact us', val: (d.totals && d.totals.contacts != null) ? num(d.totals.contacts) : '\u2014',
+          sub: 'the site\u2019s own key event, not a link click' },
+      ].filter(Boolean);
       return `<div class="card mt">
         <h2>What they did on the page</h2>
-        ${lc.bubbleOpens?`<div class="grid g-3" style="margin-bottom:14px;">
-          <div class="stat"><div class="lab">Click Chat bubble</div>
-            <div class="val">${num(lc.bubbleOpens)}</div>
-            <div class="sub">the step before choosing a channel</div></div>
-        </div>`:''}
+        <div class="grid g-3" style="margin-bottom:14px;">
+          ${stats.map(x=>`<div class="stat"><div class="lab">${x.lab}</div>
+            <div class="val">${x.val}</div><div class="sub">${x.sub}</div></div>`).join('')}
+        </div>
         <div class="grid g-2">
           <div class="card">
             <div class="card-title">Internal Clicks ${on.total?`&middot; ${num(on.total)}`:''}</div>
@@ -10558,7 +10588,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.274.0';
+const CLIENT_BUILD = '3.275.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
