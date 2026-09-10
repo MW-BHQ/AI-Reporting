@@ -5658,6 +5658,85 @@ function renderCampaignBody(d) {
       </div>
     </div>
 
+    ${(() => {
+      /**
+       * WHAT THEY CLICKED ON THE PAGE (MW), internal and outbound both.
+       *
+       * Sits under the landing pages on purpose: that card says where they
+       * arrived, this says what they reached for once there. The funnel stops
+       * at "engaged" and the key events card lists outcomes we tagged
+       * deliberately; neither tells you a visitor went for the phone number
+       * instead of the booking form.
+       *
+       * THE TWO SIDES ANSWER DIFFERENT QUESTIONS and are never added into one
+       * headline. Internal says the page worked \u2014 they went on to the
+       * appointment form, a doctor, a package. Outbound says they left, which
+       * for a hospital is usually the good kind of leaving.
+       *
+       * AN EMPTY INTERNAL SIDE IS EXPLAINED, NOT SHOWN AS A ZERO. GA4 enhanced
+       * measurement fires `click` for outbound links only; internal clicks
+       * appear where GTM tracks them, as it already does for the chat bubble.
+       * A bare 0 there would read as "nobody clicked anything on the page",
+       * which is a claim about visitors rather than about our tagging.
+       */
+      const lc = d.linkClicks;
+      if (!lc) return '';
+      if (!lc.available) return `<div class="card mt"><h2>What they clicked on the page</h2>
+        <div class="note">${esc(lc.reason || 'Not available this run.')}</div></div>`;
+      if (!lc.total) return `<div class="card mt"><h2>What they clicked on the page</h2>
+        <div class="note">No link clicks recorded for this campaign in range. Worth checking against the key events card above: if those fired, the visits were real and it is the click tracking that is missing rather than the interest.</div></div>`;
+      const sideTable = (side, title, empty) => `
+        <div class="card">
+          <div class="card-title">${title} ${side.total?`&middot; ${num(side.total)} click${side.total===1?'':'s'}${side.share!=null?` &middot; ${num(side.share*100,{dp:0})}%`:''}`:''}</div>
+          ${side.total ? `<table><thead><tr><th>Destination</th><th class="num">Clicks</th><th class="num">Share of side</th><th class="num">Per 100 visits</th></tr></thead><tbody>
+          ${side.rows.slice(0,10).map(r=>`<tr>
+            <td class="strong i18n">${esc(r.label)}</td>
+            <td class="num">${num(r.clicks)}</td>
+            <td class="num">${r.share!=null?num(r.share*100,{dp:1})+'%':'\u2014'}</td>
+            <td class="num">${d.totals&&d.totals.visits?num((r.clicks/d.totals.visits)*100,{dp:1}):'\u2014'}</td>
+          </tr>`).join('')}
+          </tbody></table>` : `<div class="note" style="margin-top:0;">${empty}</div>`}
+        </div>`;
+      return `<div class="card mt">
+        <h2>What they clicked on the page</h2>
+        <div class="grid g-3" style="margin-bottom:14px;">
+          <div class="stat"><div class="lab">Link clicks</div>
+            <div class="val">${num(lc.total)}</div>
+            <div class="sub">internal and outbound</div></div>
+          <div class="stat"><div class="lab">Per 100 visits</div>
+            <div class="val">${lc.per100Visits!=null?num(lc.per100Visits,{dp:1}):'\u2014'}</div>
+            <div class="sub">comparable across campaign sizes</div></div>
+          <div class="stat"><div class="lab">Stayed on site</div>
+            <div class="val">${lc.internal.share!=null?num(lc.internal.share*100,{dp:0})+'%':'\u2014'}</div>
+            <div class="sub">${num(lc.internal.total)} internal &middot; ${num(lc.outbound.total)} outbound</div></div>
+        </div>
+        <div class="grid g-2">
+          ${sideTable(lc.internal, 'Deeper into the site',
+            'No internal link clicks recorded. GA4 tracks outbound clicks on its own but internal ones only where GTM is set to send them, so this is most likely a tagging gap rather than a page nobody navigated from.')}
+          ${sideTable(lc.outbound, 'Off to somewhere else',
+            'No outbound link clicks recorded \u2014 nobody left the page for LINE, a phone number or a map.')}
+        </div>
+        <div class="note">
+          <b>Internal</b> is decided from the link's host, so an absolute URL on our own domain and a relative <code>/th/bangkok/\u2026</code> href both count \u2014 while <code>tel:</code> and <code>mailto:</code>, which also have no host, do not. Internal destinations are grouped by SECTION rather than by URL: a hundred doctor profiles clicked once each is one fact, not a hundred rows. The locale prefix is stripped before the section is read, so a part of the site with no rule of its own is named after itself rather than after the hospital it sits under.
+          <br><br>
+          <b>Outbound</b> is grouped by what the destination IS, because the raw list is the same shortener a hundred times with different query strings. Anything unrecognised is labelled by its <b>host</b> instead of being swept into an "Other" row &mdash; a bucket called Other is where a new booking partner or a broken redirect goes to hide. Chat channels are identified by the <code>linkId</code> GTM puts on the bubble's buttons BEFORE the URL is considered, because several resolve through one shortener where the URL alone cannot tell LINE from WhatsApp.
+        </div>
+      </div>
+
+      ${lc.urls.length?`<div class="card mt">
+        <h2>Exact links clicked</h2>
+        <table><thead><tr><th>Link</th><th></th><th class="num">Clicks</th><th class="num">Share</th></tr></thead><tbody>
+        ${lc.urls.map(u=>`<tr>
+          <td class="i18n trunc" title="${esc(u.url)}">${esc(u.url)}</td>
+          <td>${u.internal?'<span class="pill grey">internal</span>':`<span class="pill">${esc(u.host||'outbound')}</span>`}</td>
+          <td class="num">${num(u.clicks)}</td>
+          <td class="num">${u.share!=null?num(u.share*100,{dp:1})+'%':'\u2014'}</td>
+        </tr>`).join('')}
+        </tbody></table>
+        <div class="note">Top 20 by clicks, ungrouped. The tables above tell you visitors reached for LINE or for a doctor; this one tells you which LINE account and which doctor \u2014 useful when a campaign points at per-language or per-hospital variants of the same thing.</div>
+      </div>`:''}`;
+    })()}
+
     ${(d.organicPosts&&d.organicPosts.length)||(d.shortLinks&&d.shortLinks.length)?`<div class="card mt">
       <h2>Organic reach · matched by short link</h2>
       ${d.organicTotals&&d.organicTotals.posts?`<div class="grid g-4" style="margin-bottom:14px;">
@@ -10416,7 +10495,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.268.0';
+const CLIENT_BUILD = '3.270.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

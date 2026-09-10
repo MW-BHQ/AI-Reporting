@@ -366,6 +366,51 @@ function ga4Report(body) {
    * look correct, since every id would then appear with every URL anyway.
    * Telling the paired channels apart by URL is the whole point of this block.
    */
+  /**
+   * LINKS THAT ARE NOT CHAT CHANNELS, for the campaign tab's link-click block.
+   *
+   * `CHAT_LINKS` is deliberately all chat: the Chat Bubble slide's whole job is
+   * telling those channels apart. The campaign block classifies EVERY click on
+   * the page — internal navigation as well as outbound — so it needs internal
+   * hrefs, a `tel:`, a maps link and an unrecognised host, or most of its
+   * branches never execute.
+   *
+   * The three internal shapes are all here on purpose, because the
+   * internal/outbound split is decided from the host and each fails
+   * differently: an ABSOLUTE internal URL (host matches the site), a RELATIVE
+   * href (no host at all), and a locale-prefixed path (which must not become
+   * its own section per language).
+   *
+   * `chat-bubble-channel-line` behind `bkhos.co` is the pair that makes
+   * "identify by linkId BEFORE the URL" a testable rule rather than a claim:
+   * the URL says shortener and only the id says LINE. A URL-first matcher files
+   * it under "Short link" and undercounts LINE with no sign of it.
+   *
+   * In OTHER_LINKS rather than CHAT_LINKS so the Chat Bubble slide's own
+   * fixture and assertions are untouched — widening a shared fixture to prove
+   * something about a different tab tests the wrong thing in the wrong place.
+   */
+  const OTHER_LINKS = [
+    ["chat-bubble-channel-line", "https://bkhos.co/wK8kLa"],
+    ["", "tel:+6621234567"],
+    ["", "https://maps.app.goo.gl/bangkokhospital"],
+    ["", "https://www.youtube.com/@bangkokhospital"],
+    ["", "https://partner-booking.example.co.th/appt?ref=bgh"],
+    ["", "https://www.bangkokhospital.com/th/bangkok/appointment"],
+    ["", "https://www.bangkokhospital.com/en/bangkok/doctor/dr-somchai"],
+    ["", "/th/bangkok/package/heart-screening"],
+    /**
+     * A LOCALE-PREFIXED PATH IN A SECTION NOBODY HAS A RULE FOR. This is the
+     * only pair that makes stripping the locale testable. The named sections
+     * match `/doctor/` anywhere in the path, so a prefix cannot break them; the
+     * FALLBACK reads the segment after the branch, and with `/en/` still
+     * attached it reads the BRANCH instead and every unruled section on the
+     * site collapses into one row called `/bangkok/`.
+     */
+    ["", "https://www.bangkokhospital.com/en/bangkok/promotions/mid-year"],
+  ];
+  const chatOnly = JSON.stringify(body.dimensionFilter || {}).includes("chat-bubble");
+  const LINK_PAIRS = chatOnly ? CHAT_LINKS : [...CHAT_LINKS, ...OTHER_LINKS];
   const expand = (i, acc) => {
     if (i === dims.length) return emit(acc);
     const d = dims[i];
@@ -381,11 +426,11 @@ function ga4Report(body) {
     if (d === "customEvent:Click_ID") { for (const [id] of CHAT_LINKS) expand(i + 1, [...acc, id]); return; }
     if (d === "customEvent:Click_URL") { for (const [, url] of CHAT_LINKS) expand(i + 1, [...acc, url]); return; }
     if (d === "linkId" && dims[i + 1] === "linkUrl") {
-      for (const [id, url] of CHAT_LINKS) expand(i + 2, [...acc, id, url]);
+      for (const [id, url] of LINK_PAIRS) expand(i + 2, [...acc, id, url]);
       return;
     }
-    if (d === "linkId") { for (const [id] of CHAT_LINKS) expand(i + 1, [...acc, id]); return; }
-    if (d === "linkUrl") { for (const [, url] of CHAT_LINKS) expand(i + 1, [...acc, url]); return; }
+    if (d === "linkId") { for (const [id] of LINK_PAIRS) expand(i + 1, [...acc, id]); return; }
+    if (d === "linkUrl") { for (const [, url] of LINK_PAIRS) expand(i + 1, [...acc, url]); return; }
     const opts = d === "date" ? dates
       : d === "eventName" ? (allowedEvents || GA4_EVENTS)
       /**

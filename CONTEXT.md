@@ -1,5 +1,54 @@
 ### Recent (August 2026)
 
+**v3.270.0 — "What they clicked on the page": internal links AND outbound.
+v3.269.0 was reverted for covering only half of it.**
+
+MW asked for the link clicks people make once they land. v3.269.0 shipped
+outbound only, framed as a feature ("Outbound clicks only") when it was a gap,
+plus a card nobody asked for. Reverted in full (`966dfb6`) and rebuilt.
+
+Two sides, never added into one headline, because they answer different
+questions. **Internal** says the page worked — they went on to the appointment
+form, a doctor, a package. **Outbound** says they left, which for a hospital is
+usually the good kind of leaving: LINE, a phone number, a map. The dropped
+"which landing page the clicks came from" card is gone.
+
+**The split is decided from the HOST, not from GA4's `outbound` dimension.**
+`linkUrl` already carries the host, so it needs no extra dimension and no extra
+cardinality, and a relative href — which arrives with no host at all — is
+unambiguously internal. `tel:` and `mailto:` have no host either and are NOT
+internal, so the scheme is checked before falling back to "no host means same
+site".
+
+**Internal is grouped by SECTION**, because a hundred doctor profiles clicked
+once each is one fact, not a hundred rows.
+
+**Whether internal clicks appear at all depends on the tagging**, and the card
+says so instead of showing a zero. GA4 enhanced measurement fires `click` for
+outbound links only; internal ones appear where GTM sends them, as it already
+does for the chat bubble. A bare 0 there would be a claim about visitors rather
+than about our tagging.
+
+**Sixteen assertions. Three of the load-bearing ones only became real after I
+checked whether they actually failed:**
+
+- `lc tel not internal` — fails when the scheme check is removed. Real.
+- `lc id beats url` — fails when the classifier's two passes are swapped, thanks
+  to a fixture LINE link behind `bkhos.co` where only the id identifies it.
+- `lc locale stripped` — did NOT fail at first. The named sections match
+  `/doctor/` anywhere in the path, so a locale prefix cannot break them; the
+  strip only matters for the FALLBACK, which reads the segment after the branch
+  and with `/en/` attached reads the branch instead, collapsing every unruled
+  section into one row called `/bangkok/`. The fixture grew a locale-prefixed
+  `/promotions/` path, and the code comment claiming the wrong reason was
+  corrected too — along with the same wrong reason on the card itself.
+
+The extra fixture links live in `OTHER_LINKS`, added only when the request is
+not the chat-bubble pull, so a `tel:` number cannot appear in the Chat Bubble
+slide's unmapped tally.
+
+### Recent (August 2026)
+
 **v3.268.0 — paid search terms against our own organic rank. The join neither
 platform can do.**
 

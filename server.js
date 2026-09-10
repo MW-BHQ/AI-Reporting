@@ -3858,6 +3858,55 @@ async function buildCampaign(code, from, to) {
       logJson("WARNING", "campaign_landing_unavailable", { error: String(e.message || e) });
       return null;
     }),
+    /**
+     * WHAT THEY CLICKED ONCE THEY LANDED — INTERNAL LINKS AND OUTBOUND BOTH
+     * (MW, correcting v3.269 which covered outbound only).
+     *
+     * The funnel above stops at "engaged" and the key events card lists
+     * outcomes we tagged on purpose. Neither says what a visitor actually
+     * reached for on the page: the appointment link, a doctor profile, or the
+     * LINE button.
+     *
+     * FILTERED SERVER-SIDE ON BOTH THE CAMPAIGN AND THE EVENT. A property-wide
+     * `click` pull sorted by count would not contain one campaign's rows
+     * anywhere in the first 20,000 — one campaign against a site doing
+     * millions of sessions. Same mistake §3 records for the landing-page pull.
+     *
+     * `linkId` BEFORE `linkUrl` in the dimension list: they are a pair
+     * describing one click, and the fixture emits them as pairs rather than as
+     * a cross product so a matcher ignoring the URL cannot look correct.
+     * Keeping the real request in the same order keeps the two honest.
+     *
+     * INTERNAL VS OUTBOUND IS DECIDED FROM THE HOST, not from GA4's `outbound`
+     * dimension. `linkUrl` already carries the host, so the split needs no
+     * extra dimension and no extra cardinality — and a relative href, which
+     * arrives with no host at all, is unambiguously internal.
+     *
+     * WHETHER INTERNAL CLICKS APPEAR AT ALL DEPENDS ON THE TAGGING. GA4
+     * enhanced measurement fires `click` for OUTBOUND links only; internal
+     * ones show up only where GTM tracks them, as it already does for the chat
+     * bubble. So the block reports the two sides separately and says plainly
+     * when the internal side is empty, rather than showing a zero that reads
+     * as "nobody clicked anything".
+     */
+    ga4LinkClicks: ga4RunReport({
+      dimensions: ["sessionManualCampaignName", "linkId", "linkUrl"],
+      metrics: ["eventCount"],
+      from, to, limit: 5000, orderBy: "eventCount",
+      dimensionFilter: withBranch({
+        andGroup: {
+          expressions: [
+            { filter: { fieldName: "sessionManualCampaignName",
+              stringFilter: { matchType: "BEGINS_WITH", value: code, caseSensitive: false } } },
+            { filter: { fieldName: "eventName",
+              stringFilter: { matchType: "EXACT", value: "click" } } },
+          ],
+        },
+      }),
+    }).catch((e) => {
+      logJson("WARNING", "campaign_link_clicks_unavailable", { error: String(e.message || e) });
+      return null;
+    }),
     // Organic posts, matched to the campaign by the short link in their text.
     // The pull window is widened to always include the campaign's code date
     // plus 45 days: posts are returned by publish date, so a post published
@@ -4345,6 +4394,163 @@ async function buildCampaign(code, from, to) {
     trend = [...tm.values()].sort((a, b) => a.d.localeCompare(b.d));
   }
 
+  /**
+   * WHAT THEY CLICKED ON THE PAGE — both sides of the link.
+   *
+   * Split INTERNAL from OUTBOUND because they answer different questions.
+   * Internal says the page worked: they went on to the appointment form, a
+   * doctor profile, a package. Outbound says they left, which for a hospital is
+   * usually the good kind of leaving — LINE, a phone number, a map.
+   *
+   * Grouped rather than listed raw. Outbound by DESTINATION, because the raw
+   * list is the same shortener a hundred times with different query strings;
+   * internal by SECTION of the site, because a hundred doctor profiles clicked
+   * once each is one fact ("they went looking for doctors"), not a hundred.
+   *
+   * ORDER MATTERS in the outbound classifier and the specific rules come first.
+   * `linkId` is checked before the URL because GTM tags the chat bubble's
+   * buttons `chat-bubble-channel-<name>` and several channels resolve through
+   * the site's own shortener, where the URL says `bkhos.co` and tells you
+   * nothing about which channel it was.
+   */
+  const linkClicks = (() => {
+    if (data.ga4LinkClicks === null) {
+      return { available: false, reason: "GA4 link clicks were unavailable this run." };
+    }
+    const rows = data.ga4LinkClicks
+      .filter((r) => norm(r.sessionManualCampaignName).startsWith(needle));
+
+    const host = (u) => {
+      const m = String(u || "").match(/^[a-z][a-z0-9+.-]*:\/\/([^/?#]+)/i);
+      return m ? m[1].replace(/^www\./i, "").toLowerCase() : null;
+    };
+    // A relative href has NO host and is internal by definition. `tel:` and
+    // `mailto:` have no host either but are not internal, so the scheme is
+    // checked before falling back to "no host means same site".
+    const SCHEME_RE = /^([a-z][a-z0-9+.-]*):/i;
+    const isInternal = (u) => {
+      const raw = String(u || "").trim();
+      if (!raw) return false;                       // an on-page widget, not a link
+      const h = host(raw);
+      if (h) return h.endsWith("bangkokhospital.com");
+      const sch = raw.match(SCHEME_RE);
+      if (sch && !/^https?$/i.test(sch[1])) return false;   // tel:, mailto:, weixin:
+      return raw.startsWith("/");
+    };
+
+    const CHANNELS = [
+      { id: "line", label: "LINE", ids: ["channel-line"], urls: ["line.me", "lin.ee", "liff.line"] },
+      { id: "phone", label: "Phone call", urls: ["tel:"] },
+      { id: "whatsapp", label: "WhatsApp", ids: ["channel-whatsapp"], urls: ["wa.me", "whatsapp"] },
+      { id: "messenger", label: "Messenger", ids: ["channel-messenger"], urls: ["m.me", "messenger.com"] },
+      { id: "email", label: "Email", urls: ["mailto:"] },
+      { id: "maps", label: "Maps / directions", urls: ["goo.gl/maps", "maps.google", "maps.app.goo.gl"] },
+      { id: "wechat", label: "WeChat", ids: ["channel-wechat"], urls: ["weixin", "wechat"] },
+      { id: "telegram", label: "Telegram", ids: ["channel-telegram"], urls: ["t.me/"] },
+      { id: "zalo", label: "Zalo", ids: ["channel-zalo"], urls: ["zalo.me"] },
+      { id: "facebook", label: "Facebook", urls: ["facebook.com", "fb.com", "fb.me"] },
+      { id: "instagram", label: "Instagram", urls: ["instagram.com"] },
+      { id: "tiktok", label: "TikTok", urls: ["tiktok.com"] },
+      { id: "youtube", label: "YouTube", urls: ["youtube.com", "youtu.be"] },
+      { id: "shortlink", label: "Short link", urls: ["bkhos.co", "bit.ly"] },
+    ];
+    const classify = (linkId, linkUrl) => {
+      const id = norm(linkId), url = norm(linkUrl);
+      for (const c of CHANNELS) if ((c.ids || []).some((x) => id.includes(x))) return c;
+      for (const c of CHANNELS) if ((c.urls || []).some((x) => url.includes(x))) return c;
+      return null;
+    };
+
+    /**
+     * Internal destinations by the section they live in.
+     *
+     * The locale prefix is stripped first, and it matters for the FALLBACK
+     * rather than for the named sections: those match `/doctor/` anywhere in
+     * the path, so a prefix cannot break them. The fallback reads the segment
+     * AFTER the branch, and with `/en/` still attached it reads the branch
+     * instead — every unruled section on the site then collapses into one row
+     * called `/bangkok/`. The fallback exists so a section nobody has written
+     * a rule for is still named rather than pooled into "Other".
+     */
+    const SECTIONS = [
+      { re: /\/(appointment|book|booking)(\/|$|\?)/i, label: "Appointment / booking" },
+      { re: /\/doctor(\/|$|\?)/i, label: "Doctor profiles" },
+      { re: /\/package(\/|$|\?)/i, label: "Packages" },
+      { re: /\/center-clinic(\/|$|\?)/i, label: "Centers & clinics" },
+      { re: /\/(content|article)(\/|$|\?)/i, label: "Articles" },
+      { re: /\/ai-assistant|\/page\/better-ai/i, label: "Better AI" },
+      { re: /\/better-club(\/|$|\?)/i, label: "Better Club" },
+      { re: /\/campaign(\/|$|\?)/i, label: "Campaign pages" },
+      { re: /\/page(\/|$|\?)/i, label: "Content pages" },
+      { re: /\/(contact|contact-us)(\/|$|\?)/i, label: "Contact page" },
+    ];
+    const LOCALES = /^\/(th|en|my|zh|ja|de|ar|km|vn|id)(?=\/)/i;
+    const section = (u) => {
+      let path = String(u || "");
+      const h = host(path);
+      if (h) path = path.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "");
+      if (!path.startsWith("/")) path = `/${path}`;
+      const bare = path.replace(LOCALES, "");
+      for (const sec of SECTIONS) if (sec.re.test(bare)) return sec.label;
+      const seg = bare.split("?")[0].split("/").filter(Boolean);
+      // [0] is the branch (bangkok, bangkok-heart...), so [1] is the section.
+      return seg[1] ? `/${seg[1]}/` : (seg[0] ? `/${seg[0]}` : "Home");
+    };
+
+    const tally = (list, labelOf) => {
+      const m = new Map();
+      let total = 0;
+      for (const r of list) {
+        const clicks = n(r.eventCount);
+        if (!clicks) continue;
+        total += clicks;
+        const label = labelOf(r);
+        m.set(label, (m.get(label) || 0) + clicks);
+      }
+      return {
+        total,
+        rows: [...m.entries()].sort((a, b) => b[1] - a[1])
+          .map(([label, clicks]) => ({ label, clicks, share: total ? clicks / total : null })),
+      };
+    };
+
+    const live = rows.filter((r) => n(r.eventCount) > 0);
+    const inRows = live.filter((r) => isInternal(r.linkUrl));
+    const outRows = live.filter((r) => !isInternal(r.linkUrl));
+
+    const internal = tally(inRows, (r) => section(r.linkUrl));
+    const outbound = tally(outRows, (r) => {
+      const c = classify(r.linkId, r.linkUrl);
+      // An unrecognised destination is labelled by its HOST, never swept into
+      // "Other": a bucket called Other is where a new booking partner or a
+      // broken redirect goes to hide.
+      return c ? c.label : (host(r.linkUrl) || "On-page widget");
+    });
+    const total = internal.total + outbound.total;
+
+    // Exact links, both sides together, so "they clicked LINE" can be resolved
+    // to WHICH LINE account or WHICH doctor.
+    const byUrl = new Map();
+    for (const r of live) {
+      const u = String(r.linkUrl || "").trim();
+      if (!u) continue;
+      if (!byUrl.has(u)) byUrl.set(u, { url: u, clicks: 0, internal: isInternal(u), host: host(u) });
+      byUrl.get(u).clicks += n(r.eventCount);
+    }
+
+    return {
+      available: true,
+      total,
+      // Clicks per 100 visits, so a campaign that bought ten times the traffic
+      // is comparable with one that did not.
+      per100Visits: totals.visits ? (total / totals.visits) * 100 : null,
+      internal: { ...internal, share: total ? internal.total / total : null },
+      outbound: { ...outbound, share: total ? outbound.total / total : null },
+      urls: [...byUrl.values()].sort((a, b) => b.clicks - a.clicks).slice(0, 20)
+        .map((u) => ({ ...u, share: total ? u.clicks / total : null })),
+    };
+  })();
+
   const notConnected = byPlatform.filter((p) => !p.connected).map((p) => p.platform);
   const matchedNone = byPlatform.filter((p) => p.connected && p.matched === 0).map((p) => p.platform);
 
@@ -4385,7 +4591,7 @@ async function buildCampaign(code, from, to) {
     code, range: { from, to },
     matchedVariants: variants.length,
     totals, variants, keyEventBreakdown, trend,
-    byPlatform, adCampaigns, orphanAdCampaigns, landingPages,
+    byPlatform, adCampaigns, orphanAdCampaigns, landingPages, linkClicks,
     topic, shortLinks: uniqueLinks, organicPosts, organicTotals,
     goal, goalLabel: goalDef ? goalDef.label : null,
     objectives: [...new Set(adCampaigns.map((c) => c.objective).filter(Boolean))],

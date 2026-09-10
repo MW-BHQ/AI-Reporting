@@ -103,6 +103,47 @@ expect_field "sa bcm not a brand"  "$REPORT" "d.searchAds.byBrand.every(b=>b.imp
 # Cross-network guard was relaxed to match the channel on its own.
 expect_field "sa excludes x-network" "$REPORT" "${SA}'BGH').visits===400?400:undefined"
 
+echo "--- campaign: what they clicked on the page, internal AND outbound (v3.270.0) ---"
+CAMP1="/api/campaign?code=260701-08&from=$FROM&to=$TO"
+LC="d.linkClicks"
+expect_field "lc available"        "$CAMP1" "${LC}.available===true?'ok':undefined"
+# BOTH SIDES POPULATED. v3.269.0 shipped outbound only; an internal side that
+# quietly reads 0 is the failure this whole block was corrected for.
+expect_field "lc internal side"    "$CAMP1" "${LC}.internal.total>0?'ok':undefined"
+expect_field "lc outbound side"    "$CAMP1" "${LC}.outbound.total>0?'ok':undefined"
+expect_field "lc sides reconcile"  "$CAMP1" "${LC}.internal.total+${LC}.outbound.total===${LC}.total?'ok':undefined"
+# THE THREE INTERNAL SHAPES, each of which fails differently. Absolute URL on
+# our own host, relative href with NO host, and a locale-prefixed path that must
+# not become its own section per language. The fixture has one of each and they
+# must land in three named sections, not in a fallback.
+expect_field "lc internal named"   "$CAMP1" "${LC}.internal.rows.length===4?4:undefined"
+# THE LOCALE PREFIX IS STRIPPED, and this is the assertion that proves it. The
+# named sections match `/doctor/` anywhere so a prefix cannot break them; the
+# FALLBACK reads the segment after the branch, and with `/en/` attached it reads
+# the branch instead \u2014 every unruled section collapsing into one `/bangkok/` row.
+expect_field "lc locale stripped"  "$CAMP1" "${LC}.internal.rows.some(r=>r.label==='/promotions/')?'ok':undefined"
+expect_field "lc internal appt"    "$CAMP1" "${LC}.internal.rows.some(r=>r.label==='Appointment / booking')?'ok':undefined"
+expect_field "lc internal doctor"  "$CAMP1" "${LC}.internal.rows.some(r=>r.label==='Doctor profiles')?'ok':undefined"
+# The relative href. Decided by "no host means same site", which must NOT also
+# catch tel: and mailto: \u2014 those have no host either.
+expect_field "lc relative href"    "$CAMP1" "${LC}.internal.rows.some(r=>r.label==='Packages')?'ok':undefined"
+expect_field "lc tel not internal" "$CAMP1" "${LC}.outbound.rows.some(r=>r.label==='Phone call')?'ok':undefined"
+expect_field "lc maps branch"      "$CAMP1" "${LC}.outbound.rows.some(r=>r.label==='Maps / directions')?'ok':undefined"
+# AN UNKNOWN DESTINATION IS LABELLED BY ITS HOST, never swept into "Other" \u2014
+# that bucket is where a new booking partner or a broken redirect would hide.
+expect_field "lc host fallback"    "$CAMP1" "${LC}.outbound.rows.some(r=>r.label==='partner-booking.example.co.th')?'ok':undefined"
+expect_field "lc no other bucket"  "$CAMP1" "${LC}.outbound.rows.some(r=>r.label==='Other')?undefined:'ok'"
+# CHAT CHANNELS BY `linkId` BEFORE THE URL. The fixture has a LINE link behind
+# the site's own shortener: the URL says `bkhos.co` and only the id says LINE.
+# A URL-first matcher files it as "Short link" and undercounts LINE silently,
+# so the ABSENCE of that row is the test.
+expect_field "lc line one row"     "$CAMP1" "${LC}.outbound.rows.filter(r=>r.label==='LINE').length===1?'ok':undefined"
+expect_field "lc id beats url"     "$CAMP1" "${LC}.outbound.rows.some(r=>r.label==='Short link')?undefined:'ok'"
+expect_field "lc per 100 visits"   "$CAMP1" "${LC}.per100Visits>0?'ok':undefined"
+# The exact-links table carries the side flag, so a reader can tell an internal
+# doctor page from an outbound partner without re-deriving it.
+expect_field "lc urls flagged"     "$CAMP1" "${LC}.urls.some(u=>u.internal===true)&&${LC}.urls.some(u=>u.internal===false)?'ok':undefined"
+
 echo "--- google ads benchmark: impression share must not be summed or averaged ---"
 GB="/api/gads-benchmark?to=$TO"
 GBS="d.all.windows.m1.share"
