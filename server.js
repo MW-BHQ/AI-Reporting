@@ -3858,51 +3858,6 @@ async function buildCampaign(code, from, to) {
       logJson("WARNING", "campaign_landing_unavailable", { error: String(e.message || e) });
       return null;
     }),
-    /**
-     * WHAT THEY CLICKED ONCE THEY LANDED (MW).
-     *
-     * The funnel above stops at "engaged" and the key events card lists
-     * outcomes we tagged on purpose. Neither says what a visitor actually
-     * reached for on the page, which for a hospital is usually LINE, a phone
-     * number, a map or a booking link.
-     *
-     * FILTERED SERVER-SIDE ON BOTH THE CAMPAIGN AND THE EVENT. A property-wide
-     * `click` pull sorted by count would not contain this campaign's rows
-     * anywhere in the first 20,000 — one campaign against a site doing
-     * millions of sessions. `andGroup` narrows it before the row cap applies,
-     * which is the same mistake §3 records for the landing-page pull.
-     *
-     * `linkId` comes along because GTM sets it on the chat bubble's channel
-     * buttons, and it is the only thing that distinguishes LINE from WhatsApp
-     * when both resolve through the same shortener.
-     *
-     * THIS IS OUTBOUND ONLY, and the UI says so. GA4 enhanced measurement fires
-     * `click` for links leaving the domain, so internal navigation is absent by
-     * design, not missing. Read as "everything clicked on the page" it would
-     * badly understate; read as "where they went next off-site" it is complete.
-     */
-    ga4LinkClicks: ga4RunReport({
-      // `linkId` BEFORE `linkUrl`: they are a pair describing one click, and
-      // the fixture emits them as pairs rather than as a cross product so that
-      // a matcher ignoring the URL cannot look correct. Keeping the real
-      // request in the same order keeps the two honest about each other.
-      dimensions: ["sessionManualCampaignName", GA4_LANDING_DIM, "linkId", "linkUrl"],
-      metrics: ["eventCount"],
-      from, to, limit: 5000, orderBy: "eventCount",
-      dimensionFilter: withBranch({
-        andGroup: {
-          expressions: [
-            { filter: { fieldName: "sessionManualCampaignName",
-              stringFilter: { matchType: "BEGINS_WITH", value: code, caseSensitive: false } } },
-            { filter: { fieldName: "eventName",
-              stringFilter: { matchType: "EXACT", value: "click" } } },
-          ],
-        },
-      }),
-    }).catch((e) => {
-      logJson("WARNING", "campaign_link_clicks_unavailable", { error: String(e.message || e) });
-      return null;
-    }),
     // Organic posts, matched to the campaign by the short link in their text.
     // The pull window is widened to always include the campaign's code date
     // plus 45 days: posts are returned by publish date, so a post published
@@ -4390,98 +4345,8 @@ async function buildCampaign(code, from, to) {
     trend = [...tm.values()].sort((a, b) => a.d.localeCompare(b.d));
   }
 
-  /**
-   * WHERE THEY WENT NEXT, off-site (MW).
-   *
-   * Grouped by DESTINATION rather than by URL, because the raw list is a
-   * hundred rows of the same shortener with different query strings and says
-   * nothing. The buckets are the decisions a marketer can act on: did they
-   * reach for LINE, the phone, a map, or did they leave to a social profile?
-   *
-   * ORDER MATTERS in the classifier and the specific rules come first. A LINE
-   * link routed through the site's own shortener matches both `line` and the
-   * shortener rule, and the shortener is the less informative answer.
-   *
-   * `linkId` is checked before the URL for the chat-bubble channels: GTM tags
-   * those buttons with `chat-bubble-channel-<name>`, and several of them
-   * resolve through one shortener where the URL alone cannot tell them apart.
-   */
-  const linkClicks = (() => {
-    if (data.ga4LinkClicks === null) {
-      return { available: false, reason: "GA4 link clicks were unavailable this run." };
-    }
-    const rows = data.ga4LinkClicks
-      .filter((r) => norm(r.sessionManualCampaignName).startsWith(needle));
-    const CHANNELS = [
-      { id: "line", label: "LINE", ids: ["channel-line"], urls: ["line.me", "lin.ee", "liff.line"] },
-      { id: "phone", label: "Phone call", urls: ["tel:"] },
-      { id: "whatsapp", label: "WhatsApp", ids: ["channel-whatsapp"], urls: ["wa.me", "whatsapp"] },
-      { id: "messenger", label: "Messenger", ids: ["channel-messenger"], urls: ["m.me", "messenger.com"] },
-      { id: "email", label: "Email", urls: ["mailto:"] },
-      { id: "maps", label: "Maps / directions", urls: ["goo.gl/maps", "maps.google", "maps.app.goo.gl"] },
-      { id: "wechat", label: "WeChat", ids: ["channel-wechat"], urls: ["weixin", "wechat"] },
-      // Telegram and Zalo are real BHQ chat channels, so they are named rather
-      // than left to fall through to a bare `t.me` / `zalo.me` host label.
-      { id: "telegram", label: "Telegram", ids: ["channel-telegram"], urls: ["t.me/"] },
-      { id: "zalo", label: "Zalo", ids: ["channel-zalo"], urls: ["zalo.me"] },
-      { id: "facebook", label: "Facebook", urls: ["facebook.com", "fb.com", "fb.me"] },
-      { id: "instagram", label: "Instagram", urls: ["instagram.com"] },
-      { id: "tiktok", label: "TikTok", urls: ["tiktok.com"] },
-      { id: "youtube", label: "YouTube", urls: ["youtube.com", "youtu.be"] },
-      { id: "shortlink", label: "Short link", urls: ["bkhos.co", "bit.ly"] },
-    ];
-    const classify = (linkId, linkUrl) => {
-      const id = norm(linkId), url = norm(linkUrl);
-      for (const c of CHANNELS) {
-        if ((c.ids || []).some((x) => id.includes(x))) return c;
-      }
-      for (const c of CHANNELS) {
-        if ((c.urls || []).some((x) => url.includes(x))) return c;
-      }
-      return null;
-    };
-    const host = (u) => {
-      const m = String(u || "").match(/^[a-z]+:\/\/([^/?#]+)/i);
-      return m ? m[1].replace(/^www\./i, "") : null;
-    };
-
-    const byChannel = new Map(), byUrl = new Map(), byPage = new Map();
-    let total = 0, unclassified = 0;
-    for (const r of rows) {
-      const clicks = n(r.eventCount);
-      if (!clicks) continue;
-      total += clicks;
-      const c = classify(r.linkId, r.linkUrl);
-      // An unrecognised destination is labelled by its HOST rather than swept
-      // into "Other": a bucket called Other is where a new booking partner or
-      // a broken redirect goes to hide.
-      const label = c ? c.label : (host(r.linkUrl) || "Unknown destination");
-      if (!c) unclassified += clicks;
-      byChannel.set(label, (byChannel.get(label) || 0) + clicks);
-      const u = String(r.linkUrl || "").trim();
-      if (u) byUrl.set(u, (byUrl.get(u) || 0) + clicks);
-      const pg = r[GA4_LANDING_DIM];
-      if (pg) byPage.set(pg, (byPage.get(pg) || 0) + clicks);
-    }
-    const sortDesc = (m) => [...m.entries()].sort((a, b) => b[1] - a[1]);
-    return {
-      available: true,
-      total,
-      // Clicks per 100 visits, so a campaign that bought ten times the traffic
-      // is comparable with one that did not.
-      per100Visits: totals.visits ? (total / totals.visits) * 100 : null,
-      unclassified,
-      channels: sortDesc(byChannel).map(([label, clicks]) => ({
-        label, clicks, share: total ? clicks / total : null,
-      })),
-      urls: sortDesc(byUrl).slice(0, 15).map(([url, clicks]) => ({
-        url, clicks, host: host(url), share: total ? clicks / total : null,
-      })),
-      pages: sortDesc(byPage).slice(0, 10).map(([page, clicks]) => ({ page, clicks })),
-    };
-  })();
-
-  const notConnected = byPlatform.filter((p) => !p.connected).map((p) => p.platform);  const matchedNone = byPlatform.filter((p) => p.connected && p.matched === 0).map((p) => p.platform);
+  const notConnected = byPlatform.filter((p) => !p.connected).map((p) => p.platform);
+  const matchedNone = byPlatform.filter((p) => p.connected && p.matched === 0).map((p) => p.platform);
 
   // Nothing at all matched: most often the date range, since the code encodes
   // its own launch date. Say that plainly instead of rendering a zeroed funnel.
@@ -4520,7 +4385,7 @@ async function buildCampaign(code, from, to) {
     code, range: { from, to },
     matchedVariants: variants.length,
     totals, variants, keyEventBreakdown, trend,
-    byPlatform, adCampaigns, orphanAdCampaigns, landingPages, linkClicks,
+    byPlatform, adCampaigns, orphanAdCampaigns, landingPages,
     topic, shortLinks: uniqueLinks, organicPosts, organicTotals,
     goal, goalLabel: goalDef ? goalDef.label : null,
     objectives: [...new Set(adCampaigns.map((c) => c.objective).filter(Boolean))],

@@ -366,40 +366,6 @@ function ga4Report(body) {
    * look correct, since every id would then appear with every URL anyway.
    * Telling the paired channels apart by URL is the whole point of this block.
    */
-  /**
-   * LINKS THAT ARE NOT CHAT CHANNELS, for the campaign tab's link-click block.
-   *
-   * `CHAT_LINKS` is deliberately all chat: the Chat Bubble slide's whole job is
-   * telling those channels apart. The campaign block classifies EVERY outbound
-   * destination, so it needs a `tel:`, a maps link and an unrecognised host,
-   * or three of its branches never execute — including the one that labels an
-   * unknown destination by its HOST instead of sweeping it into "Other".
-   *
-   * Added only when the request is NOT the chat-bubble pull. That pull filters
-   * `linkId` on a `chat-bubble` regex, so widening the fixture for everyone
-   * would put a phone number into the Chat Bubble slide's unmapped tally.
-   */
-  const OTHER_LINKS = [
-    /**
-     * A LINE LINK BEHIND THE SITE'S OWN SHORTENER. This is the pair that makes
-     * "identify by linkId BEFORE the URL" a testable rule rather than a claim:
-     * the URL says `bkhos.co`, which is a shortener and tells you nothing, and
-     * only the GTM id says LINE. A URL-first matcher files this under "Short
-     * link" and the campaign's LINE clicks are undercounted with no sign of it.
-     *
-     * In OTHER_LINKS rather than CHAT_LINKS on purpose \u2014 the Chat Bubble slide
-     * has its own matcher and its own assertions, and widening its fixture to
-     * prove something about the campaign tab would be testing the wrong thing
-     * in the wrong place.
-     */
-    ["chat-bubble-channel-line", "https://bkhos.co/wK8kLa"],
-    ["", "tel:+6621234567"],
-    ["", "https://maps.app.goo.gl/bangkokhospital"],
-    ["", "https://www.youtube.com/@bangkokhospital"],
-    ["", "https://partner-booking.example.co.th/appt?ref=bgh"],
-  ];
-  const chatOnly = JSON.stringify(body.dimensionFilter || {}).includes("chat-bubble");
-  const LINK_PAIRS = chatOnly ? CHAT_LINKS : [...CHAT_LINKS, ...OTHER_LINKS];
   const expand = (i, acc) => {
     if (i === dims.length) return emit(acc);
     const d = dims[i];
@@ -415,11 +381,11 @@ function ga4Report(body) {
     if (d === "customEvent:Click_ID") { for (const [id] of CHAT_LINKS) expand(i + 1, [...acc, id]); return; }
     if (d === "customEvent:Click_URL") { for (const [, url] of CHAT_LINKS) expand(i + 1, [...acc, url]); return; }
     if (d === "linkId" && dims[i + 1] === "linkUrl") {
-      for (const [id, url] of LINK_PAIRS) expand(i + 2, [...acc, id, url]);
+      for (const [id, url] of CHAT_LINKS) expand(i + 2, [...acc, id, url]);
       return;
     }
-    if (d === "linkId") { for (const [id] of LINK_PAIRS) expand(i + 1, [...acc, id]); return; }
-    if (d === "linkUrl") { for (const [, url] of LINK_PAIRS) expand(i + 1, [...acc, url]); return; }
+    if (d === "linkId") { for (const [id] of CHAT_LINKS) expand(i + 1, [...acc, id]); return; }
+    if (d === "linkUrl") { for (const [, url] of CHAT_LINKS) expand(i + 1, [...acc, url]); return; }
     const opts = d === "date" ? dates
       : d === "eventName" ? (allowedEvents || GA4_EVENTS)
       /**
