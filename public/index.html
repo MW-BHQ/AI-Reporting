@@ -5722,8 +5722,16 @@ function renderCampaignBody(d) {
       const stats = [
         lc.bubbleOpens ? { lab: 'Click Chat bubble', val: num(lc.bubbleOpens),
           sub: 'the step before choosing a channel' } : null,
-        { lab: 'Reached booking', val: booking ? num(booking.views) : '0',
-          sub: booking ? `${per100(booking.views)} per 100 visits` : 'no appointment page reached' },
+        /**
+         * "Appointments" (MW's label). The SUB-LABEL CARRIES THE UNIT and has
+         * to, because the key events card on this same slide already has a row
+         * called Appointments counting the booking EVENT. This counts page
+         * views that reached a booking page — the step before it. Two things
+         * with one name on one screen is how a reader ends up comparing them.
+         */
+        { lab: 'Appointments', val: booking ? num(booking.views) : '0',
+          sub: booking ? `booking pages reached \u00b7 ${per100(booking.views)} per 100 visits`
+            : 'no booking page reached' },
         { lab: 'Contact us', val: (d.totals && d.totals.contacts != null) ? num(d.totals.contacts) : '\u2014',
           sub: 'the site\u2019s own key event, not a link click' },
       ].filter(Boolean);
@@ -5770,16 +5778,16 @@ function renderCampaignBody(d) {
             </tbody></table>`:`<div class="note" style="margin-top:0;">No outbound clicks recorded \u2014 nobody left the page for LINE, a phone number or a map.</div>`}
           </div>
         </div>
+        ${/* THE FOOTNOTES WERE FIVE PARAGRAPHS AND MW CUT THEM (fair). What
+              survives is the ONE thing a reader cannot work out for themselves
+              and gets wrong every time: why a key event in the hundreds sits
+              beside outbound clicks in the tens. The rest — how the merge
+              works, the referrer's limits, why the units differ — is written up
+              in the code and in CONTEXT, which is where it belongs. */''}
         <div class="note">
-          <b>The two sides are different units and are never added.</b> <b>Internal Clicks</b> is counted as PAGE VIEWS whose referrer was one of our own pages &mdash; the same method the Pages tab uses. It needs no click tracking, which is why it works here where a link-click measure reads empty: GA4 only fires a click event for links LEAVING the site. So it is really the onward page a click landed on rather than the click itself, and a reload or a back-button return produces a view with no click behind it. <b>Outbound Clicks</b> is clicks proper, on links leaving the domain. There is no combined total anywhere on this card, because one figure summing views and clicks would measure neither.
+          <b>Why "Contact us" is far bigger than the outbound clicks:</b> <code>contact_us</code> fires on things that are not links &mdash; the chat bubble, in-page forms and widgets are <code>div</code>s, so they raise the event and the browser never reports a click. Only the part that actually leaves the site (LINE, a phone number, a form on another domain) can appear on the right. One visitor can also fire the event several times. The two are different measurements of the same intent, not a total and its subset.
           <br><br>
-          <b>Three limits on the internal side</b>, because it is a proxy and reads like a certainty. It uses the document referrer, so it is the page whose link was clicked rather than necessarily the page viewed immediately before; a single-page app does not update it between views and parallel tabs break the chain; and exits cannot appear at all, so these are shares of onward views, never of visitors. Views whose referrer was the same page &mdash; reloads and links back to itself &mdash; are excluded${on.selfViews?` (${num(on.selfViews)} of them)`:''} rather than allowed to top their own list.
-          <br><br>
-          <b>Chat bubble clicks are included on the outbound side.</b> Its channel buttons are real links, so they fire both GA4's <code>click</code> and the <code>click_chat_bubble</code> GTM event; for each channel the HIGHER of the two is used, never the sum. Both count the same clicks, so the higher one is the more complete measurement, and a source returning nothing for a channel loses to the one that did, so a channel can never silently drop to zero. Opening the bubble is reported on its own and is not a destination.${lc.chatSource!=='click_chat_bubble'?` <b>The GTM event returned nothing this run</b>, so these are the link event's own bubble rows &mdash; channels covered, bubble opens not. That usually means <code>Click_ID</code> is not registered as a custom dimension in GA4.`:''}
-          <br><br>
-          <b>This does not reconcile with the key events card above, and it is not meant to.</b> Those are events the site fires deliberately &mdash; <code>contact_us</code> counts contact intent however GTM defines it &mdash; while these count navigation and link clicks the browser reported. Most on-page widgets are <code>div</code>s with JavaScript handlers, so they fire a key event and no link click at all. A campaign can show hundreds of <code>contact_us</code> events beside a handful of outbound clicks with nothing wrong anywhere.
-          <br><br>
-          Internal pages are listed exactly, ten at a time, and ordered by volume; only the top ${num((lc.onward.pages||[]).length)} are kept, since past that it is a site map rather than a finding. Outbound is grouped by what the destination IS, because the raw list is the same shortener many times over with different query strings &mdash; the <b>Exact links clicked</b> table below resolves those. Anything unrecognised is labelled by its <b>host</b> rather than swept into an "Other" row, since a bucket called Other is where a new booking partner or a broken redirect goes to hide.
+          <b>Internal Clicks</b> is counted as page views whose referrer was one of our own pages, the same method the Pages tab uses; GA4 only reports clicks on links that LEAVE the site, so there is nothing else to count them with. The two sides are therefore different units and are never added.
         </div>
       </div>
 
@@ -10588,7 +10596,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.275.0';
+const CLIENT_BUILD = '3.276.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

@@ -1,5 +1,33 @@
 ### Recent (August 2026)
 
+**v3.276.0 — footnotes cut from five paragraphs to two; "Reached booking" is
+"Appointments".**
+
+MW: "remove the longggg foot note, 4 of them", and asked for the one
+explanation that actually matters.
+
+**What survives is the thing a reader cannot work out and gets wrong every
+time:** why `contact_us` reads 885 while outbound clicks read 65. It fires on
+things that are NOT links — the chat bubble, in-page forms and widgets are
+`div`s, so they raise the event and the browser never reports a click. Only the
+part that leaves the site can appear on the right, and one visitor can fire the
+event several times. Two measurements of the same intent, not a total and its
+subset.
+
+The second paragraph keeps the unit distinction, because "Internal Clicks"
+counted as page views is a live mislabel risk. Everything else — how the chat
+merge works, the referrer proxy's three limits, why unknown hosts are not
+bucketed as "Other" — is in the code and in this file, which is where it
+belongs. A card nobody finishes reading protects nobody.
+
+**"Reached booking" is now "Appointments"** (MW). The sub-label carries the
+unit and has to: the key events card on the SAME slide already has a row called
+Appointments counting the booking EVENT, while this counts page views that
+reached a booking page — the step before it. Two things with one name on one
+screen is exactly how a reader ends up comparing them.
+
+### Recent (August 2026)
+
 **v3.275.0 — "On-page widget" was the web chat, and the empty stat row is
 filled.**
 
