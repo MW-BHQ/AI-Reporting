@@ -5658,6 +5658,84 @@ function renderCampaignBody(d) {
       </div>
     </div>
 
+    ${(() => {
+      /**
+       * WHAT THEY CLICKED AFTER LANDING (MW).
+       *
+       * Sits under the landing pages on purpose: that card says where they
+       * arrived, this one says what they reached for once they were there. The
+       * funnel above stops at "engaged" and the key events card lists outcomes
+       * we tagged deliberately; neither tells you a visitor went for the phone
+       * number instead of the booking form.
+       *
+       * OUTBOUND ONLY, and it says so on the card rather than in a comment.
+       * GA4 enhanced measurement fires `click` for links leaving the domain, so
+       * internal navigation is absent BY DESIGN. Left unstated, a reader would
+       * take "234 link clicks" for every click on the page and conclude the
+       * page was ignored.
+       */
+      const lc = d.linkClicks;
+      if (!lc) return '';
+      if (!lc.available) return `<div class="card mt"><h2>What they clicked after landing</h2>
+        <div class="note">${esc(lc.reason || 'Not available this run.')}</div></div>`;
+      if (!lc.total) return `<div class="card mt"><h2>What they clicked after landing</h2>
+        <div class="note">No outbound link clicks recorded for this campaign in range. GA4's <code>click</code> event only fires for links that leave the site, so a landing page whose calls to action are all internal &mdash; a booking form, an on-page enquiry &mdash; will show nothing here even when it converts well. Check the key events card for those.</div></div>`;
+      const top = lc.channels[0];
+      return `<div class="card mt">
+        <h2>What they clicked after landing</h2>
+        <div class="grid g-3" style="margin-bottom:14px;">
+          <div class="stat"><div class="lab">Outbound clicks</div>
+            <div class="val">${num(lc.total)}</div>
+            <div class="sub">links that left the site</div></div>
+          <div class="stat"><div class="lab">Per 100 visits</div>
+            <div class="val">${lc.per100Visits!=null?num(lc.per100Visits,{dp:1}):'\u2014'}</div>
+            <div class="sub">comparable across campaign sizes</div></div>
+          <div class="stat"><div class="lab">Most clicked</div>
+            <div class="val" style="font-size:var(--text-lg);">${esc(top.label)}</div>
+            <div class="sub">${num(top.clicks)} clicks \u00b7 ${top.share!=null?num(top.share*100,{dp:0})+'%':''} of the total</div></div>
+        </div>
+        <table><thead><tr><th>Destination</th><th class="num">Clicks</th><th class="num">Share</th><th class="num">Per 100 visits</th></tr></thead><tbody>
+        ${lc.channels.slice(0,12).map(c=>`<tr>
+          <td class="strong i18n">${esc(c.label)}</td>
+          <td class="num">${num(c.clicks)}</td>
+          <td class="num">${c.share!=null?num(c.share*100,{dp:1})+'%':'\u2014'}</td>
+          <td class="num">${d.totals&&d.totals.visits?num((c.clicks/d.totals.visits)*100,{dp:1}):'\u2014'}</td>
+        </tr>`).join('')}
+        </tbody></table>
+        <div class="note">
+          <b>Outbound clicks only.</b> GA4's <code>click</code> event fires when a link leaves the site, so this is where visitors went NEXT &mdash; LINE, a phone number, a map, a social profile &mdash; not every click on the page. Internal navigation and on-page forms are absent by design; the key events card above covers those.
+          <br><br>
+          Destinations are grouped by what they are rather than by URL, because the raw list is the same shortener a hundred times with different query strings. Anything unrecognised is labelled by its <b>host</b> instead of being swept into an "Other" row &mdash; a bucket called Other is where a new booking partner or a broken redirect goes to hide.${lc.unclassified?` ${num(lc.unclassified)} click${lc.unclassified===1?'':'s'} (${num((lc.unclassified/lc.total)*100,{dp:0})}%) landed on a destination with no rule of its own and are shown under their host below.`:''}
+          <br><br>
+          Chat channels are identified by the <code>linkId</code> GTM puts on the bubble's buttons before the URL is considered, because several of them resolve through one shortener where the URL alone cannot tell LINE from WhatsApp.
+        </div>
+      </div>
+
+      ${lc.urls.length?`<div class="card mt">
+        <h2>Exact links clicked</h2>
+        <table><thead><tr><th>Link</th><th>Host</th><th class="num">Clicks</th><th class="num">Share</th></tr></thead><tbody>
+        ${lc.urls.map(u=>`<tr>
+          <td class="i18n trunc" title="${esc(u.url)}">${esc(u.url)}</td>
+          <td>${esc(u.host||'\u2014')}</td>
+          <td class="num">${num(u.clicks)}</td>
+          <td class="num">${u.share!=null?num(u.share*100,{dp:1})+'%':'\u2014'}</td>
+        </tr>`).join('')}
+        </tbody></table>
+        <div class="note">Top 15 by clicks, ungrouped &mdash; the row above tells you visitors reached for LINE, this one tells you which LINE account they reached. Useful when one campaign points at a per-language or per-hospital variant of the same channel.</div>
+      </div>`:''}
+
+      ${lc.pages.length>1?`<div class="card mt">
+        <h2>Which landing page the clicks came from</h2>
+        <table><thead><tr><th>Page</th><th class="num">Outbound clicks</th></tr></thead><tbody>
+        ${lc.pages.map(pg=>`<tr>
+          <td class="i18n trunc" title="${esc(pg.page)}">${esc(pg.page)}</td>
+          <td class="num">${num(pg.clicks)}</td>
+        </tr>`).join('')}
+        </tbody></table>
+        <div class="note">Read against the landing pages card above: a page taking a large share of the entries but few of the clicks is where the call to action is not landing.</div>
+      </div>`:''}`;
+    })()}
+
     ${(d.organicPosts&&d.organicPosts.length)||(d.shortLinks&&d.shortLinks.length)?`<div class="card mt">
       <h2>Organic reach · matched by short link</h2>
       ${d.organicTotals&&d.organicTotals.posts?`<div class="grid g-4" style="margin-bottom:14px;">
@@ -10416,7 +10494,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.268.0';
+const CLIENT_BUILD = '3.269.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

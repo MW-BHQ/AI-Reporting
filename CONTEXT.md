@@ -1,5 +1,54 @@
 ### Recent (August 2026)
 
+**v3.269.0 — "What they clicked after landing" on the Campaign tab (MW).**
+
+Three cards under the landing pages: destinations grouped by what they are,
+the exact links, and which landing page the clicks came from. The landing pages
+card says where visitors ARRIVED; this says what they reached for once there,
+which for a hospital is usually LINE, a phone number, a map or a booking link.
+
+**OUTBOUND ONLY, and the card says so rather than a code comment.** GA4
+enhanced measurement fires `click` for links LEAVING the domain, so internal
+navigation and on-page forms are absent by design. Left unstated a reader takes
+"27K link clicks" for every click on the page; a landing page whose calls to
+action are all internal shows nothing here even when it converts well, so the
+empty state points at the key events card instead.
+
+**Filtered server-side on the campaign AND the event.** A property-wide `click`
+pull sorted by count would not contain one campaign's rows anywhere in the first
+20,000 — the same mistake §3 records for the landing-page pull.
+
+**`linkId` is checked BEFORE the URL.** GTM tags the chat bubble's buttons
+`chat-bubble-channel-<name>`, and several channels resolve through the site's own
+shortener where the URL says `bkhos.co` and tells you nothing.
+
+**An unrecognised destination is labelled by its HOST, never swept into
+"Other".** A bucket called Other is where a new booking partner or a broken
+redirect goes to hide — the silent-zero failure this project keeps hitting.
+
+**Twelve assertions, and two of them exist because the first version of each
+was a claim rather than a guard.**
+
+`lc no other bucket` and `lc host fallback` both fail when unknowns are swept
+into "Other" — verified.
+
+`lc line by id` was written asserting that a URL-first matcher would fail it. It
+would not: both of the fixture's LINE URLs contain `line.me`, so URL-first
+produced the same single LINE row and the assertion was decorative. Rather than
+reword the comment, the fixture grew the pair that makes the rule real — a LINE
+link behind `bkhos.co`, where only the id identifies it — and `lc id beats url`
+asserts the absence of a "Short link" row. That one is verified to fail when the
+two passes are swapped.
+
+The extra fixture links live in `OTHER_LINKS`, added only when the request is
+not the chat-bubble pull, so a `tel:` number cannot appear in the Chat Bubble
+slide's unmapped tally.
+
+The campaign export grows to 4,680px of content on a 5,661px sheet, still one
+page.
+
+### Recent (August 2026)
+
 **v3.268.0 — paid search terms against our own organic rank. The join neither
 platform can do.**
 

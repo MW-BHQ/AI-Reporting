@@ -103,6 +103,35 @@ expect_field "sa bcm not a brand"  "$REPORT" "d.searchAds.byBrand.every(b=>b.imp
 # Cross-network guard was relaxed to match the channel on its own.
 expect_field "sa excludes x-network" "$REPORT" "${SA}'BGH').visits===400?400:undefined"
 
+echo "--- campaign: what they clicked after landing (v3.269.0) ---"
+CAMP1="/api/campaign?code=260701-08&from=$FROM&to=$TO"
+LC="d.linkClicks"
+expect_field "lc available"        "$CAMP1" "${LC}.available===true?'ok':undefined"
+expect_field "lc has clicks"       "$CAMP1" "${LC}.total>0?'ok':undefined"
+# NOTHING DROPPED, NOTHING COUNTED TWICE: every click lands in exactly one
+# destination row. The classifier walks two passes (linkId, then URL) and an
+# early `return` in the wrong place would double-count or lose a row.
+expect_field "lc rows reconcile"   "$CAMP1" "${LC}.channels.reduce((a,c)=>a+c.clicks,0)===${LC}.total?'ok':undefined"
+# The non-chat branches. Each is a separate rule and each was invisible before
+# the fixture grew a tel:, a maps link and an unrecognised host.
+expect_field "lc phone branch"     "$CAMP1" "${LC}.channels.some(c=>c.label==='Phone call')?'ok':undefined"
+expect_field "lc maps branch"      "$CAMP1" "${LC}.channels.some(c=>c.label==='Maps / directions')?'ok':undefined"
+# AN UNKNOWN DESTINATION IS LABELLED BY ITS HOST, never swept into "Other".
+# A partner booking domain nobody has written a rule for must still be visible
+# by name — that is where a new integration or a broken redirect would hide.
+expect_field "lc host fallback"    "$CAMP1" "${LC}.channels.some(c=>c.label==='partner-booking.example.co.th')?'ok':undefined"
+expect_field "lc no other bucket"  "$CAMP1" "${LC}.channels.some(c=>c.label==='Other')?undefined:'ok'"
+expect_field "lc unclassified seen" "$CAMP1" "${LC}.unclassified>0?'ok':undefined"
+# CHAT CHANNELS ARE TOLD APART BY `linkId` BEFORE THE URL, and this is the
+# assertion that proves it. The fixture includes a LINE link behind the site's
+# own shortener: the URL says `bkhos.co` and tells you nothing, only the GTM id
+# says LINE. A URL-first matcher files it under "Short link" and undercounts
+# LINE with no sign of it, so the absence of that row IS the test.
+expect_field "lc line by id"       "$CAMP1" "${LC}.channels.filter(c=>c.label==='LINE').length===1?'ok':undefined"
+expect_field "lc id beats url"     "$CAMP1" "${LC}.channels.some(c=>c.label==='Short link')?undefined:'ok'"
+# Normalised per visit so campaigns of different sizes are comparable.
+expect_field "lc per 100 visits"   "$CAMP1" "${LC}.per100Visits>0?'ok':undefined"
+
 echo "--- google ads benchmark: impression share must not be summed or averaged ---"
 GB="/api/gads-benchmark?to=$TO"
 GBS="d.all.windows.m1.share"
