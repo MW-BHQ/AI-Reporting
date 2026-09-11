@@ -1,5 +1,50 @@
 ### Recent (August 2026)
 
+**v3.279.0 — phone taps are in the report, with the numbers (MW).**
+
+MW found the site's own `GA4 - click contact links` tag in GTM Preview: one
+trigger per channel (`tel:`, email, Messenger, LINE, Maps), sending `Click_URL`
+and `Click_Text`, both registered as custom dimensions since July 2025. That is
+the only source that sees a phone tap — GA4's enhanced-measurement `click`
+needs a link to another DOMAIN, and `tel:` has none.
+
+**`BEGINS_WITH "contact_link"`, not EXACT.** The tag's event name is
+`contact_link_{{Click Text}}`, so every distinct CTA is its own event name. GA4
+TRUNCATES those at 40 characters rather than dropping them — `contact_link_1719
+(local mobile calls on` is a real name in the property. A prefix match catches
+every variant and keeps working if the tag is ever made static.
+
+**Its own card, never merged into Outbound Clicks.** The two overlap partially
+and unpredictably: a LINE tap fires both, a phone tap fires only this. Adding
+them doubles LINE while leaving phone alone, and the per-channel MAX used for
+the chat bubble is wrong here too — these are different tags with different
+trigger conditions, not two measurements of one button.
+
+**ONE HOTLINE, NOT THREE.** The same line appears as `tel:+6621234567`,
+`tel:02-123-4567` and `tel:0 2123 4567`. Numbers are grouped on digits, and
+`+66…` is folded into the `0…` form because in Thailand they are the same line
+written two ways. Grouped raw, the main hotline appears three times with a third
+of its clicks each — the kind of split that makes a reader distrust the whole
+card. Applied to +66 ONLY: a blanket strip-the-country-code rule would merge
+genuinely different foreign numbers, and this hospital publishes a
+Japanese-language line.
+
+`Click_Text` is kept beside the dialled number as "As shown" — it is usually
+where the branch is.
+
+**The "not measured" notice now defers to this card** and only appears when the
+contact-link pull genuinely returns nothing. Printing "Phone call not measured"
+beside a table of numbers dialled would be worse than printing nothing.
+
+**Two negative tests, both verified:** grouping on the raw `tel:` string splits
+the hotline into three, and a failed contact-link pull brings the notice back.
+
+Also fixed on the way: `contactLinks` was declared AFTER the `notMeasured` block
+that reads it — "Cannot access before initialization", the same declaration-order
+trap recorded twice already in this file.
+
+### Recent (August 2026)
+
 **v3.278.0 — phone and email clicks are ABSENT, not zero, and the card now says
 so.**
 

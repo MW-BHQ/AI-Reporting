@@ -170,14 +170,32 @@ expect_field "lc opens not a row"  "$CAMP1" "${LC}.outbound.rows.some(r=>/bubble
 # in: the open has no URL either, and filtering it from one pull only put it
 # here and inflated the total by exactly the opens.
 expect_field "lc webchat named"    "$CAMP1" "${LC}.outbound.rows.find(r=>r.label==='Web chat').clicks===100?100:undefined"
-# PHONE AND EMAIL ARE ABSENT, NOT ZERO. GA4's outbound click needs a link to
-# another DOMAIN and `tel:`/`mailto:` have none, so the trigger never runs. A
-# missing row reads as "nobody tapped the number", which on a hospital landing
-# page is the worst possible silent zero. The fixture HAS a tel: link, so Phone
-# call must NOT be listed here and Email must be — proving the notice tracks
-# the data rather than being hardcoded either way.
-expect_field "lc phone measured"   "$CAMP1" "${LC}.notMeasured.includes('Phone call')?undefined:'ok'"
-expect_field "lc email unmeasured" "$CAMP1" "${LC}.notMeasured.includes('Email')?'ok':undefined"
+# THE "NOT MEASURED" NOTICE DEFERS TO THE CONTACT-LINK TAG. It exists because a
+# missing row reads as "nobody tapped the number" — but printing it beside a
+# card that lists the numbers dialled would be worse than saying nothing. With
+# the contact-link event covering both phone and email, the notice must be
+# EMPTY. Verified to repopulate when that pull fails.
+expect_field "lc nothing unmeasured" "$CAMP1" "${LC}.notMeasured.length===0?'none':undefined"
+
+echo "--- campaign: contact links, the only source that sees a phone tap ---"
+CL="d.linkClicks.contactLinks"
+expect_field "cl available"        "$CAMP1" "${CL}.available===true?'ok':undefined"
+expect_field "cl phone counted"    "$CAMP1" "${CL}.phone>0?'ok':undefined"
+expect_field "cl channels split"   "$CAMP1" "${CL}.channels.some(c=>c.label==='Phone call')&&${CL}.channels.some(c=>c.label==='Email')?'ok':undefined"
+expect_field "cl rows sum"         "$CAMP1" "${CL}.channels.reduce((a,c)=>a+c.clicks,0)===${CL}.total?'ok':undefined"
+# ONE HOTLINE, NOT THREE. The fixture writes the same line as `tel:+6621234567`,
+# `tel:02-123-4567` and `tel:0 2123 4567`. Grouped on the raw string that is
+# three rows with a third of the clicks each; grouped on digits with +66 folded
+# into 0 it is one row of 300. The split version is what makes a reader
+# distrust the card, so this is the load-bearing assertion here.
+expect_field "cl numbers merged"   "$CAMP1" "${CL}.numbers.length===2?2:undefined"
+expect_field "cl hotline whole"    "$CAMP1" "${CL}.numbers.find(x=>x.number==='021234567').clicks===300?300:undefined"
+# The displayed text is kept beside the dialled number — that is where the
+# branch usually is, and MW asked for the number itself.
+expect_field "cl number labelled"  "$CAMP1" "${CL}.numbers.find(x=>x.number==='021234567').label==='1719'?'ok':undefined"
+# NEVER SUMMED WITH OUTBOUND. They overlap on LINE and not on phone, so any
+# combined total would be meaningless; there must be no such field.
+expect_field "cl not merged"       "$CAMP1" "${CL}.total!==${LC}.outbound.total?'ok':undefined"
 expect_field "lc no widget row"    "$CAMP1" "${LC}.outbound.rows.some(r=>/widget/i.test(r.label))?undefined:'ok'"
 
 echo "--- isolation: the report's chat bubble slide must not move ---"

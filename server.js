@@ -3994,6 +3994,41 @@ async function buildCampaign(code, from, to) {
       logJson("WARNING", "campaign_next_pages_unavailable", { error: String(e.message || e) });
       return null;
     }),
+    /**
+     * CONTACT LINK CLICKS — the only source that sees a phone tap (MW).
+     *
+     * GA4's enhanced-measurement `click` fires only for links leaving the
+     * DOMAIN, and `tel:` and `mailto:` have none, so they never appear there.
+     * The site's own `GA4 - click contact links` tag catches them, with one
+     * trigger per channel, and sends `Click_URL` and `Click_Text` — both
+     * registered as custom dimensions since July 2025.
+     *
+     * `BEGINS_WITH`, NOT `EXACT`. The tag's event name is
+     * `contact_link_{{Click Text}}`, so every distinct CTA is its own event
+     * name: `contact_link_1719`, `contact_link_055-051-724`, and so on. GA4
+     * TRUNCATES those at 40 characters rather than dropping them, so names like
+     * `contact_link_1719 (local mobile calls on` exist too. A prefix match is
+     * the only thing that catches every variant, and it keeps working if the
+     * tag is ever changed to a static `contact_link`.
+     */
+    ga4ContactLinks: ga4RunReport({
+      dimensions: ["sessionManualCampaignName", "customEvent:Click_URL", "customEvent:Click_Text"],
+      metrics: ["eventCount"],
+      from, to, limit: 5000, orderBy: "eventCount",
+      dimensionFilter: withBranch({
+        andGroup: {
+          expressions: [
+            { filter: { fieldName: "sessionManualCampaignName",
+              stringFilter: { matchType: "BEGINS_WITH", value: code, caseSensitive: false } } },
+            { filter: { fieldName: "eventName",
+              stringFilter: { matchType: "BEGINS_WITH", value: "contact_link", caseSensitive: false } } },
+          ],
+        },
+      }),
+    }).catch((e) => {
+      logJson("WARNING", "campaign_contact_links_unavailable", { error: String(e.message || e) });
+      return null;
+    }),
     // Organic posts, matched to the campaign by the short link in their text.
     // The pull window is widened to always include the campaign's code date
     // plus 45 days: posts are returned by publish date, so a post published
@@ -4732,9 +4767,99 @@ async function buildCampaign(code, from, to) {
      * rows appear and the notice disappears on its own rather than having to
      * be remembered and removed.
      */
+    /**
+     * THE CONTACT-LINK TAG, GROUPED BY CHANNEL — AND PHONE NUMBERS NAMED.
+     *
+     * Kept as its OWN figure rather than merged into the outbound rows, because
+     * the two overlap partially and unpredictably. A LINE click fires both this
+     * and GA4's `click`; a phone tap fires ONLY this. Adding them would double
+     * LINE while leaving phone alone, and taking a max per channel — the trick
+     * used for the chat bubble — would be wrong here too, since these are
+     * different tags with different trigger conditions rather than two
+     * measurements of one button.
+     *
+     * So: two independent figures, both labelled, neither summed.
+     *
+     * MW asked for the NUMBER, not just the count, and it is the one thing this
+     * source can give that nothing else can. `tel:+6621234567` is the dialled
+     * number; `Click_Text` is what the page displayed, which is often a
+     * friendlier form ("1719", "0 2310 3752") and sometimes carries the branch.
+     * Both are kept: the URL is what was dialled and the text is what was read.
+     */
+    const contactLinks = (() => {
+      const raw = data.ga4ContactLinks;
+      if (raw === null) return { available: false, reason: "The contact-link event was unavailable this run." };
+      const rows = raw.filter((r) => norm(r.sessionManualCampaignName).startsWith(needle));
+      const byChannel = new Map(), byNumber = new Map(), byTarget = new Map();
+      let total = 0, phone = 0;
+      for (const r of rows) {
+        const v = n(r.eventCount);
+        if (!v) continue;
+        const url = String(r["customEvent:Click_URL"] || "").trim();
+        const text = String(r["customEvent:Click_Text"] || "").trim();
+        if (!url && !text) continue;
+        total += v;
+        const c = classify("", url);
+        const label = c ? c.label : (host(url) || "Other contact link");
+        byChannel.set(label, (byChannel.get(label) || 0) + v);
+        if (/^tel:/i.test(url)) {
+          phone += v;
+          /**
+           * NORMALISED BEFORE GROUPING. The same line is written half a dozen
+           * ways across the site — `+6621234567`, `02-123-4567`, `0 2310 3752`
+           * — and grouping the raw strings would report one number as six.
+           * Everything but the digits and a leading + is stripped for the KEY;
+           * the tidiest seen spelling is kept for display.
+           */
+          let digits = url.replace(/^tel:/i, "").replace(/[^\d+]/g, "");
+          /**
+           * `+66` AND `0` ARE THE SAME LINE. Thai numbers are written
+           * internationally as +66 followed by the number WITHOUT its leading
+           * zero, so `+6621234567` and `021234567` are one hotline — and the
+           * site uses both, sometimes on the same page. Left unmerged the main
+           * number appears twice, each with half its clicks, which is exactly
+           * the kind of split that makes a reader distrust the whole card.
+           *
+           * Applied to +66 ONLY. A blanket "strip the country code" rule would
+           * merge genuinely different foreign numbers, and this hospital
+           * publishes a Japanese-language line.
+           */
+          if (/^\+66/.test(digits)) digits = "0" + digits.slice(3);
+          if (!digits) continue;
+          if (!byNumber.has(digits)) byNumber.set(digits, { number: digits, label: text || digits, clicks: 0 });
+          const rec = byNumber.get(digits);
+          rec.clicks += v;
+          // Prefer a short human label over a raw URL-ish one.
+          if (text && (rec.label === digits || text.length < rec.label.length)) rec.label = text;
+        } else if (url) {
+          if (!byTarget.has(url)) byTarget.set(url, { url, label: text || null, clicks: 0, channel: label });
+          byTarget.get(url).clicks += v;
+        }
+      }
+      const desc = (m, key) => [...m.values ? m.values() : []].sort((a, b) => b.clicks - a.clicks);
+      return {
+        available: true,
+        total, phone,
+        channels: [...byChannel.entries()].sort((a, b) => b[1] - a[1])
+          .map(([label, clicks]) => ({ label, clicks, share: total ? clicks / total : null })),
+        numbers: desc(byNumber).slice(0, 15),
+        targets: desc(byTarget).slice(0, 15),
+      };
+    })();
+
+    /**
+     * The notice now defers to the contact-link tag. Saying "Phone call not
+     * measured" while the card beside it lists the numbers dialled would be
+     * worse than saying nothing: both would be on screen at once.
+     */
     const notMeasured = [];
-    if (!outMap.has("Phone call")) notMeasured.push("Phone call");
-    if (!outMap.has("Email")) notMeasured.push("Email");
+    const clTotal = contactLinks.available ? contactLinks.total : 0;
+    if (!outMap.has("Phone call") && !(contactLinks.available && contactLinks.phone > 0)) {
+      notMeasured.push("Phone call");
+    }
+    if (!outMap.has("Email") && !(clTotal && contactLinks.channels.some((c) => c.label === "Email"))) {
+      notMeasured.push("Email");
+    }
 
     const per100 = (v) => (totals.visits ? (v / totals.visits) * 100 : null);
     return {
@@ -4742,6 +4867,7 @@ async function buildCampaign(code, from, to) {
       onward: { ...onward, per100Visits: per100(onwardTotal) },
       outbound: { ...outbound, per100Visits: per100(outTotal) },
       notMeasured,
+      contactLinks,
       bubbleOpens: bubbleOpens || null,
       chatSource: haveChat ? "click_chat_bubble" : "link-event backstop",
       urls: [...byUrl.values()].sort((a, b) => b.clicks - a.clicks).slice(0, 20)

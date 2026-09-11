@@ -5781,6 +5781,56 @@ function renderCampaignBody(d) {
         </div>
       </div>
 
+      ${(() => {
+        /**
+         * CONTACT LINKS — its own card, never merged into Outbound Clicks.
+         *
+         * The two overlap partially and unpredictably: a LINE click fires both
+         * this tag and GA4's `click`, a phone tap fires ONLY this. Adding them
+         * would double LINE while leaving phone alone; taking a max per channel
+         * (the chat-bubble trick) is wrong too, because these are different
+         * tags with different trigger conditions rather than two measurements
+         * of one button. Two figures, both labelled, neither summed.
+         *
+         * THE NUMBERS ARE THE POINT (MW: "if you gonna report tel: it's great,
+         * show the number too"). Nothing else in the deck can show them — GA4's
+         * own click event never fires for `tel:` at all.
+         */
+        const cl = lc.contactLinks;
+        if (!cl || !cl.available || !cl.total) return '';
+        return `<div class="card mt">
+          <h2>Contact links \u00b7 ${num(cl.total)} click${cl.total===1?'':'s'}</h2>
+          <div class="grid g-2">
+            <div class="card">
+              <div class="card-title">By channel</div>
+              <table><thead><tr><th>Channel</th><th class="num">Clicks</th><th class="num">Share</th><th class="num">Per 100 visits</th></tr></thead><tbody>
+              ${cl.channels.map(c=>`<tr>
+                <td class="strong i18n">${esc(c.label)}</td>
+                <td class="num">${num(c.clicks)}</td>
+                <td class="num">${c.share!=null?num(c.share*100,{dp:1})+'%':'\u2014'}</td>
+                <td class="num">${d.totals&&d.totals.visits?num((c.clicks/d.totals.visits)*100,{dp:1}):'\u2014'}</td>
+              </tr>`).join('')}
+              </tbody></table>
+            </div>
+            <div class="card">
+              <div class="card-title">Numbers dialled ${cl.phone?`&middot; ${num(cl.phone)}`:''}</div>
+              ${cl.numbers.length?`<table><thead><tr><th>Number</th><th>As shown</th><th class="num">Taps</th></tr></thead><tbody>
+              ${cl.numbers.map(x=>`<tr>
+                <td class="strong"><a href="tel:${esc(x.number)}" style="color:var(--violet);text-decoration:none;">${esc(x.number)}</a></td>
+                <td class="i18n trunc" title="${esc(x.label)}">${esc(x.label)}</td>
+                <td class="num">${num(x.clicks)}</td>
+              </tr>`).join('')}
+              </tbody></table>`:`<div class="note" style="margin-top:0;">No phone taps recorded for this campaign in range.</div>`}
+            </div>
+          </div>
+          <div class="note">
+            Counted separately from Outbound Clicks and <b>never added to it</b> \u2014 a LINE tap fires both, a phone tap fires only this one, so the two overlap by an amount that changes per campaign. This is the only source that sees <code>tel:</code> and <code>mailto:</code> at all: GA4's own click event needs a link to another domain, and neither has one.
+            <br><br>
+            The same line is written several ways across the site, so numbers are grouped on their digits and <code>+66…</code> is folded into the <code>0…</code> form \u2014 they are one hotline, not two. <b>As shown</b> is the text on the page, which is often where the branch is.
+          </div>
+        </div>`;
+      })()}
+
       ${lc.urls.length?`<div class="card mt">
         <h2>Exact links clicked</h2>
         <table><thead><tr><th>Link</th><th></th><th class="num">Clicks</th></tr></thead><tbody>
@@ -10586,7 +10636,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.278.0';
+const CLIENT_BUILD = '3.279.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

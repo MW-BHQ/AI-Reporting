@@ -432,6 +432,32 @@ function ga4Report(body) {
      * dimensions — `customEvent:Click_ID` and `customEvent:Click_URL` are the
      * same id/url pairs arriving under a different name.
      */
+    /**
+     * THE CONTACT-LINK TAG'S PARAMETERS: a URL paired with the text the page
+     * displayed. Separate from CHAT_LINKS because this tag catches what the
+     * chat bubble cannot — `tel:` and `mailto:`, which fire no GA4 click at all
+     * — and because MW asked for the NUMBERS, which only live here.
+     *
+     * The same line appears three ways on purpose (`tel:+6621234567`,
+     * `tel:02-123-4567`, `tel:0 2123 4567`). They are one number written as the
+     * site writes it in three places, so anything grouping the raw string
+     * reports one hotline as three. Normalising to digits is the only thing
+     * that merges them, and this is what proves it.
+     */
+    const CONTACT_LINKS = [
+      ["tel:+6621234567", "1719"],
+      ["tel:02-123-4567", "02-123-4567"],
+      ["tel:0 2123 4567", "0 2123 4567"],
+      ["tel:+6644015999", "044-015-999"],
+      ["mailto:info@bangkokhospital.com", "info@bangkokhospital.com"],
+      ["https://line.me/R/ti/p/@bangkokhospital", "\u0e15\u0e34\u0e14\u0e15\u0e48\u0e2d\u0e2a\u0e2d\u0e1a\u0e16\u0e32\u0e21"],
+      ["https://maps.app.goo.gl/bangkokhospital", "Google Maps"],
+    ];
+    if (d === "customEvent:Click_URL" && dims[i + 1] === "customEvent:Click_Text") {
+      for (const [url, text] of CONTACT_LINKS) expand(i + 2, [...acc, url, text]);
+      return;
+    }
+    if (d === "customEvent:Click_Text") { for (const [, t] of CONTACT_LINKS) expand(i + 1, [...acc, t]); return; }
     if (d === "customEvent:Click_ID" && dims[i + 1] === "customEvent:Click_URL") {
       for (const [id, url] of CHAT_LINKS) expand(i + 2, [...acc, id, url]);
       return;
