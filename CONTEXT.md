@@ -1,5 +1,32 @@
 ### Recent (August 2026)
 
+**v3.278.0 — phone and email clicks are ABSENT, not zero, and the card now says
+so.**
+
+MW: "i notice that if they are call, tel: it doesnt show on our report."
+
+He is right and the cause is structural, not a bug in our query. **GA4's
+enhanced-measurement outbound click fires when a link leads to a different
+DOMAIN. `tel:` and `mailto:` have no domain, so the trigger never runs** — those
+clicks were never recorded anywhere, and no amount of querying will find them.
+
+Nothing else covers them either. The chat bubble carries LINE, Messenger,
+Telegram, Zalo, WeChat and web chat, and has no call button; Google Ads'
+`phone_calls` counts calls placed from the AD, not taps on the landing page.
+
+**A missing row reads as a zero**, and on a hospital landing page where the
+phone number is often the main call to action that is the worst version of this
+project's recurring silent-zero failure. The Outbound Clicks card now names what
+is not measured, in one line, with what it would take to fix it (a GTM tag).
+
+Listed only when genuinely absent, so if GTM is ever set to send them the rows
+appear and the notice disappears on its own rather than having to be remembered
+and removed. Asserted BOTH ways: the fixture has a `tel:` link, so Phone call
+must NOT be in `notMeasured` while Email must be — verified by removing the
+fixture's `tel:` link and watching the first assertion flip.
+
+### Recent (August 2026)
+
 **v3.277.0 — top three key events lead the card, footnotes gone, internal paths
 clickable.**
 

@@ -4713,11 +4713,35 @@ async function buildCampaign(code, from, to) {
       byUrl.get(u).clicks += n(r.eventCount);
     }
 
+    /**
+     * PHONE AND EMAIL CLICKS ARE NOT MEASURED, AND THE ABSENCE HAS TO BE SAID
+     * (MW: "if they are call, tel: it doesnt show on our report").
+     *
+     * GA4's enhanced-measurement outbound click fires when a link leads to a
+     * different DOMAIN. `tel:` and `mailto:` have no domain, so the trigger
+     * never runs — they are not missing from our query, they were never
+     * recorded. Nothing else covers them either: the chat bubble has LINE,
+     * Messenger, Telegram, Zalo, WeChat and web chat, and no call button.
+     *
+     * A MISSING ROW READS AS A ZERO. "No Phone call row" looks like nobody
+     * tapped the number, which is the silent-zero failure this project keeps
+     * hitting — and it is the worse reading here, because a hospital landing
+     * page's phone number is often the main call to action.
+     *
+     * Listed only when genuinely absent: if GTM is ever set to send these, the
+     * rows appear and the notice disappears on its own rather than having to
+     * be remembered and removed.
+     */
+    const notMeasured = [];
+    if (!outMap.has("Phone call")) notMeasured.push("Phone call");
+    if (!outMap.has("Email")) notMeasured.push("Email");
+
     const per100 = (v) => (totals.visits ? (v / totals.visits) * 100 : null);
     return {
       available: true,
       onward: { ...onward, per100Visits: per100(onwardTotal) },
       outbound: { ...outbound, per100Visits: per100(outTotal) },
+      notMeasured,
       bubbleOpens: bubbleOpens || null,
       chatSource: haveChat ? "click_chat_bubble" : "link-event backstop",
       urls: [...byUrl.values()].sort((a, b) => b.clicks - a.clicks).slice(0, 20)

@@ -5773,7 +5773,10 @@ function renderCampaignBody(d) {
               <td class="num">${r.share!=null?num(r.share*100,{dp:1})+'%':'\u2014'}</td>
               <td class="num">${d.totals&&d.totals.visits?num((r.clicks/d.totals.visits)*100,{dp:1}):'\u2014'}</td>
             </tr>`).join('')}
-            </tbody></table>`:`<div class="note" style="margin-top:0;">No outbound clicks recorded \u2014 nobody left the page for LINE, a phone number or a map.</div>`}
+            </tbody></table>`:`<div class="note" style="margin-top:0;">No outbound clicks recorded \u2014 nobody left the page for LINE or a map.</div>`}
+            ${(lc.notMeasured||[]).length?`<div class="note" style="margin-top:10px;">
+              <b>${lc.notMeasured.map(esc).join(' and ')} not measured.</b> GA4 only records a click when the link leads to another domain, and <code>tel:</code> and <code>mailto:</code> have none \u2014 so taps on the phone number are absent here rather than zero. They need a GTM tag to appear.
+            </div>`:''}
           </div>
         </div>
       </div>
@@ -10583,7 +10586,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.277.0';
+const CLIENT_BUILD = '3.278.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

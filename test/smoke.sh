@@ -170,6 +170,14 @@ expect_field "lc opens not a row"  "$CAMP1" "${LC}.outbound.rows.some(r=>/bubble
 # in: the open has no URL either, and filtering it from one pull only put it
 # here and inflated the total by exactly the opens.
 expect_field "lc webchat named"    "$CAMP1" "${LC}.outbound.rows.find(r=>r.label==='Web chat').clicks===100?100:undefined"
+# PHONE AND EMAIL ARE ABSENT, NOT ZERO. GA4's outbound click needs a link to
+# another DOMAIN and `tel:`/`mailto:` have none, so the trigger never runs. A
+# missing row reads as "nobody tapped the number", which on a hospital landing
+# page is the worst possible silent zero. The fixture HAS a tel: link, so Phone
+# call must NOT be listed here and Email must be — proving the notice tracks
+# the data rather than being hardcoded either way.
+expect_field "lc phone measured"   "$CAMP1" "${LC}.notMeasured.includes('Phone call')?undefined:'ok'"
+expect_field "lc email unmeasured" "$CAMP1" "${LC}.notMeasured.includes('Email')?'ok':undefined"
 expect_field "lc no widget row"    "$CAMP1" "${LC}.outbound.rows.some(r=>/widget/i.test(r.label))?undefined:'ok'"
 
 echo "--- isolation: the report's chat bubble slide must not move ---"
