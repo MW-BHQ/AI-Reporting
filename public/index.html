@@ -5766,12 +5766,18 @@ function renderCampaignBody(d) {
           </div>
           <div class="card">
             <div class="card-title">Outbound Clicks ${ob.total?`&middot; ${num(ob.total)}`:''}</div>
-            ${ob.total?`<table><thead><tr><th>Destination</th><th class="num">Clicks</th><th class="num">Share</th><th class="num">Per 100 visits</th></tr></thead><tbody>
+            ${/* PERCENT, NOT "per 100 visits" (MW: "we never use Per 100
+                  visits, we use %"). Same arithmetic either way — clicks over
+                  visits — so only the label and the % sign change. It can read
+                  above 100% where one visit clicks more than once, which is
+                  what the "per 100" phrasing was dodging; the honest version is
+                  a percentage that is occasionally larger than 100. */''}
+            ${ob.total?`<table><thead><tr><th>Destination</th><th class="num">Clicks</th><th class="num">Share</th><th class="num">% of visits</th></tr></thead><tbody>
             ${ob.rows.slice(0,10).map(r=>`<tr>
               <td class="strong i18n">${esc(r.label)}</td>
               <td class="num">${num(r.clicks)}</td>
               <td class="num">${r.share!=null?num(r.share*100,{dp:1})+'%':'\u2014'}</td>
-              <td class="num">${d.totals&&d.totals.visits?num((r.clicks/d.totals.visits)*100,{dp:1}):'\u2014'}</td>
+              <td class="num">${d.totals&&d.totals.visits?num((r.clicks/d.totals.visits)*100,{dp:1})+'%':'\u2014'}</td>
             </tr>`).join('')}
             </tbody></table>`:`<div class="note" style="margin-top:0;">No outbound clicks recorded \u2014 nobody left the page for LINE or a map.</div>`}
             ${(lc.notMeasured||[]).length?`<div class="note" style="margin-top:10px;">
@@ -5803,12 +5809,12 @@ function renderCampaignBody(d) {
           <div class="grid g-2">
             <div class="card">
               <div class="card-title">By channel</div>
-              <table><thead><tr><th>Channel</th><th class="num">Clicks</th><th class="num">Share</th><th class="num">Per 100 visits</th></tr></thead><tbody>
+              <table><thead><tr><th>Channel</th><th class="num">Clicks</th><th class="num">Share</th><th class="num">% of visits</th></tr></thead><tbody>
               ${cl.channels.map(c=>`<tr>
                 <td class="strong i18n">${esc(c.label)}</td>
                 <td class="num">${num(c.clicks)}</td>
                 <td class="num">${c.share!=null?num(c.share*100,{dp:1})+'%':'\u2014'}</td>
-                <td class="num">${d.totals&&d.totals.visits?num((c.clicks/d.totals.visits)*100,{dp:1}):'\u2014'}</td>
+                <td class="num">${d.totals&&d.totals.visits?num((c.clicks/d.totals.visits)*100,{dp:1})+'%':'\u2014'}</td>
               </tr>`).join('')}
               </tbody></table>
             </div>
@@ -5831,17 +5837,40 @@ function renderCampaignBody(d) {
         </div>`;
       })()}
 
-      ${lc.urls.length?`<div class="card mt">
-        <h2>Exact links clicked</h2>
-        <table><thead><tr><th>Link</th><th></th><th class="num">Clicks</th></tr></thead><tbody>
-        ${lc.urls.map(u=>`<tr>
-          <td class="i18n trunc" title="${esc(u.url)}">${esc(u.url)}</td>
-          <td>${u.internal?'<span class="pill grey">internal</span>':`<span class="pill">${esc(u.host||'outbound')}</span>`}</td>
-          <td class="num">${num(u.clicks)}</td>
-        </tr>`).join('')}
-        </tbody></table>
-        <div class="note">Top 20 clicked links. The table above tells you visitors reached for LINE; this tells you which LINE account &mdash; useful when a campaign points at per-language or per-hospital variants of the same thing. Rows marked <b>internal</b> are on-site links GTM happens to send as clicks; they are listed here but NOT counted in "Went deeper", because that side already counts the same step as a page view and one step under two units would be counted twice.</div>
-      </div>`:''}`;
+      ${(() => {
+        /**
+         * OUTBOUND LINKS (MW's name), and the name is now load-bearing: the
+         * table is filtered to outbound rows only.
+         *
+         * It used to list internal hrefs too, flagged with a pill. Under a
+         * heading that says "Outbound" that is just wrong, and the internal
+         * ones were never counted in the outbound tally anyway — the Internal
+         * Clicks table covers that navigation from `pageReferrer`.
+         *
+         * CLICKABLE, styled like the internal paths and the landing pages
+         * card above. These are already absolute URLs, so no host is
+         * prefixed. `tel:` and `mailto:` are left as plain text: a report is
+         * not the place to dial a number by mis-clicking, and the Contact
+         * links card makes those tappable deliberately.
+         */
+        const out = (lc.urls || []).filter(u => !u.internal);
+        if (!out.length) return '';
+        const dialish = (u) => /^(tel:|mailto:)/i.test(u);
+        return `<div class="card mt">
+          <h2>Outbound Links</h2>
+          <table><thead><tr><th>Link</th><th>Host</th><th class="num">Clicks</th><th class="num">% of visits</th></tr></thead><tbody>
+          ${out.map(u=>`<tr>
+            <td class="trunc" title="${esc(u.url)}">${dialish(u.url)
+              ? `<span class="i18n">${esc(u.url)}</span>`
+              : `<a class="i18n" href="${esc(u.url)}" target="_blank" rel="noopener" style="color:var(--violet);text-decoration:none;word-break:break-all;">${esc(u.url)}</a>`}</td>
+            <td>${esc(u.host||'\u2014')}</td>
+            <td class="num">${num(u.clicks)}</td>
+            <td class="num">${d.totals&&d.totals.visits?num((u.clicks/d.totals.visits)*100,{dp:1})+'%':'\u2014'}</td>
+          </tr>`).join('')}
+          </tbody></table>
+          <div class="note">Top ${num(out.length)} by clicks. The Outbound Clicks table above tells you visitors reached for LINE; this tells you which LINE account &mdash; useful when a campaign points at per-language or per-hospital variants of the same channel.</div>
+        </div>`;
+      })()}`;
     })()}
 
     ${(d.organicPosts&&d.organicPosts.length)||(d.shortLinks&&d.shortLinks.length)?`<div class="card mt">
@@ -10636,7 +10665,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.279.0';
+const CLIENT_BUILD = '3.280.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

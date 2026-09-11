@@ -1,5 +1,33 @@
 ### Recent (August 2026)
 
+**v3.280.0 — percentages not "per 100 visits"; "Exact links clicked" is
+"Outbound Links" and the links work.**
+
+MW: "we never use Per 100 visits, we use % … Exact links clicked > Outbound
+Links and fix them to be clickable."
+
+**Both "Per 100 visits" columns are now "% of visits".** Identical arithmetic —
+clicks over visits — so only the label and the `%` sign changed. It can read
+above 100% where one visit clicks more than once, which is what the "per 100"
+phrasing was quietly dodging; a percentage that is occasionally over 100 is the
+honest version, and it matches the rest of the deck.
+
+**"Outbound Links", and the name is now load-bearing.** The table used to list
+internal hrefs too, flagged with a pill. Under a heading that says Outbound that
+is simply wrong, so it is filtered to outbound rows only — and nothing is lost,
+because those internal clicks were never in the outbound tally anyway and the
+Internal Clicks table covers that navigation from `pageReferrer`.
+
+Links are clickable, styled like the internal paths and the landing pages card:
+violet, no underline, `rel="noopener"`. **`tel:` and `mailto:` stay plain text**
+— a report is not the place to dial a number by mis-clicking, and the Contact
+links card already makes those tappable where that is the intent.
+
+A `% of visits` column was added here too, since the card now has the room and
+the same question applies.
+
+### Recent (August 2026)
+
 **v3.279.0 — phone taps are in the report, with the numbers (MW).**
 
 MW found the site's own `GA4 - click contact links` tag in GTM Preview: one
