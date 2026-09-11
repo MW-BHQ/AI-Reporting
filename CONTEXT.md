@@ -1,5 +1,40 @@
 ### Recent (August 2026)
 
+**v3.277.0 — top three key events lead the card, footnotes gone, internal paths
+clickable.**
+
+MW: "nah the report readers dont need this foot note, delete them … for the
+score cards let sort top 3 KEs … and the path shown in internal clicks should be
+clickable".
+
+**Both remaining footnotes deleted.** The contact_us-vs-outbound-clicks
+explanation moves entirely into the code and this file. It is the right answer
+to MW's question and the wrong thing to print on a slide a hospital executive
+reads.
+
+**The stat row is now the top three KEY EVENTS by volume, each with its rate.**
+Ordered by the data rather than a fixed list, so a campaign selling packages and
+one driving phone calls do not show the same three. Zero-value events are
+excluded — better two cards than a third reading "Purchase 0" to fill a slot.
+
+**"CR" is against VISITS and the card says so:** `3.9% CR · of 12.5K visits`. It
+is events over sessions, not converting visitors over visitors — one session can
+fire "Contact us" three times, so it can exceed 100% on a small campaign. Naming
+the denominator on the card is the difference between a rate and a number that
+looks like one.
+
+This also retires the previous three stats, including the "Appointments" one
+whose name collided with the key events row of the same name. The collision is
+gone because the card now shows that row itself.
+
+**Internal paths are links**, styled and built exactly like the landing pages
+card above — same violet, no underline, same host prefix with the same
+`startsWith('http')` guard — rather than as a default blue browser link. The
+origin is added in the view and NOT in the payload, because the stored path also
+feeds the section grouping, which has to keep matching on `/th/bangkok/...`.
+
+### Recent (August 2026)
+
 **v3.276.0 — footnotes cut from five paragraphs to two; "Reached booking" is
 "Appointments".**
 

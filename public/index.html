@@ -5697,44 +5697,35 @@ function renderCampaignBody(d) {
        * the step BEFORE a destination is chosen.
        */
       /**
-       * THREE STATS, EACH ANSWERING SOMETHING THE TWO TABLES CANNOT (MW: "we
-       * got blank space beside Click Chat Bubble, what other insight should we
-       * put").
+       * THE TOP THREE KEY EVENTS (MW), each with its rate against visits.
        *
-       * The bar for a stat here is that it must NOT restate a table. "Went
-       * deeper" and "Left the site" were removed for exactly that. These
-       * three each need a join or a comparison the tables do not make:
+       * These are the outcomes the campaign was bought for, so they lead. The
+       * key events card lists all nine; three here is the summary, ordered by
+       * volume so it follows the data rather than a fixed list — a campaign
+       * selling packages and one driving phone calls should not show the same
+       * three.
        *
-       *   · CHAT BUBBLE — belongs to neither table, being the step before a
-       *     destination is chosen.
-       *   · BOOKING OR APPOINTMENT — the only onward section that is a funnel
-       *     step rather than a browse, pulled out of the roll-up and given a
-       *     per-100-visits rate so campaigns of different sizes compare. This
-       *     is also what the section grouping is now FOR, since the table below
-       *     lists exact paths.
-       *   · CONTACT US — the site's own key event, sitting deliberately beside
-       *     the click figures because MW compared the two and they did not
-       *     reconcile. Showing it here with its unit stated answers that in
-       *     place, rather than leaving a reader to scroll up and guess.
+       * ZEROS ARE EXCLUDED. A campaign with three live events should not pad
+       * the row with "Purchase 0" just to fill three slots; better two cards
+       * than a third that says nothing.
+       *
+       * "CR" IS AGAINST VISITS AND THE CARD SAYS SO. It is events over
+       * sessions, not converting visitors over visitors: one session can fire
+       * "Contact us" three times, so this can and does exceed 100% on a small
+       * campaign. Naming the denominator is the difference between a rate and
+       * a number that looks like one.
        */
-      const booking = (on.rows || []).find(r => /appointment|booking/i.test(r.label));
-      const per100 = (v) => (d.totals && d.totals.visits) ? num((v / d.totals.visits) * 100, {dp:1}) : '\u2014';
-      const stats = [
-        lc.bubbleOpens ? { lab: 'Click Chat bubble', val: num(lc.bubbleOpens),
-          sub: 'the step before choosing a channel' } : null,
-        /**
-         * "Appointments" (MW's label). The SUB-LABEL CARRIES THE UNIT and has
-         * to, because the key events card on this same slide already has a row
-         * called Appointments counting the booking EVENT. This counts page
-         * views that reached a booking page — the step before it. Two things
-         * with one name on one screen is how a reader ends up comparing them.
-         */
-        { lab: 'Appointments', val: booking ? num(booking.views) : '0',
-          sub: booking ? `booking pages reached \u00b7 ${per100(booking.views)} per 100 visits`
-            : 'no booking page reached' },
-        { lab: 'Contact us', val: (d.totals && d.totals.contacts != null) ? num(d.totals.contacts) : '\u2014',
-          sub: 'the site\u2019s own key event, not a link click' },
-      ].filter(Boolean);
+      const visits = (d.totals && d.totals.visits) || 0;
+      const stats = (d.keyEventBreakdown || [])
+        .filter(k => k.value > 0)
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 3)
+        .map(k => ({
+          lab: k.label,
+          val: num(k.value),
+          sub: visits ? `${num((k.value / visits) * 100, {dp:1})}% CR \u00b7 of ${num(visits)} visits`
+            : 'no visits to rate against',
+        }));
       return `<div class="card mt">
         <h2>What they did on the page</h2>
         <div class="grid g-3" style="margin-bottom:14px;">
@@ -5753,7 +5744,14 @@ function renderCampaignBody(d) {
                   which is the right answer for a sheet with no buttons. */''}
             ${on.pages && on.pages.length?`<table data-ipgtable><thead><tr><th>Page</th><th class="num">Clicks</th><th class="num">Share</th></tr></thead><tbody>
             ${on.pages.map((r,i)=>`<tr class="ipg" data-ipg="${Math.floor(i/10)}"${i>=10?' hidden':''}>
-              <td class="i18n trunc" title="${esc(r.path)}">${esc(r.path)}</td>
+              ${/* CLICKABLE (MW), styled and built exactly like the landing
+                    pages card above rather than as a bare browser link: same
+                    violet, no underline, same host-prefix with the same
+                    `startsWith('http')` guard for a path that already carries
+                    one. The origin is added HERE and not in the payload,
+                    because the stored path also feeds the section grouping,
+                    which has to keep matching on `/th/bangkok/...`. */''}
+              <td class="trunc" title="${esc(r.path)}"><a class="i18n" href="${esc(r.path.startsWith('http')?r.path:'https://www.bangkokhospital.com'+r.path)}" target="_blank" rel="noopener" style="color:var(--violet);text-decoration:none;word-break:break-all;">${esc(r.path)}</a></td>
               <td class="num">${num(r.views)}</td>
               <td class="num">${r.share!=null?num(r.share*100,{dp:1})+'%':'\u2014'}</td>
             </tr>`).join('')}
@@ -5777,17 +5775,6 @@ function renderCampaignBody(d) {
             </tr>`).join('')}
             </tbody></table>`:`<div class="note" style="margin-top:0;">No outbound clicks recorded \u2014 nobody left the page for LINE, a phone number or a map.</div>`}
           </div>
-        </div>
-        ${/* THE FOOTNOTES WERE FIVE PARAGRAPHS AND MW CUT THEM (fair). What
-              survives is the ONE thing a reader cannot work out for themselves
-              and gets wrong every time: why a key event in the hundreds sits
-              beside outbound clicks in the tens. The rest — how the merge
-              works, the referrer's limits, why the units differ — is written up
-              in the code and in CONTEXT, which is where it belongs. */''}
-        <div class="note">
-          <b>Why "Contact us" is far bigger than the outbound clicks:</b> <code>contact_us</code> fires on things that are not links &mdash; the chat bubble, in-page forms and widgets are <code>div</code>s, so they raise the event and the browser never reports a click. Only the part that actually leaves the site (LINE, a phone number, a form on another domain) can appear on the right. One visitor can also fire the event several times. The two are different measurements of the same intent, not a total and its subset.
-          <br><br>
-          <b>Internal Clicks</b> is counted as page views whose referrer was one of our own pages, the same method the Pages tab uses; GA4 only reports clicks on links that LEAVE the site, so there is nothing else to count them with. The two sides are therefore different units and are never added.
         </div>
       </div>
 
@@ -10596,7 +10583,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.276.0';
+const CLIENT_BUILD = '3.277.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
