@@ -450,6 +450,12 @@ function ga4Report(body) {
       ["tel:0 2123 4567", "0 2123 4567"],
       ["tel:+6644015999", "044-015-999"],
       ["mailto:info@bangkokhospital.com", "info@bangkokhospital.com"],
+      // The SAME inbox with a subject attached. The site links it both ways;
+      // grouped on the raw URL one inbox reports as two, so the query string is
+      // stripped before grouping.
+      ["mailto:info@bangkokhospital.com?subject=Appointment", "\u0e2a\u0e48\u0e07\u0e2d\u0e35\u0e40\u0e21\u0e25"],
+      ["mailto:INFO@bangkokhospital.com", "Email us"],
+      ["mailto:international@bangkokhospital.com", "International Office"],
       ["https://line.me/R/ti/p/@bangkokhospital", "\u0e15\u0e34\u0e14\u0e15\u0e48\u0e2d\u0e2a\u0e2d\u0e1a\u0e16\u0e32\u0e21"],
       ["https://maps.app.goo.gl/bangkokhospital", "Google Maps"],
     ];

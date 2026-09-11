@@ -1,5 +1,43 @@
 ### Recent (August 2026)
 
+**v3.281.0 — call and email join Outbound Clicks; emails grouped like numbers;
+the last footnotes gone.**
+
+MW: "next try to get email (mailto:), and rethink about the block Outbound
+Clicks, add call and email there as well as remove the foot note remark."
+
+**Phone and email now sit in the Outbound Clicks table**, where a reader looks
+for them. They were on a separate card because the two sources overlap — the
+overlap is now reasoned about per channel instead of avoided:
+
+- **Phone and email exist ONLY in the contact-link tag.** GA4's `click` never
+  fires for `tel:` or `mailto:`, so there is nothing to reconcile and the value
+  is taken as-is.
+- **LINE, Messenger and Maps fire BOTH tags on one click.** Two measurements of
+  one set, so the HIGHER is taken, never the sum — summing doubles every chat
+  channel. LINE stays at 300 (link event) rather than becoming 400.
+
+The max is taken against the ALREADY-MERGED value, not the raw link rows: the
+left side is body links plus the reconciled bubble figure, our best
+reconstruction of the whole set, and the contact-link tag measures that same
+whole set directly.
+
+**Emails are grouped the way numbers are.** One inbox is linked bare, with
+`?subject=`, and upper-cased — three rows for one mailbox unless the query
+string is stripped and the address lower-cased. `Click_Text` is kept beside it
+as "As shown", which is where "International Office" lives.
+
+**The remaining card is the detail only** — Numbers dialled and Email addresses,
+each dialable/mailable, with `% of visits`. The channel roll-up moved to the
+main table, so nothing is shown twice.
+
+**Both footnotes deleted**, and there are none left on this block.
+
+Four negative tests: summing instead of max inflates LINE to 400 and breaks the
+phone figure; grouping emails on the raw URL splits one inbox into three.
+
+### Recent (August 2026)
+
 **v3.280.0 — percentages not "per 100 visits"; "Exact links clicked" is
 "Outbound Links" and the links work.**
 

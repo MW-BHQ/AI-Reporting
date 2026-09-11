@@ -4698,75 +4698,6 @@ async function buildCampaign(code, from, to) {
     const bubbleOpens = Math.max(sumOpens(chatRows), sumOpens(live));
     const clicks = live.filter((r) => !isOpen(r.linkId));
 
-    // An unrecognised destination is labelled by its HOST, never swept into
-    // "Other": a bucket called Other is where a new booking partner or a
-    // broken redirect goes to hide.
-    const destOf = (r) => {
-      const c = classify(r.linkId, r.linkUrl);
-      // The fallback is now only for a click with NO url and NO recognised id —
-      // genuinely unidentifiable, and worth looking at rather than assuming.
-      return c ? c.label : (host(r.linkUrl) || "Unidentified widget");
-    };
-    /**
-     * Internal link clicks are NOT tallied here even when GTM sends them: the
-     * onward side already counts that navigation from `pageReferrer`, and
-     * showing the same step twice under two units is worse than showing it
-     * once. They are kept in the exact-links table, flagged, where the unit is
-     * unambiguous.
-     */
-    const outRows = clicks.filter((r) => !isInternal(r.linkUrl));
-    const bodyOut = outRows.filter((r) => !isBubbleId(r.linkId));
-    const bubbleFromLink = outRows.filter((r) => isBubbleId(r.linkId));
-    const sumBy = (list) => {
-      const m = new Map();
-      for (const r of list) m.set(destOf(r), (m.get(destOf(r)) || 0) + n(r.eventCount));
-      return m;
-    };
-    const fromLink = sumBy(bubbleFromLink);
-    const fromCustom = haveChat ? sumBy(chatChannelRows) : new Map();
-    const outMap = sumBy(bodyOut);
-    for (const label of new Set([...fromLink.keys(), ...fromCustom.keys()])) {
-      const merged = Math.max(fromLink.get(label) || 0, fromCustom.get(label) || 0);
-      outMap.set(label, (outMap.get(label) || 0) + merged);
-    }
-    const outTotal = [...outMap.values()].reduce((a, v) => a + v, 0);
-    const outbound = {
-      available: clickRows !== null,
-      total: outTotal,
-      rows: [...outMap.entries()].sort((a, b) => b[1] - a[1])
-        .map(([label, clicks2]) => ({ label, clicks: clicks2, share: outTotal ? clicks2 / outTotal : null })),
-    };
-
-    // Exact links, so "they clicked LINE" resolves to WHICH LINE account.
-    // Link rows only: the custom event carries the same clicks under the same
-    // URLs, so including it would list a bubble click twice.
-    const byUrl = new Map();
-    for (const r of clicks) {
-      const u = String(r.linkUrl || "").trim();
-      if (!u) continue;
-      if (!byUrl.has(u)) byUrl.set(u, { url: u, clicks: 0, internal: isInternal(u), host: host(u) });
-      byUrl.get(u).clicks += n(r.eventCount);
-    }
-
-    /**
-     * PHONE AND EMAIL CLICKS ARE NOT MEASURED, AND THE ABSENCE HAS TO BE SAID
-     * (MW: "if they are call, tel: it doesnt show on our report").
-     *
-     * GA4's enhanced-measurement outbound click fires when a link leads to a
-     * different DOMAIN. `tel:` and `mailto:` have no domain, so the trigger
-     * never runs — they are not missing from our query, they were never
-     * recorded. Nothing else covers them either: the chat bubble has LINE,
-     * Messenger, Telegram, Zalo, WeChat and web chat, and no call button.
-     *
-     * A MISSING ROW READS AS A ZERO. "No Phone call row" looks like nobody
-     * tapped the number, which is the silent-zero failure this project keeps
-     * hitting — and it is the worse reading here, because a hospital landing
-     * page's phone number is often the main call to action.
-     *
-     * Listed only when genuinely absent: if GTM is ever set to send these, the
-     * rows appear and the notice disappears on its own rather than having to
-     * be remembered and removed.
-     */
     /**
      * THE CONTACT-LINK TAG, GROUPED BY CHANNEL — AND PHONE NUMBERS NAMED.
      *
@@ -4790,8 +4721,8 @@ async function buildCampaign(code, from, to) {
       const raw = data.ga4ContactLinks;
       if (raw === null) return { available: false, reason: "The contact-link event was unavailable this run." };
       const rows = raw.filter((r) => norm(r.sessionManualCampaignName).startsWith(needle));
-      const byChannel = new Map(), byNumber = new Map(), byTarget = new Map();
-      let total = 0, phone = 0;
+      const byChannel = new Map(), byNumber = new Map(), byEmail = new Map(), byTarget = new Map();
+      let total = 0, phone = 0, email = 0;
       for (const r of rows) {
         const v = n(r.eventCount);
         if (!v) continue;
@@ -4831,6 +4762,19 @@ async function buildCampaign(code, from, to) {
           rec.clicks += v;
           // Prefer a short human label over a raw URL-ish one.
           if (text && (rec.label === digits || text.length < rec.label.length)) rec.label = text;
+        } else if (/^mailto:/i.test(url)) {
+          email += v;
+          /**
+           * Lower-cased and stripped of everything after `?` — the site links
+           * some addresses with a `?subject=` attached, and grouped raw the
+           * same inbox appears once per subject line.
+           */
+          const addr = url.replace(/^mailto:/i, "").split("?")[0].trim().toLowerCase();
+          if (!addr) continue;
+          if (!byEmail.has(addr)) byEmail.set(addr, { address: addr, label: text || addr, clicks: 0 });
+          const rec = byEmail.get(addr);
+          rec.clicks += v;
+          if (text && (rec.label === addr || text.length < rec.label.length)) rec.label = text;
         } else if (url) {
           if (!byTarget.has(url)) byTarget.set(url, { url, label: text || null, clicks: 0, channel: label });
           byTarget.get(url).clicks += v;
@@ -4839,14 +4783,112 @@ async function buildCampaign(code, from, to) {
       const desc = (m, key) => [...m.values ? m.values() : []].sort((a, b) => b.clicks - a.clicks);
       return {
         available: true,
-        total, phone,
+        total, phone, email,
         channels: [...byChannel.entries()].sort((a, b) => b[1] - a[1])
           .map(([label, clicks]) => ({ label, clicks, share: total ? clicks / total : null })),
+        // Exposed as a MAP as well, so the outbound tally can reconcile against
+        // it per channel without re-deriving the labels.
+        byChannel: Object.fromEntries(byChannel),
         numbers: desc(byNumber).slice(0, 15),
+        emails: desc(byEmail).slice(0, 15),
         targets: desc(byTarget).slice(0, 15),
       };
     })();
 
+    // An unrecognised destination is labelled by its HOST, never swept into
+    // "Other": a bucket called Other is where a new booking partner or a
+    // broken redirect goes to hide.
+    const destOf = (r) => {
+      const c = classify(r.linkId, r.linkUrl);
+      // The fallback is now only for a click with NO url and NO recognised id —
+      // genuinely unidentifiable, and worth looking at rather than assuming.
+      return c ? c.label : (host(r.linkUrl) || "Unidentified widget");
+    };
+    /**
+     * Internal link clicks are NOT tallied here even when GTM sends them: the
+     * onward side already counts that navigation from `pageReferrer`, and
+     * showing the same step twice under two units is worse than showing it
+     * once. They are kept in the exact-links table, flagged, where the unit is
+     * unambiguous.
+     */
+    const outRows = clicks.filter((r) => !isInternal(r.linkUrl));
+    const bodyOut = outRows.filter((r) => !isBubbleId(r.linkId));
+    const bubbleFromLink = outRows.filter((r) => isBubbleId(r.linkId));
+    const sumBy = (list) => {
+      const m = new Map();
+      for (const r of list) m.set(destOf(r), (m.get(destOf(r)) || 0) + n(r.eventCount));
+      return m;
+    };
+    const fromLink = sumBy(bubbleFromLink);
+    const fromCustom = haveChat ? sumBy(chatChannelRows) : new Map();
+    const outMap = sumBy(bodyOut);
+    for (const label of new Set([...fromLink.keys(), ...fromCustom.keys()])) {
+      const merged = Math.max(fromLink.get(label) || 0, fromCustom.get(label) || 0);
+      outMap.set(label, (outMap.get(label) || 0) + merged);
+    }
+    /**
+     * THE CONTACT-LINK TAG FOLDED IN, SO CALL AND EMAIL SIT WITH THE REST (MW).
+     *
+     * They were on their own card because the two sources overlap. They still
+     * overlap — but the overlap is now reasoned about per channel instead of
+     * being avoided:
+     *
+     *   · PHONE and EMAIL exist ONLY here. GA4's `click` never fires for
+     *     `tel:` or `mailto:`, so there is nothing to reconcile and the value
+     *     is taken as-is.
+     *   · LINE, Messenger, Maps fire BOTH tags on the same click. The
+     *     contact-link trigger and the outbound-click event are two
+     *     measurements of one set, so the HIGHER is taken — never the sum,
+     *     which would double every chat channel.
+     *
+     * MAX AGAINST THE ALREADY-MERGED VALUE, not against the raw link rows. The
+     * left side is body links plus the reconciled bubble figure, which is our
+     * best reconstruction of the whole set; the contact-link tag measures that
+     * same whole set directly. Two estimates of one thing, so the larger wins,
+     * and neither can inflate the other.
+     */
+    const clByChannel = contactLinks.available ? (contactLinks.byChannel || {}) : {};
+    for (const [label, clicks] of Object.entries(clByChannel)) {
+      outMap.set(label, Math.max(outMap.get(label) || 0, n(clicks)));
+    }
+    const outTotal = [...outMap.values()].reduce((a, v) => a + v, 0);
+    const outbound = {
+      available: clickRows !== null,
+      total: outTotal,
+      rows: [...outMap.entries()].sort((a, b) => b[1] - a[1])
+        .map(([label, clicks2]) => ({ label, clicks: clicks2, share: outTotal ? clicks2 / outTotal : null })),
+    };
+
+    // Exact links, so "they clicked LINE" resolves to WHICH LINE account.
+    // Link rows only: the custom event carries the same clicks under the same
+    // URLs, so including it would list a bubble click twice.
+    const byUrl = new Map();
+    for (const r of clicks) {
+      const u = String(r.linkUrl || "").trim();
+      if (!u) continue;
+      if (!byUrl.has(u)) byUrl.set(u, { url: u, clicks: 0, internal: isInternal(u), host: host(u) });
+      byUrl.get(u).clicks += n(r.eventCount);
+    }
+
+    /**
+     * PHONE AND EMAIL CLICKS ARE NOT MEASURED, AND THE ABSENCE HAS TO BE SAID
+     * (MW: "if they are call, tel: it doesnt show on our report").
+     *
+     * GA4's enhanced-measurement outbound click fires when a link leads to a
+     * different DOMAIN. `tel:` and `mailto:` have no domain, so the trigger
+     * never runs — they are not missing from our query, they were never
+     * recorded. Nothing else covers them either: the chat bubble has LINE,
+     * Messenger, Telegram, Zalo, WeChat and web chat, and no call button.
+     *
+     * A MISSING ROW READS AS A ZERO. "No Phone call row" looks like nobody
+     * tapped the number, which is the silent-zero failure this project keeps
+     * hitting — and it is the worse reading here, because a hospital landing
+     * page's phone number is often the main call to action.
+     *
+     * Listed only when genuinely absent: if GTM is ever set to send these, the
+     * rows appear and the notice disappears on its own rather than having to
+     * be remembered and removed.
+     */
     /**
      * The notice now defers to the contact-link tag. Saying "Phone call not
      * measured" while the card beside it lists the numbers dialled would be

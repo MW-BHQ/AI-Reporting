@@ -195,7 +195,22 @@ expect_field "cl hotline whole"    "$CAMP1" "${CL}.numbers.find(x=>x.number==='0
 expect_field "cl number labelled"  "$CAMP1" "${CL}.numbers.find(x=>x.number==='021234567').label==='1719'?'ok':undefined"
 # NEVER SUMMED WITH OUTBOUND. They overlap on LINE and not on phone, so any
 # combined total would be meaningless; there must be no such field.
-expect_field "cl not merged"       "$CAMP1" "${CL}.total!==${LC}.outbound.total?'ok':undefined"
+# EMAILS GROUPED LIKE NUMBERS. The fixture links one inbox three ways — bare,
+# with `?subject=`, and upper-cased — plus a second, genuinely different inbox.
+# Grouped raw that is four rows; grouped on the address it is two.
+expect_field "cl emails merged"    "$CAMP1" "${CL}.emails.length===2?2:undefined"
+expect_field "cl inbox whole"      "$CAMP1" "${CL}.emails.find(x=>x.address==='info@bangkokhospital.com').clicks===300?300:undefined"
+
+echo "--- campaign: call and email folded into Outbound Clicks (v3.281.0) ---"
+# MW asked for them in the main table. Phone and email exist ONLY in the
+# contact-link tag, so they are taken as-is.
+expect_field "ob has phone"        "$CAMP1" "${LC}.outbound.rows.find(r=>r.label==='Phone call').clicks===400?400:undefined"
+expect_field "ob has email"        "$CAMP1" "${LC}.outbound.rows.some(r=>r.label==='Email')?'ok':undefined"
+# LINE FIRES BOTH TAGS ON ONE CLICK. The link event sees 300, the contact-link
+# tag sees 100; the HIGHER is taken, never the sum. 400 here means they were
+# added and every chat channel is inflated.
+expect_field "ob line not doubled" "$CAMP1" "${LC}.outbound.rows.find(r=>r.label==='LINE').clicks===300?300:undefined"
+expect_field "ob rows sum"         "$CAMP1" "${LC}.outbound.rows.reduce((a,r)=>a+r.clicks,0)===${LC}.outbound.total?'ok':undefined"
 expect_field "lc no widget row"    "$CAMP1" "${LC}.outbound.rows.some(r=>/widget/i.test(r.label))?undefined:'ok'"
 
 echo "--- isolation: the report's chat bubble slide must not move ---"
