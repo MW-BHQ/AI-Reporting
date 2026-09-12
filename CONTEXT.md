@@ -1,5 +1,53 @@
 ### Recent (August 2026)
 
+**v3.290.0 — the campaign sheet's blank tail: 23% to 6%** (MW: "now pdf, fix
+the empty space").
+
+v3.286 fixed the seven-page split and left a quarter of the single sheet blank,
+which I described then as "prep-versus-print drift". It was not drift. It was
+three specific print rules that `print-prep` never mirrored, and each one was
+findable by diffing element heights between the two media.
+
+**THE TEN-ROW TABLE CAP — 928px, the bulk of it.** `@media print` keeps ten
+rows per table (`tbody tr:nth-child(n+11){display:none}`) and drops `.pr-cut`
+and blacklisted `.bl-row` outright. Prep applied none of it, and worse, its
+`.slide.pn tbody tr{display:table-row!important}` reveal — which exists so
+collapsed `.adrow` detail rows get measured — also OVERRODE the cap. So the
+estimate counted seventeen rows where the sheet printed ten: 68px a row against
+40px.
+
+**THE PRINTED CHART HEIGHT — 100px per chart.** Print resolves `.chart-wrap` to
+150px; screen leaves it at the authored 250px. The `slide-fill` override is
+mirrored alongside it, in the order print applies them, or the sections that
+flex to fill a short page get over-measured instead.
+
+**THE APP CHROME — about 80px.** The search box, its hint, the print buttons and
+the pager sit inside `#viewRoot` above the slide and none of them print. The
+measurement now starts at the first `.slide`, and `.no-print` is hidden during
+it.
+
+**Slack goes back to 1% + 24px.** It had been raised three times — 8px flat,
+then 1% + 24, then 3% + 48, then +72 — every time because MW's export came back
+on two sheets. Every one of those raises was treating the row cap. The comments
+even name the pattern: "the drift scales with height and with row count", which
+is a row bug, not a rounding one, and no constant can cover it. With the
+mirrors in place the estimate now OVER-shoots by ~280px instead of falling
+short, and slack stacked on an over-estimate is just more blank tail.
+
+If a second sheet ever comes back, raise this first — but check the mirrors
+before doing it, because a shortfall now means print grew something
+`pp-measure` does not know about, and raising slack would hide it again.
+
+**Result on the fixture: one page, 6% tail, down from 23%.** Better Club and
+the monthly report are unchanged, 0 problems.
+
+**A TAIL CEILING CANNOT GUARD THESE INDIVIDUALLY**, which is worth recording.
+Dropping the chart mirror moves the fixture from 6% to 8% and the chrome mirror
+from 6% to 7%; a ceiling tight enough to fail on either would fail on any
+harmless content change. So the ceiling came down 30 -> 10 to catch the big
+one, and `print:measure-mirrors` in `test/audit.js` asserts the PRESENCE of all
+four mirrors. Deleting any one fails it — verified one at a time.
+
 **v3.289.0 — four card corrections from MW, all on the campaign quality row.**
 
 1. **Engaged page views moves ahead of bounce rate** ("swap the position of

@@ -624,5 +624,34 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
     : ok("money:thb-labelled", "every bare money value carries THB in scope");
 }
 
+/**
+ * EVERY PRINT RULE THAT CHANGES HEIGHT HAS A `pp-measure` TWIN (v3.290.0).
+ *
+ * `@page` is sized from a measurement taken on SCREEN under `print-prep`, so
+ * any print-only rule that changes a height and is NOT mirrored puts the sheet
+ * wrong. Unmirrored, these three were worth roughly a quarter of MW's campaign
+ * sheet in blank tail: the ten-row table cap (~930px), the printed chart height
+ * (~100px per chart), and the app chrome that never prints (~80px).
+ *
+ * A TAIL CEILING CANNOT CATCH THEM INDIVIDUALLY. Dropping the chart mirror
+ * moves the fixture from 6% to 8% and the chrome mirror from 6% to 7%; a
+ * ceiling tight enough to fail on those would fail on any harmless content
+ * change too. Their PRESENCE is the thing to assert, and deleting any one of
+ * them fails here.
+ */
+{
+  const mirrors = [
+    ["ten-row table cap", /body\.pp-measure[^{]*tbody tr:nth-child\(n\+11\)\s*\{[^}]*display:\s*none/],
+    ["printed chart height", /body\.pp-measure[^{]*\.chart-wrap\s*\{[^}]*height:\s*150px/],
+    ["hidden app chrome", /body\.pp-measure[^{]*\.no-print\s*\{[^}]*display:\s*none/],
+    ["canvas swapped for its twin", /body\.pp-measure[^{]*\.chart-wrap canvas\s*\{[^}]*display:\s*none/],
+  ];
+  const missing = mirrors.filter(([, re]) => !re.test(html)).map(([name]) => name);
+  missing.length
+    ? fail("print:measure-mirrors",
+        `${missing.length} print rule(s) no longer mirrored for measurement — ${missing.join(", ")}`)
+    : ok("print:measure-mirrors", `all ${mirrors.length} height-changing print rules mirrored`);
+}
+
 console.log(failures ? `\n${failures} audit check(s) failed` : "\nstatic audit clean");
 process.exit(failures ? 1 : 0);

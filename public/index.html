@@ -1837,13 +1837,49 @@
      * size the twin it emits — hiding the canvas for the whole prep pass would
      * hand it a collapsed box and every printed chart would come out flat.
      */
+    /**
+     * THE PRINTED CHART HEIGHT. `@media print` resolves `.chart-wrap` to 150px
+     * (200px at line ~1619, then 150px later in the same block), while screen
+     * leaves it at the authored 250px. Worth 100px per chart, and the campaign
+     * carries two.
+     *
+     * THE `slide-fill` OVERRIDE IS MIRRORED WITH IT, in the same order print
+     * applies it. Those wrappers flex to fill a short page and print at height
+     * 0 + flex, so a blanket 150px would over-measure exactly the sections that
+     * are already short.
+     */
+    /* Print hides the app chrome; the measurement must not reserve sheet for
+       controls that never appear on it. */
+    body.pp-measure .no-print{display:none!important;}
+    body.pp-measure .chart-wrap{height:150px!important;}
+    body.pp-measure .slide-fill .chart-wrap{flex:1 1 0;height:0!important;max-height:none!important;}
     body.pp-measure .chart-wrap canvas{display:none!important;}
     body.pp-measure .chart-svg{display:block!important;width:100%;height:100%;}
-    /* TABLES ARE DELIBERATELY NOT MIRRORED HERE. `.slide.pn td/th` prints at
-       9px/14px, and forcing that on screen matched the row height exactly but
-       made the DOCUMENT 107px taller overall — the cells are narrower under
-       prep, so the smaller type re-wraps into more lines than it saves. The
-       canvas swap is the mirror that pays. */
+    /**
+     * THE TEN-ROW CAP, which is the whole remaining gap (v3.290.0).
+     *
+     * `@media print` keeps ten rows per table
+     * (`tbody tr:nth-child(n+11){display:none}`) and drops `.pr-cut` and
+     * blacklisted `.bl-row` outright. `print-prep` applies none of that — worse,
+     * its `.slide.pn tbody tr{display:table-row!important}` reveal, which
+     * exists to measure collapsed `.adrow` detail rows, also overrides the cap.
+     * So the estimate counted every row of tables that print ten: 68px a row
+     * against 40px, 680px of tbody against 400px.
+     *
+     * That was 928px of the 1,050px over-estimate, and it is why MW's campaign
+     * sheet came out with a quarter of it blank. Mirrored here rather than in
+     * `print-prep` because `buildPrintSvgs` runs first and must still see the
+     * revealed rows.
+     *
+     * TABLE CELL PADDING IS NOT MIRRORED. `.slide.pn td/th` prints at 9px/14px,
+     * and forcing that on screen matched row height exactly and then made the
+     * document 107px TALLER — the cells are narrower under prep, so the smaller
+     * type re-wraps into more lines than it saves. Measured, not assumed.
+     */
+    
+    body.pp-measure .slide table:not(.nocap) tbody tr:nth-child(n+11){display:none!important;}
+    body.pp-measure .bl-wrap:not(.bl-hidden) .bl-row{display:none!important;}
+    body.pp-measure .pr-cut{display:none!important;}
   }
   /**
    * A CANVAS MUST NOT HOLD ITS GRID TRACK OPEN.
@@ -10671,8 +10707,16 @@ function onePageIfAsked() {
    * occupies, which is what the sheet has to cover.
    */
   document.body.classList.add('pp-measure');
-  const rootTop = root.getBoundingClientRect().top;
   const slides = root.querySelectorAll('.slide');
+  /**
+   * MEASURED FROM THE FIRST SLIDE, NOT FROM `#viewRoot` (v3.290.0).
+   *
+   * The search box, its hint, the print buttons and the pager sit inside
+   * `#viewRoot` ABOVE the slide and are all hidden in print. Measuring from the
+   * root's top counted that chrome as part of the document — about 80px of
+   * sheet reserved for controls that never appear on it.
+   */
+  const rootTop = (slides.length ? slides[0] : root).getBoundingClientRect().top;
   const last = slides[slides.length - 1];
   const slideBottom = last ? last.getBoundingClientRect().bottom - rootTop : 0;
   let deepest = 0;
@@ -10685,27 +10729,27 @@ function onePageIfAsked() {
   }
   const h = Math.max(400, Math.ceil(Math.max(slideBottom, deepest) || root.scrollHeight));
   document.body.classList.remove('pp-measure');
-  // 96 CSS px to the inch, plus a little slack so a sub-pixel spill cannot
-  // emit a second, near-empty page — the v3.162 lesson.
   /**
-   * SLACK IS PROPORTIONAL, NOT A FIXED 8px.
+   * SLACK RETURNS TO 1% + 24px (v3.290.0).
    *
-   * The measured height is taken from the live DOM; the print layout then
-   * reflows slightly (font metrics, table column widths) and a tall document
-   * accumulates more of that drift than a short one. A flat 8px was enough for
-   * the 13in GBP page and short by a hair on the 31in campaign page, which put
-   * it on two sheets. 1% plus 24px covers both, and blank tail on a
-   * content-sized page costs nothing next to an unwanted second page.
+   * It had been raised three times — 8px flat, then 1% + 24, then 3% + 48, then
+   * +72 — each time because MW's export came back on two sheets. Every one of
+   * those raises was treating a symptom: the estimate was SHORT because
+   * `print-prep` never applied print's ten-row table cap, so the measurement
+   * counted seventeen rows where the sheet printed ten. The comments even name
+   * the pattern — "the drift scales with height and with row count" — which is
+   * a row bug, not a rounding one, and no constant can cover it.
+   *
+   * The cap is mirrored now, along with the printed chart height and the
+   * hidden app chrome, and the estimate OVER-shoots by ~280px on the fixture
+   * instead of falling short. Slack stacked on top of an over-estimate is
+   * simply blank tail, which is what MW asked to be rid of.
+   *
+   * IF A SECOND SHEET EVER COMES BACK, this is the first thing to raise — but
+   * check the mirrors first, because a shortfall now means print grew something
+   * `pp-measure` does not know about, and raising slack would hide it again.
    */
-  /**
-   * 3% PLUS 48px. MW's export was still two pages at 1% + 24px on a document a
-   * couple of inches taller than my fixture — the drift scales with height and
-   * with row count, and I cannot reproduce his exact content. Blank tail on a
-   * content-sized page is free; a second sheet is not.
-   */
-  // +72px, not +48: MW's last card was being shaved by a few pixels at the
-  // bottom edge. Over-reserving is invisible; a clipped card is not.
-  const tall = Math.ceil(h * 1.03) + 72;
+  const tall = Math.ceil(h * 1.01) + 24;
   st.textContent = '@media print{@page{size:13.333in ' + (tall / 96).toFixed(2) + 'in;margin:0;}}';
 }
 
@@ -10830,7 +10874,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.289.0';
+const CLIENT_BUILD = '3.290.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

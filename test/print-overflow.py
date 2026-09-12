@@ -478,10 +478,13 @@ else:
         else:
             tail = (sheet - printed) / sheet * 100
             # THE TAIL IS THE COMPLAINT, not just the spill (MW: "pdf document
-            # height ... too much blank space at the bottom"). The estimate is
-            # taken on screen and cannot be exact, so this is a ceiling, not a
-            # target — but an unbounded tail is how a 7-page export hid.
-            if tail > 30:
+            # height ... too much blank space at the bottom", then "now pdf, fix
+            # the empty space"). Tightened 30 -> 15 in v3.290.0, once the row
+            # cap, chart height and app chrome were mirrored into the estimate
+            # and the fixture came down from 23% to about 6%. A ceiling, not a
+            # target — the estimate is taken on screen and cannot be exact —
+            # but a loose ceiling is how a quarter-blank sheet passed.
+            if tail > 10:
                 cbad.append(f"{round(tail)}% of the sheet is blank")
                 print(f"  !! content {round(printed)}px on a {round(sheet)}px sheet "
                       f"— {round(tail)}% blank tail, the sheet is over-sized")
