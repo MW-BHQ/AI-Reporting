@@ -5674,22 +5674,6 @@ function renderCampaignBody(d) {
           <div class="sub">${t.purchases?num(t.purchases)+' purchases':''}</div></div>`);
       }
       /**
-       * Bounce leads because MW asked for it, but GA4 counts a session as
-       * engaged if it lasted ten seconds, saw two pages OR fired a key event —
-       * so bounce is `1 - engagement rate` and the funnel already shows
-       * Engaged. The sub-line carries what does not restate anything.
-       */
-      if (!q || !q.available) {
-        cards.push(`<div class="stat card"><div class="lab">Bounce rate</div>
-          <div class="val na">\u2014</div><div class="sub">engagement metrics unavailable</div></div>`);
-      } else {
-        const secs = Math.round(q.avgEngagedSec);
-        const dur = secs >= 60 ? `${Math.floor(secs/60)}m ${String(secs%60).padStart(2,'0')}s` : `${secs}s`;
-        cards.push(`<div class="stat card"><div class="lab">Bounce rate</div>
-          <div class="val" style="color:${q.bounceRate>0.7?'var(--rose)':'var(--ink)'}">${num(q.bounceRate*100,{dp:1})}%</div>
-          <div class="sub">${num(q.pagesPerVisit,{dp:1})} pages/visit \u00b7 ${esc(dur)} engaged</div></div>`);
-      }
-      /**
        * SCROLL DEPTH, and a single threshold is NOT an average. Enhanced
        * measurement alone fires one `scroll` at 90%, so a mean would read 90
        * forever and look like a healthy page. With one threshold the reach at
@@ -5725,8 +5709,8 @@ function renderCampaignBody(d) {
       if (q && q.available && q.engagement) {
         const e = q.engagement;
         cards.push(`<div class="stat card"><div class="lab">Engaged page views</div>
-          <div class="val" style="color:${e.ofViews<0.3?'var(--rose)':'var(--ink)'}">${num(e.ofViews*100,{dp:0})}%</div>
-          <div class="sub">of page views \u00b7 ${num(e.events)} fired it</div></div>`);
+          <div class="val" style="color:${e.ofViews<0.3?'var(--rose)':'var(--ink)'}">${num(e.events)}</div>
+          <div class="sub">${num(e.ofViews*100,{dp:0})}% of page views</div></div>`);
       } else if (q && q.available && q.scrollDepth != null) {
         const r = q.scrollReach;
         cards.push(`<div class="stat card"><div class="lab">Avg. scroll depth</div>
@@ -5738,6 +5722,27 @@ function renderCampaignBody(d) {
         cards.push(`<div class="stat card"><div class="lab">Scrolled ${num(r.percent)}%</div>
           <div class="val" style="color:${r.ofViews<0.3?'var(--rose)':'var(--ink)'}">${num(r.ofViews*100,{dp:0})}%</div>
           <div class="sub">of page views \u00b7 ${num(r.events)} reached it</div></div>`);
+      }
+      /**
+       * BOUNCE SITS AFTER ENGAGED PAGE VIEWS (MW: "swap the position of engage
+       * and bounce cards"). The two are the same question from opposite ends,
+       * and the positive one reads first.
+       *
+       * GA4 counts a session as engaged if it lasted ten seconds, saw two pages
+       * OR fired a key event — so bounce is `1 - engagement rate`, and the
+       * funnel already shows Engaged. The sub-line carries only what does not
+       * restate something already on the slide: `pages/visit` was removed at
+       * MW's request because the funnel states it.
+       */
+      if (!q || !q.available) {
+        cards.push(`<div class="stat card"><div class="lab">Bounce rate</div>
+          <div class="val na">\u2014</div><div class="sub">engagement metrics unavailable</div></div>`);
+      } else {
+        const secs = Math.round(q.avgEngagedSec);
+        const dur = secs >= 60 ? `${Math.floor(secs/60)}m ${String(secs%60).padStart(2,'0')}s` : `${secs}s`;
+        cards.push(`<div class="stat card"><div class="lab">Bounce rate</div>
+          <div class="val" style="color:${q.bounceRate>0.7?'var(--rose)':'var(--ink)'}">${num(q.bounceRate*100,{dp:1})}%</div>
+          <div class="sub">${esc(dur)} engaged</div></div>`);
       }
       return `<div class="grid g-${Math.min(6, cards.length)} mt">${cards.join('')}</div>`;
     })()}
@@ -5899,9 +5904,6 @@ function renderCampaignBody(d) {
               <td class="num">${d.totals&&d.totals.visits?num((r.clicks/d.totals.visits)*100,{dp:1})+'%':'\u2014'}</td>
             </tr>`).join('')}
             </tbody></table>`:`<div class="note" style="margin-top:0;">No outbound clicks recorded \u2014 nobody left the page for LINE or a map.</div>`}
-            ${(lc.notMeasured||[]).length?`<div class="note" style="margin-top:10px;">
-              <b>${lc.notMeasured.map(esc).join(' and ')} not measured.</b> GA4 only records a click when the link leads to another domain, and <code>tel:</code> and <code>mailto:</code> have none \u2014 so taps on the phone number are absent here rather than zero. They need a GTM tag to appear.
-            </div>`:''}
           </div>
         </div>
       </div>
@@ -10828,7 +10830,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.288.0';
+const CLIENT_BUILD = '3.289.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

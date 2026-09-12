@@ -265,9 +265,19 @@ with sync_playwright() as p:
              * from the page while every payload check stayed green.
              */
             qualityCard: (() => {
-              const labs = [...document.querySelectorAll('.stat.card .lab')]
-                .map((l) => l.textContent.trim());
-              return labs.find((l) => /engaged page views|scroll/i.test(l)) || null;
+              const cards = [...document.querySelectorAll('.stat.card')].map((c) => {
+                const g = (sel) => { const e = c.querySelector(sel); return e ? e.textContent.trim() : ''; };
+                return { lab: g('.lab'), val: g('.val'), sub: g('.sub') };
+              });
+              const eng = cards.findIndex((c) => /engaged page views/i.test(c.lab));
+              const bounce = cards.findIndex((c) => /bounce rate/i.test(c.lab));
+              return {
+                label: (cards.find((c) => /engaged page views|scroll/i.test(c.lab)) || {}).lab || null,
+                engIdx: eng, bounceIdx: bounce,
+                engVal: eng >= 0 ? cards[eng].val : null,
+                engSub: eng >= 0 ? cards[eng].sub : null,
+                bounceSub: bounce >= 0 ? cards[bounce].sub : null,
+              };
             })(),
             bodyKids: (() => {
               const cb = document.getElementById('campBody');
@@ -417,13 +427,28 @@ else:
     else:
         print("  every printed row was visible to the measurement  ok")
 
-    qc = cf.get("qualityCard")
-    if qc != "Engaged page views":
-        cbad.append(f"quality headline card reads {qc!r}, not 'Engaged page views'")
-        print(f"  !! the quality card renders {qc!r} — the engagement figure is "
-              f"on the payload but not on the page")
+    qc = cf.get("qualityCard") or {}
+    if qc.get("label") != "Engaged page views":
+        cbad.append(f"quality headline card reads {qc.get('label')!r}, not 'Engaged page views'")
+        print(f"  !! the quality card renders {qc.get('label')!r} — the engagement "
+              f"figure is on the payload but not on the page")
+    # ENGAGED BEFORE BOUNCE (MW: "swap the position of engage and bounce cards").
+    elif qc["engIdx"] < 0 or qc["bounceIdx"] < 0 or qc["engIdx"] > qc["bounceIdx"]:
+        cbad.append("engaged page views must sit before bounce rate")
+        print(f"  !! card order is engaged={qc['engIdx']} bounce={qc['bounceIdx']} "
+              f"— the positive figure reads second")
+    # THE COUNT IS THE HEADLINE, the share is the sub-line (MW: "show actual
+    # number in big number, and percentage move to small foot note").
+    elif "%" in (qc["engVal"] or "") or "%" not in (qc["engSub"] or ""):
+        cbad.append("engaged page views shows a percentage as its headline")
+        print(f"  !! engaged card reads val={qc['engVal']!r} sub={qc['engSub']!r} "
+              f"— the count belongs in the big number")
+    # `pages/visit` was removed at MW's request; the funnel already states it.
+    elif "pages/visit" in (qc["bounceSub"] or ""):
+        cbad.append("bounce sub-line still carries pages/visit")
+        print(f"  !! bounce sub-line reads {qc['bounceSub']!r}")
     else:
-        print("  quality card shows engaged page views  ok")
+        print(f"  engaged ({qc['engVal']}) before bounce, share in the sub-line  ok")
 
     bk = cf.get("bodyKids")
     if not bk:

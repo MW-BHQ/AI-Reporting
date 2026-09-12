@@ -1,5 +1,45 @@
 ### Recent (August 2026)
 
+**v3.289.0 — four card corrections from MW, all on the campaign quality row.**
+
+1. **Engaged page views moves ahead of bounce rate** ("swap the position of
+   engage and bounce cards"). The two are the same question from opposite ends
+   and the positive one now reads first.
+
+2. **The count is the headline, the share is the sub-line** ("show actual number
+   in big number, and percentage move to small foot note"). `60` over
+   `6% of page views`, where v3.288 had it the other way round.
+
+3. **`pages/visit` removed from the bounce sub-line** ("remove `1.1
+   pages/visit` keep `avg 6s time spent`"), leaving `1s engaged`. The funnel
+   already states pages per visit, and the sub-line's job is to carry what the
+   slide does not say elsewhere.
+
+4. **The `tel:`/`mailto:` "not measured" footnote is gone** ("remove footer:
+   Email not measured... one day it will show - right? because i just change the
+   rule in gtm"). He changed `Click | email` from
+   `Click URL contains info@bangkokhospital.com` to `contains mailto:`, so the
+   note's own remedy — "they need a GTM tag to appear" — has been carried out.
+
+   THE NOTE WAS ALSO WRONG about `tel:`. It claimed GA4 records no click for
+   `tel:` or `mailto:` because they leave no domain, but this container has
+   fired `Click | tel` all along, which is where the phone table's numbers come
+   from. It was describing a default GA4 property, not this one.
+
+**Guards, on the RENDERED page rather than the payload.** `print-overflow.py`
+reads the quality cards out of the DOM and asserts engaged sits before bounce,
+that the headline is not a percentage while the sub-line is, and that
+`pages/visit` has not come back. Layout instructions were previously unguarded
+entirely — the v3.284 scroll removal is what that costs.
+
+**Negative tests, both confirmed failing before revert:** the percentage put
+back as the headline; `pages/visit` put back in the bounce sub-line.
+
+**Still open:** the email `(redacted)` value. v3.288's
+`campaign_click_urls_scanned` logs the raw `Click_URL` values, and MW's GTM
+change means far more of them will now arrive — the next deploy's log settles
+whether the addresses come through intact.
+
 **v3.288.0 — engaged page views replace the scroll headline; the email
 diagnosis gets instrumented instead of guessed at a third time.**
 
