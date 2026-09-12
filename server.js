@@ -4056,6 +4056,31 @@ async function buildCampaign(code, from, to) {
       logJson("WARNING", "campaign_quality_unavailable", { error: String(e.message || e) });
       return null;
     }),
+    /**
+     * SCROLL DEPTH (MW: "we have it in our event").
+     *
+     * `percentScrolled` is a BUILT-IN GA4 dimension, not a custom one — it
+     * needs no registration, which matters because the only registered custom
+     * dimensions on this property are the four Click_* ones.
+     *
+     * NO eventName FILTER, deliberately. Enhanced measurement populates this
+     * from `scroll`, but a GTM Scroll Depth trigger can send any name, and
+     * there is one in the container. Filtering on a guessed name would return
+     * nothing and look like "nobody scrolls". The dimension is blank on every
+     * event that is not a scroll, so requiring a numeric value is the filter.
+     */
+    ga4Scroll: ga4RunReport({
+      dimensions: ["sessionManualCampaignName", "percentScrolled"],
+      metrics: ["eventCount"],
+      from, to, limit: 2000,
+      dimensionFilter: withBranch({
+        filter: { fieldName: "sessionManualCampaignName",
+          stringFilter: { matchType: "BEGINS_WITH", value: code, caseSensitive: false } },
+      }),
+    }).catch((e) => {
+      logJson("WARNING", "campaign_scroll_unavailable", { error: String(e.message || e) });
+      return null;
+    }),
     // Organic posts, matched to the campaign by the short link in their text.
     // The pull window is widened to always include the campaign's code date
     // plus 45 days: posts are returned by publish date, so a post published
@@ -5016,6 +5041,43 @@ async function buildCampaign(code, from, to) {
          */
         bounceRate: 1 - (eng / sess),
         pagesPerVisit: views / sess,
+        ...(() => {
+          /**
+           * AVERAGE SCROLL DEPTH, weighted by how many scroll events reached
+           * each threshold — a plain mean of the thresholds would report the
+           * same number whatever the traffic did.
+           *
+           * ONE THRESHOLD IS NOT AN AVERAGE. Enhanced measurement on its own
+           * fires a single `scroll` at 90%, so the "average" would be exactly
+           * 90 forever, which looks like a healthy figure and is really just
+           * the constant. When only one threshold comes back the depth is
+           * reported as null and the reach at that threshold is given instead,
+           * which is the honest form of the same fact.
+           */
+          const rows2 = data.ga4Scroll;
+          if (rows2 === null) return { scrollDepth: null, scrollThresholds: 0 };
+          let wsum = 0, ev = 0;
+          const seen = new Map();
+          for (const r of rows2) {
+            if (!norm(r.sessionManualCampaignName).startsWith(needle)) continue;
+            const pctStr = String(r.percentScrolled || "").trim();
+            if (!/^\d+(\.\d+)?$/.test(pctStr)) continue;
+            const pct = Number(pctStr), c = n(r.eventCount);
+            if (!c) continue;
+            wsum += pct * c; ev += c;
+            seen.set(pct, (seen.get(pct) || 0) + c);
+          }
+          if (!ev) return { scrollDepth: null, scrollThresholds: 0 };
+          const thresholds = [...seen.keys()].sort((a, b) => a - b);
+          return {
+            scrollThresholds: thresholds.length,
+            scrollDepth: thresholds.length > 1 ? wsum / ev : null,
+            // The single-threshold fallback: what share of visits got that far.
+            scrollOnly: thresholds.length === 1
+              ? { percent: thresholds[0], events: ev, ofVisits: ev / sess } : null,
+            scrollEvents: ev,
+          };
+        })(),
         // Seconds of ENGAGED time over all sessions, not over engaged ones:
         // dividing by engaged sessions flatters a campaign whose traffic mostly
         // bounced, which is the opposite of what a quality figure should do.

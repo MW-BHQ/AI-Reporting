@@ -156,7 +156,11 @@ expect_field "lc internal in urls" "$CAMP1" "${LC}.urls.some(u=>u.internal===tru
 # fixture's LINE arrives 3x from the link event and 2x from the custom event, so
 # max keeps 300. Summing gives 500; dropping the link rows gives 200.
 expect_field "lc chat source"      "$CAMP1" "${LC}.chatSource==='click_chat_bubble'?'ok':undefined"
-expect_field "lc line keeps max"   "$CAMP1" "${LC}.outbound.rows.find(r=>r.label==='LINE').clicks===300?300:undefined"
+# 400 = one body LINE link (100) plus the bubble's reconciled 300, which is the
+# MAX of its link rows (300) and its custom-event rows (200). Summing those two
+# gives 600; dropping the link rows gives 300. Was 300 before the fixture gained
+# a percent-encoded LINE deep link for the URL-decoding test.
+expect_field "lc line keeps max"   "$CAMP1" "${LC}.outbound.rows.find(r=>r.label==='LINE').clicks===400?400:undefined"
 # OPENING THE BUBBLE IS NOT A DESTINATION. It arrives in BOTH pulls, and
 # filtering only one put it in "On-page widget" and inflated the total.
 expect_field "lc opens reported"   "$CAMP1" "${LC}.bubbleOpens===100?100:undefined"
@@ -199,6 +203,18 @@ expect_field "q bounce in range"   "$CAMP1" "${Q}.bounceRate>=0&&${Q}.bounceRate
 expect_field "q pages per visit"   "$CAMP1" "${Q}.pagesPerVisit>0?'ok':undefined"
 expect_field "q engaged seconds"   "$CAMP1" "${Q}.avgEngagedSec>=0?'ok':undefined"
 
+echo "--- campaign: average scroll depth (v3.283.0) ---"
+# WEIGHTED BY HOW MANY EVENTS REACHED EACH THRESHOLD, not a plain mean of the
+# thresholds. The fixture drops off with depth — 400 reach 25%, 100 reach 90% —
+# so the weighted answer is 49% and the plain mean is 60%. Equal counts cannot
+# tell the two apart, which is why the fixture is uneven.
+expect_field "q scroll weighted"   "$CAMP1" "Math.round(${Q}.scrollDepth)===49?49:undefined"
+expect_field "q scroll thresholds" "$CAMP1" "${Q}.scrollThresholds===4?4:undefined"
+# ONE THRESHOLD IS NOT AN AVERAGE. Enhanced measurement alone fires a single
+# scroll at 90%, so a mean would read 90 forever and look healthy. With four
+# thresholds present the single-threshold fallback must stay null.
+expect_field "q scroll not single" "$CAMP1" "${Q}.scrollOnly===null?'null':undefined"
+
 echo "--- campaign: contact links, the only source that sees a phone tap ---"
 CL="d.linkClicks.contactLinks"
 expect_field "cl available"        "$CAMP1" "${CL}.available===true?'ok':undefined"
@@ -231,7 +247,7 @@ expect_field "ob has email"        "$CAMP1" "${LC}.outbound.rows.some(r=>r.label
 # LINE FIRES BOTH TAGS ON ONE CLICK. The link event sees 300, the contact-link
 # tag sees 100; the HIGHER is taken, never the sum. 400 here means they were
 # added and every chat channel is inflated.
-expect_field "ob line not doubled" "$CAMP1" "${LC}.outbound.rows.find(r=>r.label==='LINE').clicks===300?300:undefined"
+expect_field "ob line not doubled" "$CAMP1" "${LC}.outbound.rows.find(r=>r.label==='LINE').clicks===400?400:undefined"
 expect_field "ob rows sum"         "$CAMP1" "${LC}.outbound.rows.reduce((a,r)=>a+r.clicks,0)===${LC}.outbound.total?'ok':undefined"
 expect_field "lc no widget row"    "$CAMP1" "${LC}.outbound.rows.some(r=>/widget/i.test(r.label))?undefined:'ok'"
 

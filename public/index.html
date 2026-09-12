@@ -5611,47 +5611,64 @@ function renderCampaignBody(d) {
         <div class="sub">${t.contacts?num(t.contacts)+' contact-us events':'no contact events'}</div></div>
       `}
     </div>
-    <div class="grid g-6 mt">
-      <div class="stat card"><div class="lab">Variants matched</div><div class="val">${num(d.matchedVariants)}</div></div>
-      <div class="stat card"><div class="lab">Impressions</div><div class="val ${isNA(t.impressions)?'na':''}">${num(t.impressions)}</div>
-        <div class="sub">${!isNA(t.paidImpressions)||!isNA(t.organicImpressions)?`${num(t.paidImpressions)} paid · ${num(t.organicImpressions)} organic`:''}</div></div>
-      <div class="stat card"><div class="lab">Visits</div><div class="val">${num(t.visits)}</div>
-        <div class="sub">${t.visitRate!=null?num(t.visitRate,{pct:true,dp:2})+' of impressions':''}</div></div>
-      <div class="stat card"><div class="lab">Key events</div><div class="val">${num(t.keyEvents)}</div>
-        <div class="sub">${t.keyEventRate!=null?num(t.keyEventRate,{pct:true})+' of visits':''}</div></div>
-      <div class="stat card"><div class="lab">Revenue</div><div class="val">${num(t.revenue,{money:true})}</div>
-        <div class="sub">${t.purchases?num(t.purchases)+' purchases':''}</div></div>
-      ${(() => {
-        /**
-         * PAGE QUALITY (MW: "we don't have a scorecard to tell the quality of
-         * the campaign page yet. maybe bounce rate?").
-         *
-         * Bounce rate leads because he asked for it and executives read it,
-         * but on its own it is close to a restatement: GA4 counts a session as
-         * ENGAGED if it lasted ten seconds, saw two pages, OR fired a key
-         * event, so bounce is `1 - engagement rate` and the funnel above
-         * already shows Engaged. On a campaign built to fire key events it is
-         * partly circular by construction.
-         *
-         * So the sub-line carries the two figures that restate nothing: how
-         * many pages a visit saw, and how long it was actually engaged. Those
-         * separate "they arrived and left" from "they read the page".
-         *
-         * A dash rather than a zero when the pull failed. 0% bounce would read
-         * as a perfect landing page.
-         */
-        const q = d.quality;
-        if (!q || !q.available) {
-          return `<div class="stat card"><div class="lab">Bounce rate</div>
-            <div class="val na">\u2014</div>
-            <div class="sub">engagement metrics unavailable this run</div></div>`;
-        }
+    ${(() => {
+      /**
+       * THE HEADER ROW IS BUILT, NOT LAID OUT BY HAND (MW: remove Variants
+       * matched, hide Revenue when zero).
+       *
+       * With cards appearing and disappearing, a fixed `g-5` leaves a hole or
+       * squeezes. The grid class follows the number of cards that survived.
+       *
+       * REVENUE HIDES ONLY AT EXACTLY ZERO. A campaign that took THB 0 and one
+       * whose revenue pull failed are different facts, and `isNA` already
+       * distinguishes them — a failed pull keeps the card so the dash is
+       * visible rather than the row silently shrinking.
+       */
+      const q = d.quality;
+      const cards = [];
+      cards.push(`<div class="stat card"><div class="lab">Impressions</div><div class="val ${isNA(t.impressions)?'na':''}">${num(t.impressions)}</div>
+        <div class="sub">${!isNA(t.paidImpressions)||!isNA(t.organicImpressions)?`${num(t.paidImpressions)} paid \u00b7 ${num(t.organicImpressions)} organic`:''}</div></div>`);
+      cards.push(`<div class="stat card"><div class="lab">Visits</div><div class="val">${num(t.visits)}</div>
+        <div class="sub">${t.visitRate!=null?num(t.visitRate,{pct:true,dp:2})+' of impressions':''}</div></div>`);
+      cards.push(`<div class="stat card"><div class="lab">Key events</div><div class="val">${num(t.keyEvents)}</div>
+        <div class="sub">${t.keyEventRate!=null?num(t.keyEventRate,{pct:true})+' of visits':''}</div></div>`);
+      if (isNA(t.revenue) || t.revenue > 0) {
+        cards.push(`<div class="stat card"><div class="lab">Revenue</div><div class="val ${isNA(t.revenue)?'na':''}">${num(t.revenue,{money:true})}</div>
+          <div class="sub">${t.purchases?num(t.purchases)+' purchases':''}</div></div>`);
+      }
+      /**
+       * Bounce leads because MW asked for it, but GA4 counts a session as
+       * engaged if it lasted ten seconds, saw two pages OR fired a key event —
+       * so bounce is `1 - engagement rate` and the funnel already shows
+       * Engaged. The sub-line carries what does not restate anything.
+       */
+      if (!q || !q.available) {
+        cards.push(`<div class="stat card"><div class="lab">Bounce rate</div>
+          <div class="val na">\u2014</div><div class="sub">engagement metrics unavailable</div></div>`);
+      } else {
         const secs = Math.round(q.avgEngagedSec);
         const dur = secs >= 60 ? `${Math.floor(secs/60)}m ${String(secs%60).padStart(2,'0')}s` : `${secs}s`;
-        return `<div class="stat card"><div class="lab">Bounce rate</div>
+        cards.push(`<div class="stat card"><div class="lab">Bounce rate</div>
           <div class="val" style="color:${q.bounceRate>0.7?'var(--rose)':'var(--ink)'}">${num(q.bounceRate*100,{dp:1})}%</div>
-          <div class="sub">${num(q.pagesPerVisit,{dp:1})} pages/visit \u00b7 ${esc(dur)} engaged</div></div>`;
-      })()}
+          <div class="sub">${num(q.pagesPerVisit,{dp:1})} pages/visit \u00b7 ${esc(dur)} engaged</div></div>`);
+      }
+      /**
+       * SCROLL DEPTH, and a single threshold is NOT an average. Enhanced
+       * measurement alone fires one `scroll` at 90%, so a mean would read 90
+       * forever and look like a healthy page. With one threshold the reach at
+       * that depth is shown instead, which is the honest form of the same fact.
+       */
+      if (q && q.available && q.scrollDepth != null) {
+        cards.push(`<div class="stat card"><div class="lab">Avg scroll depth</div>
+          <div class="val" style="color:${q.scrollDepth<40?'var(--rose)':'var(--ink)'}">${num(q.scrollDepth,{dp:0})}%</div>
+          <div class="sub">${num(q.scrollEvents)} scroll events \u00b7 ${num(q.scrollThresholds)} thresholds</div></div>`);
+      } else if (q && q.available && q.scrollOnly) {
+        cards.push(`<div class="stat card"><div class="lab">Reached ${num(q.scrollOnly.percent)}%</div>
+          <div class="val">${num(q.scrollOnly.ofVisits*100,{dp:0})}%</div>
+          <div class="sub">of visits \u00b7 only one threshold is tracked, so there is no average</div></div>`);
+      }
+      return `<div class="grid g-${Math.min(6, cards.length)} mt">${cards.join('')}</div>`;
+    })()}
     </div>
 
     <div class="grid g-2-1 mt">
@@ -5879,14 +5896,35 @@ function renderCampaignBody(d) {
          */
         const out = (lc.urls || []).filter(u => !u.internal);
         if (!out.length) return '';
-        const dialish = (u) => /^(tel:|mailto:)/i.test(u);
+        /**
+         * DECODED FOR READING, RAW FOR CLICKING (MW: "if you found escaped text
+         * like link, please type to unescape it so users know the meaning").
+         *
+         * A LINE deep link arrives as
+         * `line.me/R/oaMessage/@554fiafl/?Surgery%20Master%2C%20%E0%B8%AA…` and
+         * the Thai after the campaign name is unreadable. Decoded it says what
+         * the message actually is.
+         *
+         * The `href` keeps the ORIGINAL string. Decoding is for the eye only —
+         * a decoded URL is not always a valid one, and re-encoding it wrongly
+         * would break the link that currently works.
+         *
+         * `decodeURIComponent` throws on a malformed sequence (a stray `%` is
+         * enough), so a failure falls back to the raw text rather than taking
+         * the card down.
+         */
+        const readable = (u) => {
+          try { const dec = decodeURIComponent(String(u).replace(/\+/g, ' ')); return dec || u; }
+          catch (e) { return u; }
+        };
+        /* `tel:` and `mailto:` are links like everything else now (MW: "please
+           dont redacted the email, it's our internal department"). They were
+           plain text to avoid a mis-click dialling the switchboard; his call. */
         return `<div class="card mt">
           <h2>Outbound Links</h2>
           <table><thead><tr><th>Link</th><th>Host</th><th class="num">Clicks</th><th class="num">% of visits</th></tr></thead><tbody>
           ${out.map(u=>`<tr>
-            <td class="trunc" title="${esc(u.url)}">${dialish(u.url)
-              ? `<span class="i18n">${esc(u.url)}</span>`
-              : `<a class="i18n" href="${esc(u.url)}" target="_blank" rel="noopener" style="color:var(--violet);text-decoration:none;word-break:break-all;">${esc(u.url)}</a>`}</td>
+            <td class="trunc" title="${esc(u.url)}"><a class="i18n" href="${esc(u.url)}"${/^(tel:|mailto:)/i.test(u.url)?'':' target="_blank" rel="noopener"'} style="color:var(--violet);text-decoration:none;word-break:break-all;">${esc(readable(u.url))}</a></td>
             <td>${esc(u.host||'\u2014')}</td>
             <td class="num">${num(u.clicks)}</td>
             <td class="num">${d.totals&&d.totals.visits?num((u.clicks/d.totals.visits)*100,{dp:1})+'%':'\u2014'}</td>
@@ -10688,7 +10726,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.282.0';
+const CLIENT_BUILD = '3.283.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

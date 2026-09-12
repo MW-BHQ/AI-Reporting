@@ -1,5 +1,47 @@
 ### Recent (August 2026)
 
+**v3.283.0 — five from MW: decoded links, `mailto:` clickable, Variants matched
+gone, Revenue hidden at zero, average scroll depth.**
+
+**Percent-encoded links are decoded FOR READING, raw FOR CLICKING.** A LINE deep
+link arrives as `?Surgery%20Master%2C%20%E0%B8%AA…`; decoded it says
+`?Surgery Master, สอบถาม`. The `href` keeps the ORIGINAL string — a decoded URL
+is not always a valid one and re-encoding it wrongly would break a link that
+works. `decodeURIComponent` throws on a malformed sequence, so a failure falls
+back to the raw text rather than taking the card down.
+
+**`tel:` and `mailto:` are links again.** I had made them plain text to stop a
+mis-click dialling the switchboard; MW's call, and the address is an internal
+department.
+
+**Variants matched removed. Revenue hidden at exactly zero** — a campaign that
+took THB 0 and one whose revenue pull FAILED are different facts, and `isNA`
+already tells them apart, so a failed pull keeps the card and shows the dash.
+The header row is now built as a list with the grid class following the count,
+because a fixed `g-5` leaves a hole when a card drops out.
+
+**Average scroll depth**, from the BUILT-IN `percentScrolled` dimension — no
+custom-dimension registration, which matters since the only registered ones on
+this property are the four `Click_*`.
+
+**No `eventName` filter on that pull, deliberately.** Enhanced measurement
+populates it from `scroll`, but the container has a GTM Scroll Depth trigger
+that can send any name, and filtering on a guessed name would return nothing and
+read as "nobody scrolls". The dimension is blank on non-scroll events, so
+requiring a numeric value is the filter.
+
+**Weighted by events per threshold, and ONE THRESHOLD IS NOT AN AVERAGE.**
+Enhanced measurement alone fires a single `scroll` at 90%, so a mean would read
+90 forever and look like a healthy page; with one threshold the card shows the
+reach at that depth instead. The fixture drops off with depth (400 reach 25%,
+100 reach 90%) so the weighted answer is 49% against a plain mean of 60% —
+equal counts cannot tell those apart, which is the mistake this invites.
+
+LINE's pinned figure moved 300 → 400 because the fixture gained the encoded
+LINE deep link. Both merge guards still fail when the sources are summed.
+
+### Recent (August 2026)
+
 **v3.282.0 — a page-quality scorecard on the campaign header row.**
 
 MW: "we don't have a scorecard to tell the quality of the campaign page yet …

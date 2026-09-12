@@ -352,6 +352,14 @@ function ga4Report(body) {
           ? (String(page).indexOf("/bangkok-bone-brain/") >= 0
                 && String(vals.join(" ")).indexOf("telegram") >= 0 ? "0"
              : page === "/th/somewhere-else/page" ? "9997" : "100")
+        /**
+         * SCROLL EVENTS FALL OFF WITH DEPTH, as they do in reality: 400 reach
+         * 25%, 100 reach 90%. Unequal on purpose — with equal counts the
+         * weighted average equals the plain mean of the thresholds and a
+         * mis-weighted implementation passes.
+         */
+        : (m === "eventCount" && dims.indexOf("percentScrolled") >= 0)
+          ? ({ "25": "400", "50": "300", "75": "200", "90": "100" }[vals[dims.indexOf("percentScrolled")]] || "0")
         : (m === "eventCount" && weight !== undefined) ? String(weight * 10)
         : (m === "eventCount" && page && PAGE_ACTIONS[page] !== undefined) ? String(PAGE_ACTIONS[page])
         : "100" })),
@@ -396,6 +404,12 @@ function ga4Report(body) {
     ["", "https://maps.app.goo.gl/bangkokhospital"],
     ["", "https://www.youtube.com/@bangkokhospital"],
     ["", "https://partner-booking.example.co.th/appt?ref=bgh"],
+    /**
+     * A PERCENT-ENCODED LINE DEEP LINK, copied in shape from the real ones MW
+     * screenshotted. Unreadable raw; decoded it says "Surgery Master,
+     * \u0e2a\u0e2d\u0e1a\u0e16\u0e32\u0e21". Without a row like this the decode path never runs.
+     */
+    ["", "https://line.me/R/oaMessage/@554fiafl/?Surgery%20Master%2C%20%E0%B8%AA%E0%B8%AD%E0%B8%9A%E0%B8%96%E0%B8%B2%E0%B8%A1"],
     ["", "https://www.bangkokhospital.com/th/bangkok/appointment"],
     ["", "https://www.bangkokhospital.com/en/bangkok/doctor/dr-somchai"],
     ["", "/th/bangkok/package/heart-screening"],
@@ -510,6 +524,13 @@ function ga4Report(body) {
        *     CONTAINS filter lets through and the code must reject;
        *   - an external referrer, which must not be treated as a previous page.
        */
+      /**
+       * SCROLL THRESHOLDS. Four of them, with UNEQUAL weights supplied by the
+       * eventCount stub, so the weighted average differs from the plain mean of
+       * the thresholds — a fixture with equal weights cannot tell the two
+       * apart, which is the mistake this dimension invites.
+       */
+      : d === "percentScrolled" ? ["25", "50", "75", "90"]
       : d === "pageReferrer" ? [
           "https://www.bangkokhospital.com/th/bangkok/page/a",
           "https://www.bangkokhospital.com/th/bangkok/page/a-other",
