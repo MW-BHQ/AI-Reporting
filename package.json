@@ -1,6 +1,6 @@
 {
   "name": "bkh-cross-channel-dashboard",
-  "version": "3.285.0",
+  "version": "3.286.0",
   "description": "Bangkok Hospital cross-channel realtime marketing dashboard (Windsor.ai -> Cloud Run)",
   "main": "server.js",
   "engines": {

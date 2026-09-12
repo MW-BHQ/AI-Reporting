@@ -1815,6 +1815,35 @@
     body.pp-onepage .grid.g-2-1{grid-template-columns:2fr 1fr!important;}
     body.pp-onepage .slide.pn .gbp-row .grid.g-2-1{grid-template-columns:1fr!important;}
     body.print-prep{overflow:hidden!important;}
+    /**
+     * THE LAST TWO PRINT RULES THAT CHANGE HEIGHT, MIRRORED FOR THE MEASUREMENT
+     * ONLY (v3.286.0).
+     *
+     * `print-prep` mirrored the row reveal and the grid tracks but not these
+     * two, and together they were worth 1,673px on MW's campaign — the sheet
+     * came out 58.92in for 32in of content, a 23% blank tail on a page the
+     * export is supposed to fit exactly.
+     *
+     *   · THE CANVAS IS NOT WHAT PRINTS. `@media print` hides every
+     *     `.chart-wrap canvas` and shows the SVG twin in its place; on screen
+     *     the canvas is visible and the twin is not, so prep counted the
+     *     canvas's full height for a box that prints at the twin's.
+     *   · TABLE CELLS SHRINK. `.slide.pn td/th` print at 9px padding and 14px
+     *     type; on screen they are larger, and a campaign with four tables
+     *     accumulates the difference row by row.
+     *
+     * A SEPARATE CLASS FROM `print-prep`, added only around the measurement.
+     * `buildPrintSvgs` runs BEFORE `onePageIfAsked` and measures each wrapper to
+     * size the twin it emits — hiding the canvas for the whole prep pass would
+     * hand it a collapsed box and every printed chart would come out flat.
+     */
+    body.pp-measure .chart-wrap canvas{display:none!important;}
+    body.pp-measure .chart-svg{display:block!important;width:100%;height:100%;}
+    /* TABLES ARE DELIBERATELY NOT MIRRORED HERE. `.slide.pn td/th` prints at
+       9px/14px, and forcing that on screen matched the row height exactly but
+       made the DOCUMENT 107px taller overall — the cells are narrower under
+       prep, so the smaller type re-wraps into more lines than it saves. The
+       canvas swap is the mirror that pays. */
   }
   /**
    * A CANVAS MUST NOT HOLD ITS GRID TRACK OPEN.
@@ -5696,7 +5725,6 @@ function renderCampaignBody(d) {
       }
       return `<div class="grid g-${Math.min(6, cards.length)} mt">${cards.join('')}</div>`;
     })()}
-    </div>
 
     <div class="grid g-2-1 mt">
       <div class="card">
@@ -10603,11 +10631,36 @@ function onePageIfAsked() {
    * visible content, so the page ended a long way below the last thing on it.
    * The bottom edge of the last slide IS where the content ends.
    */
+  /**
+   * ...AND THE DEEPEST CONTENT, WHICHEVER IS LOWER DOWN (v3.286.0).
+   *
+   * "The last slide is where the content ends" is only true while every section
+   * IS inside a slide. On the campaign view a stray `</div>` had been closing
+   * the slide after three children, so this measured 534px of a 4,986px
+   * document and sized a 6.49in sheet — Chrome then paginated the rest into
+   * seven ragged pages. The stray tag is fixed, but the measurement should not
+   * have been able to miss 90% of a document and report nothing.
+   *
+   * So the taller of the two is used. The bottom of the deepest laid-out
+   * element is not `scrollHeight` and does not carry the trailing margin that
+   * made `scrollHeight` overshoot; it is the lowest edge anything actually
+   * occupies, which is what the sheet has to cover.
+   */
+  document.body.classList.add('pp-measure');
+  const rootTop = root.getBoundingClientRect().top;
   const slides = root.querySelectorAll('.slide');
   const last = slides[slides.length - 1];
-  const h = Math.max(400, Math.ceil(last
-    ? last.getBoundingClientRect().bottom - root.getBoundingClientRect().top
-    : root.scrollHeight));
+  const slideBottom = last ? last.getBoundingClientRect().bottom - rootTop : 0;
+  let deepest = 0;
+  for (const el of root.querySelectorAll('*')) {
+    const r = el.getBoundingClientRect();
+    // Zero-area and hidden nodes reserve nothing on the sheet.
+    if (r.height < 1 || r.width < 1) continue;
+    const b = r.bottom - rootTop;
+    if (b > deepest) deepest = b;
+  }
+  const h = Math.max(400, Math.ceil(Math.max(slideBottom, deepest) || root.scrollHeight));
+  document.body.classList.remove('pp-measure');
   // 96 CSS px to the inch, plus a little slack so a sub-pixel spill cannot
   // emit a second, near-empty page — the v3.162 lesson.
   /**
@@ -10753,7 +10806,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.285.0';
+const CLIENT_BUILD = '3.286.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

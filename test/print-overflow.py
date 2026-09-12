@@ -223,19 +223,49 @@ with sync_playwright() as p:
             bars: svg ? svg.querySelectorAll('rect[rx]').length : 0,
             canvasHidden: getComputedStyle(w.querySelector('canvas')).display === 'none',
             /**
-             * THE WHOLE SLIDE, measured in PRINT media. `onePageIfAsked` sizes
+             * THE WHOLE VIEW, measured in PRINT media. `onePageIfAsked` sizes
              * `@page` from a measurement taken on SCREEN under `print-prep`,
              * and the two disagree whenever a print-only rule changes the
              * layout — the `.adrow` reveal was worth 143px per collapsed row.
              * Anything the estimate misses spills onto a second sheet.
+             *
+             * MEASURED FROM `#viewRoot`, NOT FROM `w.closest('.slide')`. It used
+             * to walk up from the funnel to its slide and return 0 when there
+             * was not one — and there was not one, because a stray `</div>` in
+             * the campaign template had been closing the slide after three
+             * children. So this reported 0 on every run, `printed > sheet` was
+             * never true, and the check could not fail. Two decorative
+             * assertions were found this way in v3.284; this was a third.
              */
             printed: (() => {
-              const sl = w.closest('.slide');
-              if (!sl) return 0;
-              const kids = [...sl.children];
-              const lastKid = kids[kids.length - 1];
-              return Math.round(lastKid.getBoundingClientRect().bottom
-                                - sl.getBoundingClientRect().top);
+              const root = document.getElementById('viewRoot');
+              if (!root) return 0;
+              const rt = root.getBoundingClientRect().top;
+              let deepest = 0;
+              for (const el of root.querySelectorAll('*')) {
+                const r = el.getBoundingClientRect();
+                if (r.height < 1 || r.width < 1) continue;
+                const b = r.bottom - rt;
+                if (b > deepest) deepest = b;
+              }
+              return Math.round(deepest);
+            })(),
+            /**
+             * EVERY SECTION INSIDE THE SLIDE. `#campBody` holds exactly one
+             * element — the `slideShell` wrapper — and everything else is
+             * nested in it. A stray closing tag pops the later sections out as
+             * SIBLINGS, where they still render on screen and still print, but
+             * the one-page sizer cannot see them.
+             */
+            bodyKids: (() => {
+              const cb = document.getElementById('campBody');
+              if (!cb) return null;
+              const kids = [...cb.children];
+              return {
+                n: kids.length,
+                firstIsSlide: !!(kids[0] && kids[0].classList.contains('slide')),
+                strays: kids.slice(1).map((k) => k.tagName + '.' + String(k.className).slice(0, 30)),
+              };
             })(),
           };
         }""")
@@ -375,6 +405,17 @@ else:
     else:
         print("  every printed row was visible to the measurement  ok")
 
+    bk = cf.get("bodyKids")
+    if not bk:
+        cbad.append("no #campBody to measure")
+    elif bk["n"] != 1 or not bk["firstIsSlide"]:
+        cbad.append(f"campBody has {bk['n']} children — sections outside the slide")
+        print(f"  !! campBody holds {bk['n']} elements, not 1 — "
+              f"{', '.join(bk['strays'][:4])} sit OUTSIDE the slide, so the "
+              f"one-page sizer cannot see them")
+    else:
+        print("  every section is inside the slide  ok")
+
     m = re.search(r"size:[\d.]+in\s+([\d.]+)in", pageRule or "")
     if not m:
         cbad.append("no @page size rule was written for the campaign export")
@@ -382,14 +423,26 @@ else:
     else:
         sheet = float(m.group(1)) * 96          # CSS px to the inch
         printed = cf["printed"]
-        if printed > sheet:
+        if printed <= 0:
+            cbad.append("printed height measured 0 — the check is asserting nothing")
+            print("  !! printed height came back 0; this check cannot fail")
+        elif printed > sheet:
             cbad.append(f"content is {round(printed - sheet)}px taller than the sized sheet")
             print(f"  !! content prints {round(printed)}px against a {round(sheet)}px sheet "
                   f"— {round(printed - sheet)}px spills onto a second page")
         else:
             tail = (sheet - printed) / sheet * 100
-            print(f"  content {round(printed)}px on a {round(sheet)}px sheet, "
-                  f"{round(tail)}% blank tail  ok")
+            # THE TAIL IS THE COMPLAINT, not just the spill (MW: "pdf document
+            # height ... too much blank space at the bottom"). The estimate is
+            # taken on screen and cannot be exact, so this is a ceiling, not a
+            # target — but an unbounded tail is how a 7-page export hid.
+            if tail > 30:
+                cbad.append(f"{round(tail)}% of the sheet is blank")
+                print(f"  !! content {round(printed)}px on a {round(sheet)}px sheet "
+                      f"— {round(tail)}% blank tail, the sheet is over-sized")
+            else:
+                print(f"  content {round(printed)}px on a {round(sheet)}px sheet, "
+                      f"{round(tail)}% blank tail  ok")
 
 print(f"\n{len(cbad)} campaign funnel problem(s)")
 

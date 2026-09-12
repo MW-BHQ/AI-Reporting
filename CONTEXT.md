@@ -1,5 +1,64 @@
 ### Recent (August 2026)
 
+**v3.286.0 — a stray `</div>` was splitting the campaign export into seven
+ragged pages.**
+
+MW: "the pdf document height ... too much blank space at the bottom", Campaign
+Analysis.
+
+**The bug is one closing tag.** `campBody.innerHTML = slideShell(title, ...)`
+should produce ONE element — the slide — with every section nested inside it.
+An extra `</div>` after the header-card grid closed the slide after three
+children, and the remaining nine sections (the funnel row, all four tables, the
+link-click cards, Daily) parsed as SIBLINGS of the slide instead of contents of
+it. On screen this is invisible: the sections render, the spacing is identical,
+nothing errors.
+
+It is not invisible in print. `onePageIfAsked` sizes `@page` from the bottom of
+the LAST `.slide`, so it measured 534px of a 4,986px document and wrote a
+6.49in sheet. Chrome then paginated 32in of content into it: **seven pages**,
+each cut wherever the flow happened to land, most with a wedge of blank at the
+bottom. Fixing the tag returns the export to a single page.
+
+**The measurement should not have been able to miss 90% of a document.** "The
+last slide is where the content ends" holds only while every section is inside
+a slide, and nothing enforced that. It now takes the taller of the last slide's
+bottom and the deepest laid-out element in `#viewRoot`. That is NOT
+`scrollHeight` — the overshoot that made `scrollHeight` unusable was trailing
+margin and container padding, and the bottom edge of the deepest element
+carries neither. With the tag fixed the two agree; the max is there so the next
+stray tag costs a blank tail instead of six extra pages.
+
+**`pp-measure`: the canvas swap, mirrored for the measurement only.** Print
+hides every `.chart-wrap canvas` and shows the SVG twin; prep kept the canvas,
+so the estimate counted chart boxes at their on-screen height. Mirrored under a
+SEPARATE class rather than `print-prep`, because `buildPrintSvgs` runs first and
+measures each wrapper to size the twin it emits — hiding the canvas for the
+whole prep pass hands it a collapsed box and every printed chart comes out flat.
+
+Table cells are deliberately NOT mirrored. `.slide.pn td/th` prints at 9px/14px
+and forcing that on screen matched row height exactly, then made the document
+107px TALLER overall — the cells are narrower under prep, so the smaller type
+re-wraps into more lines than it saves. Measured, not assumed.
+
+**A third decorative assertion, found the same way as v3.284's two.** The
+print-overflow detector's `printed` walked up from the funnel to
+`w.closest('.slide')` and returned 0 when there was not one — and there never
+was one, because of the stray tag. So `printed > sheet` was never true and the
+spill check could not fail, through every release that shipped this bug. It now
+measures the deepest bottom under `#viewRoot`, refuses a 0 outright, and asserts
+two new things: `#campBody` holds exactly one child and it is the slide, and the
+blank tail is under 30%.
+
+**Where it stands: 1 page, 21% blank tail** (was 7 pages). The residual is
+prep-versus-print drift of roughly 1,050px — print lays the tables out narrower
+than prep does — and it is over-estimation, which costs blank tail rather than a
+second sheet. Bounded by the new assertion rather than left to grow.
+
+**Negative test:** the stray `</div>` put back, both new assertions fire —
+"campBody holds 10 elements, not 1" and "38% blank tail, the sheet is
+over-sized".
+
 **v3.285.0 — the average scroll depth is back, every money figure says THB
 again, every inbox is visible, and Google Ads landing views come from GA4.**
 
