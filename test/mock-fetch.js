@@ -470,6 +470,13 @@ function ga4Report(body) {
       ["mailto:info@bangkokhospital.com?subject=Appointment", "\u0e2a\u0e48\u0e07\u0e2d\u0e35\u0e40\u0e21\u0e25"],
       ["mailto:INFO@bangkokhospital.com", "Email us"],
       ["mailto:international@bangkokhospital.com", "International Office"],
+      /**
+       * A BARE ADDRESS, no `mailto:`. The contact-link tag also fires from an
+       * All Elements trigger where the captured Click URL can be the address
+       * alone; matching only on the scheme filed those under the host fallback
+       * and the Email row went missing while the clicks were happening.
+       */
+      ["surgery@bangkokhospital.com", "Email Surgery Master"],
       ["https://line.me/R/ti/p/@bangkokhospital", "\u0e15\u0e34\u0e14\u0e15\u0e48\u0e2d\u0e2a\u0e2d\u0e1a\u0e16\u0e32\u0e21"],
       ["https://maps.app.goo.gl/bangkokhospital", "Google Maps"],
     ];

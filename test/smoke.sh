@@ -210,10 +210,27 @@ echo "--- campaign: average scroll depth (v3.283.0) ---"
 # tell the two apart, which is why the fixture is uneven.
 expect_field "q scroll weighted"   "$CAMP1" "Math.round(${Q}.scrollDepth)===49?49:undefined"
 expect_field "q scroll thresholds" "$CAMP1" "${Q}.scrollThresholds===4?4:undefined"
-# ONE THRESHOLD IS NOT AN AVERAGE. Enhanced measurement alone fires a single
-# scroll at 90%, so a mean would read 90 forever and look healthy. With four
-# thresholds present the single-threshold fallback must stay null.
-expect_field "q scroll not single" "$CAMP1" "${Q}.scrollOnly===null?'null':undefined"
+# REACH AT A THRESHOLD (MW: "how many percent reach 50% depth is easier to
+# understand"). The 50% mark, or the nearest tracked threshold AT OR ABOVE it —
+# asking for exactly 50 reports nothing on a container tracking 25/75/90.
+expect_field "q reach threshold"   "$CAMP1" "${Q}.scrollReach.percent===50?50:undefined"
+# 300 events reached 50% in the fixture, out of 400 that reached 25%. Picking
+# the first threshold instead of the first >= 50 gives 400 here.
+expect_field "q reach events"      "$CAMP1" "${Q}.scrollReach.events===300?300:undefined"
+# Divided by PAGE VIEWS, not sessions: a scroll event belongs to a page view,
+# and a visit that saw four pages had four chances to scroll.
+expect_field "q reach over views"  "$CAMP1" "${Q}.scrollReach.ofViews>0?'ok':undefined"
+
+echo "--- campaign: Google Ads reports no landing page views (v3.284.0) ---"
+# MW spotted a Google Ads ad-campaign row reading "0" landing views next to Meta
+# rows with real ones. `actions_landing_page_view` is a META field; Google Ads
+# has no landing-page-view metric at all — checked against all 2,902 fields on
+# the connector. A 0 there is a real zero for something never measured, sitting
+# beside Meta rows where 0 would mean nobody arrived. It must be null so the
+# table shows a dash.
+expect_field "lpv meta reports"    "$CAMP1" "d.byPlatform.find(p=>p.platform==='Meta Ads').landingPageViews>0?'ok':undefined"
+expect_field "lpv gads is null"    "$CAMP1" "d.byPlatform.find(p=>p.platform==='Google Ads').landingPageViews===null?'null':undefined"
+expect_field "lpv gads row null"   "$CAMP1" "d.adCampaigns.filter(c=>c.platform==='Google Ads').every(c=>c.landingPageViews===null)?'ok':undefined"
 
 echo "--- campaign: contact links, the only source that sees a phone tap ---"
 CL="d.linkClicks.contactLinks"
@@ -236,8 +253,17 @@ expect_field "cl number labelled"  "$CAMP1" "${CL}.numbers.find(x=>x.number==='0
 # EMAILS GROUPED LIKE NUMBERS. The fixture links one inbox three ways — bare,
 # with `?subject=`, and upper-cased — plus a second, genuinely different inbox.
 # Grouped raw that is four rows; grouped on the address it is two.
-expect_field "cl emails merged"    "$CAMP1" "${CL}.emails.length===2?2:undefined"
+expect_field "cl emails merged"    "$CAMP1" "${CL}.emails.length===3?3:undefined"
 expect_field "cl inbox whole"      "$CAMP1" "${CL}.emails.find(x=>x.address==='info@bangkokhospital.com').clicks===300?300:undefined"
+# A BARE ADDRESS WITH NO `mailto:` IS STILL AN EMAIL. The contact-link tag can
+# capture the address alone, and matching only on the scheme filed those under
+# the host fallback — the Email row went missing while the clicks happened.
+expect_field "cl bare address"     "$CAMP1" "${CL}.emails.some(x=>x.address==='surgery@bangkokhospital.com')?'ok':undefined"
+# ...and it must be LABELLED Email, not swept into the no-scheme fallback. The
+# line above passes either way — the emails list has its own regex — so this is
+# the one that actually tests the classifier. Without the rule the bare address
+# has no host and lands under "Other contact link".
+expect_field "cl bare labelled"    "$CAMP1" "${CL}.channels.some(c=>c.label==='Other contact link')?undefined:'ok'"
 
 echo "--- campaign: call and email folded into Outbound Clicks (v3.281.0) ---"
 # MW asked for them in the main table. Phone and email exist ONLY in the

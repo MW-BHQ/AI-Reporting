@@ -4196,13 +4196,25 @@ async function buildCampaign(code, from, to) {
       if (!agg.has(name)) agg.set(name, {
         name, platform: p.label, objective: r.campaign_objective || null,
         goal: goalOf(r.campaign_objective, name),
-        impressions: 0, clicks: 0, linkClicks: 0, landingPageViews: 0, spend: 0, leads: 0, messages: 0,
+        /**
+         * `landingPageViews` STARTS NULL, NOT ZERO (MW spotted a Google Ads row
+         * reading 0). `actions_landing_page_view` is a META field. Google Ads
+         * has no landing-page-view metric at all — checked against all 2,902
+         * fields on the connector; the `*_page_view` ones there are CONVERSION
+         * actions that happen to be named "Page view", which is a different
+         * thing. So a Google row was reporting a real zero for something that
+         * was never measured, next to Meta rows where zero would mean nobody
+         * arrived.
+         */
+        impressions: 0, clicks: 0, linkClicks: 0, landingPageViews: null, spend: 0, leads: 0, messages: 0,
       });
       const a = agg.get(name);
       a.impressions += n(r.impressions);
       a.clicks += n(r.clicks);
       a.linkClicks += n(r.actions_link_click);
-      a.landingPageViews += n(r.actions_landing_page_view);
+      if (r.actions_landing_page_view !== undefined && r.actions_landing_page_view !== null) {
+        a.landingPageViews = (a.landingPageViews || 0) + n(r.actions_landing_page_view);
+      }
       a.spend += n(r.spend);
       a.leads += n(r.actions_lead);
       a.messages += n(r.actions_onsite_conversion_messaging_conversation_started_7d);
@@ -4215,7 +4227,9 @@ async function buildCampaign(code, from, to) {
       impressions: list.reduce((a, c) => a + c.impressions, 0),
       clicks: list.reduce((a, c) => a + c.clicks, 0),
       linkClicks: list.reduce((a, c) => a + c.linkClicks, 0),
-      landingPageViews: list.reduce((a, c) => a + c.landingPageViews, 0),
+      // null unless at least one campaign on the platform reported the field.
+      landingPageViews: list.some((c) => c.landingPageViews !== null)
+        ? list.reduce((a, c) => a + (c.landingPageViews || 0), 0) : null,
       spend: list.reduce((a, c) => a + c.spend, 0),
       leads: list.reduce((a, c) => a + c.leads, 0),
       messages: list.reduce((a, c) => a + c.messages, 0),
@@ -4607,7 +4621,15 @@ async function buildCampaign(code, from, to) {
       { id: "phone", label: "Phone call", urls: ["tel:"] },
       { id: "whatsapp", label: "WhatsApp", ids: ["channel-whatsapp"], urls: ["wa.me", "whatsapp"] },
       { id: "messenger", label: "Messenger", ids: ["channel-messenger"], urls: ["m.me", "messenger.com"] },
-      { id: "email", label: "Email", urls: ["mailto:"] },
+      /**
+       * `mailto:` OR A BARE ADDRESS. GTM's Click URL normally carries the full
+       * href, but the contact-link tag also fires from an All Elements trigger
+       * where the captured value can be the address alone. Matching only on the
+       * scheme filed those under the host fallback and the Email row went
+       * missing while the clicks were plainly happening (MW: "we have CTA as to
+       * email us in EN version, there's must be some").
+       */
+      { id: "email", label: "Email", urls: ["mailto:"], test: (u) => /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(u) },
       { id: "maps", label: "Maps / directions", urls: ["goo.gl/maps", "maps.google", "maps.app.goo.gl"] },
       { id: "wechat", label: "WeChat", ids: ["channel-wechat"], urls: ["weixin", "wechat"] },
       /**
@@ -4632,6 +4654,7 @@ async function buildCampaign(code, from, to) {
       const id = norm(linkId), url = norm(linkUrl);
       for (const c of CHANNELS) if ((c.ids || []).some((x) => id.includes(x))) return c;
       for (const c of CHANNELS) if ((c.urls || []).some((x) => url.includes(x))) return c;
+      for (const c of CHANNELS) if (c.test && c.test(url)) return c;
       return null;
     };
     // An internal href is not an outbound click and must not be tallied as one.
@@ -4814,7 +4837,7 @@ async function buildCampaign(code, from, to) {
           rec.clicks += v;
           // Prefer a short human label over a raw URL-ish one.
           if (text && (rec.label === digits || text.length < rec.label.length)) rec.label = text;
-        } else if (/^mailto:/i.test(url)) {
+        } else if (/^mailto:/i.test(url) || /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(url)) {
           email += v;
           /**
            * Lower-cased and stripped of everything after `?` — the site links
@@ -4822,6 +4845,7 @@ async function buildCampaign(code, from, to) {
            * same inbox appears once per subject line.
            */
           const addr = url.replace(/^mailto:/i, "").split("?")[0].trim().toLowerCase();
+          // no-op guard kept explicit: a bare address has no scheme to strip.
           if (!addr) continue;
           if (!byEmail.has(addr)) byEmail.set(addr, { address: addr, label: text || addr, clicks: 0 });
           const rec = byEmail.get(addr);
@@ -5069,12 +5093,33 @@ async function buildCampaign(code, from, to) {
           }
           if (!ev) return { scrollDepth: null, scrollThresholds: 0 };
           const thresholds = [...seen.keys()].sort((a, b) => a - b);
+          /**
+           * REACH AT A THRESHOLD, NOT AN AVERAGE (MW: "how many percent reach
+           * 50% depth is easier to understand").
+           *
+           * He is right, and the average had a second problem beyond being hard
+           * to read: it is an average over EVENTS, and a page that fires four
+           * thresholds contributes four times as much as one that fires one. A
+           * reach figure has a denominator anyone can name.
+           *
+           * The 50% mark, or the nearest tracked threshold at or above it —
+           * asking for exactly 50 would report nothing on a container tracking
+           * 25/75/90. The threshold actually used is reported so the card can
+           * say which.
+           *
+           * DIVIDED BY PAGE VIEWS, not sessions. A scroll event belongs to a
+           * page view, and a visit that saw four pages had four chances to
+           * scroll; dividing by sessions would let a deep-browsing visit push
+           * the figure over 100%.
+           */
+          const target = thresholds.find((x) => x >= 50);
+          const reached = target != null ? (seen.get(target) || 0) : 0;
           return {
             scrollThresholds: thresholds.length,
+            scrollThresholdList: thresholds,
             scrollDepth: thresholds.length > 1 ? wsum / ev : null,
-            // The single-threshold fallback: what share of visits got that far.
-            scrollOnly: thresholds.length === 1
-              ? { percent: thresholds[0], events: ev, ofVisits: ev / sess } : null,
+            scrollReach: target != null && views
+              ? { percent: target, events: reached, ofViews: reached / views } : null,
             scrollEvents: ev,
           };
         })(),

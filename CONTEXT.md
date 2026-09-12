@@ -1,5 +1,49 @@
 ### Recent (August 2026)
 
+**v3.284.0 — scroll reach instead of an average, THB at unit level, bare-address
+emails, and Google Ads landing views are NULL not zero.**
+
+**1. "Scrolled 50%" replaces "Avg scroll depth"** (MW: "how many percent reach
+50% depth is easier to understand"). He is right, and the average had a second
+fault: it averaged over EVENTS, so a page firing four thresholds counted four
+times as much as one firing one. Reach has a denominator anyone can name.
+
+The 50% mark, or the nearest tracked threshold AT OR ABOVE it — asking for
+exactly 50 reports nothing on a container tracking 25/75/90. Divided by PAGE
+VIEWS, not sessions: a scroll event belongs to a page view, and a visit that saw
+four pages had four chances to scroll.
+
+**2. `฿` moved from the value to the label**, across the whole campaign tab:
+`Ad spend (THB) · 45.7K`, `THB/visit`, `Spend (THB)`. Done with a new
+`{money:true,bare:true}` option rather than by switching to `{dp:0}` — the money
+branch carries the rounding rules that matter (satang below THB 100, K and M
+above) and `dp:0` threw all of it away, turning a THB 4.08 cost per visit into
+"4". I made exactly that mistake first and caught it on the render.
+
+**3. A bare address with no `mailto:` is still an email.** The contact-link tag
+can capture the address alone, and matching only on the scheme filed those under
+the no-scheme fallback while the clicks were plainly happening.
+
+**Worth knowing, and it is in GTM not here:** the `Click | email` trigger fires
+on *Click URL contains `info@bangkokhospital.com`*. Any other department address
+produces no event at all, so those clicks are invisible to every report. That is
+a one-field change to a regex if the other inboxes matter.
+
+**4. Google Ads landing page views are NULL, not 0** (MW spotted a Google row
+reading 0 beside Meta rows with real figures). `actions_landing_page_view` is a
+META field; Google Ads has no landing-page-view metric at all — checked against
+all 2,902 fields on the connector, where the `*_page_view` entries are
+CONVERSION actions that happen to be named "Page view". A 0 there was a real
+zero for something never measured, sitting next to Meta rows where 0 means
+nobody arrived. Now a dash.
+
+Two guards needed a second pass before they meant anything: the bare-address one
+first asserted the emails list, which has its own regex and passes either way —
+it now asserts the CHANNEL LABEL, which is what the classifier actually decides.
+And it was checking for the wrong fallback string.
+
+### Recent (August 2026)
+
 **v3.283.0 — five from MW: decoded links, `mailto:` clickable, Variants matched
 gone, Revenue hidden at zero, average scroll depth.**
 

@@ -2416,8 +2416,16 @@ function num(v, opts = {}) {
   if (v === null || v === undefined || Number.isNaN(v)) return '—';
   const a = Math.abs(v);
   if (opts.money) {
-    if (a >= 1e6) return '\u0e3f' + (v/1e6).toFixed(2) + 'M';
-    if (a >= 1e3) return '\u0e3f' + (v/1e3).toFixed(1) + 'K';
+    /**
+     * `bare:true` KEEPS THE MONEY FORMATTING AND DROPS THE SYMBOL (MW: "move
+     * \u0e3f to unit level"). The rounding rules below are the whole value of
+     * this branch — satang under a hundred, K and M above — and a caller that
+     * wanted a symbol-free figure previously had to pass `{dp:0}`, which threw
+     * all of that away and turned a \u0e3f4.08 cost per visit into "4".
+     */
+    const sym = opts.bare ? '' : '\u0e3f';
+    if (a >= 1e6) return sym + (v/1e6).toFixed(2) + 'M';
+    if (a >= 1e3) return sym + (v/1e3).toFixed(1) + 'K';
     /**
      * SATANG SURVIVE BELOW A HUNDRED BAHT (v3.208.0).
      *
@@ -2428,8 +2436,8 @@ function num(v, opts = {}) {
      * precision actually matters: a spend of \u0e3f4,350,000 does not need
      * satang, a cost-per-click does.
      */
-    if (a > 0 && a < 100) return '\u0e3f' + v.toFixed(2);
-    return '\u0e3f' + v.toFixed(0);
+    if (a > 0 && a < 100) return sym + v.toFixed(2);
+    return sym + v.toFixed(0);
   }
   if (opts.pct) return v.toFixed(opts.dp ?? 1) + '%';
   if (opts.dp !== undefined) return v.toFixed(opts.dp);
@@ -5592,22 +5600,22 @@ function renderCampaignBody(d) {
     d.topic ? `${d.topic} \u00b7 ${d.code || ''}` : `Campaign \u00b7 ${d.code || ''}`, `
     ${d.notes ? `<div class="warnbox">${d.offSiteGoal?'<b>This campaign doesn\'t send traffic to the website.</b> ':''}${esc(d.notes)}</div>` : ''}
     <div class="grid g-3">
-      <div class="stat card"><div class="lab"><span class="chip" style="background:var(--amber)"></span>Ad spend</div>
-        <div class="val ${isNA(t.spend)?'na':''}">${num(t.spend,{money:true})}</div>
-        <div class="sub">${d.unattributedSpend?num(d.unattributedSpend,{money:true})+' not tied to a utm variant':'across matched ad campaigns'}</div></div>
+      <div class="stat card"><div class="lab"><span class="chip" style="background:var(--amber)"></span>Ad spend (THB)</div>
+        <div class="val ${isNA(t.spend)?'na':''}">${num(t.spend,{money:true,bare:true})}</div>
+        <div class="sub">${d.unattributedSpend?num(d.unattributedSpend,{money:true,bare:true})+' not tied to a utm variant':'across matched ad campaigns'}</div></div>
       ${d.offSiteGoal?`
       <div class="stat card"><div class="lab">${esc(d.goalResultLabel||'result')}s <span class="pill">${esc(d.goalLabel||'')}</span></div>
         <div class="val">${num(d.goalResults)}</div>
         <div class="sub">counted by Meta, not the website</div></div>
       <div class="stat card"><div class="lab">Cost per ${esc(d.goalResultLabel||'result')}</div>
-        <div class="val ${isNA(d.goalCostPerResult)?'na':''}">${num(d.goalCostPerResult,{money:true})}</div>
-        <div class="sub">${d.goalResults?num(t.spend,{money:true})+' ÷ '+num(d.goalResults):''}</div></div>
+        <div class="val ${isNA(d.goalCostPerResult)?'na':''}">${num(d.goalCostPerResult,{money:true,bare:true})}</div>
+        <div class="sub">${d.goalResults?num(t.spend,{money:true,bare:true})+' ÷ '+num(d.goalResults):''}</div></div>
       `:`
-      <div class="stat card"><div class="lab">Cost per visit</div>
-        <div class="val ${isNA(t.costPerVisit)?'na':''}">${num(t.costPerVisit,{money:true})}</div>
-        <div class="sub">${t.spend!=null&&t.visits?num(t.spend,{money:true})+' ÷ '+num(t.visits)+' visits':''}</div></div>
-      <div class="stat card"><div class="lab">Cost per contact</div>
-        <div class="val ${isNA(t.costPerContact)?'na':''}">${num(t.costPerContact,{money:true})}</div>
+      <div class="stat card"><div class="lab">Cost per visit (THB)</div>
+        <div class="val ${isNA(t.costPerVisit)?'na':''}">${num(t.costPerVisit,{money:true,bare:true})}</div>
+        <div class="sub">${t.spend!=null&&t.visits?num(t.spend,{money:true,bare:true})+' ÷ '+num(t.visits)+' visits':''}</div></div>
+      <div class="stat card"><div class="lab">Cost per contact (THB)</div>
+        <div class="val ${isNA(t.costPerContact)?'na':''}">${num(t.costPerContact,{money:true,bare:true})}</div>
         <div class="sub">${t.contacts?num(t.contacts)+' contact-us events':'no contact events'}</div></div>
       `}
     </div>
@@ -5633,7 +5641,7 @@ function renderCampaignBody(d) {
       cards.push(`<div class="stat card"><div class="lab">Key events</div><div class="val">${num(t.keyEvents)}</div>
         <div class="sub">${t.keyEventRate!=null?num(t.keyEventRate,{pct:true})+' of visits':''}</div></div>`);
       if (isNA(t.revenue) || t.revenue > 0) {
-        cards.push(`<div class="stat card"><div class="lab">Revenue</div><div class="val ${isNA(t.revenue)?'na':''}">${num(t.revenue,{money:true})}</div>
+        cards.push(`<div class="stat card"><div class="lab">Revenue (THB)</div><div class="val ${isNA(t.revenue)?'na':''}">${num(t.revenue,{money:true,bare:true})}</div>
           <div class="sub">${t.purchases?num(t.purchases)+' purchases':''}</div></div>`);
       }
       /**
@@ -5658,14 +5666,17 @@ function renderCampaignBody(d) {
        * forever and look like a healthy page. With one threshold the reach at
        * that depth is shown instead, which is the honest form of the same fact.
        */
-      if (q && q.available && q.scrollDepth != null) {
-        cards.push(`<div class="stat card"><div class="lab">Avg scroll depth</div>
-          <div class="val" style="color:${q.scrollDepth<40?'var(--rose)':'var(--ink)'}">${num(q.scrollDepth,{dp:0})}%</div>
-          <div class="sub">${num(q.scrollEvents)} scroll events \u00b7 ${num(q.scrollThresholds)} thresholds</div></div>`);
-      } else if (q && q.available && q.scrollOnly) {
-        cards.push(`<div class="stat card"><div class="lab">Reached ${num(q.scrollOnly.percent)}%</div>
-          <div class="val">${num(q.scrollOnly.ofVisits*100,{dp:0})}%</div>
-          <div class="sub">of visits \u00b7 only one threshold is tracked, so there is no average</div></div>`);
+      /**
+       * REACH, NOT AN AVERAGE (MW: "how many percent reach 50% depth is easier
+       * to understand"). The average was also an average over EVENTS, so a page
+       * firing four thresholds counted four times as much as one firing one.
+       * A reach figure has a denominator a reader can name.
+       */
+      if (q && q.available && q.scrollReach) {
+        const r = q.scrollReach;
+        cards.push(`<div class="stat card"><div class="lab">Scrolled ${num(r.percent)}%</div>
+          <div class="val" style="color:${r.ofViews<0.3?'var(--rose)':'var(--ink)'}">${num(r.ofViews*100,{dp:0})}%</div>
+          <div class="sub">of page views \u00b7 ${num(r.events)} reached it</div></div>`);
       }
       return `<div class="grid g-${Math.min(6, cards.length)} mt">${cards.join('')}</div>`;
     })()}
@@ -5693,7 +5704,7 @@ function renderCampaignBody(d) {
              print rules, which is the whole mechanism here. -->
         <div class="chart-wrap funnel-wrap"><canvas id="funnelChart"></canvas></div>
         ${d.offSiteGoal?`<div class="note">Only the ad-platform stages appear: a ${esc((d.goalLabel||'').toLowerCase())} campaign's clicks open a ${d.goal==='leads'?'lead form':'chat'} on Meta, so no website stages follow. A logarithmic axis is used so stages of very different size stay readable.</div>`
-          :t.costPerKeyEvent!=null?`<div class="note">Cost per key event: <b>${num(t.costPerKeyEvent,{money:true})}</b> · ${num(t.spend,{money:true})} ÷ ${num(t.keyEvents)} key events. A logarithmic axis keeps impressions and key events readable together.</div>`
+          :t.costPerKeyEvent!=null?`<div class="note">Cost per key event: <b>THB ${num(t.costPerKeyEvent,{money:true,bare:true})}</b> · ${num(t.spend,{money:true,bare:true})} ÷ ${num(t.keyEvents)} key events. A logarithmic axis keeps impressions and key events readable together.</div>`
           :`<div class="note">Stages with no data are omitted — a logarithmic axis can't plot zero. ${t.visits?'':'No website visits carry this code.'}</div>`}
       </div>
       <div class="card"><h2>Key events</h2>
@@ -5973,10 +5984,10 @@ function renderCampaignBody(d) {
       <div class="grid g-4">
         <div class="stat"><div class="lab">Link CTR</div><div class="val">${num(t.ctr,{pct:true,dp:2})}</div>
           <div class="sub">${num(t.linkClicks)} link clicks ÷ ${num(t.impressions)} impr</div></div>
-        <div class="stat"><div class="lab">Cost per link click</div><div class="val">${num(t.cpc,{money:true})}</div>
-          <div class="sub">CPM ${num(t.cpm,{money:true})}</div></div>
+        <div class="stat"><div class="lab">Cost per link click</div><div class="val">${num(t.cpc,{money:true,bare:true})}</div>
+          <div class="sub">CPM ${num(t.cpm,{money:true,bare:true})}</div></div>
         <div class="stat"><div class="lab">Landing page views</div><div class="val ${isNA(t.landingPageViews)?'na':''}">${num(t.landingPageViews)}</div>
-          <div class="sub">${t.costPerLpv!=null?num(t.costPerLpv,{money:true})+' each':'reported by Meta'}</div></div>
+          <div class="sub">${t.costPerLpv!=null?num(t.costPerLpv,{money:true,bare:true})+' each':'reported by Meta'}</div></div>
         <div class="stat"><div class="lab">Page view → session</div>
           <div class="val" style="${t.lpvToVisit!=null&&t.lpvToVisit<50?'color:var(--rose)':''}">${t.lpvToVisit!=null?num(t.lpvToVisit,{pct:true,dp:1}):'—'}</div>
           <div class="sub">${num(t.visits)} sessions from ${num(t.landingPageViews)} page views</div></div>
@@ -5987,17 +5998,17 @@ function renderCampaignBody(d) {
           <div class="sub">incl. reactions &amp; expands · ${num(t.ctrAll,{pct:true,dp:2})} of impr</div></div>
         <div class="stat"><div class="lab">Leads</div>
           <div class="val ${!t.leads?'na':''}">${t.leads?num(t.leads):'0'}</div>
-          <div class="sub">${t.costPerLead!=null?num(t.costPerLead,{money:true})+' per lead':'no lead-objective campaign here'}</div></div>
+          <div class="sub">${t.costPerLead!=null?num(t.costPerLead,{money:true,bare:true})+' per lead':'no lead-objective campaign here'}</div></div>
         <div class="stat"><div class="lab">Conversations</div>
           <div class="val ${!t.messages?'na':''}">${t.messages?num(t.messages):'0'}</div>
-          <div class="sub">${t.costPerMessage!=null?num(t.costPerMessage,{money:true})+' each':'none started'}</div></div>
+          <div class="sub">${t.costPerMessage!=null?num(t.costPerMessage,{money:true,bare:true})+' each':'none started'}</div></div>
         <div class="stat"><div class="lab">Sessions not recorded</div>
           <div class="val" style="${t.lostSessions?'color:var(--rose)':''}">${t.lostSessions!=null?num(t.lostSessions):'—'}</div>
           <div class="sub">page views with no tagged session</div></div>
       </div>
 
       ${t.lpvToVisit!=null&&t.lpvToVisit<50?`<div class="warnbox" style="margin-top:14px;">
-        <b>Tagging gap, quantified.</b> Meta recorded ${num(t.landingPageViews)} landing page views &mdash; browsers that actually rendered your page &mdash; but only ${num(t.visits)} sessions carry this campaign code. Around ${num(t.lostSessions)} visits arrived and were credited elsewhere, so ${num(t.spend,{money:true})} of spend can't be tied to any outcome. The destination URL is missing its <code>utm_campaign</code>, or carries a different one.
+        <b>Tagging gap, quantified.</b> Meta recorded ${num(t.landingPageViews)} landing page views &mdash; browsers that actually rendered your page &mdash; but only ${num(t.visits)} sessions carry this campaign code. Around ${num(t.lostSessions)} visits arrived and were credited elsewhere, so ${num(t.spend,{money:true,bare:true})} of spend can't be tied to any outcome. The destination URL is missing its <code>utm_campaign</code>, or carries a different one.
       </div>`:''}
 
       <div class="note"><b>Link CTR and cost per link click use link clicks, not Meta's "clicks (all)"</b>, which also counts reactions, photo expands and profile taps and so overstates traffic intent &mdash; often by half. <b>Page view → session</b> is the tagging health check and the only fair comparison available: Meta's landing page view means the browser rendered your page, so it should closely match a GA4 session. A large shortfall is a measurement failure, not lost interest. Leads and conversations show as 0 rather than being hidden, so you can see the objective produced none.</div>
@@ -6008,9 +6019,9 @@ function renderCampaignBody(d) {
       <table>
         <thead><tr>
           <th>Campaign</th><th>Source</th>
-          <th class="num">Impr</th><th class="num">Clicks</th><th class="num">Spend</th>
+          <th class="num">Impr</th><th class="num">Clicks</th><th class="num">Spend (THB)</th>
           <th class="num">Visits</th><th class="num">Engaged</th><th class="num">Key ev.</th>
-          <th class="num">฿/visit</th><th class="num">฿/contact</th><th class="num">Revenue</th>
+          <th class="num">THB/visit</th><th class="num">THB/contact</th><th class="num">Revenue (THB)</th>
         </tr></thead>
         <tbody>
           ${(d.variants||[]).map(v=>`<tr>
@@ -6021,31 +6032,31 @@ function renderCampaignBody(d) {
             <td>${esc(v.source||'—')}${v.medium?' <span style="color:var(--faint)">/ '+esc(v.medium)+'</span>':''}</td>
             <td class="num">${num(v.impressions)}${v.organicSource?' <span class="pill grey" title="From organic Facebook posts matched by short link — not ad-platform data">org</span>':''}${v.lineSent?' <span class="pill grey" title="LINE messages delivered on the campaign date — delivery volume, not views. LINE never reports views or clicks for OA Manager sends.">sent</span>':''}</td>
             <td class="num">${num(v.clicks)}${v.organicSource?' <span class="pill grey" title="From organic Facebook posts matched by short link — not ad-platform data">org</span>':''}</td>
-            <td class="num">${num(v.spend,{money:true})}${v.spendEstimated?' <span class="pill grey" title="Split across variants by visit share">~</span>':''}</td>
+            <td class="num">${num(v.spend,{money:true,bare:true})}${v.spendEstimated?' <span class="pill grey" title="Split across variants by visit share">~</span>':''}</td>
             <td class="num">${num(v.visits)}</td>
             <td class="num">${num(v.engagement)}</td>
             <td class="num">${num(v.keyEvents)}</td>
-            <td class="num">${num(v.costPerVisit,{money:true})}</td>
-            <td class="num">${num(v.costPerContact,{money:true})}</td>
-            <td class="num">${num(v.revenue,{money:true})}</td>
+            <td class="num">${num(v.costPerVisit,{money:true,bare:true})}</td>
+            <td class="num">${num(v.costPerContact,{money:true,bare:true})}</td>
+            <td class="num">${num(v.revenue,{money:true,bare:true})}</td>
           </tr>${v.adNames&&v.adNames.length?`<tr class="adrow" data-adfor="${esc(v.code)}::${esc(v.source||'')}" hidden>
             <td colspan="11"><div style="font-size:var(--text-2xs);color:var(--ink-2);line-height:1.7;">
             <table style="width:100%"><thead><tr>
               <th>Ad campaign</th><th class="num">Impr</th><th class="num">Link clicks</th>
-              <th class="num">Landing views</th><th class="num">Spend</th></tr></thead><tbody>
+              <th class="num">Landing views</th><th class="num">Spend (THB)</th></tr></thead><tbody>
             ${(v.adRows||v.adNames.map(nm=>({name:nm}))).map(a2=>`<tr>
               <td class="i18n">${esc(a2.name)}</td>
               <td class="num">${a2.impressions==null?'\u2014':num(a2.impressions)}</td>
               <td class="num">${a2.clicks==null?'\u2014':num(a2.clicks)}</td>
               <td class="num">${a2.lpv==null?'\u2014':num(a2.lpv)}</td>
-              <td class="num">${a2.spend==null?'\u2014':num(a2.spend,{money:true})}</td>
+              <td class="num">${a2.spend==null?'\u2014':num(a2.spend,{money:true,bare:true})}</td>
             </tr>`).join('')}</tbody></table></div></td></tr>`:''}`).join('')||((d.orphanAdCampaigns||[]).length?'':'<tr><td colspan="11" class="num">no traffic matched this code</td></tr>')}
 
           ${(d.orphanAdCampaigns||[]).map(c=>`<tr>
             <td class="strong i18n trunc" title="${esc(c.name)}">${esc(c.name)}</td>
             <td><span class="pill warn">${esc(c.platform)} · no GA4 match</span></td>
             <td class="num">${num(c.impressions)}</td><td class="num">${num(c.clicks)}</td>
-            <td class="num">${num(c.spend,{money:true})}</td>
+            <td class="num">${num(c.spend,{money:true,bare:true})}</td>
             <td class="num dim">—</td><td class="num dim">—</td><td class="num dim">—</td>
             <td class="num dim">—</td><td class="num dim">—</td><td class="num dim">—</td>
           </tr>`).join('')}
@@ -6053,12 +6064,12 @@ function renderCampaignBody(d) {
           <tr class="tot">
             <td class="strong">Total</td><td></td>
             <td class="num">${num(t.impressions)}</td><td class="num">${num(t.clicks)}</td>
-            <td class="num">${num(t.spend,{money:true})}</td>
+            <td class="num">${num(t.spend,{money:true,bare:true})}</td>
             <td class="num">${num(t.visits)}</td><td class="num">${num(t.engagement)}</td>
             <td class="num">${num(t.keyEvents)}</td>
-            <td class="num">${num(t.costPerVisit,{money:true})}</td>
-            <td class="num">${num(t.costPerContact,{money:true})}</td>
-            <td class="num">${num(t.revenue,{money:true})}</td>
+            <td class="num">${num(t.costPerVisit,{money:true,bare:true})}</td>
+            <td class="num">${num(t.costPerContact,{money:true,bare:true})}</td>
+            <td class="num">${num(t.revenue,{money:true,bare:true})}</td>
           </tr>
         </tbody>
       </table>
@@ -10726,7 +10737,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.283.0';
+const CLIENT_BUILD = '3.284.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
