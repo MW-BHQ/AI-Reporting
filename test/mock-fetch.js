@@ -521,6 +521,19 @@ function ga4Report(body) {
        */
       ["surgery@bangkokhospital.com", "Email Surgery Master"],
       /**
+       * A ROW GA4 REDACTED BEFORE STORING IT (v3.291.0). MW's property had the
+       * group-level Redact data setting on, so every address arrived as the
+       * literal string `(redacted)`. The mailto branch tested only for the
+       * scheme, so this became an "inbox" named `(redacted)`, printed as an
+       * address and linked as `mailto:(redacted)`.
+       *
+       * IT STAYS IN THE FIXTURE NOW THAT THE SETTING IS OFF, because redaction
+       * happens at COLLECTION: every month already collected still returns
+       * these rows, and any report covering them has to render them honestly.
+       * The clicks are real and still count toward the email total.
+       */
+      ["mailto:(redacted)", "(redacted)"],
+      /**
        * A DEPARTMENT INBOX NO `contact_link*` EVENT CAN SEE (v3.287.0). This is
        * the bug MW reported: `Click | email` fires on
        * `Click URL contains info@bangkokhospital.com`, so `contact_link*`

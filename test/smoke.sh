@@ -313,10 +313,12 @@ expect_field "cl number labelled"  "$CAMP1" "${CL}.numbers.find(x=>x.number==='0
 # EMAILS GROUPED LIKE NUMBERS. The fixture links one inbox three ways — bare,
 # with `?subject=`, and upper-cased — plus a second, genuinely different inbox.
 # Grouped raw that is four rows; grouped on the address it is two.
-# Four inboxes: info@ (linked three ways — bare, with `?subject=`, upper-cased),
-# international@, the bare-address surgery@, and oncology@, which only the wider
-# `contact_us` source can see. Grouped raw that is seven rows.
-expect_field "cl emails merged"    "$CAMP1" "${CL}.emails.length===4?4:undefined"
+# Five rows: info@ (linked three ways — bare, with `?subject=`, upper-cased),
+# international@, the bare-address surgery@, oncology@ which only the wide
+# Click_URL scan can see, and one GA4 redacted before storing it. Grouped raw
+# that is eight rows; four of the five are real inboxes.
+expect_field "cl emails merged"    "$CAMP1" "${CL}.emails.length===5?5:undefined"
+expect_field "cl real inboxes"     "$CAMP1" "${CL}.emails.filter(x=>!x.redacted).length===4?4:undefined"
 expect_field "cl inbox whole"      "$CAMP1" "${CL}.emails.find(x=>x.address==='info@bangkokhospital.com').clicks===300?300:undefined"
 # A BARE ADDRESS WITH NO `mailto:` IS STILL AN EMAIL. The contact-link tag can
 # capture the address alone, and matching only on the scheme filed those under
@@ -345,6 +347,17 @@ expect_field "cl wider source on"  "$CAMP1" "${CL}.emailSourceWide===true?'ok':u
 # v3.285.0 shipped a filter matching nothing and the card was indistinguishable
 # from a campaign nobody emailed; MW had to catch it on the deployed page.
 expect_field "cl scan reported"    "$CAMP1" "(${CL}.emailScan&&${CL}.emailScan.withUrl>0&&${CL}.emailScan.matched>0)?'ok':undefined"
+# A REDACTED ROW IS NOT AN ADDRESS (v3.291.0). MW's property had GA4's
+# group-level Redact data setting on, so addresses arrived as the literal
+# "(redacted)". The mailto branch tested only for the scheme, so that string
+# became an inbox name and was linked as mailto:(redacted). Redaction happens at
+# COLLECTION, so turning it off does not clean the months already stored — these
+# rows keep arriving in any report covering them.
+expect_field "cl redacted flagged" "$CAMP1" "${CL}.emails.find(x=>x.address==='(redacted)').redacted===true?'ok':undefined"
+# Real addresses must NOT be flagged, or the fix hides every inbox.
+expect_field "cl real not flagged" "$CAMP1" "${CL}.emails.filter(x=>x.address.includes('@')).every(x=>!x.redacted)?'ok':undefined"
+# The clicks are real and still count toward the email total.
+expect_field "cl redacted counted" "$CAMP1" "${CL}.emails.find(x=>x.address==='(redacted)').clicks>0?'ok':undefined"
 expect_field "cl dept inbox found" "$CAMP1" "${CL}.emails.some(x=>x.address==='oncology@bangkokhospital.com')?'ok':undefined"
 # THE HIGHER OF THE TWO, NEVER THE SUM. `info@` fires BOTH triggers on a single
 # click and the fixture gives it 300 in each source. Summed it reads 600 — one

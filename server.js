@@ -5000,7 +5000,25 @@ async function buildCampaign(code, from, to) {
           const addr = url.replace(/^mailto:/i, "").split("?")[0].trim().toLowerCase();
           // no-op guard kept explicit: a bare address has no scheme to strip.
           if (!addr) continue;
-          if (!byEmail.has(addr)) byEmail.set(addr, { address: addr, label: text || addr, clicks: 0 });
+          /**
+           * WHAT FOLLOWS `mailto:` IS NOT ALWAYS AN ADDRESS (v3.291.0).
+           *
+           * MW's property had GA4's Redact data setting on at GROUP level, so
+           * every address was replaced with the literal string `(redacted)`
+           * before it was ever stored. This branch tested only for the
+           * `mailto:` scheme, so `(redacted)` became an "address": the card
+           * printed it as an inbox name and linked it as `mailto:(redacted)`.
+           *
+           * REDACTION IS NOT RETROACTIVE. It was disabled on 13 Sep 2026, so
+           * clicks from then on carry real addresses — but everything already
+           * collected stays redacted, and any report covering those months will
+           * keep returning these rows. They are real clicks and still count
+           * toward the email total; they just have no address to show.
+           */
+          const isAddress = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(addr);
+          if (!byEmail.has(addr)) {
+            byEmail.set(addr, { address: addr, label: text || addr, clicks: 0, redacted: !isAddress });
+          }
           const rec = byEmail.get(addr);
           rec.clicks += v;
           if (text && (rec.label === addr || text.length < rec.label.length)) rec.label = text;

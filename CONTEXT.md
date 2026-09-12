@@ -1,5 +1,40 @@
 ### Recent (August 2026)
 
+**v3.291.0 — the `(redacted)` email is solved, and the rows it already made are
+rendered honestly.**
+
+MW found it: GA4's **Redact data** setting was on at GROUP level. He had checked
+a different property when he said it was off. Disabled 13 Sep 2026.
+
+That was the second of three diagnoses and it was right — the wrong one was
+checking the wrong account, not the reasoning. Worth recording because the first
+diagnosis (a guessed `contact_us` event filter, v3.285) was a real bug of mine
+that had to be fixed before this one could even be seen: two independent faults
+producing one symptom, and fixing the first changed the symptom just enough to
+look like the second was disproved.
+
+**REDACTION IS NOT RETROACTIVE.** It runs at collection, so the addresses in
+every month already stored remain the literal string `(redacted)` forever. Only
+clicks from 13 Sep carry real addresses. Any report covering earlier months
+keeps returning these rows, so this is not a problem that ages out of the
+codebase — only out of the data.
+
+**The rows were being printed as an inbox.** The mailto branch tested only for
+the `mailto:` scheme, so `(redacted)` became an "address": the card showed it as
+an inbox name and linked it as `mailto:(redacted)`. It now checks that what
+follows the scheme is actually an address, flags `redacted` when it is not, and
+the card renders "Address withheld by GA4" in muted type with no link and a dash
+for the label. The clicks are real and still count toward the email total.
+
+**The fixture keeps a redacted row permanently**, for the same reason the data
+does. `["mailto:(redacted)", "(redacted)"]` sits alongside the real inboxes so
+the two paths are both exercised: four real addresses, one withheld.
+
+**Negative tests, both confirmed failing before revert:** treating anything after
+`mailto:` as an address (the v3.290 behaviour, which puts `(redacted)` back in
+the inbox list); flagging every address as redacted (which would hide all four
+real inboxes).
+
 **v3.290.0 — the campaign sheet's blank tail: 23% to 6%** (MW: "now pdf, fix
 the empty space").
 

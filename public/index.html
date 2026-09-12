@@ -5976,8 +5976,12 @@ function renderCampaignBody(d) {
               <div class="card-title">Email addresses ${cl.email?`&middot; ${num(cl.email)}`:''}</div>
               ${cl.emails.length?`<table><thead><tr><th style="padding-right:16px;">Address</th><th>As shown</th><th class="num">Clicks</th><th class="num">% of visits</th></tr></thead><tbody>
               ${cl.emails.map(x=>`<tr>
-                <td class="strong trunc" style="padding-right:16px;" title="${esc(x.address)}"><a href="mailto:${esc(x.address)}" style="color:var(--violet);text-decoration:none;word-break:break-all;">${esc(x.address)}</a></td>
-                <td class="i18n trunc" title="${esc(x.label)}">${esc(x.label)}</td>
+                <td class="strong trunc" style="padding-right:16px;" title="${esc(x.redacted?'GA4 stored no address for these clicks':x.address)}">${
+                  x.redacted
+                    ? '<span style="color:var(--muted);">Address withheld by GA4</span>'
+                    : `<a href="mailto:${esc(x.address)}" style="color:var(--violet);text-decoration:none;word-break:break-all;">${esc(x.address)}</a>`
+                }</td>
+                <td class="i18n trunc" title="${esc(x.label)}">${x.redacted?'<span style="color:var(--muted);">\u2014</span>':esc(x.label)}</td>
                 <td class="num">${num(x.clicks)}</td>
                 <td class="num">${pct(x.clicks)}</td>
               </tr>`).join('')}
@@ -10874,7 +10878,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.290.0';
+const CLIENT_BUILD = '3.291.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
