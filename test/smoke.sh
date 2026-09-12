@@ -98,10 +98,16 @@ expect_field "sa nine key events"  "$REPORT" "${SA}'BGH').actions.length===9?9:u
 # If either leaks into a hospital this drops to 1.
 expect_field "sa unattributed"     "$REPORT" "d.searchAds.unattributed.campaigns.length===2?2:undefined"
 expect_field "sa bcm not a brand"  "$REPORT" "d.searchAds.byBrand.every(b=>b.impressions!==4100)?'ok':undefined"
-# Four sources are emitted under BOTH Paid Search and Cross-network. Only the
-# Paid Search ones count, because no source here is Google — 800 means the
-# Cross-network guard was relaxed to match the channel on its own.
-expect_field "sa excludes x-network" "$REPORT" "${SA}'BGH').visits===400?400:undefined"
+# Five sources are emitted under BOTH Paid Search and Cross-network. Paid Search
+# contributes all five (500); Cross-network contributes ONLY `google` (100),
+# because `isPaidSearch` requires the source to be Google before it will count a
+# Cross-network row. 600 is both halves of that rule.
+#
+# Until v3.285.0 the fixture had no Google source at all, so the Cross-network
+# branch was never reached and this asserted 400 — the guard could have been
+# deleted entirely and stayed green. 1000 now means the source condition was
+# dropped and every Cross-network row counted.
+expect_field "sa excludes x-network" "$REPORT" "${SA}'BGH').visits===600?600:undefined"
 
 echo "--- campaign: onward navigation and outbound clicks (v3.273.0) ---"
 CAMP1="/api/campaign?code=260701-08&from=$FROM&to=$TO"
@@ -220,17 +226,37 @@ expect_field "q reach events"      "$CAMP1" "${Q}.scrollReach.events===300?300:u
 # Divided by PAGE VIEWS, not sessions: a scroll event belongs to a page view,
 # and a visit that saw four pages had four chances to scroll.
 expect_field "q reach over views"  "$CAMP1" "${Q}.scrollReach.ofViews>0?'ok':undefined"
+# BOTH FIGURES SHIP (v3.285.0). MW: "can you find average scroll depth? you just
+# average all scroll depth events fired in the page." v3.284.0 removed the
+# average from the card and left the reach; the server kept computing it, so the
+# assertions above stayed green while the deployed page lost the number. This
+# pins the pair so neither can be dropped silently again.
+expect_field "q depth and reach"   "$CAMP1" "(${Q}.scrollDepth!=null&&${Q}.scrollReach!=null)?'ok':undefined"
 
-echo "--- campaign: Google Ads reports no landing page views (v3.284.0) ---"
-# MW spotted a Google Ads ad-campaign row reading "0" landing views next to Meta
-# rows with real ones. `actions_landing_page_view` is a META field; Google Ads
-# has no landing-page-view metric at all — checked against all 2,902 fields on
-# the connector. A 0 there is a real zero for something never measured, sitting
-# beside Meta rows where 0 would mean nobody arrived. It must be null so the
-# table shows a dash.
+echo "--- campaign: Google Ads landing views come from GA4 (v3.285.0) ---"
+# `actions_landing_page_view` is a META field; Google Ads has no
+# landing-page-view metric at all — checked against all 2,902 connector fields.
+# v3.284.0 answered that with a dash. MW: "you just look in GA4 see how many
+# visit came from source/medium google/cpc or google/paid search."
 expect_field "lpv meta reports"    "$CAMP1" "d.byPlatform.find(p=>p.platform==='Meta Ads').landingPageViews>0?'ok':undefined"
-expect_field "lpv gads is null"    "$CAMP1" "d.byPlatform.find(p=>p.platform==='Google Ads').landingPageViews===null?'null':undefined"
-expect_field "lpv gads row null"   "$CAMP1" "d.adCampaigns.filter(c=>c.platform==='Google Ads').every(c=>c.landingPageViews===null)?'ok':undefined"
+# The fixture carries one google/cpc variant of 100 sessions.
+expect_field "lpv gads from ga4"   "$CAMP1" "d.byPlatform.find(p=>p.platform==='Google Ads').landingPageViews===100?100:undefined"
+# FLAGGED, or the UI cannot tell it apart from a Meta landing page view — which
+# is a browser render counted on the ad platform, not a session counted on site.
+expect_field "lpv gads flagged"    "$CAMP1" "d.byPlatform.find(p=>p.platform==='Google Ads').landingPageViewsFromGa4===true?'ok':undefined"
+expect_field "lpv gads row filled" "$CAMP1" "d.adCampaigns.filter(c=>c.platform==='Google Ads').every(c=>c.landingPageViews===100&&c.landingPageViewsFromGa4)?'ok':undefined"
+# ONE Google campaign in the fixture, so the figure is exact and must NOT be
+# marked apportioned. The split flag is only for the several-campaigns case.
+expect_field "lpv gads not split"  "$CAMP1" "d.adCampaigns.filter(c=>c.platform==='Google Ads').every(c=>!c.landingPageViewsSplit)?'ok':undefined"
+# NEVER FOLDED INTO THE META TOTAL. `lpvToVisit` is sessions / landing page
+# views and exists to expose a tagging shortfall; a GA4 session on both sides of
+# that ratio is a 1:1 term that dilutes the alarm. Meta reports 100 and the GA4
+# figure is another 100 — if it leaked in, this would read 200.
+expect_field "lpv total meta only" "$CAMP1" "d.totals.landingPageViews===100?100:undefined"
+# SOURCE STRICT, MEDIUM LOOSE. `pantip.com` / `paid` is paid traffic that is not
+# Google Ads; if the source match were relaxed to "any paid medium" every one of
+# the fixture's four non-Google paid sources would be swept in and this reads
+# 500 rather than 100.
 
 echo "--- campaign: contact links, the only source that sees a phone tap ---"
 CL="d.linkClicks.contactLinks"
@@ -253,7 +279,10 @@ expect_field "cl number labelled"  "$CAMP1" "${CL}.numbers.find(x=>x.number==='0
 # EMAILS GROUPED LIKE NUMBERS. The fixture links one inbox three ways — bare,
 # with `?subject=`, and upper-cased — plus a second, genuinely different inbox.
 # Grouped raw that is four rows; grouped on the address it is two.
-expect_field "cl emails merged"    "$CAMP1" "${CL}.emails.length===3?3:undefined"
+# Four inboxes: info@ (linked three ways — bare, with `?subject=`, upper-cased),
+# international@, the bare-address surgery@, and oncology@, which only the wider
+# `contact_us` source can see. Grouped raw that is seven rows.
+expect_field "cl emails merged"    "$CAMP1" "${CL}.emails.length===4?4:undefined"
 expect_field "cl inbox whole"      "$CAMP1" "${CL}.emails.find(x=>x.address==='info@bangkokhospital.com').clicks===300?300:undefined"
 # A BARE ADDRESS WITH NO `mailto:` IS STILL AN EMAIL. The contact-link tag can
 # capture the address alone, and matching only on the scheme filed those under
@@ -264,6 +293,29 @@ expect_field "cl bare address"     "$CAMP1" "${CL}.emails.some(x=>x.address==='s
 # the one that actually tests the classifier. Without the rule the bare address
 # has no host and lands under "Other contact link".
 expect_field "cl bare labelled"    "$CAMP1" "${CL}.channels.some(c=>c.label==='Other contact link')?undefined:'ok'"
+
+echo "--- campaign: every Click_URL, not just the contact_link tag (v3.285.0) ---"
+# MW: "you just find all click_url in the page then filter out which falls into
+# email address pattern."
+#
+# WIDEN THE SOURCE, NOT THE PATTERN. `Click | email` fires on
+# `Click URL contains info@bangkokhospital.com`, so `contact_link*` events exist
+# for that ONE inbox. `contact_us` fires from `Click | Contact URL`, whose regex
+# catches every `mailto:` whatever the address — that is where the department
+# inboxes are. The fixture gives `contact_us` an oncology address that the
+# contact-link rows do not carry, so no regex applied to the old source can find
+# it and this assertion fails unless the second pull is actually being read.
+expect_field "cl wider source on"  "$CAMP1" "${CL}.emailSourceWide===true?'ok':undefined"
+expect_field "cl dept inbox found" "$CAMP1" "${CL}.emails.some(x=>x.address==='oncology@bangkokhospital.com')?'ok':undefined"
+# THE HIGHER OF THE TWO, NEVER THE SUM. `info@` fires BOTH triggers on a single
+# click and the fixture gives it 300 in each source. Summed it reads 600 — one
+# address doubled while every other stays put, which is the worst kind of wrong
+# because the total still looks plausible.
+expect_field "cl info not doubled" "$CAMP1" "${CL}.emails.find(x=>x.address==='info@bangkokhospital.com').clicks===300?300:undefined"
+# The channel breakdown must move with the email figure, or the Email row
+# disagrees with the table printed directly above it.
+expect_field "cl channels resum"   "$CAMP1" "${CL}.channels.reduce((a,c)=>a+c.clicks,0)===${CL}.total?'ok':undefined"
+expect_field "cl email is sum"     "$CAMP1" "${CL}.emails.reduce((a,e)=>a+e.clicks,0)===${CL}.email?'ok':undefined"
 
 echo "--- campaign: call and email folded into Outbound Clicks (v3.281.0) ---"
 # MW asked for them in the main table. Phone and email exist ONLY in the
@@ -285,7 +337,7 @@ echo "--- isolation: the report's chat bubble slide must not move ---"
 expect_field "iso chat source"     "$REPORT" "d.chatBubble.source==='click_chat_bubble'?'ok':undefined"
 expect_field "iso chat bhq total"  "$REPORT" "d.chatBubble.byScope.BHQ.total===1700?1700:undefined"
 expect_field "iso chat bgh total"  "$REPORT" "d.chatBubble.byScope.BGH.total===900?900:undefined"
-expect_field "iso chat contactus"  "$REPORT" "d.chatBubble.byScope.BHQ.contactUs===9600?9600:undefined"
+expect_field "iso chat contactus"  "$REPORT" "d.chatBubble.byScope.BHQ.contactUs===12000?12000:undefined"
 expect_field "iso chat one event"  "$REPORT" "d.chatBubble.events.length===1?'ok':undefined"
 
 echo "--- google ads benchmark: impression share must not be summed or averaged ---"

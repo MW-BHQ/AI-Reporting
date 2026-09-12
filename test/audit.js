@@ -578,5 +578,51 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
     : fail("print:no-shadow", "no blanket box-shadow:none in @media print — shadows will band in the PDF");
 }
 
+/**
+ * EVERY BARE MONEY FIGURE MUST STILL SAY THB SOMEWHERE (v3.285.0).
+ *
+ * v3.284.0 moved `฿` out of every money VALUE on the campaign tab and put
+ * `(THB)` on four labels — leaving every other money figure unitless, which is
+ * worse than the glyph it replaced. MW found `Cost per link click` on the
+ * deployed page; the audit found nothing, because nothing was looking.
+ *
+ * THE WINDOW IS THE ENCLOSING CARD OR SENTENCE, not the line. A `<div class=
+ * "sub">` sits under a `<div class="lab">` that may already carry `(THB)`, and
+ * requiring the unit twice inside one card would push the fix towards noise.
+ * So: walk back from the value to the start of its stat card, table cell or
+ * sentence and require THB, ฿ or a THB-bearing column header in that span.
+ *
+ * NEGATIVE TEST: delete `(THB)` from the `Cost per link click` label in
+ * `public/index.html`, run `ECOM_SHEET_ID=mock npm test`, watch this fail,
+ * revert. Confirmed failing on v3.284.0 as written, with 6 offenders.
+ */
+{
+  const BARE = /num\([^()]*?,\s*\{[^}]*money:\s*true[^}]*bare:\s*true[^}]*\}\)/g;
+  const offenders = [];
+  for (const m of html.matchAll(BARE)) {
+    /**
+     * The window opens at the nearest ENCLOSING container, never at the
+     * previous `</div>`: a `<div class="val">` is preceded by the `</div>` that
+     * closed its own `<div class="lab">`, so a closing tag as the boundary
+     * would cut every card off from the label carrying its unit.
+     */
+    const cell = Math.max(html.lastIndexOf("<td", m.index), html.lastIndexOf("<th", m.index));
+    const card = html.lastIndexOf("<div class=\"stat", m.index);
+    // A table cell is unitless by design — its unit lives in the column header
+    // — so for those the window is the whole enclosing <table>.
+    const start = cell > card
+      ? (html.lastIndexOf("<table", m.index) !== -1 ? html.lastIndexOf("<table", m.index) : cell)
+      : Math.max(card, m.index - 500);
+    const span = html.slice(start, m.index);
+    if (/THB|฿/.test(span)) continue;
+    const line = html.slice(0, m.index).split("\n").length;
+    offenders.push(`${line}: ${m[0].slice(0, 60)}`);
+  }
+  offenders.length
+    ? fail("money:thb-labelled",
+        `${offenders.length} bare money value(s) with no THB in scope — ${offenders.join(" | ")}`)
+    : ok("money:thb-labelled", "every bare money value carries THB in scope");
+}
+
 console.log(failures ? `\n${failures} audit check(s) failed` : "\nstatic audit clean");
 process.exit(failures ? 1 : 0);

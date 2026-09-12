@@ -1,5 +1,123 @@
 ### Recent (August 2026)
 
+**v3.285.0 — the average scroll depth is back, every money figure says THB
+again, every inbox is visible, and Google Ads landing views come from GA4.**
+
+Four corrections from MW, all of them undoing or completing something v3.284.0
+got wrong.
+
+**1. Average scroll depth restored** (MW: "can you find average scroll depth?
+you just average all scroll depth events fired in the page"). v3.284.0 replaced
+it with a reach figure after an argument about single-threshold containers that
+does not apply to this property — it tracks 25/50/75/90, so the mean moves with
+the traffic instead of sitting on a constant.
+
+The server never stopped computing it. `wsum / ev`, each threshold weighted by
+its event count, was still on the payload; only the card had been switched to
+render `scrollReach` alone. That is why the existing assertions stayed green
+while the deployed page lost the number, and it is the shape of failure worth
+remembering: a payload test does not prove a card renders.
+
+Both figures now ship on ONE card — average as the value, reach as the sub-line
+("62% of page views reached 50%"). One card and not two because the header grid
+caps at six and a seventh would wrap a row of one. The single-threshold
+fallback still shows the reach card by itself, so the case v3.284.0 was worried
+about is still handled.
+
+**2. `(THB)` on every money figure — a regression fix.** v3.284.0 moved the baht
+symbol out of every money VALUE on the campaign tab and added `(THB)` to four
+labels, leaving every other money figure unitless, which is worse than the glyph
+it replaced. MW found `Cost per link click` on the deployed page.
+
+Seven places, not the four the handover listed: `Cost per {goalResultLabel}`,
+`Cost per link click`, the landing-page-views sub-line, the leads sub-line, the
+conversations sub-line, the funnel note's divisor, and the tagging-gap warnbox
+prose. Labels take `(THB)` where the value is money; sub-lines sitting under a
+COUNT label take `THB` inline, since the label above them cannot carry it.
+Rounding is untouched — `{money:true,bare:true}` throughout, never `{dp:0}`,
+which flattens THB 4.08 to "4".
+
+The real fix is the guard. `money:thb-labelled` in `test/audit.js` walks back
+from every bare money value to its enclosing stat card or table and requires THB
+in that window. The window opens at the enclosing CONTAINER, never at the
+previous `</div>` — a `<div class="val">` is preceded by the `</div>` closing its
+own `<div class="lab">`, so a closing tag as the boundary cuts every card off
+from the label carrying its unit. Table cells are exempted to their `<table>`,
+since a cell is unitless by design and its unit lives in the column header.
+
+**3. Email reads every `Click_URL`** (MW: "you just find all click_url in the
+page then filter out which falls into email address pattern").
+
+WIDEN THE SOURCE, NOT THE PATTERN — the old code was not short of regex, it was
+short of ROWS. `Click | email` fires on
+`Click URL contains info@bangkokhospital.com`, so `contact_link*` events exist
+for that ONE inbox and no other; every department address clicked through
+invisibly. No pattern applied to that data could have found them.
+
+`contact_us` is the trigger that sees them: it fires from `Click | Contact URL`,
+whose regex is `^(tel:|mailto:|https?://(line\.me|...))`, catching every
+`mailto:` whatever the address, and it sends `Click_URL` — a registered custom
+dimension since July 2025. New pull `ga4ContactUsUrls`, campaign-filtered.
+
+Merged per address as the HIGHER of the two sources, never the sum. `info@`
+fires BOTH triggers on a single click, so adding them doubles exactly one
+address while every other stays put — the worst kind of wrong, because the total
+still looks plausible. Same rule the chat bubble already uses for a button
+measured twice. `total` and `byChannel` move with each address, or the Email row
+disagrees with the breakdown printed above it. `emailSourceWide:false` when the
+pull fails, so the card can say the department inboxes may be missing rather
+than imply the list is complete.
+
+The fixture now gives `contact_us` an oncology address the contact-link rows do
+not carry, so the stub reproduces the asymmetry instead of papering over it —
+`test/mock-fetch.js` reads the EXACT `eventName` filter to tell the two triggers
+apart. Without that the assertion passes on the broken code.
+
+**4. Google Ads landing views come from GA4** (MW: "you just look in GA4 see how
+many visit came from source/medium google/cpc or google/paid search").
+
+Google Ads genuinely has no landing-page-view metric — checked against all 2,902
+connector fields — and v3.284.0 answered that with a dash, which is not what MW
+asked for. The main campaign request already pulls `session_manual_source` and
+`session_manual_medium`, so the number was already in `variants`; no new call.
+
+SOURCE STRICT, MEDIUM LOOSE. Auto-tagging writes `cpc`; a hand-tagged link may
+say `paid search`, `paidsearch` or `ppc`, and all three are the same traffic.
+The source stays exactly `google` — `google` / `organic` is not an ad click and
+`bing` / `cpc` is a platform not on this connector.
+
+NEVER ADDED TO THE META TOTAL. A Meta landing page view is a browser render
+counted on the ad platform; a GA4 session is counted on the site, and
+`lpvToVisit` exists to measure the gap between those two counts. Folding
+sessions in would put a 1:1 term inside a ratio built to detect a shortfall and
+quietly dilute the tagging alarm. Every GA4-derived figure is flagged
+`landingPageViewsFromGa4` and excluded from `adLpv`.
+
+Split across Google ad campaigns by link-click share and marked, the same
+convention spend already uses — GA4 cannot name the ad campaign a session came
+from. With one Google campaign the platform figure IS that campaign's figure and
+is exact, and the split flag stays off.
+
+**Fixture: the GA4 stub gains a `google` source paired with `cpc`.** The medium
+DEPENDS on the source rather than being a free cross product — listing `cpc`
+unconditionally would also mint `facebook` / `cpc` and `pantip.com` / `cpc`,
+doubling the session total on every campaign assertion in the suite.
+
+This moved two pinned numbers, and one of them matters. `sa excludes x-network`
+asserted 400 on the reasoning that "no source here is Google". That was true and
+it was the problem: `isPaidSearch` counts a Cross-network row ONLY when the
+source is Google, so with no Google source the branch was never reached and the
+guard could have been deleted entirely without turning the suite red. It now
+reads 600 — 500 from Paid Search across five sources, 100 from the one
+Cross-network Google row — and exercises both halves of the rule.
+
+**Negative tests, all six confirmed failing before revert:** dropping
+`scrollDepth` from the payload; reading only the contact-link source; summing
+the two email sources instead of taking the max; relaxing the Google source
+match to any paid medium; leaking GA4 sessions into `adLpv`; dropping the
+GA4 flag. Plus the audit guard, which catches the exact `Cost per link click`
+regression MW reported.
+
 **v3.284.0 — scroll reach instead of an average, THB at unit level, bare-address
 emails, and Google Ads landing views are NULL not zero.**
 

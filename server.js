@@ -4030,6 +4030,53 @@ async function buildCampaign(code, from, to) {
       return null;
     }),
     /**
+     * EVERY `Click_URL` ON THE PAGE, SO EVERY INBOX IS VISIBLE (MW: "you just
+     * find all click_url in the page then filter out which falls into email
+     * address pattern").
+     *
+     * WIDEN THE SOURCE, NOT THE PATTERN. The contact-link pull above is not
+     * short of regex — it is short of ROWS. Its events only exist where a GTM
+     * trigger fired, and the email trigger is `Click | email`, whose condition
+     * is literally `Click URL contains info@bangkokhospital.com`. Every other
+     * department inbox — oncology, international, HR — clicks through without
+     * ever firing it, so no pattern applied to that data can find them.
+     *
+     * `contact_us` is the trigger that does see them. It fires from
+     * `Click | Contact URL`, whose regex is
+     * `^(tel:|mailto:|https?://(line\.me|...))` — that matches EVERY `mailto:`
+     * whatever the address, and it sends `Click_URL`, registered as a custom
+     * dimension since July 2025 alongside `Click_Classes`, `Click_ID` and
+     * `Click_Text`.
+     *
+     * NOT SUMMED WITH THE CONTACT-LINK SOURCE. The two triggers overlap on
+     * `info@` and only there, so adding them would double exactly one address.
+     * The consumer takes the HIGHER of the two per address, the same rule the
+     * chat bubble already uses for a button measured twice.
+     *
+     * NULL ON FAILURE. `customEvent:` dimensions resolve only while the
+     * parameter stays registered; if it is ever unregistered this request fails
+     * whole, and the email block falls back to the contact-link source rather
+     * than the tab losing its contact card.
+     */
+    ga4ContactUsUrls: ga4RunReport({
+      dimensions: ["sessionManualCampaignName", "customEvent:Click_URL", "customEvent:Click_Text"],
+      metrics: ["eventCount"],
+      from, to, limit: 5000, orderBy: "eventCount",
+      dimensionFilter: withBranch({
+        andGroup: {
+          expressions: [
+            { filter: { fieldName: "sessionManualCampaignName",
+              stringFilter: { matchType: "BEGINS_WITH", value: code, caseSensitive: false } } },
+            { filter: { fieldName: "eventName",
+              stringFilter: { matchType: "EXACT", value: "contact_us" } } },
+          ],
+        },
+      }),
+    }).catch((e) => {
+      logJson("WARNING", "campaign_contact_us_urls_unavailable", { error: String(e.message || e) });
+      return null;
+    }),
+    /**
      * PAGE QUALITY — how good was the traffic once it arrived (MW).
      *
      * A SEPARATE, GUARDED PULL rather than two more metrics on the main one.
@@ -4340,6 +4387,56 @@ async function buildCampaign(code, from, to) {
   const variants = [...vMap.values()].sort((a, b) => b.visits - a.visits);
 
   /**
+   * GOOGLE ADS LANDING VIEWS COME FROM GA4 (MW: "you just look in GA4 see how
+   * many visit came from source/medium google/cpc or google/paid search").
+   *
+   * Google Ads genuinely has no landing-page-view metric — checked against all
+   * 2,902 connector fields — and v3.284.0 answered that with a dash. MW does
+   * not want a dash; he wants the number GA4 already holds. The main request
+   * already pulls `session_manual_source` and `session_manual_medium`, so the
+   * variants carry it and no new call is needed.
+   *
+   * MEDIUM MATCHED LOOSELY, SOURCE STRICTLY. Auto-tagging writes `cpc`; a
+   * hand-tagged link may say `paid search`, `paidsearch` or `ppc`, and all
+   * three are the same traffic. The SOURCE stays exactly `google` —
+   * `google` / `organic` is not an ad click, and `bing` / `cpc` belongs to a
+   * platform that is not on this connector.
+   *
+   * THESE ARE SESSIONS, NOT META LANDING PAGE VIEWS, and the two are never
+   * added. A Meta landing page view is a browser render counted on the ad
+   * platform; a GA4 session is counted on the site, and `lpvToVisit` exists to
+   * measure the gap between those two counts. Folding sessions in would put a
+   * 1:1 term inside a ratio built to detect a shortfall, so every GA4-derived
+   * figure is flagged and excluded from `adLpv` below.
+   *
+   * SPLIT ACROSS GOOGLE AD CAMPAIGNS BY LINK-CLICK SHARE, and flagged, exactly
+   * as spend is already split across variants by visit share. GA4 cannot name
+   * the ad campaign a session came from, so with several Google campaigns
+   * running the per-campaign figure is an apportionment and says so; with one,
+   * the platform figure IS that campaign's figure and is exact.
+   */
+  const GOOGLE_PAID_MEDIUM = /^(cpc|ppc|paid[\s_-]?search)$/i;
+  const googlePaidSessions = variants.reduce((a, v) =>
+    norm(v.source) === "google" && GOOGLE_PAID_MEDIUM.test(String(v.medium || "").trim())
+      ? a + n(v.visits) : a, 0);
+  if (googlePaidSessions) {
+    for (const p of byPlatform) {
+      if (!/google/i.test(p.platform) || p.landingPageViews !== null) continue;
+      p.landingPageViews = googlePaidSessions;
+      p.landingPageViewsFromGa4 = true;
+      const mineG = adCampaigns.filter((c) => c.platform === p.platform);
+      const clickTotal = mineG.reduce((a, c) => a + n(c.linkClicks || c.clicks), 0);
+      for (const c of mineG) {
+        const share = mineG.length === 1 ? 1
+          : (clickTotal ? n(c.linkClicks || c.clicks) / clickTotal : 1 / mineG.length);
+        c.landingPageViews = Math.round(googlePaidSessions * share);
+        c.landingPageViewsFromGa4 = true;
+        c.landingPageViewsSplit = mineG.length > 1;
+      }
+    }
+  }
+
+  /**
    * Attribute each platform's spend to the utm variants that came from it.
    * The join is utm_source -> platform (names can't be matched directly, see
    * above). Where one paid variant matches a platform the figure is exact; where
@@ -4403,6 +4500,8 @@ async function buildCampaign(code, from, to) {
       v.adRows = (v !== owned[0]) ? (v.adRows || []) : [...(v.adRows || []), ...mine.map((c) => ({
         name: c.name, spend: c.spend, impressions: c.impressions,
         clicks: c.linkClicks || c.clicks, lpv: c.landingPageViews,
+        lpvFromGa4: c.landingPageViewsFromGa4 || false,
+        lpvSplit: c.landingPageViewsSplit || false,
       }))];
       v.adNames = (v !== owned[0]) ? [] : v.adNames;
       v.platform = p.platform;
@@ -4538,7 +4637,10 @@ async function buildCampaign(code, from, to) {
    * session is the signature of a broken or missing utm tag.
    */
   const adLinkClicks = byPlatform.reduce((a, p) => a + n(p.linkClicks), 0);
-  const adLpv = byPlatform.reduce((a, p) => a + n(p.landingPageViews), 0);
+  // GA4-derived figures are excluded: they are sessions, and `adLpv` feeds
+  // `lpvToVisit`, which is sessions ÷ landing page views. Including them would
+  // put a 1:1 term in a ratio built to detect a shortfall.
+  const adLpv = byPlatform.reduce((a, p) => a + (p.landingPageViewsFromGa4 ? 0 : n(p.landingPageViews)), 0);
   totals.linkClicks = adLinkClicks || null;
   totals.landingPageViews = adLpv || null;
   // CTR on link clicks, since that's the click that expresses intent.
@@ -4856,10 +4958,76 @@ async function buildCampaign(code, from, to) {
           byTarget.get(url).clicks += v;
         }
       }
+      /**
+       * THE SECOND EMAIL SOURCE, FOLDED IN PER ADDRESS (MW: "you just find all
+       * click_url in the page then filter out which falls into email address
+       * pattern").
+       *
+       * `contact_us` fires from `Click | Contact URL`, whose regex catches
+       * every `mailto:` regardless of the address, so this is where the
+       * department inboxes are. The loop above sees only `contact_link*`
+       * events, and `Click | email` fires solely on
+       * `Click URL contains info@bangkokhospital.com`.
+       *
+       * THE HIGHER OF THE TWO, NEVER THE SUM. `info@` fires BOTH triggers on a
+       * single click, so adding them would double that one address while
+       * leaving every other one alone — the same failure mode the chat bubble
+       * has, and it takes the same fix. A max is safe in the other direction
+       * too: an address only this source sees starts from zero, so the max is
+       * simply its own count.
+       */
+      const emailRe = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
+      const usRaw = data.ga4ContactUsUrls;
+      if (usRaw !== null) {
+        const wider = new Map();
+        for (const r of usRaw) {
+          if (!norm(r.sessionManualCampaignName).startsWith(needle)) continue;
+          const v = n(r.eventCount);
+          if (!v) continue;
+          const url = String(r["customEvent:Click_URL"] || "").trim();
+          if (!url) continue;
+          const addr = url.replace(/^mailto:/i, "").split("?")[0].trim().toLowerCase();
+          if (!addr || !emailRe.test(addr)) continue;
+          const text = String(r["customEvent:Click_Text"] || "").trim();
+          if (!wider.has(addr)) wider.set(addr, { clicks: 0, label: text || addr });
+          const w = wider.get(addr);
+          w.clicks += v;
+          if (text && (w.label === addr || text.length < w.label.length)) w.label = text;
+        }
+        let emailAfter = 0;
+        for (const [addr, w] of wider) {
+          if (!byEmail.has(addr)) byEmail.set(addr, { address: addr, label: w.label, clicks: 0 });
+          const rec = byEmail.get(addr);
+          // Per address: the higher of the two triggers, not their sum.
+          const before = rec.clicks;
+          rec.clicks = Math.max(before, w.clicks);
+          if (rec.label === addr && w.label !== addr) rec.label = w.label;
+          /**
+           * `total` and `byChannel` move with each address, or the Email row
+           * would disagree with the channel breakdown printed above it. The
+           * label comes from THIS address's own URL, the same call the loop
+           * above makes — a synthetic `mailto:x@y.com` could classify into a
+           * different bucket than the real one and split the row in two.
+           */
+          const gain = rec.clicks - before;
+          if (gain > 0) {
+            const c = classify("", `mailto:${addr}`);
+            const label = c ? c.label : (host(`mailto:${addr}`) || "Other contact link");
+            byChannel.set(label, (byChannel.get(label) || 0) + gain);
+            total += gain;
+          }
+        }
+        for (const rec of byEmail.values()) emailAfter += rec.clicks;
+        email = emailAfter;
+      }
       const desc = (m, key) => [...m.values ? m.values() : []].sort((a, b) => b.clicks - a.clicks);
       return {
         available: true,
         total, phone, email,
+        // False when the wider `contact_us` source failed this run, so the card
+        // can say the department inboxes may be missing rather than imply the
+        // list is complete.
+        emailSourceWide: usRaw !== null,
         channels: [...byChannel.entries()].sort((a, b) => b[1] - a[1])
           .map(([label, clicks]) => ({ label, clicks, share: total ? clicks / total : null })),
         // Exposed as a MAP as well, so the outbound tally can reconcile against

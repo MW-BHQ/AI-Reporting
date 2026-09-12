@@ -5607,7 +5607,7 @@ function renderCampaignBody(d) {
       <div class="stat card"><div class="lab">${esc(d.goalResultLabel||'result')}s <span class="pill">${esc(d.goalLabel||'')}</span></div>
         <div class="val">${num(d.goalResults)}</div>
         <div class="sub">counted by Meta, not the website</div></div>
-      <div class="stat card"><div class="lab">Cost per ${esc(d.goalResultLabel||'result')}</div>
+      <div class="stat card"><div class="lab">Cost per ${esc(d.goalResultLabel||'result')} (THB)</div>
         <div class="val ${isNA(d.goalCostPerResult)?'na':''}">${num(d.goalCostPerResult,{money:true,bare:true})}</div>
         <div class="sub">${d.goalResults?num(t.spend,{money:true,bare:true})+' ÷ '+num(d.goalResults):''}</div></div>
       `:`
@@ -5667,12 +5667,28 @@ function renderCampaignBody(d) {
        * that depth is shown instead, which is the honest form of the same fact.
        */
       /**
-       * REACH, NOT AN AVERAGE (MW: "how many percent reach 50% depth is easier
-       * to understand"). The average was also an average over EVENTS, so a page
-       * firing four thresholds counted four times as much as one firing one.
-       * A reach figure has a denominator a reader can name.
+       * THE AVERAGE IS THE FIGURE, THE REACH IS THE SUB-LINE (MW: "can you find
+       * average scroll depth? you just average all scroll depth events fired in
+       * the page" — v3.285.0 puts it back).
+       *
+       * v3.284.0 replaced the average with a reach figure over an argument
+       * about single-threshold containers. That argument does not apply to this
+       * property: it tracks 25/50/75/90, so the mean moves with the traffic
+       * rather than sitting on a constant. The server still guards the case it
+       * was worried about — `scrollDepth` is null when only one threshold came
+       * back — and the reach card is what shows then.
+       *
+       * ONE CARD, NOT TWO. Both numbers fit because the reach reads naturally
+       * as the sub-line, and the header grid caps at six cards; a seventh would
+       * wrap a row of one.
        */
-      if (q && q.available && q.scrollReach) {
+      if (q && q.available && q.scrollDepth != null) {
+        const r = q.scrollReach;
+        cards.push(`<div class="stat card"><div class="lab">Avg. scroll depth</div>
+          <div class="val" style="color:${q.scrollDepth<40?'var(--rose)':'var(--ink)'}">${num(q.scrollDepth,{dp:0})}%</div>
+          <div class="sub">${r?`${num(r.ofViews*100,{dp:0})}% of page views reached ${num(r.percent)}%`
+            :`${num(q.scrollEvents)} scroll events`}</div></div>`);
+      } else if (q && q.available && q.scrollReach) {
         const r = q.scrollReach;
         cards.push(`<div class="stat card"><div class="lab">Scrolled ${num(r.percent)}%</div>
           <div class="val" style="color:${r.ofViews<0.3?'var(--rose)':'var(--ink)'}">${num(r.ofViews*100,{dp:0})}%</div>
@@ -5704,7 +5720,7 @@ function renderCampaignBody(d) {
              print rules, which is the whole mechanism here. -->
         <div class="chart-wrap funnel-wrap"><canvas id="funnelChart"></canvas></div>
         ${d.offSiteGoal?`<div class="note">Only the ad-platform stages appear: a ${esc((d.goalLabel||'').toLowerCase())} campaign's clicks open a ${d.goal==='leads'?'lead form':'chat'} on Meta, so no website stages follow. A logarithmic axis is used so stages of very different size stay readable.</div>`
-          :t.costPerKeyEvent!=null?`<div class="note">Cost per key event: <b>THB ${num(t.costPerKeyEvent,{money:true,bare:true})}</b> · ${num(t.spend,{money:true,bare:true})} ÷ ${num(t.keyEvents)} key events. A logarithmic axis keeps impressions and key events readable together.</div>`
+          :t.costPerKeyEvent!=null?`<div class="note">Cost per key event: <b>THB ${num(t.costPerKeyEvent,{money:true,bare:true})}</b> · THB ${num(t.spend,{money:true,bare:true})} ÷ ${num(t.keyEvents)} key events. A logarithmic axis keeps impressions and key events readable together.</div>`
           :`<div class="note">Stages with no data are omitted — a logarithmic axis can't plot zero. ${t.visits?'':'No website visits carry this code.'}</div>`}
       </div>
       <div class="card"><h2>Key events</h2>
@@ -5984,10 +6000,10 @@ function renderCampaignBody(d) {
       <div class="grid g-4">
         <div class="stat"><div class="lab">Link CTR</div><div class="val">${num(t.ctr,{pct:true,dp:2})}</div>
           <div class="sub">${num(t.linkClicks)} link clicks ÷ ${num(t.impressions)} impr</div></div>
-        <div class="stat"><div class="lab">Cost per link click</div><div class="val">${num(t.cpc,{money:true,bare:true})}</div>
+        <div class="stat"><div class="lab">Cost per link click (THB)</div><div class="val">${num(t.cpc,{money:true,bare:true})}</div>
           <div class="sub">CPM ${num(t.cpm,{money:true,bare:true})}</div></div>
         <div class="stat"><div class="lab">Landing page views</div><div class="val ${isNA(t.landingPageViews)?'na':''}">${num(t.landingPageViews)}</div>
-          <div class="sub">${t.costPerLpv!=null?num(t.costPerLpv,{money:true,bare:true})+' each':'reported by Meta'}</div></div>
+          <div class="sub">${t.costPerLpv!=null?'THB '+num(t.costPerLpv,{money:true,bare:true})+' each':'reported by Meta'}</div></div>
         <div class="stat"><div class="lab">Page view → session</div>
           <div class="val" style="${t.lpvToVisit!=null&&t.lpvToVisit<50?'color:var(--rose)':''}">${t.lpvToVisit!=null?num(t.lpvToVisit,{pct:true,dp:1}):'—'}</div>
           <div class="sub">${num(t.visits)} sessions from ${num(t.landingPageViews)} page views</div></div>
@@ -5998,17 +6014,17 @@ function renderCampaignBody(d) {
           <div class="sub">incl. reactions &amp; expands · ${num(t.ctrAll,{pct:true,dp:2})} of impr</div></div>
         <div class="stat"><div class="lab">Leads</div>
           <div class="val ${!t.leads?'na':''}">${t.leads?num(t.leads):'0'}</div>
-          <div class="sub">${t.costPerLead!=null?num(t.costPerLead,{money:true,bare:true})+' per lead':'no lead-objective campaign here'}</div></div>
+          <div class="sub">${t.costPerLead!=null?'THB '+num(t.costPerLead,{money:true,bare:true})+' per lead':'no lead-objective campaign here'}</div></div>
         <div class="stat"><div class="lab">Conversations</div>
           <div class="val ${!t.messages?'na':''}">${t.messages?num(t.messages):'0'}</div>
-          <div class="sub">${t.costPerMessage!=null?num(t.costPerMessage,{money:true,bare:true})+' each':'none started'}</div></div>
+          <div class="sub">${t.costPerMessage!=null?'THB '+num(t.costPerMessage,{money:true,bare:true})+' each':'none started'}</div></div>
         <div class="stat"><div class="lab">Sessions not recorded</div>
           <div class="val" style="${t.lostSessions?'color:var(--rose)':''}">${t.lostSessions!=null?num(t.lostSessions):'—'}</div>
           <div class="sub">page views with no tagged session</div></div>
       </div>
 
       ${t.lpvToVisit!=null&&t.lpvToVisit<50?`<div class="warnbox" style="margin-top:14px;">
-        <b>Tagging gap, quantified.</b> Meta recorded ${num(t.landingPageViews)} landing page views &mdash; browsers that actually rendered your page &mdash; but only ${num(t.visits)} sessions carry this campaign code. Around ${num(t.lostSessions)} visits arrived and were credited elsewhere, so ${num(t.spend,{money:true,bare:true})} of spend can't be tied to any outcome. The destination URL is missing its <code>utm_campaign</code>, or carries a different one.
+        <b>Tagging gap, quantified.</b> Meta recorded ${num(t.landingPageViews)} landing page views &mdash; browsers that actually rendered your page &mdash; but only ${num(t.visits)} sessions carry this campaign code. Around ${num(t.lostSessions)} visits arrived and were credited elsewhere, so THB ${num(t.spend,{money:true,bare:true})} of spend can't be tied to any outcome. The destination URL is missing its <code>utm_campaign</code>, or carries a different one.
       </div>`:''}
 
       <div class="note"><b>Link CTR and cost per link click use link clicks, not Meta's "clicks (all)"</b>, which also counts reactions, photo expands and profile taps and so overstates traffic intent &mdash; often by half. <b>Page view → session</b> is the tagging health check and the only fair comparison available: Meta's landing page view means the browser rendered your page, so it should closely match a GA4 session. A large shortfall is a measurement failure, not lost interest. Leads and conversations show as 0 rather than being hidden, so you can see the objective produced none.</div>
@@ -6048,7 +6064,7 @@ function renderCampaignBody(d) {
               <td class="i18n">${esc(a2.name)}</td>
               <td class="num">${a2.impressions==null?'\u2014':num(a2.impressions)}</td>
               <td class="num">${a2.clicks==null?'\u2014':num(a2.clicks)}</td>
-              <td class="num">${a2.lpv==null?'\u2014':num(a2.lpv)}</td>
+              <td class="num">${a2.lpv==null?'\u2014':num(a2.lpv)+(a2.lpvFromGa4?` <span class="pill grey" title="GA4 sessions from google / cpc. Google Ads reports no landing page view, so this is counted on the site, not on the ad platform${a2.lpvSplit?' — and split across the Google ad campaigns by link-click share':''}.">GA4${a2.lpvSplit?' ~':''}</span>`:'')}</td>
               <td class="num">${a2.spend==null?'\u2014':num(a2.spend,{money:true,bare:true})}</td>
             </tr>`).join('')}</tbody></table></div></td></tr>`:''}`).join('')||((d.orphanAdCampaigns||[]).length?'':'<tr><td colspan="11" class="num">no traffic matched this code</td></tr>')}
 
@@ -10737,7 +10753,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.284.0';
+const CLIENT_BUILD = '3.285.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

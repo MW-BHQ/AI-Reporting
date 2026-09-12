@@ -198,6 +198,7 @@ function ga4Report(body) {
   const beginsWith = {};       // fieldName -> required prefix
   const regexes = {};          // fieldName -> [RegExp] (the branch filter)
   let allowedEvents = null;
+  let exactEvent = null;
   for (const f of flat) {
     if (f.stringFilter && f.stringFilter.matchType === "BEGINS_WITH") {
       beginsWith[f.fieldName] = f.stringFilter.value;
@@ -218,6 +219,16 @@ function ga4Report(body) {
         .push(new RegExp(f.stringFilter.value, f.stringFilter.caseSensitive ? "" : "i"));
     }
     if (f.inListFilter) allowedEvents = f.inListFilter.values;
+    /**
+     * An EXACT eventName filter is captured too, so the stub can tell which
+     * TRIGGER is being asked for. `contact_link*` and `contact_us` both send
+     * `Click_URL`, but they fire on different conditions and therefore see
+     * different sets of links — returning one list for both would hide the
+     * whole reason the second pull exists.
+     */
+    if (f.fieldName === "eventName" && f.stringFilter && f.stringFilter.matchType === "EXACT") {
+      exactEvent = f.stringFilter.value;
+    }
   }
   const keep = (field, value) => {
     const p = beginsWith[field];
@@ -477,6 +488,21 @@ function ga4Report(body) {
        * and the Email row went missing while the clicks were happening.
        */
       ["surgery@bangkokhospital.com", "Email Surgery Master"],
+      /**
+       * A DEPARTMENT INBOX ONLY `contact_us` CAN SEE (v3.285.0). This is the
+       * bug MW reported: `Click | email` fires on
+       * `Click URL contains info@bangkokhospital.com`, so `contact_link*`
+       * events exist for that ONE address and no other. Every other inbox
+       * clicks through invisibly.
+       *
+       * Appended only on the `contact_us` pull, so the fixture reproduces the
+       * asymmetry rather than papering over it. Widening the regex on the
+       * contact-link data cannot find this row — only widening the SOURCE can,
+       * which is what the assertion is for.
+       */
+      ...(exactEvent === "contact_us"
+        ? [["mailto:oncology@bangkokhospital.com", "Oncology Centre"]]
+        : []),
       ["https://line.me/R/ti/p/@bangkokhospital", "\u0e15\u0e34\u0e14\u0e15\u0e48\u0e2d\u0e2a\u0e2d\u0e1a\u0e16\u0e32\u0e21"],
       ["https://maps.app.goo.gl/bangkokhospital", "Google Maps"],
     ];
@@ -509,8 +535,23 @@ function ga4Report(body) {
        * the filter and the suite still passed — which is why the fixture uses
        * the subdomain rather than the bare host.
        */
-      : d === "sessionManualSource" ? ["facebook", "pantip.com", "chatgpt.com", "www.canva.com"]
-      : d === "sessionManualMedium" ? ["paid"]
+      /**
+       * `google` IS HERE FOR THE PAID-SEARCH PAIR. Google Ads has no
+       * landing-page-view metric, so that figure is read from GA4 sessions
+       * whose source/medium is `google` / `cpc`. With a facebook-only fixture
+       * that lookup returns zero whether the rule is right or wrong, and the
+       * assertion would pass on a broken match.
+       */
+      : d === "sessionManualSource" ? ["facebook", "google", "pantip.com", "chatgpt.com", "www.canva.com"]
+      /**
+       * MEDIUM DEPENDS ON THE SOURCE, and is not a free cross product. Listing
+       * `cpc` unconditionally would also mint `facebook` / `cpc` and
+       * `pantip.com` / `cpc` rows, doubling the session total on every campaign
+       * assertion in the suite. Only `google` carries `cpc`, which is also what
+       * the real property looks like.
+       */
+      : d === "sessionManualMedium"
+        ? (acc[dims.indexOf("sessionManualSource")] === "google" ? ["cpc"] : ["paid"])
       // Thailand must be present so the render-time exclusion is exercised.
       : d === "country" ? ["Thailand", "Japan", "United States", "Germany", "Singapore", "Cambodia"]
       : d === "sessionManualCampaignName" ? [...campaigns, ...marker]
