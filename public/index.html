@@ -5611,7 +5611,7 @@ function renderCampaignBody(d) {
         <div class="sub">${t.contacts?num(t.contacts)+' contact-us events':'no contact events'}</div></div>
       `}
     </div>
-    <div class="grid g-5 mt">
+    <div class="grid g-6 mt">
       <div class="stat card"><div class="lab">Variants matched</div><div class="val">${num(d.matchedVariants)}</div></div>
       <div class="stat card"><div class="lab">Impressions</div><div class="val ${isNA(t.impressions)?'na':''}">${num(t.impressions)}</div>
         <div class="sub">${!isNA(t.paidImpressions)||!isNA(t.organicImpressions)?`${num(t.paidImpressions)} paid · ${num(t.organicImpressions)} organic`:''}</div></div>
@@ -5621,6 +5621,37 @@ function renderCampaignBody(d) {
         <div class="sub">${t.keyEventRate!=null?num(t.keyEventRate,{pct:true})+' of visits':''}</div></div>
       <div class="stat card"><div class="lab">Revenue</div><div class="val">${num(t.revenue,{money:true})}</div>
         <div class="sub">${t.purchases?num(t.purchases)+' purchases':''}</div></div>
+      ${(() => {
+        /**
+         * PAGE QUALITY (MW: "we don't have a scorecard to tell the quality of
+         * the campaign page yet. maybe bounce rate?").
+         *
+         * Bounce rate leads because he asked for it and executives read it,
+         * but on its own it is close to a restatement: GA4 counts a session as
+         * ENGAGED if it lasted ten seconds, saw two pages, OR fired a key
+         * event, so bounce is `1 - engagement rate` and the funnel above
+         * already shows Engaged. On a campaign built to fire key events it is
+         * partly circular by construction.
+         *
+         * So the sub-line carries the two figures that restate nothing: how
+         * many pages a visit saw, and how long it was actually engaged. Those
+         * separate "they arrived and left" from "they read the page".
+         *
+         * A dash rather than a zero when the pull failed. 0% bounce would read
+         * as a perfect landing page.
+         */
+        const q = d.quality;
+        if (!q || !q.available) {
+          return `<div class="stat card"><div class="lab">Bounce rate</div>
+            <div class="val na">\u2014</div>
+            <div class="sub">engagement metrics unavailable this run</div></div>`;
+        }
+        const secs = Math.round(q.avgEngagedSec);
+        const dur = secs >= 60 ? `${Math.floor(secs/60)}m ${String(secs%60).padStart(2,'0')}s` : `${secs}s`;
+        return `<div class="stat card"><div class="lab">Bounce rate</div>
+          <div class="val" style="color:${q.bounceRate>0.7?'var(--rose)':'var(--ink)'}">${num(q.bounceRate*100,{dp:1})}%</div>
+          <div class="sub">${num(q.pagesPerVisit,{dp:1})} pages/visit \u00b7 ${esc(dur)} engaged</div></div>`;
+      })()}
     </div>
 
     <div class="grid g-2-1 mt">
@@ -10657,7 +10688,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.281.0';
+const CLIENT_BUILD = '3.282.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

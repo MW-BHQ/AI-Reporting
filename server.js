@@ -4029,6 +4029,33 @@ async function buildCampaign(code, from, to) {
       logJson("WARNING", "campaign_contact_links_unavailable", { error: String(e.message || e) });
       return null;
     }),
+    /**
+     * PAGE QUALITY — how good was the traffic once it arrived (MW).
+     *
+     * A SEPARATE, GUARDED PULL rather than two more metrics on the main one.
+     * `userEngagementDuration` and `screenPageViews` have bitten this project
+     * before with "The request's dimensions & metrics are incompatible", and on
+     * the main pull that failure would take the whole campaign tab down. Here
+     * it degrades to no scorecard.
+     *
+     * ALL FOUR METRICS ARE SUMMABLE, which is the point. Bounce rate and
+     * pages-per-session are RATIOS and cannot be averaged across rows — the
+     * same trap as impression share on the Google Ads tab. Pulling the
+     * components and dividing once at the end is the only correct way:
+     * `1 - engaged/sessions`, not the mean of per-row bounce rates.
+     */
+    ga4Quality: ga4RunReport({
+      dimensions: ["sessionManualCampaignName"],
+      metrics: ["sessions", "engagedSessions", "screenPageViews", "userEngagementDuration"],
+      from, to, limit: 2000,
+      dimensionFilter: withBranch({
+        filter: { fieldName: "sessionManualCampaignName",
+          stringFilter: { matchType: "BEGINS_WITH", value: code, caseSensitive: false } },
+      }),
+    }).catch((e) => {
+      logJson("WARNING", "campaign_quality_unavailable", { error: String(e.message || e) });
+      return null;
+    }),
     // Organic posts, matched to the campaign by the short link in their text.
     // The pull window is widened to always include the campaign's code date
     // plus 45 days: posts are returned by publish date, so a post published
@@ -4967,6 +4994,34 @@ async function buildCampaign(code, from, to) {
     lineMessages, lineSameDay, lineRequestIdsFound: lineReqIds.length,
     sheetErrors: sheets.errors,
     unattributedSpend,
+    quality: (() => {
+      const rows = data.ga4Quality;
+      if (rows === null) return { available: false };
+      let sess = 0, eng = 0, views = 0, secs = 0;
+      for (const r of rows) {
+        if (!norm(r.sessionManualCampaignName).startsWith(needle)) continue;
+        sess += n(r.sessions); eng += n(r.engagedSessions);
+        views += n(r.screenPageViews); secs += n(r.userEngagementDuration);
+      }
+      if (!sess) return { available: false };
+      return {
+        available: true, sessions: sess, engagedSessions: eng,
+        /**
+         * GA4's bounce rate IS `1 - engagement rate` — a session counts as
+         * engaged if it lasted 10s, saw two pages, or fired a key event. So on
+         * a campaign built to fire key events this is partly circular, and it
+         * is the inverse of the "Engaged" stage already in the funnel above.
+         * Kept because MW asked and executives read it, but the sub-line
+         * carries the two figures that are not restatements of anything.
+         */
+        bounceRate: 1 - (eng / sess),
+        pagesPerVisit: views / sess,
+        // Seconds of ENGAGED time over all sessions, not over engaged ones:
+        // dividing by engaged sessions flatters a campaign whose traffic mostly
+        // bounced, which is the opposite of what a quality figure should do.
+        avgEngagedSec: secs / sess,
+      };
+    })(),
     emptyResult, dateHint, launchDate: launch,
     adImpressionsMatched: anyAdMatch,
     notConnected, matchedNone,

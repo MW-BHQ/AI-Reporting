@@ -1,5 +1,44 @@
 ### Recent (August 2026)
 
+**v3.282.0 — a page-quality scorecard on the campaign header row.**
+
+MW: "we don't have a scorecard to tell the quality of the campaign page yet …
+maybe bounce rate?"
+
+Sixth card in the header row (`g-5` becomes `g-6`): **Bounce rate**, with pages
+per visit and average engaged time underneath.
+
+**Bounce rate leads because he asked and executives read it, but on its own it
+is close to a restatement.** GA4 counts a session as ENGAGED if it lasted ten
+seconds, saw two pages, OR fired a key event — so bounce is `1 - engagement
+rate`, and the funnel already shows Engaged. On a campaign built to fire key
+events it is partly circular by construction. The sub-line therefore carries the
+two figures that restate nothing: **pages per visit** and **seconds engaged**,
+which separate "arrived and left" from "read the page".
+
+**A SEPARATE, GUARDED PULL**, not two more metrics on the main one.
+`userEngagementDuration` and `screenPageViews` have produced "The request's
+dimensions & metrics are incompatible" on this project before, and on the main
+pull that failure takes the whole campaign tab down. Here it degrades to a dash
+— never a 0%, which would read as a perfect landing page.
+
+**All four metrics pulled are SUMMABLE and the ratios are divided once at the
+end.** Bounce and pages-per-session are ratios and cannot be averaged across
+rows, the same trap as impression share on the Google Ads tab. Engaged seconds
+are divided by ALL sessions rather than engaged ones: dividing by engaged
+flatters a campaign whose traffic mostly bounced, which is backwards for a
+quality figure.
+
+**Coverage, and its limit, recorded in the test rather than implied.** The
+assertion pins bounce against its own components and is verified to fail when
+the formula is inverted. It does NOT catch averaging per-row rates instead of
+dividing sums — the more likely mistake — because the fixture returns one row
+for the campaign, so mean and weighted are identical. Proving that needs rows
+with unequal session counts, a fixture change with reach into other sections, so
+the gap is written down instead.
+
+### Recent (August 2026)
+
 **v3.281.0 — call and email join Outbound Clicks; emails grouped like numbers;
 the last footnotes gone.**
 

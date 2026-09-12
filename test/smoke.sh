@@ -177,6 +177,28 @@ expect_field "lc webchat named"    "$CAMP1" "${LC}.outbound.rows.find(r=>r.label
 # EMPTY. Verified to repopulate when that pull fails.
 expect_field "lc nothing unmeasured" "$CAMP1" "${LC}.notMeasured.length===0?'none':undefined"
 
+echo "--- campaign: page quality scorecard (v3.282.0) ---"
+Q="d.quality"
+expect_field "q available"         "$CAMP1" "${Q}.available===true?'ok':undefined"
+# Bounce must equal 1 - engaged/sessions computed on the SUMS. This catches an
+# inverted or mis-denominated formula — verified by flipping it to
+# engaged/sessions and watching it fail.
+#
+# WHAT IT DOES NOT CATCH, stated rather than implied: averaging the per-row
+# rates instead of dividing the sums. That is the same trap as impression share
+# on the Google Ads tab and it is the more likely mistake, but this fixture
+# returns ONE row for the campaign, so the mean and the weighted figure are
+# identical and every assertion stays green either way. Giving the stub rows
+# with unequal session counts would prove it; that is a fixture change with
+# reach into other sections, so the gap is recorded instead.
+expect_field "q bounce from sums"  "$CAMP1" "Math.abs(${Q}.bounceRate-(1-${Q}.engagedSessions/${Q}.sessions))<1e-9?'ok':undefined"
+expect_field "q bounce in range"   "$CAMP1" "${Q}.bounceRate>=0&&${Q}.bounceRate<=1?'ok':undefined"
+# Engaged seconds are divided by ALL sessions, not by engaged ones: dividing by
+# engaged flatters a campaign whose traffic mostly bounced, which is backwards
+# for a quality figure.
+expect_field "q pages per visit"   "$CAMP1" "${Q}.pagesPerVisit>0?'ok':undefined"
+expect_field "q engaged seconds"   "$CAMP1" "${Q}.avgEngagedSec>=0?'ok':undefined"
+
 echo "--- campaign: contact links, the only source that sees a phone tap ---"
 CL="d.linkClicks.contactLinks"
 expect_field "cl available"        "$CAMP1" "${CL}.available===true?'ok':undefined"
