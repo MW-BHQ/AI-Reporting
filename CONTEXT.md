@@ -1,5 +1,66 @@
 ### Recent (August 2026)
 
+**v3.288.0 — engaged page views replace the scroll headline; the email
+diagnosis gets instrumented instead of guessed at a third time.**
+
+**1. Engaged page views** (MW: "i got `engagement` fired if a user scroll over
+60% of the page, along with other trigger ... may be we change the scorecard —
+scroll depth to engaged session instead of avg scroll depth, while keep how many
+% and page views · x reached it").
+
+The format he asked to keep is the format the card already had, so only the
+source changed. It reads from the `ga4EventNames` pull added in v3.287, so
+there is no new GA4 call.
+
+NOT CALLED AN ENGAGED SESSION, though that is what MW called it. GA4 already has
+"engaged session" and this tab already prints it twice — the funnel's Engaged
+stage and the bounce-rate sub-line, both from `engagedSessions` (10 seconds, or
+two pages, or a key event). Reusing the words for a GTM event with different
+rules would put two different numbers under one name on one slide. The card
+says "Engaged page views", which is what the number is.
+
+OVER PAGE VIEWS, not sessions — the event fires per page, so a visit that read
+four pages had four chances at it.
+
+MORE THAN SCROLL, and the label does not promise otherwise: MW says other
+triggers fire it too. The scroll figures stay on the payload behind it, so a
+renamed event drops the card to the average and then to reach at a single
+threshold rather than losing it.
+
+**2. The email "(redacted)" is still unexplained, and now it is instrumented.**
+Two diagnoses from a screenshot were wrong: first a guessed `contact_us` event
+filter (v3.285, real, fixed in v3.287), then GA4's Redact data setting, which MW
+confirms has never been on. Nothing in this codebase writes that word, so it is
+arriving from the API. `campaign_click_urls_scanned` now logs up to twelve
+distinct mailto-ish `Click_URL` values verbatim, so the next deploy shows what
+GA4 actually returns instead of inviting a third guess.
+
+Note the shape of the bug it produced: the contact-link branch treats anything
+starting `mailto:` as an address without validating what follows, so
+`mailto:(redacted)` became an address named `(redacted)` and rendered as a
+clickable `mailto:(redacted)` link.
+
+**3. Two fixture weaknesses that were certifying untested code.**
+
+PAGE VIEWS NOW DIFFER FROM SESSIONS on the campaign quality pull — 1,000 against
+100, previously 100 of each. Every "over page views, not over sessions" rule in
+this tab produced the same number under either denominator, so the negative test
+for dividing by the wrong one could not fail. `engagement.ofViews` now reads 6%
+and would read 60% over sessions.
+
+`engagement` FIRES ON 60 OF THE PAGE VIEWS, not all of them. At parity the card
+reads 100% and a bug returning the page-view total looks identical.
+
+**4. A render assertion, not just a payload one.** smoke.sh proves the server
+computes `quality.engagement`; it cannot prove the card renders it — and that
+exact gap is how v3.284 removed a working scroll figure from the page while
+every payload check stayed green. `print-overflow.py` now reads the headline
+quality card's label off the rendered page.
+
+**Negative tests, all confirmed failing before revert:** counting every event
+name instead of `engagement`; dividing by sessions instead of page views;
+rendering the scroll card instead of the engagement one.
+
 **v3.287.0 — the email scan was filtered to a guessed event name, and scroll
 thresholds can be read from event names.**
 

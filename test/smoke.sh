@@ -247,6 +247,26 @@ expect_field "q no double count"   "$CAMP1" "${Q}.scrollEvents===1100?1100:undef
 # 55,000/1,100. Reading 49 means the event-name pass never ran.
 expect_field "q weighted average"  "$CAMP1" "${Q}.scrollDepth===50?50:undefined"
 
+echo "--- campaign: engaged page views replace the scroll headline (v3.288.0) ---"
+# MW: "i got `engagement` fired if a user scroll over 60% of the page, along
+# with other trigger ... change the scorecard - scroll depth to engaged session
+# instead of avg scroll depth". It is the only depth signal on this property
+# that MOVES — percentScrolled carries one value, so its average is 90 forever.
+#
+# The fixture fires `engagement` 60 times against 1,000 page views. Counting
+# every event name instead of this one reads far higher; returning the page-view
+# total reads 100%.
+expect_field "q engagement events"  "$CAMP1" "${Q}.engagement.events===60?60:undefined"
+# OVER PAGE VIEWS, not sessions. The event fires per page, so a visit that read
+# four pages had four chances at it. 60/1000 = 6%; over the fixture's 100
+# sessions the same numerator reads 60%, so this one assertion separates the two
+# denominators — which it could not do until v3.288.0 gave the fixture 1,000
+# page views against 100 sessions instead of 100 of each.
+expect_field "q engagement of views" "$CAMP1" "Math.round(${Q}.engagement.ofViews*100)===6?6:undefined"
+# The scroll figures STAY on the payload as the fallback — if the container
+# renames the event the card drops to the average, not to nothing.
+expect_field "q scroll still there" "$CAMP1" "${Q}.scrollDepth!=null?'ok':undefined"
+
 echo "--- campaign: Google Ads landing views come from GA4 (v3.285.0) ---"
 # `actions_landing_page_view` is a META field; Google Ads has no
 # landing-page-view metric at all — checked against all 2,902 connector fields.

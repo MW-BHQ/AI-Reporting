@@ -5711,7 +5711,23 @@ function renderCampaignBody(d) {
        * as the sub-line, and the header grid caps at six cards; a seventh would
        * wrap a row of one.
        */
-      if (q && q.available && q.scrollDepth != null) {
+      /**
+       * ENGAGED PAGE VIEWS FIRST (MW: "may be we change the scorecard — scroll
+       * depth to engaged session instead of avg scroll depth, while keep how
+       * many % and page views · x reached it").
+       *
+       * The format he asked to keep is the format the card already had, so only
+       * the source changes. The scroll cards stay behind it: if the container's
+       * `engagement` event is ever renamed or stops firing, the tab falls back
+       * to the average, and then to reach at a single threshold, rather than
+       * losing the card.
+       */
+      if (q && q.available && q.engagement) {
+        const e = q.engagement;
+        cards.push(`<div class="stat card"><div class="lab">Engaged page views</div>
+          <div class="val" style="color:${e.ofViews<0.3?'var(--rose)':'var(--ink)'}">${num(e.ofViews*100,{dp:0})}%</div>
+          <div class="sub">of page views \u00b7 ${num(e.events)} fired it</div></div>`);
+      } else if (q && q.available && q.scrollDepth != null) {
         const r = q.scrollReach;
         cards.push(`<div class="stat card"><div class="lab">Avg. scroll depth</div>
           <div class="val" style="color:${q.scrollDepth<40?'var(--rose)':'var(--ink)'}">${num(q.scrollDepth,{dp:0})}%</div>
@@ -10812,7 +10828,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.287.0';
+const CLIENT_BUILD = '3.288.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

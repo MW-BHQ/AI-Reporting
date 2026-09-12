@@ -257,6 +257,18 @@ with sync_playwright() as p:
              * SIBLINGS, where they still render on screen and still print, but
              * the one-page sizer cannot see them.
              */
+            /**
+             * THE HEADLINE QUALITY CARD, read off the RENDERED page. The
+             * payload assertions in smoke.sh prove the server computes
+             * `quality.engagement`; they cannot prove the card renders it, and
+             * that gap is exactly how v3.284 removed a working scroll figure
+             * from the page while every payload check stayed green.
+             */
+            qualityCard: (() => {
+              const labs = [...document.querySelectorAll('.stat.card .lab')]
+                .map((l) => l.textContent.trim());
+              return labs.find((l) => /engaged page views|scroll/i.test(l)) || null;
+            })(),
             bodyKids: (() => {
               const cb = document.getElementById('campBody');
               if (!cb) return null;
@@ -404,6 +416,14 @@ else:
               f"anyway — the sheet is sized short by all of them")
     else:
         print("  every printed row was visible to the measurement  ok")
+
+    qc = cf.get("qualityCard")
+    if qc != "Engaged page views":
+        cbad.append(f"quality headline card reads {qc!r}, not 'Engaged page views'")
+        print(f"  !! the quality card renders {qc!r} — the engagement figure is "
+              f"on the payload but not on the page")
+    else:
+        print("  quality card shows engaged page views  ok")
 
     bk = cf.get("bodyKids")
     if not bk:

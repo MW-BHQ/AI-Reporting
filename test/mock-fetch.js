@@ -174,7 +174,7 @@ const GA4_PAGES = [
  * must NOT be counted twice — one click fires one event.
  */
 const GA4_EVENTS = ["appointments", "contact_us", "better_ai_start", "better_ai_result", "login",
-  "scroll_60", "scroll_90"];
+  "scroll_60", "scroll_90", "engagement"];
 const GA4_LANDING_DIM_NAME = process.env.GA4_LANDING_DIM || "landingPagePlusQueryString";
 
 /**
@@ -356,6 +356,15 @@ function ga4Report(body) {
       metricValues: mets.map((m) => ({ value:
         m === "keyEvents" ? "3"
         : m === "engagedSessions" ? "60"
+        /**
+         * PAGE VIEWS MUST NOT EQUAL SESSIONS on the campaign quality pull.
+         * Both were 100, so every "over page views, not over sessions" rule —
+         * scroll reach, engaged page views — produced the same number either
+         * way and the negative test for dividing by the wrong denominator
+         * could not fail. 1,000 against 100 sessions makes the two visibly
+         * different.
+         */
+        : (m === "screenPageViews" && !page && dims.includes("sessionManualCampaignName")) ? "1000"
         : (m === "screenPageViews" && page && PAGE_VIEWS[page] !== undefined) ? String(PAGE_VIEWS[page])
         /**
          * CHAT rows get their own scale, independent of PAGE_ACTIONS, which
@@ -383,6 +392,15 @@ function ga4Report(body) {
          * weighted average equals the plain mean of the thresholds and a
          * mis-weighted implementation passes.
          */
+        /**
+         * `engagement` FIRES ON 60 OF THE 100 PAGE VIEWS, not all of them. At
+         * parity the card reads 100% and any bug that returns the page-view
+         * total instead of the event count produces the same number — the
+         * assertion certifies nothing. 60 is only reachable by counting this
+         * one event name.
+         */
+        : (m === "eventCount" && dims.indexOf("eventName") >= 0
+           && vals[dims.indexOf("eventName")] === "engagement") ? "60"
         : (m === "eventCount" && dims.indexOf("percentScrolled") >= 0)
           ? ({ "25": "400", "50": "300", "75": "200", "90": "100" }[vals[dims.indexOf("percentScrolled")]] || "0")
         : (m === "eventCount" && weight !== undefined) ? String(weight * 10)

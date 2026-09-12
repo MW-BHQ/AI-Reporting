@@ -5040,7 +5040,7 @@ async function buildCampaign(code, from, to) {
         const m = String(v || "").match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
         return m ? m[0].toLowerCase() : null;
       };
-      const diag = { rows: 0, withUrl: 0, emails: 0, events: new Set() };
+      const diag = { rows: 0, withUrl: 0, emails: 0, events: new Set(), samples: [] };
       if (usRaw !== null) {
         /**
          * PER ADDRESS, PER EVENT — then the HIGHEST single event, never the
@@ -5058,6 +5058,8 @@ async function buildCampaign(code, from, to) {
           const url = String(r["customEvent:Click_URL"] || "").trim();
           if (!url || url === "(not set)") continue;
           diag.withUrl++;
+          if (/mailto|@|redact/i.test(url) && diag.samples.length < 12
+              && !diag.samples.includes(url)) diag.samples.push(url);
           const addr = findEmail(url);
           if (!addr) continue;
           diag.emails++;
@@ -5102,10 +5104,22 @@ async function buildCampaign(code, from, to) {
        * to spot it on the deployed page. These four numbers separate "the pull
        * failed", "no click carried a URL" and "no URL was an address".
        */
+      /**
+       * SAMPLE THE ACTUAL VALUES, because two diagnoses from a screenshot were
+       * already wrong: first a guessed event-name filter, then GA4's Redact
+       * data setting, which MW confirms has never been on. The card renders
+       * "(redacted)" and nothing in this codebase writes that word, so the
+       * string is arriving from GA4 — and the only way to settle where it comes
+       * from is to look at what the API actually returns.
+       *
+       * MAILTO ROWS ONLY, capped. These are internal department inboxes on the
+       * hospital's own site and MW has asked twice that they not be hidden;
+       * they are already in the report the log sits beside.
+       */
       logJson("INFO", "campaign_click_urls_scanned", {
         code, available: usRaw !== null, rows: diag.rows, withUrl: diag.withUrl,
         emailRows: diag.emails, events: [...diag.events].slice(0, 12),
-        addresses: byEmail.size,
+        addresses: byEmail.size, sampleMailtos: diag.samples.slice(0, 12),
       });
       const desc = (m, key) => [...m.values ? m.values() : []].sort((a, b) => b.clicks - a.clicks);
       return {
@@ -5419,6 +5433,43 @@ async function buildCampaign(code, from, to) {
            * scroll; dividing by sessions would let a deep-browsing visit push
            * the figure over 100%.
            */
+          /**
+           * THE `engagement` EVENT, which is what this container actually
+           * measures (MW: "i got `engagement` fired if a user scroll over 60%
+           * of the page, along with other trigger").
+           *
+           * It replaces the scroll card as the headline because it is the only
+           * depth signal on the property that MOVES. `percentScrolled` carries
+           * one value — enhanced measurement fires a single `scroll` at 90% —
+           * so an average of it is 90 forever and the reach figure is the same
+           * fact stated once.
+           *
+           * NOT CALLED AN ENGAGED SESSION, though that is what MW called it.
+           * GA4 already has "engaged session" and this tab already prints it
+           * twice: the funnel's Engaged stage and the bounce-rate sub-line, both
+           * from `engagedSessions` (10 seconds, or two pages, or a key event).
+           * Reusing the words for a GTM event with different rules would put two
+           * different numbers under one name on one slide.
+           *
+           * OVER PAGE VIEWS, not sessions. The event fires per page, so a visit
+           * that read four pages had four chances to fire it; dividing by
+           * sessions lets a deep-browsing visit push the figure past 100%.
+           *
+           * MORE THAN SCROLL, and the label must not promise otherwise — MW
+           * says other triggers fire it too. "Engaged page views" is what the
+           * number is: page views on which the engagement event fired, whatever
+           * fired it.
+           */
+          const engRows = nameRows || [];
+          let engEvents = 0;
+          for (const r of engRows) {
+            if (!norm(r.sessionManualCampaignName).startsWith(needle)) continue;
+            if (String(r.eventName || "").trim().toLowerCase() !== "engagement") continue;
+            engEvents += n(r.eventCount);
+          }
+          const engagement = (nameRows && engEvents && views)
+            ? { events: engEvents, ofViews: engEvents / views } : null;
+
           const target = thresholds.find((x) => x >= 50);
           const reached = target != null ? (seen.get(target) || 0) : 0;
           return {
@@ -5428,6 +5479,7 @@ async function buildCampaign(code, from, to) {
             scrollReach: target != null && views
               ? { percent: target, events: reached, ofViews: reached / views } : null,
             scrollEvents: ev,
+            engagement,
           };
         })(),
         // Seconds of ENGAGED time over all sessions, not over engaged ones:
