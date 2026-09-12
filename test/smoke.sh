@@ -214,8 +214,8 @@ echo "--- campaign: average scroll depth (v3.283.0) ---"
 # thresholds. The fixture drops off with depth — 400 reach 25%, 100 reach 90% —
 # so the weighted answer is 49% and the plain mean is 60%. Equal counts cannot
 # tell the two apart, which is why the fixture is uneven.
-expect_field "q scroll weighted"   "$CAMP1" "Math.round(${Q}.scrollDepth)===49?49:undefined"
-expect_field "q scroll thresholds" "$CAMP1" "${Q}.scrollThresholds===4?4:undefined"
+expect_field "q scroll weighted"   "$CAMP1" "Math.round(${Q}.scrollDepth)===50?50:undefined"
+expect_field "q scroll thresholds" "$CAMP1" "${Q}.scrollThresholds===5?5:undefined"
 # REACH AT A THRESHOLD (MW: "how many percent reach 50% depth is easier to
 # understand"). The 50% mark, or the nearest tracked threshold AT OR ABOVE it —
 # asking for exactly 50 reports nothing on a container tracking 25/75/90.
@@ -232,6 +232,20 @@ expect_field "q reach over views"  "$CAMP1" "${Q}.scrollReach.ofViews>0?'ok':und
 # assertions above stayed green while the deployed page lost the number. This
 # pins the pair so neither can be dropped silently again.
 expect_field "q depth and reach"   "$CAMP1" "(${Q}.scrollDepth!=null&&${Q}.scrollReach!=null)?'ok':undefined"
+# THRESHOLDS FROM EVENT NAMES (v3.287.0). `percentScrolled` is populated by
+# enhanced measurement, which fires ONE `scroll` at 90% — on MW's property that
+# is the only threshold there is, so the card kept showing reach instead of the
+# average he asked for twice. A GTM Scroll Depth trigger encodes the mark in the
+# event NAME, which needs no custom-dimension registration to read.
+#
+# The fixture's dimension carries 25/50/75/90; the event names carry 60 and 90.
+# 60 must be folded in and 90 must NOT be counted twice — one click, one event.
+expect_field "q folds name thresh" "$CAMP1" "${Q}.scrollThresholdList.join(',')==='25,50,60,75,90'?'ok':undefined"
+# 1,000 events from the dimension + 100 for the 60 mark. 1,200 means 90 was
+# added a second time from its event name.
+expect_field "q no double count"   "$CAMP1" "${Q}.scrollEvents===1100?1100:undefined"
+# 55,000/1,100. Reading 49 means the event-name pass never ran.
+expect_field "q weighted average"  "$CAMP1" "${Q}.scrollDepth===50?50:undefined"
 
 echo "--- campaign: Google Ads landing views come from GA4 (v3.285.0) ---"
 # `actions_landing_page_view` is a META field; Google Ads has no
@@ -306,6 +320,11 @@ echo "--- campaign: every Click_URL, not just the contact_link tag (v3.285.0) --
 # contact-link rows do not carry, so no regex applied to the old source can find
 # it and this assertion fails unless the second pull is actually being read.
 expect_field "cl wider source on"  "$CAMP1" "${CL}.emailSourceWide===true?'ok':undefined"
+# THE SCAN COUNTS ARE ON THE PAYLOAD, so an empty table can say WHICH of the
+# three it was — pull failed, no click carried a URL, or no URL was an address.
+# v3.285.0 shipped a filter matching nothing and the card was indistinguishable
+# from a campaign nobody emailed; MW had to catch it on the deployed page.
+expect_field "cl scan reported"    "$CAMP1" "(${CL}.emailScan&&${CL}.emailScan.withUrl>0&&${CL}.emailScan.matched>0)?'ok':undefined"
 expect_field "cl dept inbox found" "$CAMP1" "${CL}.emails.some(x=>x.address==='oncology@bangkokhospital.com')?'ok':undefined"
 # THE HIGHER OF THE TWO, NEVER THE SUM. `info@` fires BOTH triggers on a single
 # click and the fixture gives it 300 in each source. Summed it reads 600 — one

@@ -161,7 +161,20 @@ const GA4_PAGES = [
 ];
 // Includes login (must be filtered out by the server's inListFilter) and the
 // two Better AI events, so a merge that silently returns zero is detectable.
-const GA4_EVENTS = ["appointments", "contact_us", "better_ai_start", "better_ai_result", "login"];
+/**
+ * `scroll_60` and `scroll_90` are GTM Scroll Depth events (v3.287.0).
+ *
+ * `percentScrolled` is populated by enhanced measurement, which fires ONE
+ * `scroll` at 90% — on MW's property that is the only threshold there is, which
+ * is why the card kept reporting reach instead of the average he asked for
+ * twice. A GTM trigger encodes the mark in the event NAME instead, and an event
+ * name needs no custom-dimension registration.
+ *
+ * 60 is not in the `percentScrolled` fixture and must be FOLDED IN. 90 is, and
+ * must NOT be counted twice — one click fires one event.
+ */
+const GA4_EVENTS = ["appointments", "contact_us", "better_ai_start", "better_ai_result", "login",
+  "scroll_60", "scroll_90"];
 const GA4_LANDING_DIM_NAME = process.env.GA4_LANDING_DIM || "landingPagePlusQueryString";
 
 /**
@@ -198,7 +211,7 @@ function ga4Report(body) {
   const beginsWith = {};       // fieldName -> required prefix
   const regexes = {};          // fieldName -> [RegExp] (the branch filter)
   let allowedEvents = null;
-  let exactEvent = null;
+  let eventFilter = null;
   for (const f of flat) {
     if (f.stringFilter && f.stringFilter.matchType === "BEGINS_WITH") {
       beginsWith[f.fieldName] = f.stringFilter.value;
@@ -220,15 +233,16 @@ function ga4Report(body) {
     }
     if (f.inListFilter) allowedEvents = f.inListFilter.values;
     /**
-     * An EXACT eventName filter is captured too, so the stub can tell which
-     * TRIGGER is being asked for. `contact_link*` and `contact_us` both send
-     * `Click_URL`, but they fire on different conditions and therefore see
-     * different sets of links — returning one list for both would hide the
-     * whole reason the second pull exists.
+     * ANY eventName filter is captured, whatever its matchType, so the stub can
+     * tell a request that scans EVERY event from one that narrows to a trigger.
+     * `contact_link*` (BEGINS_WITH) and `contact_us` (EXACT) both send
+     * `Click_URL` but fire on different conditions, so they see different sets
+     * of links — returning one list for both hides the whole reason the wide
+     * scan exists. Matching only EXACT missed the BEGINS_WITH pull and handed
+     * the department inbox to the narrow source too, which is what let a
+     * broken filter pass this suite.
      */
-    if (f.fieldName === "eventName" && f.stringFilter && f.stringFilter.matchType === "EXACT") {
-      exactEvent = f.stringFilter.value;
-    }
+    if (f.fieldName === "eventName") eventFilter = f;
   }
   const keep = (field, value) => {
     const p = beginsWith[field];
@@ -489,18 +503,20 @@ function ga4Report(body) {
        */
       ["surgery@bangkokhospital.com", "Email Surgery Master"],
       /**
-       * A DEPARTMENT INBOX ONLY `contact_us` CAN SEE (v3.285.0). This is the
-       * bug MW reported: `Click | email` fires on
+       * A DEPARTMENT INBOX NO `contact_link*` EVENT CAN SEE (v3.287.0). This is
+       * the bug MW reported: `Click | email` fires on
        * `Click URL contains info@bangkokhospital.com`, so `contact_link*`
        * events exist for that ONE address and no other. Every other inbox
        * clicks through invisibly.
        *
-       * Appended only on the `contact_us` pull, so the fixture reproduces the
-       * asymmetry rather than papering over it. Widening the regex on the
-       * contact-link data cannot find this row — only widening the SOURCE can,
-       * which is what the assertion is for.
+       * Present only when NO eventName filter was sent — which is the whole
+       * correction in v3.287.0. v3.285.0 filtered on a guessed `contact_us`
+       * and found one address in production; the fixture had been keyed to
+       * that same guess, so it agreed with the broken code. Now the fixture
+       * rewards scanning every event and punishes filtering to any one of
+       * them.
        */
-      ...(exactEvent === "contact_us"
+      ...(eventFilter === null && allowedEvents === null
         ? [["mailto:oncology@bangkokhospital.com", "Oncology Centre"]]
         : []),
       ["https://line.me/R/ti/p/@bangkokhospital", "\u0e15\u0e34\u0e14\u0e15\u0e48\u0e2d\u0e2a\u0e2d\u0e1a\u0e16\u0e32\u0e21"],

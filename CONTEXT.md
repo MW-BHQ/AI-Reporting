@@ -1,5 +1,70 @@
 ### Recent (August 2026)
 
+**v3.287.0 — the email scan was filtered to a guessed event name, and scroll
+thresholds can be read from event names.**
+
+Both from MW's screenshots of the deployed v3.286.0.
+
+**1. Email: one address found in production.** v3.285.0 pulled `Click_URL`
+filtered to `eventName == "contact_us"`. That name was a GUESS — and it is
+exactly the mistake the `ga4Scroll` pull twenty lines above already documents
+and deliberately avoids: *"a GTM Scroll Depth trigger can send any name, and
+filtering on a guessed name would return nothing and look like nobody
+scrolls."* It looked like nobody emails.
+
+MW's instruction never mentioned an event: "you just find all click_url in the
+page then filter out which falls into email address pattern." The filter is now
+gone. `Click_URL` is blank on every event that does not set it, so requiring an
+email pattern in the VALUE is the filter, whatever the container names its
+triggers.
+
+`eventName` stays as a DIMENSION so rows can be grouped by it. Two triggers can
+fire on one click — `Click | email` and `Click | Contact URL` both match
+`mailto:info@...` — so the consumer takes the HIGHEST single event's count per
+address, never the sum, the same rule the chat bubble uses for a button
+measured twice. Verified: `info@` appears under five event names at 300 each
+and reports 300.
+
+The pattern is now a SEARCH, not a whole-string match after stripping a prefix.
+A `mailto:` may carry query params, an uppercase scheme, or no scheme at all.
+
+**The card says which kind of empty it is.** An empty table read as "nobody
+emailed" whether the pull failed, no click carried a URL, or no URL was an
+address — MW had to catch a total miss by eye. `emailScan` counts rows, rows
+with a URL, and rows that matched, and `campaign_click_urls_scanned` logs the
+same plus the event names seen.
+
+**2. Scroll: thresholds recovered from event names.** MW asked twice for an
+average and twice got the reach card. He was not wrong to ask and the handover
+was not right that the property tracks 25/50/75/90 — the deployed card read
+"Scrolled 90% · 3%", which is the single-threshold fallback firing.
+`percentScrolled` is populated by enhanced measurement, which fires ONE `scroll`
+at 90%. A mean of one number is that number, forever, for every campaign.
+
+A GTM Scroll Depth trigger usually encodes the mark in the event NAME
+(`scroll_50`, `scroll_depth_75`), and an event name needs no custom-dimension
+registration to query. New `ga4EventNames` pull; any event whose name mentions
+scrolling and ends in 1..100 contributes that threshold, weighted by its count.
+A threshold already present in the built-in dimension is SKIPPED, not added —
+one click fires one event. `campaign_scroll_thresholds` logs which came from
+where plus the full event-name list, so if the container names them some other
+way the next deploy says so instead of another round of guessing.
+
+If the container has no scroll trigger at all, the card still shows reach at
+90%, which stays the honest form of a single threshold.
+
+**Fixture: the stub now punishes the bug instead of agreeing with it.** The
+department inbox was gated on `exactEvent === "contact_us"` — keyed to the same
+guess as the broken code, so it certified it. It is now gated on NO eventName
+filter of any matchType. Matching only EXACT missed the contact-link pull's
+`eventName BEGINS_WITH`, which handed the inbox to the narrow source too and is
+why the first attempt at this negative test passed against broken code.
+
+**Four negative tests, all confirmed failing before revert:** filtering the scan
+to a guessed event name (loses the department inbox); summing across events
+instead of taking the highest (doubles `info@`); skipping the event-name scroll
+pass; counting a name threshold the dimension already has.
+
 **v3.286.0 — a stray `</div>` was splitting the campaign export into seven
 ragged pages.**
 

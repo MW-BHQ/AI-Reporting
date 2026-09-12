@@ -4058,22 +4058,73 @@ async function buildCampaign(code, from, to) {
      * whole, and the email block falls back to the contact-link source rather
      * than the tab losing its contact card.
      */
-    ga4ContactUsUrls: ga4RunReport({
-      dimensions: ["sessionManualCampaignName", "customEvent:Click_URL", "customEvent:Click_Text"],
+    /**
+     * EVERY `Click_URL` ON THE PAGE, WITH NO eventName FILTER (MW: "you just
+     * find all click_url in the page then filter out which falls into email
+     * address pattern").
+     *
+     * v3.285.0 filtered this to `eventName == "contact_us"` and found ONE
+     * address in production. That filter was a guessed name — exactly the
+     * mistake `ga4Scroll` above already documents and deliberately avoids:
+     * "a GTM trigger can send any name, and filtering on a guessed name would
+     * return nothing and look like nobody scrolls". It looked like nobody
+     * emails.
+     *
+     * MW's instruction never mentioned an event. `Click_URL` is a registered
+     * custom dimension (since Jul 2025, with `Click_Classes`, `Click_ID`,
+     * `Click_Text`) and it is BLANK on every event that does not set it, so
+     * requiring an email pattern in the value IS the filter. Whatever the
+     * container calls its triggers, the address is in this dimension.
+     *
+     * `eventName` STAYS AS A DIMENSION so rows can be grouped by it. Two
+     * triggers can fire on ONE click — `Click | email` and `Click | Contact
+     * URL` both match `mailto:info@...` — and summing `eventCount` across them
+     * would double that address while leaving every other one alone. The
+     * consumer takes the highest single event's count per address, the same
+     * rule the chat bubble uses for a button measured twice.
+     *
+     * NULL ON FAILURE, and the card says so rather than printing an empty
+     * table that looks like a campaign nobody emailed.
+     */
+    ga4ClickUrls: ga4RunReport({
+      dimensions: ["sessionManualCampaignName", "eventName",
+        "customEvent:Click_URL", "customEvent:Click_Text"],
       metrics: ["eventCount"],
-      from, to, limit: 5000, orderBy: "eventCount",
+      from, to, limit: 10000, orderBy: "eventCount",
       dimensionFilter: withBranch({
-        andGroup: {
-          expressions: [
-            { filter: { fieldName: "sessionManualCampaignName",
-              stringFilter: { matchType: "BEGINS_WITH", value: code, caseSensitive: false } } },
-            { filter: { fieldName: "eventName",
-              stringFilter: { matchType: "EXACT", value: "contact_us" } } },
-          ],
-        },
+        filter: { fieldName: "sessionManualCampaignName",
+          stringFilter: { matchType: "BEGINS_WITH", value: code, caseSensitive: false } },
       }),
     }).catch((e) => {
-      logJson("WARNING", "campaign_contact_us_urls_unavailable", { error: String(e.message || e) });
+      logJson("WARNING", "campaign_click_urls_unavailable", { error: String(e.message || e) });
+      return null;
+    }),
+    /**
+     * EVERY EVENT NAME ON THIS CAMPAIGN, WITH ITS COUNT.
+     *
+     * Two jobs, both of them things v3.285/6 had to guess at.
+     *
+     *   · SCROLL THRESHOLDS THE BUILT-IN DIMENSION CANNOT SEE. `percentScrolled`
+     *     is populated by enhanced measurement, which fires ONE `scroll` at 90%
+     *     — that is why the card reports reach at 90% and not an average: there
+     *     is only one threshold, and a mean of one number is that number. A GTM
+     *     Scroll Depth trigger usually encodes the mark in the EVENT NAME
+     *     (`scroll_50`, `scroll_depth_75`), and an event name needs no custom
+     *     dimension registration to query. If the container does that, the
+     *     thresholds are recoverable from here.
+     *   · A NAME LIST IN THE LOG, so the next question about "which trigger
+     *     fires this" is answered by data instead of by reading the container.
+     */
+    ga4EventNames: ga4RunReport({
+      dimensions: ["sessionManualCampaignName", "eventName"],
+      metrics: ["eventCount"],
+      from, to, limit: 500, orderBy: "eventCount",
+      dimensionFilter: withBranch({
+        filter: { fieldName: "sessionManualCampaignName",
+          stringFilter: { matchType: "BEGINS_WITH", value: code, caseSensitive: false } },
+      }),
+    }).catch((e) => {
+      logJson("WARNING", "campaign_event_names_unavailable", { error: String(e.message || e) });
       return null;
     }),
     /**
@@ -4976,32 +5027,56 @@ async function buildCampaign(code, from, to) {
        * too: an address only this source sees starts from zero, so the max is
        * simply its own count.
        */
-      const emailRe = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
-      const usRaw = data.ga4ContactUsUrls;
+      const usRaw = data.ga4ClickUrls;
+      /**
+       * PATTERN-MATCH THE VALUE, DO NOT PARSE IT AS A URL. MW: "filter out
+       * which falls into email address pattern." A `mailto:` may carry query
+       * params, an uppercase scheme, or whitespace, and some containers write
+       * the bare address with no scheme at all. Searching the string for an
+       * address covers all of those; requiring the whole value to BE one after
+       * stripping a prefix does not.
+       */
+      const findEmail = (v) => {
+        const m = String(v || "").match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+        return m ? m[0].toLowerCase() : null;
+      };
+      const diag = { rows: 0, withUrl: 0, emails: 0, events: new Set() };
       if (usRaw !== null) {
-        const wider = new Map();
+        /**
+         * PER ADDRESS, PER EVENT — then the HIGHEST single event, never the
+         * sum. Two triggers firing on one click (`Click | email` and
+         * `Click | Contact URL` both match `mailto:info@...`) would otherwise
+         * double exactly that address and leave every other one alone, which
+         * is the worst kind of wrong because the total still looks plausible.
+         */
+        const perAddr = new Map();
         for (const r of usRaw) {
+          diag.rows++;
           if (!norm(r.sessionManualCampaignName).startsWith(needle)) continue;
           const v = n(r.eventCount);
           if (!v) continue;
           const url = String(r["customEvent:Click_URL"] || "").trim();
-          if (!url) continue;
-          const addr = url.replace(/^mailto:/i, "").split("?")[0].trim().toLowerCase();
-          if (!addr || !emailRe.test(addr)) continue;
+          if (!url || url === "(not set)") continue;
+          diag.withUrl++;
+          const addr = findEmail(url);
+          if (!addr) continue;
+          diag.emails++;
+          const ev = String(r.eventName || "?");
+          diag.events.add(ev);
           const text = String(r["customEvent:Click_Text"] || "").trim();
-          if (!wider.has(addr)) wider.set(addr, { clicks: 0, label: text || addr });
-          const w = wider.get(addr);
-          w.clicks += v;
-          if (text && (w.label === addr || text.length < w.label.length)) w.label = text;
+          if (!perAddr.has(addr)) perAddr.set(addr, { byEvent: new Map(), label: text || addr });
+          const a = perAddr.get(addr);
+          a.byEvent.set(ev, (a.byEvent.get(ev) || 0) + v);
+          if (text && (a.label === addr || text.length < a.label.length)) a.label = text;
         }
-        let emailAfter = 0;
-        for (const [addr, w] of wider) {
-          if (!byEmail.has(addr)) byEmail.set(addr, { address: addr, label: w.label, clicks: 0 });
+        for (const [addr, a] of perAddr) {
+          const best = Math.max(...a.byEvent.values());
+          if (!byEmail.has(addr)) byEmail.set(addr, { address: addr, label: a.label, clicks: 0 });
           const rec = byEmail.get(addr);
-          // Per address: the higher of the two triggers, not their sum.
           const before = rec.clicks;
-          rec.clicks = Math.max(before, w.clicks);
-          if (rec.label === addr && w.label !== addr) rec.label = w.label;
+          // Also the higher against the contact-link source, not their sum.
+          rec.clicks = Math.max(before, best);
+          if (rec.label === addr && a.label !== addr) rec.label = a.label;
           /**
            * `total` and `byChannel` move with each address, or the Email row
            * would disagree with the channel breakdown printed above it. The
@@ -5017,17 +5092,33 @@ async function buildCampaign(code, from, to) {
             total += gain;
           }
         }
+        let emailAfter = 0;
         for (const rec of byEmail.values()) emailAfter += rec.clicks;
         email = emailAfter;
       }
+      /**
+       * SAY WHERE IT BROKE. v3.285.0 shipped a filter that matched nothing and
+       * the card was indistinguishable from a campaign nobody emailed — MW had
+       * to spot it on the deployed page. These four numbers separate "the pull
+       * failed", "no click carried a URL" and "no URL was an address".
+       */
+      logJson("INFO", "campaign_click_urls_scanned", {
+        code, available: usRaw !== null, rows: diag.rows, withUrl: diag.withUrl,
+        emailRows: diag.emails, events: [...diag.events].slice(0, 12),
+        addresses: byEmail.size,
+      });
       const desc = (m, key) => [...m.values ? m.values() : []].sort((a, b) => b.clicks - a.clicks);
       return {
         available: true,
         total, phone, email,
-        // False when the wider `contact_us` source failed this run, so the card
-        // can say the department inboxes may be missing rather than imply the
-        // list is complete.
+        /**
+         * WHY THE EMAIL TABLE IS EMPTY, when it is. An empty table reads as
+         * "nobody emailed"; these say whether the Click_URL scan ran at all and
+         * whether anything on the page carried a URL to match. MW should never
+         * have to ask a screenshot which of the three it was.
+         */
         emailSourceWide: usRaw !== null,
+        emailScan: { rows: diag.rows, withUrl: diag.withUrl, matched: diag.emails },
         channels: [...byChannel.entries()].sort((a, b) => b[1] - a[1])
           .map(([label, clicks]) => ({ label, clicks, share: total ? clicks / total : null })),
         // Exposed as a MAP as well, so the outbound tally can reconcile against
@@ -5259,6 +5350,54 @@ async function buildCampaign(code, from, to) {
             wsum += pct * c; ev += c;
             seen.set(pct, (seen.get(pct) || 0) + c);
           }
+          /**
+           * THRESHOLDS ENCODED IN EVENT NAMES, folded in beside the built-in
+           * dimension (v3.287.0).
+           *
+           * MW asked twice for an average and twice got the reach card instead,
+           * because `percentScrolled` carries exactly one value on this
+           * property: enhanced measurement fires a single `scroll` at 90%, so
+           * the "average" would be 90 forever. A GTM Scroll Depth trigger
+           * usually names its events `scroll_50` / `scroll_depth_75`, and an
+           * event name needs no custom-dimension registration to read.
+           *
+           * THE NUMBER MUST LOOK LIKE A THRESHOLD. Bounded to 1..100 and to
+           * event names that mention scrolling, or `page_view_2024` becomes a
+           * scroll depth. A name matching a threshold ALREADY in the built-in
+           * dimension is skipped rather than added twice — one click, one
+           * event, counted once.
+           */
+          const nameRows = data.ga4EventNames;
+          const fromNames = new Map();
+          if (nameRows) {
+            for (const r of nameRows) {
+              if (!norm(r.sessionManualCampaignName).startsWith(needle)) continue;
+              const nm = String(r.eventName || "");
+              if (!/scroll|depth/i.test(nm)) continue;
+              const m = nm.match(/(\d{1,3})\s*%?\s*$/);
+              if (!m) continue;
+              const pct = Number(m[1]);
+              if (!(pct > 0 && pct <= 100)) continue;
+              const c = n(r.eventCount);
+              if (!c) continue;
+              fromNames.set(pct, (fromNames.get(pct) || 0) + c);
+            }
+          }
+          const fromDimension = [...seen.keys()].sort((a, b) => a - b);
+          const added = [];
+          for (const [pct, c] of fromNames) {
+            if (seen.has(pct)) continue;      // already counted by the dimension
+            wsum += pct * c; ev += c;
+            seen.set(pct, c);
+            added.push(pct);
+          }
+          logJson("INFO", "campaign_scroll_thresholds", {
+            code, fromDimension,
+            fromEventNames: [...fromNames.keys()].sort((a, b) => a - b),
+            addedFromEventNames: added.sort((a, b) => a - b),
+            eventNames: nameRows
+              ? [...new Set(nameRows.map((r) => String(r.eventName || "")))].slice(0, 40) : null,
+          });
           if (!ev) return { scrollDepth: null, scrollThresholds: 0 };
           const thresholds = [...seen.keys()].sort((a, b) => a - b);
           /**

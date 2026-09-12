@@ -5927,7 +5927,13 @@ function renderCampaignBody(d) {
                 <td class="num">${num(x.clicks)}</td>
                 <td class="num">${pct(x.clicks)}</td>
               </tr>`).join('')}
-              </tbody></table>`:`<div class="note" style="margin-top:0;">No email clicks recorded for this campaign in range.</div>`}
+              </tbody></table>`:`<div class="note" style="margin-top:0;">${
+                cl.emailSourceWide===false
+                  ? 'Click URL data was unavailable this run, so any address other than the one with its own trigger is missing \u2014 not measured, not zero.'
+                  : (cl.emailScan && cl.emailScan.withUrl===0
+                      ? 'No click on this campaign\u2019s pages carried a Click URL, so no address could be read.'
+                      : 'No email clicks recorded for this campaign in range.')
+              }</div>`}
             </div>
           </div>
         </div>`;
@@ -10806,7 +10812,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.286.0';
+const CLIENT_BUILD = '3.287.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
