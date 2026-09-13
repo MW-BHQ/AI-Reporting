@@ -2306,7 +2306,50 @@
 </div>
 
 <script>
-// ============================================================ state & helpers
+// =================================================================== thresholds
+/**
+ * EVERY NUMBER THAT DECIDES A COLOUR, IN ONE PLACE (MW: "what is the threshold
+ * before they turn red?").
+ *
+ * They were six inline comparisons scattered through the campaign renderer, so
+ * the only way to answer that question was to read the source, and changing one
+ * meant finding it first. A threshold is an editorial judgement about what
+ * counts as bad — it belongs somewhere a person can read and argue with, not
+ * buried in a style attribute.
+ *
+ * RED IS THE ONLY TONE. There is no amber tier and none is wanted here: a
+ * scorecard that paints three colours makes the reader decode a legend before
+ * they can read a number. Red means "this one needs looking at", everything
+ * else is ink.
+ *
+ * A THRESHOLD THAT NEVER FIRES IS AS BAD AS ONE THAT ALWAYS DOES. `lostSessions`
+ * was red on ANY value above zero, so on a campaign of any size it was red
+ * permanently and carried no information. It now shares the landing-to-visit
+ * rule, because they are the same fact stated two ways — the count of sessions
+ * the ad platform saw and the site did not, and that count as a share.
+ *
+ * CAMPAIGN TAB ONLY SO FAR. The other tabs still carry their own inline
+ * comparisons; moving them here is a backlog item, not something to do
+ * halfway — see ROADMAP.md.
+ */
+const RED = {
+  // Engaged page views: share of page views on which the `engagement` event
+  // fired. PROVISIONAL — inherited from the scroll-reach card this replaced in
+  // v3.288 and never re-based. That card measured "reached 50% depth"; this
+  // event fires at 60% scroll AND on other triggers, so its natural range is
+  // probably higher and 30% may never fire. Re-set once MW has a few months.
+  engagedPageViews: 0.30,
+  // Bounce rate: GA4's inverse engagement rate, so this is "fewer than 30% of
+  // sessions engaged".
+  bounceRate: 0.70,
+  // Landing page views the ad platform reported vs sessions GA4 saw. Below half
+  // means most of the traffic paid for never arrived tagged — a tagging fault,
+  // not a performance one.
+  landingToVisit: 50,
+  // Scroll cards, both fallbacks for when the `engagement` event is absent.
+  scrollDepth: 40,
+  scrollReach: 0.30,
+};
 const S = {
   view: 'overview',
   // Value vs volume on the centre cross-tab. Defaults to value: revenue is what
@@ -5745,18 +5788,18 @@ function renderCampaignBody(d) {
       if (q && q.available && q.engagement) {
         const e = q.engagement;
         cards.push(`<div class="stat card"><div class="lab">Engaged page views</div>
-          <div class="val" style="color:${e.ofViews<0.3?'var(--rose)':'var(--ink)'}">${num(e.events)}</div>
+          <div class="val" style="color:${e.ofViews<RED.engagedPageViews?'var(--rose)':'var(--ink)'}">${num(e.events)}</div>
           <div class="sub">${num(e.ofViews*100,{dp:0})}% of page views</div></div>`);
       } else if (q && q.available && q.scrollDepth != null) {
         const r = q.scrollReach;
         cards.push(`<div class="stat card"><div class="lab">Avg. scroll depth</div>
-          <div class="val" style="color:${q.scrollDepth<40?'var(--rose)':'var(--ink)'}">${num(q.scrollDepth,{dp:0})}%</div>
+          <div class="val" style="color:${q.scrollDepth<RED.scrollDepth?'var(--rose)':'var(--ink)'}">${num(q.scrollDepth,{dp:0})}%</div>
           <div class="sub">${r?`${num(r.ofViews*100,{dp:0})}% of page views reached ${num(r.percent)}%`
             :`${num(q.scrollEvents)} scroll events`}</div></div>`);
       } else if (q && q.available && q.scrollReach) {
         const r = q.scrollReach;
         cards.push(`<div class="stat card"><div class="lab">Scrolled ${num(r.percent)}%</div>
-          <div class="val" style="color:${r.ofViews<0.3?'var(--rose)':'var(--ink)'}">${num(r.ofViews*100,{dp:0})}%</div>
+          <div class="val" style="color:${r.ofViews<RED.scrollReach?'var(--rose)':'var(--ink)'}">${num(r.ofViews*100,{dp:0})}%</div>
           <div class="sub">of page views \u00b7 ${num(r.events)} reached it</div></div>`);
       }
       /**
@@ -5777,7 +5820,7 @@ function renderCampaignBody(d) {
         const secs = Math.round(q.avgEngagedSec);
         const dur = secs >= 60 ? `${Math.floor(secs/60)}m ${String(secs%60).padStart(2,'0')}s` : `${secs}s`;
         cards.push(`<div class="stat card"><div class="lab">Bounce rate</div>
-          <div class="val" style="color:${q.bounceRate>0.7?'var(--rose)':'var(--ink)'}">${num(q.bounceRate*100,{dp:1})}%</div>
+          <div class="val" style="color:${q.bounceRate>RED.bounceRate?'var(--rose)':'var(--ink)'}">${num(q.bounceRate*100,{dp:1})}%</div>
           <div class="sub">${esc(dur)} engaged</div></div>`);
       }
       return `<div class="grid g-${Math.min(6, cards.length)} mt">${cards.join('')}</div>`;
@@ -6097,7 +6140,7 @@ function renderCampaignBody(d) {
         <div class="stat"><div class="lab">Landing page views</div><div class="val ${isNA(t.landingPageViews)?'na':''}">${num(t.landingPageViews)}</div>
           <div class="sub">${t.costPerLpv!=null?'THB '+num(t.costPerLpv,{money:true,bare:true})+' each':'reported by Meta'}</div></div>
         <div class="stat"><div class="lab">Page view → session</div>
-          <div class="val" style="${t.lpvToVisit!=null&&t.lpvToVisit<50?'color:var(--rose)':''}">${t.lpvToVisit!=null?num(t.lpvToVisit,{pct:true,dp:1}):'—'}</div>
+          <div class="val" style="${t.lpvToVisit!=null&&t.lpvToVisit<RED.landingToVisit?'color:var(--rose)':''}">${t.lpvToVisit!=null?num(t.lpvToVisit,{pct:true,dp:1}):'—'}</div>
           <div class="sub">${num(t.visits)} sessions from ${num(t.landingPageViews)} page views</div></div>
       </div>
 
@@ -6111,11 +6154,11 @@ function renderCampaignBody(d) {
           <div class="val ${!t.messages?'na':''}">${t.messages?num(t.messages):'0'}</div>
           <div class="sub">${t.costPerMessage!=null?'THB '+num(t.costPerMessage,{money:true,bare:true})+' each':'none started'}</div></div>
         <div class="stat"><div class="lab">Sessions not recorded</div>
-          <div class="val" style="${t.lostSessions?'color:var(--rose)':''}">${t.lostSessions!=null?num(t.lostSessions):'—'}</div>
+          <div class="val" style="${t.lpvToVisit!=null&&t.lpvToVisit<RED.landingToVisit?'color:var(--rose)':''}">${t.lostSessions!=null?num(t.lostSessions):'—'}</div>
           <div class="sub">page views with no tagged session</div></div>
       </div>
 
-      ${t.lpvToVisit!=null&&t.lpvToVisit<50?`<div class="warnbox" style="margin-top:14px;">
+      ${t.lpvToVisit!=null&&t.lpvToVisit<RED.landingToVisit?`<div class="warnbox" style="margin-top:14px;">
         <b>Tagging gap, quantified.</b> Meta recorded ${num(t.landingPageViews)} landing page views &mdash; browsers that actually rendered your page &mdash; but only ${num(t.visits)} sessions carry this campaign code. Around ${num(t.lostSessions)} visits arrived and were credited elsewhere, so THB ${num(t.spend,{money:true,bare:true})} of spend can't be tied to any outcome. The destination URL is missing its <code>utm_campaign</code>, or carries a different one.
       </div>`:''}
 
@@ -10878,7 +10921,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.291.0';
+const CLIENT_BUILD = '3.292.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

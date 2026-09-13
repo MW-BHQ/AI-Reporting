@@ -1,5 +1,54 @@
 ### Recent (August 2026)
 
+**v3.292.0 — every red threshold on the campaign tab is named** (MW: "what is
+the threshold before they turn red?").
+
+The honest answer was "read six style attributes". The comparisons lived
+wherever the card happened to be written, so nobody could see the set, and
+changing one meant finding it first. A threshold is an editorial judgement about
+what counts as bad — it belongs where a person can read and argue with it.
+
+They are now a `RED` block at the top of the client script, each entry commented
+with what it means and why that number.
+
+| Figure | Red when |
+| --- | --- |
+| Engaged page views | under 30% of page views |
+| Bounce rate | over 70% |
+| Landing → visit | under 50% |
+| Lost sessions | same rule as Landing → visit |
+| Avg. scroll depth *(fallback)* | under 40% |
+| Scrolled X% *(fallback)* | under 30% of page views |
+
+**A THRESHOLD THAT ALWAYS FIRES CARRIES NO INFORMATION.** `lostSessions` was red
+on any value above zero, so on a campaign of any size it was permanently red. It
+now shares the landing-to-visit rule, because the two are the same fact stated
+twice — the count of sessions the ad platform saw and the site did not, and that
+count as a share. One threshold, and the two cards agree.
+
+**`engagedPageViews: 0.30` IS PROVISIONAL AND SAYS SO.** It was inherited from
+the scroll-reach card it replaced in v3.288 and never re-based. That card
+measured "reached 50% depth"; the `engagement` event fires at 60% scroll AND on
+other triggers, so the natural range is probably higher and 30% may never fire.
+Recorded in ROADMAP.md as needing real values, not guessed at again.
+
+**The other tabs are a DECLARED BACKLOG, not an exception.** Writing the audit
+check found four more inline thresholds outside the campaign renderer, on three
+tabs. MW asked for the campaign tab now and the rest later, so
+`thresholds:named` lists them BY EXPRESSION — line numbers move, and a
+line-number allowlist rots into a lie within two releases.
+
+The list is closed in both directions: a NEW inline threshold fails, so the
+problem cannot grow while the backlog waits, and a listed one that HAS been
+moved also fails, which forces the entry to be deleted. The list can only
+shrink and cannot quietly outlive the work. Both directions negative-tested.
+
+**One of the four needs MW before it moves.** `t.organicPosition <= 3.5` paints
+red when the position is GOOD — the inverse of every other rule in the deck,
+where red means "look at this because it is bad". Either it is a deliberate
+highlight wanting a different colour, or the comparison is backwards. Left
+alone and flagged rather than guessed.
+
 **v3.291.0 — the `(redacted)` email is solved, and the rows it already made are
 rendered honestly.**
 

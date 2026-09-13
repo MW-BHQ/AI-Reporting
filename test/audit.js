@@ -653,5 +653,61 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
     : ok("print:measure-mirrors", `all ${mirrors.length} height-changing print rules mirrored`);
 }
 
+/**
+ * NO NUMERIC THRESHOLD INLINE IN A COLOUR DECISION (v3.292.0).
+ *
+ * MW asked what turns a figure red and the honest answer was "read six style
+ * attributes" — the comparisons lived wherever the card was written, so nobody
+ * could see the set and changing one meant hunting for it. They are in `RED`
+ * now, and this keeps them there: any `var(--rose)` chosen by comparing against
+ * a bare number fails.
+ *
+ * The check is narrow on purpose. It does not police colour, only the COMPARISON
+ * that selects it — `x < 0.3 ? rose : ink`. A literal already named in `RED` is
+ * still a literal at the call site, so `RED.bounceRate` passes and `0.7` does
+ * not, which is the whole point.
+ *
+ * NEGATIVE TEST: put `0.7` back in the bounce card, run
+ * `ECOM_SHEET_ID=mock npm test`, watch this fail, revert.
+ */
+{
+  /**
+   * THE OTHER TABS ARE A DECLARED BACKLOG, NOT AN EXCEPTION.
+   *
+   * Four inline thresholds live outside the campaign renderer. MW asked for the
+   * campaign tab now and the rest "for the whole war room later", so they are
+   * listed here by EXPRESSION rather than line number — lines move, and a
+   * line-number allowlist rots into a lie within two releases.
+   *
+   * The list is closed in both directions. A NEW inline threshold fails, so the
+   * problem cannot grow while the backlog waits. A listed one that has been
+   * moved to `RED` ALSO fails, which forces the entry to be deleted — the list
+   * can only shrink, and it cannot quietly outlive the work.
+   */
+  const BACKLOG = [
+    "sh.budgetLostShare>0.15",   // Search Ads: impression share lost to budget
+    "sh.rankLostShare>0.4",      // Search Ads: impression share lost to rank
+    "t.organicPosition<=3.5",    // Pages: NOTE — red marks a GOOD position here,
+                                 // the inverse of every other rule on the site.
+                                 // Worth settling with MW before it moves.
+    "sp.unmatchedShare>=10",     // Spend: share of spend with no GA4 match
+  ];
+  const INLINE = /([A-Za-z_$][\w$.]*)\s*([<>]=?)\s*(\d*\.?\d+)\s*\?\s*['"`](?:color:)?var\(--rose\)/g;
+  const found = [...html.matchAll(INLINE)].map((m) => ({
+    expr: `${m[1]}${m[2]}${m[3]}`,
+    line: html.slice(0, m.index).split("\n").length,
+  }));
+  const unlisted = found.filter((f) => !BACKLOG.includes(f.expr));
+  const done = BACKLOG.filter((b) => !found.some((f) => f.expr === b));
+  const problems = [
+    ...unlisted.map((f) => `NEW inline threshold at line ${f.line}: ${f.expr} — put it in RED`),
+    ...done.map((b) => `${b} is no longer inline — delete it from the audit's BACKLOG list`),
+  ];
+  problems.length
+    ? fail("thresholds:named", problems.join(" | "))
+    : ok("thresholds:named",
+        `campaign thresholds all named; ${BACKLOG.length} on other tabs still pending`);
+}
+
 console.log(failures ? `\n${failures} audit check(s) failed` : "\nstatic audit clean");
 process.exit(failures ? 1 : 0);

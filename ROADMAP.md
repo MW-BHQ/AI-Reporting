@@ -136,6 +136,39 @@ rate-limited LINE call was being displayed as a confident 0.
 Kept short on purpose. MW's rule: if neither of us remembers an item, it was not
 important. Things land here only when he says to note them.
 
+### Named colour thresholds across the whole War Room (MW, 13 Sep 2026)
+
+MW asked what turns a figure red, and the honest answer was "read six style
+attributes". The campaign tab is done in v3.292.0 — every red threshold is a
+named entry in the `RED` block at the top of the client script, with a comment
+saying what it means and why that number. The rest of the deck is not.
+
+**Four inline thresholds remain, on three tabs.** They are listed by expression
+in the `thresholds:named` audit check, which fails on any NEW inline threshold
+and also fails if a listed one has been moved — so the list can only shrink and
+cannot outlive the work.
+
+- `sh.budgetLostShare > 0.15` — Search Ads, impression share lost to budget
+- `sh.rankLostShare > 0.4` — Search Ads, impression share lost to rank
+- `sp.unmatchedShare >= 10` — Spend, share with no GA4 match
+- `t.organicPosition <= 3.5` — Pages, organic position
+
+**Settle the last one before moving it.** It paints red when the position is
+GOOD, which is the inverse of every other rule in the deck — red elsewhere means
+"look at this because it is bad". Either it is a deliberate highlight and wants a
+different colour, or the comparison is backwards. Ask MW, do not guess.
+
+**Two campaign thresholds also want real numbers**, and neither is a code
+problem:
+- `engagedPageViews: 0.30` is inherited from the scroll-reach card it replaced in
+  v3.288 and was never re-based. That card measured "reached 50% depth"; the
+  `engagement` event fires at 60% scroll AND on other triggers, so the natural
+  range is probably higher and 30% may never fire. Needs a few months of real
+  values.
+- `landingToVisit: 50` now also drives the Lost sessions card, which used to be
+  red on any value above zero and was therefore red permanently on a campaign of
+  any size.
+
 ### Shopee and LINE as first-class sources (MW, "one day")
 
 Both are already in the codebase in part, so the gap is narrower than "add
