@@ -1,5 +1,53 @@
 ### Recent (August 2026)
 
+**v3.293.0 — GA4 reports are fetched to the end** (MW: "we tried date range the
+whole year but the report goes back only 3 months", Pages tab).
+
+`ga4RunReportInner` asked for `limit` rows in ONE request and kept whatever came
+back. Three ways to lose data silently, all of them present:
+
+**1. NO PAGINATION.** A report larger than `limit` returned page one and nothing
+said so. The Pages tab groups by `landingPagePlusQueryString` x `date`, and
+every `gclid` and `utm_*` combination is a DISTINCT landing-page value — a year
+of a busy page is hundreds of thousands of rows. That is the exact shape that
+overflows, which is why a year came back as three months.
+
+**2. `rowCount` IGNORED.** The truncation warning fired only on
+`rows.length >= limit`, so a report GA4 capped BELOW our limit was invisible.
+`rowCount` is the report's true size and is now the authority for both the walk
+and the warning.
+
+**3. `(other)` ROWS EATEN AS DATA.** When a report exceeds GA4's cardinality
+limits the surplus collapses into a row whose dimension values are the literal
+string `(other)`. Consumed blindly, `(other)` becomes a date bucket and its
+sessions are credited to a day that does not exist. Now detected and logged as
+`ga4_report_othered`.
+
+**A SHORT PAGE IS NOT THE END OF THE REPORT** — this was a flaw in the first cut
+of the fix, caught by making the stub return short pages. The API may answer
+with fewer rows than requested (its own per-request ceiling, a quota trim)
+without the report having ended, and "fewer than I asked for means done" stops
+the walk mid-report and drops the tail. Only `rowCount` knows the size. The
+zero-row guard is the backstop against a server answering past the end.
+
+**The stub used to answer a truncating request with a complete report**, which
+is why no assertion could have caught any of this. It now returns `rowCount` for
+the WHOLE report and `rows` for the requested slice, capped at 25 per page —
+deliberately shorter than asked for. Every fixture report therefore spans
+several pages and every pinned total in the suite depends on the walk being
+correct.
+
+**Negative tests, all three confirmed failing before revert:** removing
+pagination entirely (the v3.292 behaviour); treating a short page as the end;
+trusting the returned rows instead of `rowCount`. Each collapses chat-bubble
+totals and the onward-path list.
+
+**NOT YET CONFIRMED AS MW'S ROOT CAUSE.** This is a real defect of the right
+shape in the right code path, and it cannot be reproduced locally because the
+mock has no `/api/page` route. If the Pages tab still stops short after this
+deploys, `ga4_report_truncated` and `ga4_report_othered` in Cloud Logging now
+name the failing report, its dimensions and its true row count.
+
 **v3.292.0 — every red threshold on the campaign tab is named** (MW: "what is
 the threshold before they turn red?").
 

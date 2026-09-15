@@ -272,47 +272,112 @@ async function ga4RunReportGated({ dimensions, metrics, from, to, dimensionFilte
   }
 }
 
+/**
+ * ONE REPORT, FETCHED IN PAGES (v3.293.0).
+ *
+ * MW: "we tried date range the whole year but the report goes back only 3
+ * months" on the Pages tab. This function asked for `limit` rows and kept
+ * whatever came back, with three ways to lose data silently:
+ *
+ *   1. NO PAGINATION. A report with more rows than `limit` returned the first
+ *      page and nothing said so. The Pages tab groups by
+ *      `landingPagePlusQueryString` x `date`, and every `gclid` and `utm_*`
+ *      combination is a DISTINCT landing-page value — a year of a busy page is
+ *      hundreds of thousands of rows, so this is the exact shape that overflows.
+ *   2. `rowCount` IGNORED. The old warning fired only on
+ *      `rows.length >= limit`, so a report GA4 capped BELOW our limit was
+ *      invisible. `rowCount` is the report's true size and is now the authority.
+ *   3. `(other)` ROWS EATEN AS DATA. When a report exceeds GA4's cardinality
+ *      limits the surplus is collapsed into a row whose dimension values are
+ *      the literal string `(other)`. Consumed blindly, `(other)` becomes a date
+ *      bucket and its sessions are credited to a day that does not exist.
+ *
+ * `offset` walks the report to the end. `GA4_PAGE_ROWS` stays at 100,000 —
+ * comfortably inside the API's 250,000 ceiling and small enough that one page
+ * is not a huge JSON parse — and `limit` remains the caller's cap on the TOTAL,
+ * not on one request.
+ */
+const GA4_PAGE_ROWS = 100000;
+
 async function ga4RunReportInner({ dimensions, metrics, from, to, dimensionFilter, limit, orderBy }) {
   const token = await ga4Token();
-  const body = {
-    dateRanges: [{ startDate: from, endDate: to }],
-    dimensions: dimensions.map((name) => ({ name })),
-    metrics: metrics.map((name) => ({ name })),
-    limit,
-    returnPropertyQuota: false,
-  };
-  if (dimensionFilter) body.dimensionFilter = dimensionFilter;
-  /**
-   * Sort server-side on a metric, descending. This is what makes a row limit
-   * safe on a high-cardinality page report: truncation then drops the tail
-   * rather than an arbitrary slice, the same reasoning as the GSC query pull.
-   */
-  if (orderBy) body.orderBys = [{ metric: { metricName: orderBy }, desc: true }];
+  const out = [];
+  let offset = 0;
+  let reported = null;      // GA4's own row count for the whole report
+  let othered = false;
 
-  const res = await fetch(`${GA4_API_BASE}/properties/${GA4_ACCOUNT}:runReport`, {
-    method: "POST",
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    const err = new Error(`GA4 Data API ${res.status}: ${text.slice(0, 300)}`);
-    err.status = res.status === 403 ? 403 : 502;
-    throw err;
+  while (out.length < limit) {
+    const body = {
+      dateRanges: [{ startDate: from, endDate: to }],
+      dimensions: dimensions.map((name) => ({ name })),
+      metrics: metrics.map((name) => ({ name })),
+      limit: Math.min(GA4_PAGE_ROWS, limit - out.length),
+      offset,
+      returnPropertyQuota: false,
+    };
+    if (dimensionFilter) body.dimensionFilter = dimensionFilter;
+    /**
+     * Sort server-side on a metric, descending. This is what makes a row limit
+     * safe on a high-cardinality page report: truncation then drops the tail
+     * rather than an arbitrary slice, the same reasoning as the GSC query pull.
+     * With paging it also makes the page boundary stable between requests.
+     */
+    if (orderBy) body.orderBys = [{ metric: { metricName: orderBy }, desc: true }];
+
+    const res = await fetch(`${GA4_API_BASE}/properties/${GA4_ACCOUNT}:runReport`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      const err = new Error(`GA4 Data API ${res.status}: ${text.slice(0, 300)}`);
+      err.status = res.status === 403 ? 403 : 502;
+      throw err;
+    }
+    const json = await res.json();
+    const dimHeaders = (json.dimensionHeaders || []).map((h) => h.name);
+    const metHeaders = (json.metricHeaders || []).map((h) => h.name);
+    const rows = (json.rows || []).map((r) => {
+      const o = {};
+      dimHeaders.forEach((h, i) => { o[h] = (r.dimensionValues && r.dimensionValues[i] || {}).value ?? null; });
+      metHeaders.forEach((h, i) => { o[h] = (r.metricValues && r.metricValues[i] || {}).value ?? null; });
+      if (dimHeaders.some((h) => o[h] === "(other)")) othered = true;
+      return o;
+    });
+    if (reported === null) reported = Number(json.rowCount ?? rows.length);
+    out.push(...rows);
+    offset += rows.length;
+    /**
+     * `rowCount` DECIDES THE END, NOT A SHORT PAGE.
+     *
+     * "Fewer rows than I asked for means the end" is the assumption that makes
+     * this whole class of bug: the API is free to return a shorter page than
+     * requested — its own per-request ceiling, a quota trim — and treating that
+     * as the end stops the walk mid-report and silently drops the tail, which
+     * is precisely what the old single-request version did. Only `rowCount`
+     * knows how big the report is. The zero-row guard is the loop's backstop so
+     * a server that keeps answering past the end cannot spin.
+     */
+    if (!rows.length || offset >= reported) break;
   }
-  const json = await res.json();
-  const dimHeaders = (json.dimensionHeaders || []).map((h) => h.name);
-  const metHeaders = (json.metricHeaders || []).map((h) => h.name);
-  const rows = (json.rows || []).map((r) => {
-    const o = {};
-    dimHeaders.forEach((h, i) => { o[h] = (r.dimensionValues && r.dimensionValues[i] || {}).value ?? null; });
-    metHeaders.forEach((h, i) => { o[h] = (r.metricValues && r.metricValues[i] || {}).value ?? null; });
-    return o;
-  });
-  if (rows.length >= limit) {
-    logJson("WARNING", "ga4_report_truncated", { limit, dimensions, metrics, from, to });
+
+  /**
+   * TRUNCATION IS NOW A REPORTED FACT, not a guess from the row count. It stays
+   * a warning rather than an error because a partial report is still useful —
+   * but it must be visible, because the failure mode is a chart that simply
+   * starts later than it should and looks fine.
+   */
+  if (reported !== null && out.length < reported) {
+    logJson("WARNING", "ga4_report_truncated", {
+      limit, returned: out.length, reportRows: reported, dimensions, metrics, from, to });
   }
-  return rows;
+  if (othered) {
+    logJson("WARNING", "ga4_report_othered", {
+      returned: out.length, reportRows: reported, dimensions, metrics, from, to,
+      hint: "GA4 collapsed surplus dimension combinations into (other); reduce cardinality or shorten the range" });
+  }
+  return out;
 }
 
 const GA4_LANDING_DIM = process.env.GA4_LANDING_DIM || "landingPagePlusQueryString";

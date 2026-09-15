@@ -638,11 +638,36 @@ function ga4Report(body) {
     for (const v of opts) expand(i + 1, [...acc, v]);
   };
   expand(0, []);
+  /**
+   * THE STUB PAGES LIKE GA4 DOES (v3.293.0).
+   *
+   * It used to return every generated row whatever `limit` said and echo
+   * `rowCount: rows.length`, so a report was never larger than one page and the
+   * server's paging loop was never entered. MW's Pages tab lost nine months of
+   * a year to exactly that, and the suite could not have caught it: the stub
+   * answered a truncating request with a complete report.
+   *
+   * `rowCount` is now the size of the WHOLE report and `rows` is the requested
+   * slice, which is the contract the Data API actually offers. A caller that
+   * ignores `offset` gets page one forever and its assertions come up short.
+   */
+  const total = rows.length;
+  const offset = Number(body.offset || 0);
+  /**
+   * PAGES ARE DELIBERATELY SHORTER THAN ASKED FOR. The Data API may answer with
+   * fewer rows than the requested `limit` — its own per-request ceiling, a
+   * quota trim — without that meaning the report has ended. A caller that reads
+   * a short page as "the end" walks off mid-report, which is the bug this
+   * whole change exists to kill. 25 makes every fixture report span several
+   * pages, so every pinned total in the suite now depends on the walk being
+   * right.
+   */
+  const limit = Math.min(Number(body.limit || total), 25);
   return {
     dimensionHeaders: dims.map((name) => ({ name })),
     metricHeaders: mets.map((name) => ({ name })),
-    rows,
-    rowCount: rows.length,
+    rows: rows.slice(offset, offset + limit),
+    rowCount: total,
   };
 }
 
