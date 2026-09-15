@@ -110,6 +110,27 @@ expect_field "sa bcm not a brand"  "$REPORT" "d.searchAds.byBrand.every(b=>b.imp
 expect_field "sa excludes x-network" "$REPORT" "${SA}'BGH').visits===600?600:undefined"
 
 echo "--- campaign: onward navigation and outbound clicks (v3.273.0) ---"
+echo "--- pages: the axis spans the range, not just the months with traffic (v3.294.0) ---"
+# MW: "we tried date range the whole year but the report goes back only 3
+# months". Nothing was truncated. A month with no sessions produces no GA4 row,
+# so it never entered the map and the chart simply STARTED at the first month
+# with traffic — eight months of a page launched in June rendered as three bars
+# and looked exactly like a lost report.
+#
+# A zero here is a measurement, not a gap: those months were queried and the
+# answer was nobody came. The fixture has traffic in July only, so eight months
+# asked for must return eight, not one.
+PAGE1="/api/page?url=https://www.bangkokhospital.com/th/bangkok/page/a&from=2026-01-01&to=2026-08-31"
+expect_field "pg months span"      "$PAGE1" "d.monthly.length===8?8:undefined"
+expect_field "pg months ordered"   "$PAGE1" "(d.monthly[0].month==='2026-01'&&d.monthly[7].month==='2026-08')?'ok':undefined"
+# The empty months must be ZERO, not null or absent — a bar of no height.
+expect_field "pg empty is zero"    "$PAGE1" "d.monthly.filter(m=>m.sessions===0).length===7?7:undefined"
+# ...and the month that DOES have traffic must survive the padding.
+expect_field "pg real month kept"  "$PAGE1" "d.monthly.find(m=>m.sessions>0).month==='2026-07'?'ok':undefined"
+# Same rule for the daily series: 243 days from 01 Jan to 31 Aug inclusive.
+expect_field "pg daily spans"      "$PAGE1" "d.daily.length===243?243:undefined"
+expect_field "pg daily edges"      "$PAGE1" "(d.daily[0].d==='2026-01-01'&&d.daily[242].d==='2026-08-31')?'ok':undefined"
+
 CAMP1="/api/campaign?code=260701-08&from=$FROM&to=$TO"
 LC="d.linkClicks"
 expect_field "lc available"        "$CAMP1" "${LC}.available===true?'ok':undefined"

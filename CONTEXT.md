@@ -1,5 +1,44 @@
 ### Recent (August 2026)
 
+**v3.294.0 — the Pages chart was not truncated; it was omitting the empty
+months** (MW: "still 3 month", with a screenshot).
+
+The screenshot settled it, and it disproved v3.293's theory. The card read
+**"1 URL variants"** — cardinality of one, so a year of that page is a few
+hundred rows and no row limit was ever in play. The range was Jan-Aug 2026 and
+the chart showed 2026-06 to 2026-08, with June's bar barely off the floor.
+
+**A month with no sessions produces no GA4 row.** It therefore never entered the
+`months` map, and the chart began at the first month that had traffic. The page
+is `/campaign/real-pro-in-bone-and-joint-care` — a campaign page that launched
+in June. Eight months of a page that did not exist for five of them rendered as
+three bars and looked exactly like a report that had lost five months. `MoM` and
+`YoY` both read as a dash for the same reason, which was the corroborating
+signal sitting right there on the card.
+
+**A ZERO HERE IS A MEASUREMENT, NOT A GAP.** The project rule is never to print
+0 for something that was not measured — and it does not apply: those months WERE
+queried and the answer was that nobody came. Omitting them is what told the lie,
+because absence of a bar reads as absence of data. Both `monthly` and `daily` are
+now filled across the requested range, so "this page did not exist yet" shows as
+flat months instead of a short axis.
+
+**v3.293's pagination work stands.** It was a real defect — no paging, `rowCount`
+ignored, `(other)` rows eaten as data — and it will bite a section URL with many
+query-string variants. It was simply not THIS bug. Two wrong theories in a row
+on this one; the screenshot had the answer in it both times and I did not ask for
+it soon enough.
+
+**Testable now, and was not before.** `/api/page` does go through the stub — the
+first attempt to reproduce used a URL the fixture does not contain and returned
+nothing, which read as "no route" and moved me on. `test/smoke.sh` now asks for
+eight months of a fixture page with traffic in July only and asserts eight
+months back, seven of them zero, the real month preserved, and 243 daily points
+from 01 Jan to 31 Aug.
+
+**Negative tests, both confirmed failing before revert:** dropping the month
+padding (the v3.293 behaviour) and dropping the daily padding.
+
 **v3.293.0 — GA4 reports are fetched to the end** (MW: "we tried date range the
 whole year but the report goes back only 3 months", Pages tab).
 

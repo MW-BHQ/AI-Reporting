@@ -10391,6 +10391,13 @@ async function buildPage(url, from, to) {
     days.set(d, e);
   }
   for (const e of days.values()) e.keyEvents = dayKeyEvents.get(e.d) || 0;
+  // Empty days are filled for the same reason empty months are: a gap in the
+  // series must look like a gap in the traffic, not a gap in the report.
+  for (let t0 = Date.parse(`${from}T00:00:00Z`), t1 = Date.parse(`${to}T00:00:00Z`);
+       t0 <= t1; t0 += 86400000) {
+    const d = new Date(t0).toISOString().slice(0, 10);
+    if (!days.has(d)) days.set(d, { d, visits: 0, engagement: 0, keyEvents: 0 });
+  }
   const daily = [...days.values()].sort((a, b) => a.d.localeCompare(b.d));
 
   // Same shape the Overview key-events card uses, so the client renders it the
@@ -10420,6 +10427,34 @@ async function buildPage(url, from, to) {
     variants.set(lp, v);
   }
   for (const mm of months.values()) mm.keyEvents = monthKeyEvents.get(mm.month) || 0;
+
+  /**
+   * EVERY MONTH IN THE RANGE GETS A BAR, INCLUDING THE EMPTY ONES (v3.294.0).
+   *
+   * MW: "we tried date range the whole year but the report goes back only 3
+   * months." The report was not truncated. A month with no sessions produces no
+   * GA4 row, so it was never added to this map, so the chart simply began at
+   * the first month that had traffic — Jan-Aug of a campaign page launched in
+   * June rendered as three bars labelled 2026-06 to 2026-08, and looked exactly
+   * like a report that had lost five months.
+   *
+   * A ZERO HERE IS A MEASUREMENT, NOT A GAP. The project rule is never to print
+   * 0 for something that was not measured — but these months WERE measured and
+   * the answer was nobody came. Leaving them out is what told the lie: absence
+   * of a bar read as absence of data. The axis now spans what was asked for, so
+   * "this page did not exist yet" is visible as five flat months.
+   *
+   * The same argument applies to `daily`, and for the same reason: a page that
+   * goes quiet for a fortnight should show a flat line, not a shorter chart.
+   */
+  const ymAdd = (ym, k) => {
+    const [y, m] = ym.split("-").map(Number);
+    const d = new Date(Date.UTC(y, m - 1 + k, 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  };
+  for (let m = String(from).slice(0, 7); m <= String(to).slice(0, 7); m = ymAdd(m, 1)) {
+    if (!months.has(m)) months.set(m, { month: m, sessions: 0, engaged: 0, keyEvents: 0 });
+  }
 
   /** Group a sessions report, folding in key events from its paired report. */
   const group = (sSet, kSet, keyFn, label) => {
