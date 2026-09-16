@@ -1,5 +1,36 @@
 ### Recent (September 2026)
 
+**v3.298.0 — one legend at the bottom, naming every segment in the funnel card**
+(MW: "we dont need seperate foot note and legend, use only one at the bottom").
+
+v3.297.0 put a legend under each source-stacked bar. Two more legends in a card
+that already had one is clutter, and MW said so immediately. There is now ONE,
+at the bottom: the sources that stack Impressions and Interactions, in the order
+those bars draw them, then the GA4 channels that stack Visits, Engagement and
+Value actions.
+
+**THE PALETTE HAD TO BE FIXED BEFORE ONE LEGEND WAS EVEN POSSIBLE.** `SRCC` held
+six colours and the Impressions bar draws eight, so it wrapped — Google Business
+Profile came out the same purple as Google Search, TikTok the same blue as Meta
+Ads. Hover-only that was survivable; in a legend, two identical chips meaning
+different things is the exact confusion a legend exists to remove. Now fourteen
+colours, and Interactions continues from where Impressions stops rather than
+restarting at zero, so no two segments in the card share a colour.
+
+**AND NO SOURCE COLOUR APPEARS IN `CHANNEL_COLORS`.** `#4B8DF8` was in both
+palettes, so TikTok views and Paid Social drew the same blue, and `#F2A93B` put
+Google Ads and Referral on the same amber. Invisible while the two sets lived in
+separate legends; a collision the moment they share one. The fourteen are
+checked against the channel list.
+
+**Verified on the rendered page, not by reading the code:** zero per-stage
+legends, twenty entries, no duplicate colour, and the concatenated segment
+colours of the two source bars equal the first fourteen legend chips in order —
+which is the property that matters, because a legend in a different order from
+its bars points at the wrong segments and is worse than none.
+
+### Recent (September 2026)
+
 **v3.297.0 — a legend for the source-stacked bars, and followers come off the
 Overview.**
 

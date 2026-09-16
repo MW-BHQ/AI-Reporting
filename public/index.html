@@ -5398,26 +5398,36 @@ function renderOverview() {
    */
   const io = d.impressionsBySource || {};
   const oa = d.offsiteActions || {};
-  const SRCC = ['#6C5CE7','#4B8DF8','#2E9E6F','#F2A93B','#8FA0C8','#A9B8D8'];
   /**
-   * A LEGEND FOR THE SOURCE-STACKED BARS (MW: "the legend still no LINE yet").
+   * FOURTEEN COLOURS, BECAUSE THERE ARE FOURTEEN SEGMENTS.
    *
-   * The legend under the funnel is built from the GA4 CHANNEL array, so it
-   * names the segments in Visits, Engagement and Value actions and nothing
-   * else. Impressions and Interactions are stacked by SOURCE — a different cut
-   * entirely — and their segments have only a hover title, so Meta Ads,
-   * YouTube, GBP and TikTok were all as unnamed as LINE. MW noticed it when
-   * LINE arrived; it has been true since the source bars were built.
+   * The palette held six and the Impressions bar draws eight, so it wrapped:
+   * Google Business Profile came out the same purple as Google Search and
+   * TikTok the same blue as Meta Ads. That was survivable while the segments
+   * were hover-only, and stops being survivable the moment one legend has to
+   * name them — two chips of the same colour meaning different things is worse
+   * than no legend.
    *
-   * SAME ORDER, SAME COLOURS, SAME FILTER as `srcSeg`, or the chips point at
-   * the wrong segments — which is worse than no legend at all.
+   * Impressions take the first run, Interactions continue from where they stop,
+   * so every entry in the single legend below points at exactly one segment.
    */
-  const srcLegend = (rows) => `<div class="legend">${rows.filter(r => r.v > 0).map((r,i) =>
-    `<div><span class="chip" style="background:${SRCC[i%SRCC.length]}"></span>${esc(r.n)}</div>`).join('')}</div>`;
-  const srcSeg = (rows, total) => rows.filter(r => r.v > 0).map((r,i) => {
+  /**
+   * NO COLOUR SHARED WITH `CHANNEL_COLORS`, because one legend now names both
+   * sets. `#4B8DF8` was in both palettes, so TikTok views and Paid Social drew
+   * the same blue, and `#F2A93B` put Google Ads and Referral on the same amber
+   * — two chips of one colour in a single legend, which is the exact confusion
+   * the legend exists to remove. These fourteen are checked against that list.
+   */
+  const SRCC = ['#6C5CE7','#2E9E6F','#8FA0C8','#C86FD1','#E2705A','#5BA55B',
+                '#D9A441','#2F7FA8','#B5532F','#6B7F3A','#8E5AA8','#C9556E',
+                '#3E8F7A','#7A6248'];
+  // What each source bar actually draws — the legend must use the same list,
+  // in the same order, or the chips point at the wrong segments.
+  const drawn = (rows) => rows.filter(r => r.v > 0);
+  const srcSeg = (rows, total, offset = 0) => rows.filter(r => r.v > 0).map((r,i) => {
     const pct = (r.v/total)*100;
     const label = pct >= 9 ? `<b class="seg-val">${num(r.v)}</b>` : '';
-    return `<span style="width:${pct}%;background:${SRCC[i%SRCC.length]}" title="${esc(r.n)}: ${num(r.v)}">${label}</span>`;
+    return `<span style="width:${pct}%;background:${SRCC[(offset+i)%SRCC.length]}" title="${esc(r.n)}: ${num(r.v)}">${label}</span>`;
   }).join('');
   const impSources = [
     { n:'Meta Ads', v: n0(io.meta) },
@@ -5442,6 +5452,7 @@ function renderOverview() {
     // this stage. The click is not taken: its session is counted at Visits.
     { n:'LINE opens', v: n0(io.lineOpens) },
   ].sort((a,b)=>b.v-a.v);
+  const impDrawn = drawn(impSources), clickDrawn = drawn(clickSources);
   const keExtra = [
     { n:'Calls from profile', v: n0(oa.gbpCalls) },
     { n:'Direction requests', v: n0(oa.gbpDirections) },
@@ -5464,14 +5475,12 @@ function renderOverview() {
         <div class="stage-head"><span class="stage-name">Impressions</span>
           <span class="stage-val ${isNA(d.totals.impressions)?'na':''}">${num(d.totals.impressions)}</span></div>
         <div class="bar">${srcSeg(impSources, d.totals.impressions||1)}</div>
-        ${srcLegend(impSources)}
         <div class="stage-note"><b>TOFU.</b> Everything that put us in front of someone: Meta Ads, Google Ads, Search Console, TikTok views, <b>YouTube views</b>, Facebook <b>organic</b> reach and Google Business Profile views. YouTube is one corporate channel and cannot be split by branch, so unlike everything else here it is not scoped to the four hospitals. Facebook contributes organic distribution only, so Meta Ads keeps its boosted and dark posts without either being counted twice. Units differ per platform, so read this as scale rather than one audited total. <b>LINE broadcasts</b> are delivered messages, and like YouTube the OA is one account for all four hospitals, so that figure is group-level. Email sends belong here too but have no connector yet.</div>
       </div>
       <div class="stage minor">
         <div class="stage-head"><span class="stage-name">Interactions</span>
           <span class="stage-val ${isNA(d.totals.clicks)?'na':''}">${num(d.totals.clicks)}</span></div>
-        <div class="bar">${srcSeg(clickSources, d.totals.clicks||1)}</div>
-        ${srcLegend(clickSources)}
+        <div class="bar">${srcSeg(clickSources, d.totals.clicks||1, impDrawn.length)}</div>
         <div class="stage-note">The interim step between seeing and visiting: ad and search clicks, plus post engagements, TikTok engagements and profile website clicks. Someone acting on what they saw, without necessarily arriving on the site. Always higher than visits &mdash; a click that bounces before the tag fires never becomes a session.</div>
       </div>
       <div class="stage">
@@ -5492,7 +5501,18 @@ function renderOverview() {
         <div class="bar">${seg(f, d.totals.keyEvents||1, 'keyEvents')}${extraSeg(keExtra, d.totals.keyEvents||1)}</div>
         <div class="stage-note"><b>BOFU.</b> ${(d.keyEventBreakdown||[]).map(k=>esc(k.label)).join(', ')||'—'}${d.totals.keyEventsOffsite?`, plus <b>${num(d.totals.keyEventsOffsite)}</b> off-site actions worth the same, shown as the grey segments: calls and direction requests from Google Business Profile, messages from Meta ads, and calls placed straight from Google ads.`:''}.</div>
       </div>
-      <div class="legend">${f.map((c,i)=>`<div><span class="chip" style="background:${colorFor(i)}"></span>${esc(c.channel)}</div>`).join('')}</div>
+      <!-- ONE LEGEND, AT THE BOTTOM (MW: "we dont need seperate foot note and
+           legend, use only one at the bottom"). It names every segment in the
+           card: the SOURCES that stack Impressions and Interactions first, in
+           the order those bars draw them, then the GA4 CHANNELS that stack
+           Visits, Engagement and Value actions. Two different cuts of the same
+           funnel, which is why a source never appears in the channel bars and
+           a channel never appears in the source bars. -->
+      <div class="legend">${
+        [...impDrawn.map((r,i)=>({n:r.n, c:SRCC[i%SRCC.length]})),
+         ...clickDrawn.map((r,i)=>({n:r.n, c:SRCC[(impDrawn.length+i)%SRCC.length]})),
+         ...f.map((c,i)=>({n:c.channel, c:colorFor(i)}))]
+        .map(e=>`<div><span class="chip" style="background:${e.c}"></span>${esc(e.n)}</div>`).join('')}</div>
     </div>
 
     <!-- channel table + reach-only -->
@@ -10944,7 +10964,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.297.0';
+const CLIENT_BUILD = '3.298.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
