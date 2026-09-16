@@ -84,6 +84,36 @@ check "better club"  GET "/api/better-club?from=$FROM&to=$TO"
 # a 200 and nobody noticed. These assert the payload, not the status.
 REPORT="/api/report?from=$FROM&to=$TO"
 OVERVIEW="/api/overview?from=$FROM&to=$TO"
+
+echo "--- overview: LINE broadcasts in the funnel (v3.295.0) ---"
+# MW's mapping: deliveredCount = impressions, open = the Interactions stage,
+# visits onward from GA4. The fixture sends three broadcasts in July (90,000 +
+# 60,000 + 0 delivered; 22,000 + 18,000 + 0 opened) and one in June.
+#
+# 150,000 proves the June send is EXCLUDED, and that the Thai-remark broadcast
+# still counts at channel level — a remark in the campaign column means it
+# cannot be attributed to a campaign, not that it was never sent.
+IO="d.impressionsBySource"
+expect_field "line delivered"      "$OVERVIEW" "${IO}.line===150000?150000:undefined"
+expect_field "line opens"          "$OVERVIEW" "${IO}.lineOpens===40000?40000:undefined"
+# OPENS ARE NOT IMPRESSIONS. Reading 150,000 here would mean delivered was used
+# for both stages and the funnel would not narrow between them.
+expect_field "line stages differ"  "$OVERVIEW" "${IO}.lineOpens<${IO}.line?'ok':undefined"
+# THE BAR MUST RECONCILE WITH ITS OWN TOTAL. Segments are drawn as a share of
+# totals.impressions, so a source in the bar but not in the total makes every
+# percentage overstate and the widths sum past 100% — the exact fault that hid
+# YouTube. This is the guard for every future source, not just LINE.
+expect_field "imp bar reconciles"  "$OVERVIEW" "(['meta','gads','gsc','tiktok','fbPage','gmb','youtube','line'].reduce((a,k)=>a+Number(${IO}[k]||0),0)===d.totals.impressions)?'ok':undefined"
+# LINE opens must be inside the Interactions total for the same reason.
+expect_field "line opens in stage" "$OVERVIEW" "d.totals.clicks>=${IO}.lineOpens?'ok':undefined"
+# A REMARK IS NOT A CAMPAIGN CODE (MW: "thai texts are remark, some is
+# different format, both can be ignore in campaign tab for now"). Three July
+# sends: one real code, one Thai remark, one blank — so 1 tagged, 2 untagged.
+# Accepting any non-empty string reads 2 tagged and would join a broadcast to a
+# campaign that does not exist.
+expect_field "line sends counted"  "$OVERVIEW" "d.lineBroadcast.sends===3?3:undefined"
+expect_field "line tagged strict"  "$OVERVIEW" "d.lineBroadcast.tagged===1?1:undefined"
+expect_field "line untagged known" "$OVERVIEW" "d.lineBroadcast.untagged===2?2:undefined"
 SA="d.searchAds.byBrand.find(b=>b.key==="
 echo "--- monthly report: per-hospital split must be able to fail ---"
 # The brand comes from the campaign code. A boundary bug here sent every coded

@@ -1025,6 +1025,34 @@ global.fetch = async (url, opts = {}) => {
    */
   if (u.includes("sheets.googleapis.com")) {
     /**
+     * LINE OA BROADCAST SHEET (v3.295.0). MW's live export, with the four
+     * things the real file actually does:
+     *
+     *   - THE HEADER IS MISSPELLED `utm_camapgin`. Matching the correct
+     *     spelling finds nothing and reads every broadcast as untagged, which
+     *     looks identical to a genuinely untagged year.
+     *   - `sentDate` IS A TIMESTAMP, and an evening send must stay on its own
+     *     day rather than being dragged backwards by a Date parse.
+     *   - TAGS THAT ARE NOT CAMPAIGN CODES. Thai remarks and agency strings sit
+     *     in the same column (MW: "both can be ignore in campaign tab for
+     *     now"), so they must count as untagged, not as campaigns.
+     *   - A ROW OUTSIDE THE WINDOW must count in neither the totals nor the
+     *     campaign split.
+     *
+     * Window is 2026-07-01..2026-07-31: delivered 90,000 + 60,000 = 150,000,
+     * opens 22,000 + 18,000 = 40,000, three sends of which one is tagged.
+     */
+    if (u.includes("1pk5EA12P") || u.includes("mock-line")) {
+      return jsonRes({ spreadsheetId: "mock-line", valueRanges: [{ values: [
+        ["utm_camapgin", "broadcastId", "sentDate", "deliveredCount", "open", "clickUU"],
+        ["260701-08_bgh_tra", "273082477", "2026-07-03 13:03:55", "90000", "22000", "290"],
+        ["\u0e1b\u0e34\u0e14\u0e1b\u0e23\u0e31\u0e1a\u0e1b\u0e23\u0e38\u0e07", "272781001", "2026-07-20 22:40:11", "60000", "18000", "959"],
+        ["", "271844891", "2026-07-28 09:04:04", "0", "0", ""],
+        ["260601-02_bih_tra", "270000001", "2026-06-15 10:00:00", "40000", "9000", "74"],
+      ] }] });
+    }
+
+    /**
      * BETTER AI: the agentic assistant's own Sheet, two daily tabs.
      *
      * FOUR TRAPS, each from something this export actually does:

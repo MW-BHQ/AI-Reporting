@@ -5413,6 +5413,9 @@ function renderOverview() {
     { n:'YouTube views', v: n0(io.youtube) },
     { n:'Facebook organic reach', v: n0(io.fbPage) },
     { n:'Google Business Profile', v: n0(io.gmb) },
+    // One OA for all four hospitals, so group-level like YouTube — the
+    // awareness table below carries the scope.
+    { n:'LINE broadcasts', v: n0(io.line) },
   ].sort((a,b)=>b.v-a.v);
   const clickSources = [
     { n:'Ad clicks', v: n0(io.adClicks) },
@@ -5420,6 +5423,9 @@ function renderOverview() {
     { n:'Facebook post engagements', v: n0(io.fbEngagements) },
     { n:'TikTok engagements', v: n0(io.ttEngagements) },
     { n:'Profile website clicks', v: n0(oa.gbpWebsiteClicks) },
+    // A LINE open is acting on what was seen without necessarily arriving —
+    // this stage. The click is not taken: its session is counted at Visits.
+    { n:'LINE opens', v: n0(io.lineOpens) },
   ].sort((a,b)=>b.v-a.v);
   const keExtra = [
     { n:'Calls from profile', v: n0(oa.gbpCalls) },
@@ -5443,7 +5449,7 @@ function renderOverview() {
         <div class="stage-head"><span class="stage-name">Impressions</span>
           <span class="stage-val ${isNA(d.totals.impressions)?'na':''}">${num(d.totals.impressions)}</span></div>
         <div class="bar">${srcSeg(impSources, d.totals.impressions||1)}</div>
-        <div class="stage-note"><b>TOFU.</b> Everything that put us in front of someone: Meta Ads, Google Ads, Search Console, TikTok views, <b>YouTube views</b>, Facebook <b>organic</b> reach and Google Business Profile views. YouTube is one corporate channel and cannot be split by branch, so unlike everything else here it is not scoped to the four hospitals. Facebook contributes organic distribution only, so Meta Ads keeps its boosted and dark posts without either being counted twice. Units differ per platform, so read this as scale rather than one audited total. Email sends and LINE broadcasts belong here too but have no connector yet.</div>
+        <div class="stage-note"><b>TOFU.</b> Everything that put us in front of someone: Meta Ads, Google Ads, Search Console, TikTok views, <b>YouTube views</b>, Facebook <b>organic</b> reach and Google Business Profile views. YouTube is one corporate channel and cannot be split by branch, so unlike everything else here it is not scoped to the four hospitals. Facebook contributes organic distribution only, so Meta Ads keeps its boosted and dark posts without either being counted twice. Units differ per platform, so read this as scale rather than one audited total. <b>LINE broadcasts</b> are delivered messages, and like YouTube the OA is one account for all four hospitals, so that figure is group-level. Email sends belong here too but have no connector yet.</div>
       </div>
       <div class="stage minor">
         <div class="stage-head"><span class="stage-name">Interactions</span>
@@ -10921,7 +10927,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.294.0';
+const CLIENT_BUILD = '3.295.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

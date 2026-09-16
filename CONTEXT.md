@@ -1,3 +1,65 @@
+### Recent (September 2026)
+
+**v3.295.0 — LINE broadcasts enter the Overview funnel.** Step 1 of MW's
+pipeline: Overview, then Campaign, then Page, then its own tab, then one page in
+the Monthly report.
+
+**MW's mapping, and it fits stages that already exist:** `deliveredCount` ->
+Impressions, `open` -> Interactions, visits onward from GA4.
+
+**`open` GOES TO INTERACTIONS, NOT ENGAGEMENT**, though MW called it engage. The
+Engagement stage is GA4 engaged sessions and is DEFINED as a subset of visits;
+LINE opens outnumber LINE sessions by orders of magnitude, so putting them there
+would make the funnel widen instead of narrow. Interactions is "acted on what
+they saw without necessarily arriving" and already holds post engagements — an
+open is exactly that, and it lands between Impressions and Visits where it
+belongs.
+
+**CLICKS ARE IGNORED, ON INSTRUCTION AND ON PRINCIPLE** ("ignore the rests of
+clicks, use GA4 visit/session for MOFU"). `clickUU` and the GA4 session it
+produces are one event counted twice; Visits is GA4's stage. Taking both would
+double every broadcast visit — the fault the chat bubble and the email overlap
+each had.
+
+**A WINDSOR `line` CONNECTOR ALREADY EXISTED AND WAS DORMANT.** `data.line` and
+`data.lineEvents` have been wired since v3.68 behind `LINE_ENABLED`, which
+defaults to OFF because the connector was never authorised — so `impressions.line`
+existed, was always null, and never reached the bar. That is why the funnel note
+still claimed LINE "has no connector yet". The sheet is now the live source and
+Windsor stays as the fallback it already was. Naming the new job `line` would
+have silently overwritten the connector's data; it is `lineBroadcast`.
+
+**IN THE TOTAL, UNLIKE FACEBOOK PAGE REACH.** Facebook is excluded because
+`page_impressions` contains the ads already counted in `meta`; a broadcast
+delivery overlaps nothing else here. The rule that matters is YouTube's: a
+source drawn in the bar MUST be in the total, or the segments are shares of a
+smaller number and sum past 100%. `imp bar reconciles` now asserts that for
+every source, not just LINE.
+
+**GROUP-SCOPED, AND SAID SO** (MW: "this one LINE OA serve all 4 hospital,
+similar to the FB page"). One OA cannot be split by branch, exactly like the
+YouTube channel, so the funnel note carries the scope rather than letting a
+group-level number sit unlabelled in a BHQ-scoped view.
+
+**Tagging coverage is on the payload from day one.** 122 of 1,000 broadcasts
+carry a campaign code and all of them are 2026; 20 of those are Thai remarks or
+agency strings, which count as UNTAGGED (MW: "both can be ignore in campaign tab
+for now"). Exposed as `lineBroadcast.tagged/untagged` now rather than left
+untested until the Campaign tab — a code path nothing exercises is a code path
+nothing verifies.
+
+**The header is misspelled `utm_camapgin`** and is matched as written, with the
+correct spelling accepted too. The export will keep producing the typo.
+
+**Negative tests, all four confirmed failing before revert:** opens used as
+impressions; LINE dropped from the impressions total; the date window ignored; a
+Thai remark accepted as a campaign code.
+
+**Next:** Campaign tab — 2026 only, dash-with-reason for every untagged
+broadcast. Note step 3 changed shape: the sheet has no destination URL
+(`cmsUrl` is the LINE Manager console link), so Page-level LINE has to come from
+GA4 sessions with source = line, not from this file.
+
 ### Recent (August 2026)
 
 **v3.294.0 — the Pages chart was not truncated; it was omitting the empty

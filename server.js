@@ -1434,6 +1434,13 @@ async function buildOverview(from, to) {
      * converted and invent the ones that did not.
      */
     youtube: buildYouTube(from, to),
+    /**
+     * LINE broadcast reach. UNLIKE YouTube this one IS in the funnel: a
+     * delivery is not an ad impression, so there is no Boost-Post-style double
+     * count, and the sessions it drives arrive through GA4 at the Visits stage
+     * where they belong. Only Impressions and Interactions come from here.
+     */
+    lineBroadcast: buildLine(from, to),
     ga4: ga4Compat(GA4_FUNNEL_DIMS, ["sessions", "engaged_sessions"], from, to),
     keyEvents: ga4KeyEvents(GA4_FUNNEL_DIMS, from, to),
     ga4Ecom: ga4Compat(GA4_FUNNEL_DIMS, GA4_ECOM_METRICS, from, to),
@@ -1519,6 +1526,15 @@ async function buildOverview(from, to) {
   const ytTotals = (data.youtube && data.youtube.totals) || null;
   const ytViews = ytTotals && ytTotals.days ? ytTotals.views : null;
 
+  /**
+   * `available: false` means the sheet could not be read; `sends === 0` means it
+   * was read and the window holds no broadcast. Only the second is a real zero,
+   * and neither may print as one — a null keeps the stage honest.
+   */
+  const bc = (data.lineBroadcast && data.lineBroadcast.available) ? data.lineBroadcast : null;
+  const bcDelivered = bc && bc.sends ? bc.delivered : null;
+  const bcOpens = bc && bc.sends ? bc.opens : null;
+
   const impressions = {
     youtube: ytViews,
     meta: sumOrNull(data.meta, "impressions"),
@@ -1553,6 +1569,20 @@ async function buildOverview(from, to) {
      * ever start reporting.
      */
     line: (() => {
+      /**
+       * THE BROADCAST SHEET WINS (MW, 16 Sep 2026: "deliveredCount = imp").
+       *
+       * The Windsor `line` connector below is DORMANT — `LINE_ENABLED` defaults
+       * to off because it was never authorised — so this key existed and was
+       * always null, which is why the funnel note still claims LINE "has no
+       * connector yet". The sheet is the live source; Windsor stays as the
+       * fallback it already was, in case it is ever switched on.
+       *
+       * DELIVERED, NOT OPENS. Delivery is the impression: the message reached
+       * the device. Opens are the INTERACTION stage, where they narrow properly
+       * against delivery instead of sitting at the same width.
+       */
+      if (bcDelivered !== null) return bcDelivered;
       const opens = sumOrNull(data.lineEvents, "message_unique_impression");
       if (opens) return opens;
       if (data.line === null) return null;
@@ -1562,6 +1592,13 @@ async function buildOverview(from, to) {
         "message__api_narrowcast", "message__api_multicast", "message__api_push"]
         .reduce((a, f) => a + n(sumOrNull(data.line, f)), 0);
     })(),
+    /**
+     * Opens, for the Interactions stage. Same source preference as `line`
+     * above — sheet first, dormant Windsor connector second — so the bar
+     * segment and the stage total can never disagree about which source they
+     * came from.
+     */
+    lineOpens: bcOpens ?? sumOrNull(data.lineEvents, "message_unique_impression"),
   };
 
   const lineOpens = sumOrNull(data.lineEvents, "message_unique_impression");
@@ -1687,9 +1724,21 @@ async function buildOverview(from, to) {
        * The alternative — leaving YouTube out of a slide called "everything that
        * put us in front of someone" — understates by a million views a month.
        */
+      /**
+       * LINE IS IN THE TOTAL, unlike Facebook page reach. Facebook is excluded
+       * because `page_impressions` contains the ads already counted in `meta`;
+       * a broadcast delivery has no such overlap with anything else here. Same
+       * rule as YouTube: a source drawn in the bar must be in the total, or the
+       * segments are shares of a smaller number and sum past 100%.
+       *
+       * Same scope caveat as YouTube too — one OA serves all four hospitals
+       * (MW: "similar to the FB page"), so this figure is group-level inside an
+       * otherwise BHQ-scoped view. The awareness row says so rather than
+       * letting it pass unlabelled.
+       */
       const vals = [impressions.meta, impressions.gads, impressions.gsc,
                     impressions.tiktok, impressions.fbPage, impressions.gmb,
-                    impressions.youtube];
+                    impressions.youtube, impressions.line];
       return vals.every((v) => v === null) ? null : vals.reduce((a, v) => a + n(v), 0);
     })(),
     clicks: (() => {
@@ -1704,7 +1753,12 @@ async function buildOverview(from, to) {
                     data.ttOrganic === null ? null
                       : n(sumOrNull(data.ttOrganic, "likes")) + n(sumOrNull(data.ttOrganic, "comments"))
                         + n(sumOrNull(data.ttOrganic, "shares")),
-                    offsiteActions.gbpWebsiteClicks];
+                    offsiteActions.gbpWebsiteClicks,
+                    // A LINE open is "acted on what they saw without
+                    // necessarily arriving" — this stage exactly. The CLICK is
+                    // deliberately not taken: the session it becomes is already
+                    // counted at Visits by GA4.
+                    impressions.lineOpens];
       return vals.every((v) => v === null) ? null : vals.reduce((a, v) => a + n(v), 0);
     })(),
     visits: ga4Available ? funnel.reduce((a, c) => a + c.visits, 0) : null,
@@ -1853,6 +1907,11 @@ async function buildOverview(from, to) {
       // Explicit whitelist, so adding a key to `impressions` is not enough —
       // that is exactly how this one was missed on the first attempt.
       youtube: impressions.youtube,
+      // LINE, both stages: delivered draws in the Impressions bar, opens in the
+      // Interactions bar. The whitelist above is why both are needed — a key on
+      // `impressions` alone never reaches the client.
+      line: impressions.line,
+      lineOpens: impressions.lineOpens,
       adClicks: addNullable(adClicksByKey.meta, adClicksByKey.gads),
       searchClicks: adClicksByKey.gsc,
       fbEngagements: sumOrNull(data.fbOrganic, "post_engagements"),
@@ -1860,6 +1919,21 @@ async function buildOverview(from, to) {
         : n(sumOrNull(data.ttOrganic, "likes")) + n(sumOrNull(data.ttOrganic, "comments"))
           + n(sumOrNull(data.ttOrganic, "shares")),
     },
+    /**
+     * How much of the LINE window can be attributed to a campaign AT ALL.
+     * Tagging began in 2026 and remarks share the column with codes, so the
+     * Campaign tab must read an untagged broadcast as "not measured" and never
+     * as zero. Carried on the overview payload so the split is exercised from
+     * the day it is written rather than sitting untested until the Campaign
+     * tab is built.
+     */
+    lineBroadcast: (data.lineBroadcast && data.lineBroadcast.available) ? {
+      sends: data.lineBroadcast.sends,
+      tagged: data.lineBroadcast.tagged,
+      untagged: data.lineBroadcast.untagged,
+      openRate: data.lineBroadcast.openRate,
+      coverage: data.lineBroadcast.coverage,
+    } : null,
     ecommerce, forecast, topProducts,
     paid, topAccounts, search, trend,
     unavailable: Object.keys(errors),
@@ -5792,6 +5866,132 @@ function monthWeekLabels(from, to) {
  * with no error anywhere — the silent-failure shape that let a dead channel
  * look like a quiet month for 400 days.
  */
+/**
+ * LINE OFFICIAL ACCOUNT — BROADCAST REACH (MW, 16 Sep 2026).
+ *
+ * The funnel's Impressions note has said "Email sends and LINE broadcasts
+ * belong here too but have no connector yet" since v3.68. This is the LINE half.
+ *
+ * MW'S MAPPING, AND IT FITS THE STAGES THAT ALREADY EXIST:
+ *   deliveredCount -> Impressions   ("deliveredCount = imp")
+ *   open           -> Interactions  ("open = engage")
+ *   visits onward  -> GA4           ("use GA4 visit/session for MOFU")
+ *
+ * `open` GOES TO INTERACTIONS, NOT TO ENGAGEMENT, even though MW called it
+ * engage. The Engagement stage is GA4 engaged sessions and is defined as a
+ * SUBSET of visits; LINE opens outnumber LINE sessions by orders of magnitude,
+ * so putting them there would make the funnel widen instead of narrow.
+ * Interactions is the stage for "acted on what they saw without necessarily
+ * arriving" and already holds post engagements — an open is precisely that.
+ *
+ * CLICKS ARE IGNORED ON PURPOSE ("ignore the rests of clicks, use GA4
+ * visit/session for MOFU"). LINE's `clickUU` and the GA4 sessions it produces
+ * are one event counted twice, and the Visits stage is GA4's. Taking LINE's
+ * click as well would double every broadcast visit — the same fault the chat
+ * bubble and the email overlap each had.
+ *
+ * ONE ACCOUNT FOR FOUR HOSPITALS (MW: "this one LINE OA serve all 4 hospital,
+ * similar to the FB page"). So LINE reach CANNOT be scoped to BHQ, exactly like
+ * the YouTube channel, and the row says so rather than letting a group-level
+ * number sit unlabelled inside a BHQ-scoped view. Unlike Facebook page reach it
+ * IS added to the funnel total: a broadcast delivery is not an ad impression,
+ * so there is no Boost-Post-style double count to avoid.
+ *
+ * COLUMNS BY NAME, AND THE HEADER IS MISSPELLED. The export writes
+ * `utm_camapgin`. It is matched as written and normalised here rather than
+ * "corrected" in the sheet, because the export will keep producing the typo.
+ */
+const LINE_SHEET_ID = process.env.LINE_SHEET_ID || "1pk5EA12P-DnkjHvhh9PvsVCFmvvKhk-exSDVP2V82Oc";
+const LINE_SHEET_TAB = process.env.LINE_SHEET_TAB || "Broadcast";
+
+async function buildLine(from, to) {
+  let rows;
+  try {
+    const res = await sheetBatchGet(LINE_SHEET_ID, [`'${LINE_SHEET_TAB}'!A1:BB`]);
+    rows = (res[0] && res[0].values) || [];
+  } catch (e) {
+    logJson("WARNING", "line_sheet_unavailable", { error: String(e.message || e) });
+    return { available: false, reason: String(e.message || e) };
+  }
+  if (rows.length < 2) return { available: false, reason: "sheet is empty" };
+
+  const head = (rows[0] || []).map((h) => String(h || "").trim().toLowerCase());
+  const col = (...names) => {
+    for (const nm of names) {
+      const i = head.indexOf(nm.toLowerCase());
+      if (i >= 0) return i;
+    }
+    return -1;
+  };
+  const C = {
+    // Both spellings, so a corrected sheet keeps working and an uncorrected one
+    // never silently reads every campaign as untagged.
+    campaign: col("utm_camapgin", "utm_campaign"),
+    sent: col("sentDate"),
+    delivered: col("deliveredCount"),
+    open: col("open"),
+    id: col("broadcastId"),
+  };
+  const missing = Object.entries(C).filter(([, i]) => i < 0).map(([k]) => k);
+  if (missing.length) {
+    logJson("WARNING", "line_sheet_columns_missing", { missing, head: head.slice(0, 12) });
+    return { available: false, reason: `sheet is missing ${missing.join(", ")}` };
+  }
+
+  /**
+   * A broadcast is dated by when it was SENT. `sentDate` is a timestamp
+   * (`2022-09-03 13:03:55`), so the day is the first ten characters — parsing it
+   * as a Date would drag it across the date line into the previous day for any
+   * evening send, which is how MonthYear drift happened on Better Club.
+   */
+  const day = (v) => {
+    const m = String(v || "").trim().match(/^(\d{4}-\d{2}-\d{2})/);
+    return m ? m[1] : null;
+  };
+  /**
+   * A CAMPAIGN CODE, OR NOTHING. MW: "some of them, thai texts are remark, some
+   * is different format, both can be ignore in campaign tab for now." Remarks
+   * and agency strings are not campaign codes, so they are recorded as untagged
+   * rather than joined to a campaign that does not exist.
+   */
+  const CODE = /^\d{6}(-\d{2})?_[a-z]{3}(_|$)/i;
+
+  let delivered = 0, opens = 0, sends = 0, tagged = 0;
+  const byCampaign = new Map();
+  let earliest = null, latest = null;
+  for (const r of rows.slice(1)) {
+    const d = day(r[C.sent]);
+    if (!d) continue;
+    if (earliest === null || d < earliest) earliest = d;
+    if (latest === null || d > latest) latest = d;
+    if (d < from || d > to) continue;
+    const dv = n(r[C.delivered]), op = n(r[C.open]);
+    sends += 1; delivered += dv; opens += op;
+    const raw = String(r[C.campaign] || "").trim();
+    if (!CODE.test(raw)) continue;
+    tagged += 1;
+    const key = raw.toLowerCase();
+    const c = byCampaign.get(key) || { campaign: key, sends: 0, delivered: 0, opens: 0 };
+    c.sends += 1; c.delivered += dv; c.opens += op;
+    byCampaign.set(key, c);
+  }
+
+  return {
+    available: true,
+    scope: "group",            // one OA for all four hospitals; see the header note
+    sends, delivered, opens,
+    openRate: delivered ? opens / delivered : null,
+    // How much of the window can be attributed to a campaign at all. Tagging
+    // began in 2026; every broadcast before it is untagged and always will be,
+    // so the Campaign tab must read this as "not measured", never as zero.
+    tagged, untagged: sends - tagged,
+    byCampaign: [...byCampaign.values()].sort((a, b) => b.delivered - a.delivered),
+    // The sheet's own extent, so a range outside it says so instead of
+    // reporting a confident zero.
+    coverage: { from: earliest, to: latest },
+  };
+}
+
 const YT_SHEET_ID = process.env.YT_SHEET_ID || "18dIkhWSyqcSVyVf9D07R-9R6Hkih4mpZ4c__WZbhyWs";
 
 const BETTERAI_SHEET_ID = process.env.BETTERAI_SHEET_ID || "1jOz2XYry-D28z_Eg6w3oIHao1c61OrGTa5jD7Hz21oQ";
