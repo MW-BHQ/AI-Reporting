@@ -1,5 +1,52 @@
 ### Recent (September 2026)
 
+**v3.305.0 — LINE on the Pages tab. Step 3, and it turned out richer than
+planned.**
+
+MW confirmed the traffic is identifiable: `line / social`, 35 sessions on
+`/th/bangkok/package/obstetric-delivery-packages`, all carrying
+`260823-01_bgh_tra`. So the page does not just get a LINE session count — it
+gets the whole funnel: **delivered -> opened -> arrived**.
+
+**THE SHEET HAS NO DESTINATION URL, SO THE JOIN IS ON THE CAMPAIGN.** `cmsUrl`
+is the LINE Manager console link, not where the reader lands. GA4 reports which
+campaigns brought sessions to this page; the sheet reports which broadcasts
+carried those codes.
+
+**JOINED ON THE CAMPAIGN NUMBER, NOT THE WHOLE STRING** — found by testing, not
+by reading. The fixture page takes `260701-08_bht_tra` while the broadcast was
+tagged `260701-08_bgh_tra`: same campaign, different brand suffix. Full-string
+matching returned zero and the card said "no broadcast", which is the false
+negative the Campaign tab's prefix rule already exists to avoid. The number IS
+the campaign; the suffix is which brand and objective ran it. Anything without a
+recognisable code is skipped rather than joined on a bare prefix, or a Thai
+remark would match everything.
+
+**ARRIVALS COME FROM GA4, NOT THE SHEET.** `line / social` sessions are the
+arrival; `clickUU` is the same click counted on the other side, and taking both
+would double the journey. Third time this rule has applied — Overview funnel,
+Campaign tab, now here.
+
+**ARRIVALS ARE NOT FILTERED TO THE MATCHED CAMPAIGNS, deliberately.** A page
+takes LINE traffic from rich menus, untagged broadcasts and old posts, and that
+traffic is real. So "Arrived from LINE" is every LINE session on the page while
+delivered and opened cover only the broadcasts we can name — stated as separate
+figures rather than one clean rate, and `arrivalRate` can legitimately exceed
+100% when untagged sends are also driving traffic there. That is worth seeing,
+not worth hiding.
+
+**Negative tests, all three confirmed failing before revert:** matching the whole
+campaign string; taking arrivals from the sheet instead of GA4; joining every
+broadcast rather than this page's campaigns.
+
+**The fixture gained a `line` source**, without which the arrival figure was
+always zero and the funnel passed whether it was wired up or not. Two pinned
+numbers moved with it — search-ads BGH visits 600 -> 700 and chat-bubble
+contactUs 12,000 -> 14,400 — both pure source-cardinality arithmetic, checked
+against the rule each assertion documents rather than just re-pinned.
+
+### Recent (September 2026)
+
 **v3.304.0 — LINE on the Campaign tab. Step 2 of MW's pipeline.**
 
 `deliveredCount` is the impression and `open` the interaction, the same mapping

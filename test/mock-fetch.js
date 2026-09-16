@@ -589,7 +589,14 @@ function ga4Report(body) {
        * that lookup returns zero whether the rule is right or wrong, and the
        * assertion would pass on a broken match.
        */
-      : d === "sessionManualSource" ? ["facebook", "google", "pantip.com", "chatgpt.com", "www.canva.com"]
+      /**
+       * `line` IS HERE FOR THE PAGE-LEVEL LINE FUNNEL (v3.305.0). MW confirmed
+       * the traffic is identifiable in GA4 — `line / social`, 35 sessions on
+       * one package page, all of it carrying `260823-01_bgh_tra`. Without a
+       * `line` source in the fixture the arrival figure is always zero and the
+       * whole funnel passes whether it is wired up or not.
+       */
+      : d === "sessionManualSource" ? ["facebook", "google", "line", "pantip.com", "chatgpt.com", "www.canva.com"]
       /**
        * MEDIUM DEPENDS ON THE SOURCE, and is not a free cross product. Listing
        * `cpc` unconditionally would also mint `facebook` / `cpc` and
@@ -598,7 +605,8 @@ function ga4Report(body) {
        * the real property looks like.
        */
       : d === "sessionManualMedium"
-        ? (acc[dims.indexOf("sessionManualSource")] === "google" ? ["cpc"] : ["paid"])
+        ? (acc[dims.indexOf("sessionManualSource")] === "google" ? ["cpc"]
+           : acc[dims.indexOf("sessionManualSource")] === "line" ? ["social"] : ["paid"])
       // Thailand must be present so the render-time exclusion is exercised.
       : d === "country" ? ["Thailand", "Japan", "United States", "Germany", "Singapore", "Cambodia"]
       : d === "sessionManualCampaignName" ? [...campaigns, ...marker]

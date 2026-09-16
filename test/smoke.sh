@@ -149,16 +149,17 @@ expect_field "sa nine key events"  "$REPORT" "${SA}'BGH').actions.length===9?9:u
 # If either leaks into a hospital this drops to 1.
 expect_field "sa unattributed"     "$REPORT" "d.searchAds.unattributed.campaigns.length===2?2:undefined"
 expect_field "sa bcm not a brand"  "$REPORT" "d.searchAds.byBrand.every(b=>b.impressions!==4100)?'ok':undefined"
-# Five sources are emitted under BOTH Paid Search and Cross-network. Paid Search
-# contributes all five (500); Cross-network contributes ONLY `google` (100),
+# Six sources are emitted under BOTH Paid Search and Cross-network. Paid Search
+# contributes all six (600); Cross-network contributes ONLY `google` (100),
 # because `isPaidSearch` requires the source to be Google before it will count a
-# Cross-network row. 600 is both halves of that rule.
+# Cross-network row. 700 is both halves of that rule. (Six since v3.305.0 added
+# a `line` source for the page-level LINE funnel.)
 #
 # Until v3.285.0 the fixture had no Google source at all, so the Cross-network
 # branch was never reached and this asserted 400 — the guard could have been
 # deleted entirely and stayed green. 1000 now means the source condition was
 # dropped and every Cross-network row counted.
-expect_field "sa excludes x-network" "$REPORT" "${SA}'BGH').visits===600?600:undefined"
+expect_field "sa excludes x-network" "$REPORT" "${SA}'BGH').visits===700?700:undefined"
 
 echo "--- campaign: onward navigation and outbound clicks (v3.273.0) ---"
 echo "--- pages: the axis spans the range, not just the months with traffic (v3.294.0) ---"
@@ -181,6 +182,23 @@ expect_field "pg real month kept"  "$PAGE1" "d.monthly.find(m=>m.sessions>0).mon
 # Same rule for the daily series: 243 days from 01 Jan to 31 Aug inclusive.
 expect_field "pg daily spans"      "$PAGE1" "d.daily.length===243?243:undefined"
 expect_field "pg daily edges"      "$PAGE1" "(d.daily[0].d==='2026-01-01'&&d.daily[242].d==='2026-08-31')?'ok':undefined"
+
+echo "--- pages: the LINE funnel for one page (v3.305.0) ---"
+PAGE2="/api/page?url=https://www.bangkokhospital.com/th/bangkok/page/a&from=2026-07-01&to=2026-07-31"
+# ARRIVED COMES FROM GA4, not the sheet: sessions whose source is `line`. The
+# sheet's clickUU is the same click counted on the other side.
+expect_field "pg line sessions"    "$PAGE2" "d.line.sessions===100?100:undefined"
+# JOINED ON THE CAMPAIGN NUMBER, NOT THE WHOLE STRING. The fixture page takes
+# `260701-08_bht_tra` while the broadcast was tagged `260701-08_bgh_tra` — same
+# campaign, different brand suffix. Full-string matching finds nothing and the
+# card reports "no broadcast", a false negative.
+expect_field "pg line joined"      "$PAGE2" "d.line.sends===1?1:undefined"
+expect_field "pg line delivered"   "$PAGE2" "d.line.delivered===90000?90000:undefined"
+expect_field "pg line code"        "$PAGE2" "d.line.codes[0]==='260701-08_bgh_tra'?'ok':undefined"
+# A code that brought no traffic to this page must not be joined in: the
+# fixture's second tagged broadcast (260702-01) is not among this page's
+# campaigns, so 90,000 stands rather than being topped up.
+expect_field "pg line no leak"     "$PAGE2" "d.line.sends===1&&d.line.codes.length===1?'ok':undefined"
 
 CAMP1="/api/campaign?code=260701-08&from=$FROM&to=$TO"
 LC="d.linkClicks"
@@ -479,7 +497,7 @@ echo "--- isolation: the report's chat bubble slide must not move ---"
 expect_field "iso chat source"     "$REPORT" "d.chatBubble.source==='click_chat_bubble'?'ok':undefined"
 expect_field "iso chat bhq total"  "$REPORT" "d.chatBubble.byScope.BHQ.total===1700?1700:undefined"
 expect_field "iso chat bgh total"  "$REPORT" "d.chatBubble.byScope.BGH.total===900?900:undefined"
-expect_field "iso chat contactus"  "$REPORT" "d.chatBubble.byScope.BHQ.contactUs===12000?12000:undefined"
+expect_field "iso chat contactus"  "$REPORT" "d.chatBubble.byScope.BHQ.contactUs===14400?14400:undefined"
 expect_field "iso chat one event"  "$REPORT" "d.chatBubble.events.length===1?'ok':undefined"
 
 echo "--- google ads benchmark: impression share must not be summed or averaged ---"
