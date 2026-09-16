@@ -2357,6 +2357,10 @@ const RED = {
   // means most of the traffic paid for never arrived tagged — a tagging fault,
   // not a performance one.
   landingToVisit: 50,
+  // LINE open rate on the campaign tab. PROVISIONAL — MW's export averages
+  // about 27% across 1,000 broadcasts, so 15% is roughly half the norm. Re-set
+  // once there are enough tagged campaigns to see the spread.
+  lineOpenRate: 0.15,
   // Scroll cards, both fallbacks for when the `engagement` event is absent.
   scrollDepth: 40,
   scrollReach: 0.30,
@@ -6322,6 +6326,47 @@ function renderCampaignBody(d) {
         </div></div>`:''}
       ${(d.shortLinks||[]).length?`<div class="note"><b>Registered short links:</b> ${d.shortLinks.slice(0,8).map(l=>`<code style="font-size:var(--text-2xs);">${esc(l)}</code>`).join(' &middot; ')}${d.shortLinks.length>8?` +${d.shortLinks.length-8} more`:''}<br>Organic posts are found by searching post text for these links, so a post only appears here if it used a link registered in UTM Builder 2026. LINE broadcasts and EDM can't be matched this way &mdash; those platforms don't expose message content.</div>`:'<div class="note">No short links are registered against this code in UTM Builder 2026, so organic posts can\'t be matched.</div>'}
     </div>`:''}
+
+    ${(() => {
+      /**
+       * LINE BROADCASTS FOR THIS CAMPAIGN.
+       *
+       * `deliveredCount` is the impression and `open` is the interaction, the
+       * same mapping the Overview funnel uses. CLICKS ARE ABSENT ON PURPOSE:
+       * the session a LINE click becomes is already in this campaign's visits,
+       * and showing both would count one action twice.
+       *
+       * AN EMPTY RESULT IS NOT A ZERO, AND THE THREE CASES READ DIFFERENTLY.
+       * Campaign tagging in the LINE sheet only began in 2026 — 122 of 1,000
+       * broadcasts carry a code and every one of them is 2026 — so a 2025
+       * campaign can never have a matching broadcast. Printing "0 delivered"
+       * for it would claim LINE was used and failed, when the truth is that
+       * nobody recorded which campaign the send belonged to.
+       */
+      const L = d.line;
+      if (!L) return '';
+      const card = (body) => `<div class="card mt"><h2>LINE broadcasts</h2>${body}</div>`;
+      if (!L.available) return card('<div class="note" style="margin-top:0;">The LINE broadcast sheet could not be read this run, so broadcasts for this campaign are not measured &mdash; not zero.</div>');
+      if (!L.sends) {
+        const outside = L.coverage && L.coverage.from && (d.range.to < L.coverage.from || d.range.from > L.coverage.to);
+        return card(`<div class="note" style="margin-top:0;">${
+          outside
+            ? `No broadcast data covers this range &mdash; the sheet runs ${esc(L.coverage.from)} to ${esc(L.coverage.to)}.`
+            : `No broadcast carries this campaign code.${L.untaggedInWindow?` ${num(L.untaggedInWindow)} broadcast${L.untaggedInWindow===1?' was':'s were'} sent in this range without one, so LINE may have run for this campaign without being recorded against it.`:''} Campaign codes were only added to the LINE sheet from 2026.`
+        }</div>`);
+      }
+      return card(`<div class="grid g-4">
+        <div class="stat"><div class="lab">Broadcasts</div><div class="val">${num(L.sends)}</div>
+          <div class="sub">${L.codes.map(esc).join(', ')}</div></div>
+        <div class="stat"><div class="lab">Delivered</div><div class="val">${num(L.delivered)}</div>
+          <div class="sub">messages that reached a device</div></div>
+        <div class="stat"><div class="lab">Opened</div><div class="val">${num(L.opens)}</div>
+          <div class="sub">counted at Interactions, not Visits</div></div>
+        <div class="stat"><div class="lab">Open rate</div>
+          <div class="val" style="color:${L.openRate!=null&&L.openRate<RED.lineOpenRate?'var(--rose)':'var(--ink)'}">${L.openRate!=null?num(L.openRate*100,{dp:1})+'%':'\u2014'}</div>
+          <div class="sub">opened \u00f7 delivered</div></div>
+      </div>`);
+    })()}
 
     ${(d.sheetErrors&&d.sheetErrors.length)?`<div class="warnbox">Internal sheets unavailable: ${d.sheetErrors.map(esc).join(' | ')} &mdash; campaign names and organic matching are degraded. Check <code>/api/sheets-check</code>.</div>`:''}
 
@@ -11117,7 +11162,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.303.0';
+const CLIENT_BUILD = '3.304.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

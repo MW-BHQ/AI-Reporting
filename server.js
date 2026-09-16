@@ -4282,6 +4282,13 @@ async function buildCampaign(code, from, to) {
      * NULL ON FAILURE, and the card says so rather than printing an empty
      * table that looks like a campaign nobody emailed.
      */
+    /**
+     * LINE broadcasts for THIS campaign. `buildLine` already groups the sheet
+     * by `utm_camapgin`, so the campaign tab only has to pick the codes that
+     * match — same prefix rule as every other source here, so "260501",
+     * "260501-11" and "260501-11_bgh" all resolve.
+     */
+    lineBroadcast: buildLine(from, to),
     ga4ClickUrls: ga4RunReport({
       dimensions: ["sessionManualCampaignName", "eventName",
         "customEvent:Click_URL", "customEvent:Click_Text"],
@@ -5516,9 +5523,46 @@ async function buildCampaign(code, from, to) {
     notes = `Impressions cover only connected platforms. Not connected to Windsor: ${notConnected.join(", ")} — any spend there is missing from the Impressions stage.`;
   }
 
+  /**
+   * LINE BROADCASTS FOR THIS CAMPAIGN.
+   *
+   * THREE OUTCOMES, AND THEY ARE NOT THE SAME THING — this is the whole reason
+   * the block exists rather than a bare number:
+   *   · the sheet could not be read      -> `available: false`
+   *   · it was read and this campaign has no tagged broadcast -> `sends: 0`
+   *     with the window's untagged count, because tagging only began in 2026
+   *     and a 2025 campaign can NEVER have one. That is "not measured", not
+   *     zero, and the card has to say which.
+   *   · it matched -> the figures.
+   *
+   * Delivered is the impression and opens are the interaction, the same mapping
+   * the Overview funnel uses (MW: "deliveredCount = imp, open = engage").
+   * Clicks are deliberately absent: the session a LINE click becomes is already
+   * counted in this campaign's GA4 visits.
+   */
+  const lineCamp = (() => {
+    const lb = data.lineBroadcast;
+    if (!lb || !lb.available) return { available: false };
+    const mine = (lb.byCampaign || []).filter((c) => norm(c.campaign).startsWith(needle));
+    const sends = mine.reduce((a, c) => a + c.sends, 0);
+    const delivered = mine.reduce((a, c) => a + c.delivered, 0);
+    const opens = mine.reduce((a, c) => a + c.opens, 0);
+    return {
+      available: true,
+      sends, delivered, opens,
+      openRate: delivered ? opens / delivered : null,
+      // Untagged broadcasts in the same window, so a campaign showing nothing
+      // can say whether anything was sent at all that simply was not tagged.
+      untaggedInWindow: lb.untagged,
+      coverage: lb.coverage,
+      codes: mine.map((c) => c.campaign),
+    };
+  })();
+
   return {
     code, range: { from, to },
     matchedVariants: variants.length,
+    line: lineCamp,
     totals, variants, keyEventBreakdown, trend,
     byPlatform, adCampaigns, orphanAdCampaigns, landingPages, linkClicks,
     topic, shortLinks: uniqueLinks, organicPosts, organicTotals,

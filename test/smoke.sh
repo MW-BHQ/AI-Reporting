@@ -112,8 +112,8 @@ expect_field "line opens in stage" "$OVERVIEW" "d.totals.clicks>=${IO}.lineOpens
 # Accepting any non-empty string reads 2 tagged and would join a broadcast to a
 # campaign that does not exist.
 expect_field "line sends counted"  "$OVERVIEW" "d.lineBroadcast.sends===3?3:undefined"
-expect_field "line tagged strict"  "$OVERVIEW" "d.lineBroadcast.tagged===1?1:undefined"
-expect_field "line untagged known" "$OVERVIEW" "d.lineBroadcast.untagged===2?2:undefined"
+expect_field "line tagged strict"  "$OVERVIEW" "d.lineBroadcast.tagged===2?2:undefined"
+expect_field "line untagged known" "$OVERVIEW" "d.lineBroadcast.untagged===1?1:undefined"
 
 echo "--- overview: LINE followers are snapshots, not increments (v3.296.0) ---"
 # contacts/targetReaches/blocks are STOCK figures — what the account held that
@@ -359,6 +359,24 @@ expect_field "lpv gads not split"  "$CAMP1" "d.adCampaigns.filter(c=>c.platform=
 # that ratio is a 1:1 term that dilutes the alarm. Meta reports 100 and the GA4
 # figure is another 100 — if it leaked in, this would read 200.
 expect_field "lpv total meta only" "$CAMP1" "d.totals.landingPageViews===100?100:undefined"
+
+echo "--- campaign: LINE broadcasts matched by campaign code (v3.304.0) ---"
+# Step 2 of MW's LINE pipeline. The fixture sends one broadcast tagged
+# 260701-08_bgh_tra (90,000 delivered, 22,000 opened) plus two untagged in the
+# same window, and one tagged 260601-02_bih_tra in JUNE — outside this range.
+expect_field "line camp sends"     "$CAMP1" "d.line.sends===1?1:undefined"
+expect_field "line camp delivered" "$CAMP1" "d.line.delivered===90000?90000:undefined"
+expect_field "line camp opens"     "$CAMP1" "d.line.opens===22000?22000:undefined"
+# PREFIX MATCH, like every other source here: "260701-08" must find
+# "260701-08_bgh_tra". An exact match finds nothing and reads as "LINE was not
+# used", which is the failure this whole card is built to avoid.
+expect_field "line camp code"      "$CAMP1" "d.line.codes[0]==='260701-08_bgh_tra'?'ok':undefined"
+# THE UNTAGGED COUNT IS CARRIED, so a campaign with no match can say whether
+# anything was sent at all. Tagging began in 2026; a 2025 campaign can never
+# have one, and 0 delivered would claim LINE ran and failed.
+expect_field "line camp untagged"  "$CAMP1" "d.line.untaggedInWindow===1?1:undefined"
+# A broadcast for a DIFFERENT campaign must not leak in. 90,000 not 130,000.
+expect_field "line camp no leak"   "$CAMP1" "d.line.delivered<130000?'ok':undefined"
 # SOURCE STRICT, MEDIUM LOOSE. `pantip.com` / `paid` is paid traffic that is not
 # Google Ads; if the source match were relaxed to "any paid medium" every one of
 # the fixture's four non-Google paid sources would be swept in and this reads

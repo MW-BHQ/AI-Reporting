@@ -1,5 +1,45 @@
 ### Recent (September 2026)
 
+**v3.304.0 — LINE on the Campaign tab. Step 2 of MW's pipeline.**
+
+`deliveredCount` is the impression and `open` the interaction, the same mapping
+the Overview funnel uses. CLICKS ARE ABSENT ON PURPOSE: the session a LINE click
+becomes is already in this campaign's GA4 visits, so showing both counts one
+action twice.
+
+**PREFIX MATCH, like every other source on this tab** — `260701-08` finds
+`260701-08_bgh_tra`. An exact match finds nothing and reads as "LINE was not
+used", which is the failure the card exists to prevent.
+
+**THREE EMPTY STATES, AND THEY ARE NOT THE SAME THING.** This is the whole
+reason the card is a block rather than a number:
+- the sheet could not be read -> "not measured, not zero"
+- the range sits outside the sheet's coverage -> says so, with the dates
+- no broadcast carries this code -> says how many WERE sent untagged in the same
+  range, and that codes only start in 2026
+
+That last one matters most. 122 of 1,000 broadcasts carry a code and every one
+is 2026, so a 2025 campaign can NEVER have a match. Printing "0 delivered" for
+it would claim LINE ran and failed, when the truth is nobody recorded which
+campaign the send belonged to.
+
+**`lineOpenRate: 0.15` joins the named `RED` block, and is provisional** — MW's
+export averages about 27% open across 1,000 broadcasts, so 15% is roughly half
+the norm. Re-set once enough campaigns are tagged to see the spread.
+
+**Negative tests, all three confirmed failing before revert:** exact-matching the
+code instead of prefix; taking every campaign's broadcasts instead of this one's;
+dropping the untagged count so an empty card cannot explain itself.
+
+**THE LEAK TEST PASSED AGAINST BROKEN CODE AT FIRST.** Only one campaign was
+tagged inside the fixture's window, so `byCampaign` held one entry and "take
+every campaign" gave the same answer as "take this one". A second tagged
+campaign now sits in the same window — with ZERO delivered, so it also proves a
+send that reached nobody still counts as a broadcast for its own campaign
+without adding to anyone's delivered total.
+
+### Recent (September 2026)
+
 **v3.303.0 — the brand colours carry into the channel bars too** (MW: "why wont
 we apply the colors to the the rests of funnel?").
 

@@ -1069,7 +1069,17 @@ global.fetch = async (url, opts = {}) => {
         ["utm_camapgin", "broadcastId", "sentDate", "deliveredCount", "open", "clickUU"],
         ["260701-08_bgh_tra", "273082477", "2026-07-03 13:03:55", "90000", "22000", "290"],
         ["\u0e1b\u0e34\u0e14\u0e1b\u0e23\u0e31\u0e1a\u0e1b\u0e23\u0e38\u0e07", "272781001", "2026-07-20 22:40:11", "60000", "18000", "959"],
-        ["", "271844891", "2026-07-28 09:04:04", "0", "0", ""],
+        /**
+         * A SECOND TAGGED CAMPAIGN INSIDE THE SAME WINDOW, so the campaign tab
+         * has something it must NOT pick up. Without it `byCampaign` held one
+         * entry and "take every campaign's broadcasts" produced the same answer
+         * as "take this campaign's" — the leak test passed against broken code.
+         *
+         * Zero delivered on purpose as well: a send that reached nobody is
+         * still a send, and it must count as a broadcast for ITS campaign
+         * without adding to anyone's delivered total.
+         */
+        ["260702-01_wsh_tra", "271844891", "2026-07-28 09:04:04", "0", "0", ""],
         ["260601-02_bih_tra", "270000001", "2026-06-15 10:00:00", "40000", "9000", "74"],
       ] }] });
     }
