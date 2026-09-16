@@ -2781,7 +2781,56 @@ function fnW(val, max, floor = 7) {
 const n0 = (v) => (v === null || v === undefined || isNaN(Number(v))) ? 0 : Number(v);
 
 const CHANNEL_COLORS = ['#7C6BF5','#4B8DF8','#35C3B4','#F2A93B','#F2708F','#3BC97F','#9B8CEF','#6ECBE0','#E8A0C4','#A8B4D4'];
-const colorFor = (i) => CHANNEL_COLORS[i % CHANNEL_COLORS.length];
+/**
+ * A CHANNEL'S COLOUR IS FIXED TO ITS NAME, NOT ITS RANK.
+ *
+ * `colorFor(i)` indexed into the palette by position in the funnel array, and
+ * that array is sorted by visits — so Organic Search was violet only while it
+ * was the biggest channel. Two periods side by side could paint the same
+ * channel two colours, and the moment MW asked for one key across all five
+ * stages ("if the violet mean organic search, then use that all five stage")
+ * the rank-based version could not deliver it.
+ *
+ * The twelve GA4 default groups this property actually produces are pinned.
+ * The eleventh and twelfth used to wrap onto Organic Search's and Direct's
+ * colours, so Organic Video and Paid Video were already drawing as other
+ * channels before any of this. Anything unrecognised still falls back to the
+ * rank-based palette rather than going colourless.
+ */
+const CHANNEL_COLOR_BY_NAME = {
+  "organic search": "#7C6BF5", "direct": "#4B8DF8", "paid social": "#35C3B4",
+  "organic social": "#F2A93B", "paid search": "#F2708F", "referral": "#3BC97F",
+  "ai assistant": "#9B8CEF", "unassigned": "#6ECBE0", "sms": "#E8A0C4",
+  "cross-network": "#A8B4D4", "organic video": "#C86FD1", "paid video": "#2F7FA8",
+  "email": "#5BA55B", "display": "#D9A441", "organic shopping": "#B5532F",
+  "paid shopping": "#8E5AA8", "affiliates": "#7A6248", "audio": "#3E8F7A",
+};
+const colorFor = (i, name) => CHANNEL_COLOR_BY_NAME[String(name || "").trim().toLowerCase()]
+  || CHANNEL_COLORS[i % CHANNEL_COLORS.length];
+
+/**
+ * WHICH CHANNEL EACH SOURCE BELONGS TO, so one colour key serves all five
+ * stages. The top two bars still stack by SOURCE — mapping a platform onto a
+ * channel ROW breaks whenever that channel is absent from the data, and the bar
+ * stops adding up — but a source can safely wear its channel's colour.
+ *
+ * `null` MEANS THERE IS NO HONEST ANSWER, and those draw in the neutral brand
+ * tone rather than being forced into a channel they do not belong to:
+ *   · Google Business Profile views and LINE broadcasts have no GA4 channel at
+ *     all — a profile view and a delivered message are not sessions.
+ *   · `adClicks` is Meta AND Google Ads summed, so it spans Paid Social and
+ *     Paid Search; colouring it either one would be a claim the number does not
+ *     support.
+ */
+const SOURCE_CHANNEL = {
+  "Meta Ads": "paid social", "Google Ads": "paid search", "Google Search": "organic search",
+  "TikTok views": "organic social", "YouTube views": "organic video",
+  "Facebook organic reach": "organic social",
+  "Google Business Profile": null, "LINE broadcasts": null,
+  "Search clicks": "organic search", "Ad clicks": null,
+  "Facebook post engagements": "organic social", "TikTok engagements": "organic social",
+  "Profile website clicks": null, "LINE opens": null,
+};
 
 function setStatus(kind, text) {
   $('statusDot').className = 'dot ' + (kind === 'ok' ? '' : kind);
@@ -5391,7 +5440,7 @@ function renderOverview() {
      * one place still using the native one.
      */
     const label = pct >= 9 ? `<b class="seg-val">${num(v)}</b>` : '';
-    return `<span style="width:${pct}%;background:${colorFor(f.indexOf(c))}" data-tip="${esc(c.channel)}: ${num(v)}">${label}</span>`;
+    return `<span style="width:${pct}%;background:${colorFor(f.indexOf(c), c.channel)}" data-tip="${esc(c.channel)}: ${num(v)}">${label}</span>`;
   }).join('');
 
   /**
@@ -5466,14 +5515,41 @@ function renderOverview() {
    * would read as the same CHANNEL, and the whole reason the source palette
    * went away was to stop one colour meaning two things in one card.
    */
-  const SRCC = ['#4C3FC4','#6E60E0'];
+  /**
+   * A SOURCE WEARS ITS CHANNEL'S COLOUR (MW: "you should keep the channel color
+   * across funnels. if the violet mean organic search, then use that all five
+   * stage").
+   *
+   * Google Search impressions draw the same violet as Organic Search visits,
+   * Meta Ads the same teal as Paid Social, all the way down — one key, five
+   * stages. The bars still STACK by source, because mapping a platform onto a
+   * channel row breaks whenever that channel is missing from the data; only the
+   * colour is shared.
+   *
+   * TWO SOURCES IN ONE CHANNEL ARE THE SAME COLOUR, by design — Facebook
+   * organic reach and TikTok views are both Organic Social and now say so. The
+   * tooltip separates them; the `::after` hit area makes it reachable.
+   *
+   * SRCN is for sources with no honest channel (GBP, LINE, combined ad clicks),
+   * and it is deliberately SLATE rather than brand violet: now that every other
+   * colour names a channel, "no channel" has to look like no channel. The first
+   * attempt used two steps of the brand violet and Google Business Profile came
+   * out a shade off Organic Search — the precise misreading this change exists
+   * to stop. Two steps so adjacent neutrals keep an edge, and neither is
+   * Cross-network's #A8B4D4.
+   */
+  const SRCN = ['#5C6478','#7B8296'];
+  const srcColor = (name, i) => {
+    const ch = SOURCE_CHANNEL[name];
+    return ch ? (CHANNEL_COLOR_BY_NAME[ch] || SRCN[i % SRCN.length]) : SRCN[i % SRCN.length];
+  };
   // What each source bar actually draws — the legend must use the same list,
   // in the same order, or the chips point at the wrong segments.
   const drawn = (rows) => rows.filter(r => r.v > 0);
   const srcSeg = (rows, total, offset = 0) => rows.filter(r => r.v > 0).map((r,i) => {
     const pct = (r.v/total)*100;
     const label = pct >= 9 ? `<b class="seg-val">${num(r.v)}</b>` : '';
-    return `<span style="width:${pct}%;background:${SRCC[(offset+i)%SRCC.length]}" data-tip="${esc(r.n)}: ${num(r.v)}">${label}</span>`;
+    return `<span style="width:${pct}%;background:${srcColor(r.n, offset+i)}" data-tip="${esc(r.n)}: ${num(r.v)}">${label}</span>`;
   }).join('');
   const impSources = [
     { n:'Meta Ads', v: n0(io.meta) },
@@ -5551,7 +5627,7 @@ function renderOverview() {
            colour never has two meanings in the same card and the legend stays
            short enough to read. What each source is lives in CONTEXT.md, not on
            the slide. -->
-      <div class="legend">${f.map((c,i)=>`<div><span class="chip" style="background:${colorFor(i)}"></span>${esc(c.channel)}</div>`).join('')}</div>
+      <div class="legend">${f.map((c,i)=>`<div><span class="chip" style="background:${colorFor(i, c.channel)}"></span>${esc(c.channel)}</div>`).join('')}</div>
     </div>
 
     <!-- channel table + reach-only -->
@@ -5560,7 +5636,7 @@ function renderOverview() {
         <h2>Channel detail</h2>
         <table><thead><tr><th>Channel</th><th class="num">Impr</th><th class="num">Clicks</th><th class="num">Visits</th><th class="num">Engaged</th><th class="num">Key events</th><th class="num">KE / visit</th></tr></thead><tbody>
         ${f.map((c,i)=>`<tr>
-          <td class="strong"><span class="chip" style="background:${colorFor(i)};margin-right:7px;"></span>${esc(c.channel)}</td>
+          <td class="strong"><span class="chip" style="background:${colorFor(i, c.channel)};margin-right:7px;"></span>${esc(c.channel)}</td>
           <td class="num">${num(c.impressions)}</td>
           <td class="num">${num(c.clicks)}</td>
           <td class="num">${num(c.visits)}</td>
@@ -11003,7 +11079,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.300.0';
+const CLIENT_BUILD = '3.301.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

@@ -51,9 +51,17 @@ function overviewFixture() {
     unavailable: { map: { topAccounts: "facebook HTTP 500 simulated" } },
     totals: { visits: 412903, engagement: 208114, clicks: 51002,
       impressions: 8841200, keyEvents: 19477, keyEventsOffsite: 3120 },
+    /**
+     * ORGANIC SEARCH IS NOT FIRST HERE, DELIBERATELY (v3.301.0). The server
+     * sorts the funnel by visits and the client used to colour by POSITION, so
+     * a fixture with Organic Search on top could not tell a name-keyed palette
+     * from a rank-keyed one — both paint it violet. Paid Social leads now, so
+     * the assertion that Organic Search is still #7C6BF5 fails the moment
+     * colour goes back to depending on rank.
+     */
     funnel: [
-      { channel: "Organic Search", visits: 231004, engagement: 121888, keyEvents: 11902 },
-      { channel: "Paid Social",    visits: 98771,  engagement: 44120,  keyEvents: 5411 },
+      { channel: "Paid Social",    visits: 231004, engagement: 121888, keyEvents: 11902 },
+      { channel: "Organic Search", visits: 98771,  engagement: 44120,  keyEvents: 5411 },
       { channel: "Direct",         visits: 61228,  engagement: 32006,  keyEvents: 2164 },
       { channel: "Referral",       visits: 21900,  engagement: 10100,  keyEvents: 0 },
     ],
@@ -673,6 +681,28 @@ setTimeout(() => {
        * the bar empty, and this passes only if the segment was actually drawn.
        */
       ["impressions by source", 'data-tip="Google Business Profile', "html"],
+      /**
+       * ONE COLOUR KEY ACROSS ALL FIVE STAGES (MW: "if the violet mean organic
+       * search, then use that all five stage"). Meta Ads is Paid Social, so its
+       * impression segment must carry Paid Social's colour — #35C3B4 — and not
+       * a palette position. Asserting the hex is the only way to catch a
+       * regression here: the bar renders, the tooltip is right, and only the
+       * colour silently stops meaning anything.
+       */
+      ["source wears its channel colour", 'background:#35C3B4" data-tip="Meta Ads', "html"],
+      /**
+       * A CHANNEL'S COLOUR IS ITS NAME'S, NOT ITS RANK'S. Organic Search is
+       * SECOND in the fixture above, so a rank-keyed palette would paint it
+       * Direct's blue. Two periods side by side would have shown one channel in
+       * two colours — and no single key could span five stages.
+       */
+      ["channel colour keyed by name", 'background:#7C6BF5" data-tip="Organic Search', "html"],
+      /**
+       * And a source with NO channel must NOT wear one. Google Business Profile
+       * views are not sessions; the first cut painted them a shade off Organic
+       * Search's violet, which is the misreading this whole change removes.
+       */
+      ["no-channel source stays neutral", 'background:#5C6478" data-tip="Google Business Profile', "html"],
       ["offsite actions", "Direction requests"],
       ["key events", "Appointment form"],
       ["top packages", "Cardiac screening"],

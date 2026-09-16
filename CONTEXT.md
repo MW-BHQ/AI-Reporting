@@ -1,5 +1,48 @@
 ### Recent (September 2026)
 
+**v3.301.0 — one colour key across all five funnel stages** (MW: "you should
+keep the channel color across funnels. if the violet mean organic search, then
+use that all five stage").
+
+**A LATENT BUG HAD TO GO FIRST: COLOUR DEPENDED ON RANK.** `colorFor(i)` indexed
+the palette by position in the funnel array, and the server sorts that array by
+visits — so Organic Search was violet only while it was the biggest channel. Two
+periods side by side could paint one channel two colours, and no single key
+could have spanned five stages while that was true. Colour is now keyed to the
+channel NAME. The eleventh and twelfth groups used to wrap onto Organic Search's
+and Direct's colours, so Organic Video and Paid Video were already drawing as
+other channels before any of this; they have their own now.
+
+**A SOURCE WEARS ITS CHANNEL'S COLOUR.** Google Search impressions draw the same
+violet as Organic Search visits, Meta Ads the same teal as Paid Social, TikTok
+views and Facebook organic reach the same amber as Organic Social — which also
+says, correctly, that those two are one channel.
+
+**THE BARS STILL STACK BY SOURCE.** Only the colour is shared. Mapping a
+platform onto a channel ROW breaks whenever that channel is absent from the
+data — the source counts toward the headline, appears in no segment, and the bar
+quietly stops adding up. That reasoning has been in the code since the funnel was
+built and still holds; it just never applied to the palette.
+
+**"NO CHANNEL" NOW LOOKS LIKE NO CHANNEL.** Google Business Profile views and
+LINE broadcasts have no GA4 channel — a profile view and a delivered message are
+not sessions — and `adClicks` is Meta AND Google Ads summed, so it spans Paid
+Social and Paid Search and cannot honestly wear either. Those draw slate. The
+first cut used two steps of the brand violet and GBP came out a shade off
+Organic Search, which is the exact misreading this change exists to remove.
+
+**Negative tests, all three confirmed failing before revert:** colouring
+channels by rank; giving every source the neutral; forcing a channel colour onto
+a source that has none.
+
+**THE FIXTURE COULD NOT TELL RANK FROM NAME**, so it was changed too. Organic
+Search led the boot funnel, and both palettes paint a leader violet. Paid Social
+leads now and Organic Search sits second, so the rank-keyed version fails
+immediately — without that reorder the first negative test passed against
+broken code.
+
+### Recent (September 2026)
+
 **v3.300.0 — the source bars take the brand violet** (MW: "use one brand colour,
 not grey").
 
