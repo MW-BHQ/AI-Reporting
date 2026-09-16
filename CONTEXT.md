@@ -1,5 +1,46 @@
 ### Recent (September 2026)
 
+**v3.307.0 — the Pages campaign rows are clickable, and the hand cursor stops
+lying** (MW: "rows in Campaigns that sent traffic here, have hand cursor, but
+not clickable").
+
+**TWO HALVES.** `td.trunc:hover{cursor:pointer}` put the hand on EVERY truncated
+cell in the app, whether or not a click did anything — a truncated cell's
+affordance is the full string on hover, not a click. And the campaign rows,
+which SHOULD be clickable, were not wired. Fixed both ways round: the blanket
+rule is gone, `td[data-code]` opts in, and the rows now open that campaign on
+the Campaign tab through the app's existing drill-in contract.
+
+**THE FIRST FIX DID NOTHING, WHICH IS THE SAME BUG ONE LAYER DOWN.** It read
+`#campInput` and set its value before switching tabs — but that input only
+exists while the Campaign view is rendered, so on Pages it is null and the
+handler bailed. The cursor still promised a click that went nowhere, with the
+fix in place. Order is now state, view, render, run: `S.campaignCode` is what
+the input renders its value from.
+
+The handler is DELEGATED from `document`, because the campaigns table is rebuilt
+on every page load and a handler bound to the rows dies with them.
+
+**Two guards, both negative-tested:**
+- `cursor:promises-a-click` — `cursor:pointer` on a `td`/`tr` rule is only
+  allowed when the selector also requires a `data-*` hook. Scoped to the
+  stylesheet after the first cut matched `try {` and an inline `style=` inside a
+  template literal; a selector regex loose enough to hit JavaScript reports
+  noise, and noise is how a check gets ignored.
+- `pages:drill-in-wired` — the Pages handler must set `S.campaignCode` and must
+  NOT touch `campInput`. Anchored on `#viewRoot td[data-code]`, because the
+  campaign LIST has its own drill-in that reads `campInput` quite correctly, and
+  comments are stripped first: the handler's own comment explains the bug and so
+  contains the word, which failed the check on correct code. A guard that fails
+  on the documentation of the thing it guards is worse than none — the fix would
+  be to delete the explanation.
+
+**Also caught by an existing rule**, worth recording as a rule that earns its
+keep: `js:comment-backtick` rejected an HTML comment I put inside the row
+template, because a backtick in it ends the template literal.
+
+### Recent (September 2026)
+
 **v3.306.0 — the Pages LINE card is removed. Step 3 was already done.**
 
 MW: "i dont think a seperate card for line is making sense, while other channels

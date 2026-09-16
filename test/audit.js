@@ -709,5 +709,85 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
         `campaign thresholds all named; ${BACKLOG.length} on other tabs still pending`);
 }
 
+/**
+ * A HAND CURSOR MUST PROMISE SOMETHING (v3.307.0).
+ *
+ * MW: "rows in Campaigns that sent traffic here, have hand cursor, but not
+ * clickable." One blanket rule — `td.trunc:hover{cursor:pointer}` — put the
+ * hand on EVERY truncated cell in the app whether or not a click did anything.
+ * A truncated cell's affordance is the full string on hover, not a click.
+ *
+ * So `cursor:pointer` on a `td` is only allowed when the selector also requires
+ * something that makes it actionable: `[data-code]`, `[data-tip]` or `[data-*]`
+ * generally. A bare `td...:hover{cursor:pointer}` fails here.
+ *
+ * NEGATIVE TEST: change `td[data-code]{cursor:pointer;}` to
+ * `td.trunc:hover{cursor:pointer;}`, run the suite, watch this fail, revert.
+ */
+{
+  /**
+   * SCOPED TO THE STYLESHEET. The first cut ran over the whole file and matched
+   * `try {` and an inline `style="..."` in a template literal — a selector regex
+   * loose enough to hit JavaScript reports noise, and noise is how a check gets
+   * ignored.
+   */
+  const css = [...html.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join("\n");
+  const RULE = /(^|[\s,{}])((?:td|tr)[a-zA-Z0-9_.:()\[\]="'~^$*|>+\-\s]*?)\{([^}]*)\}/g;
+  const bad = [];
+  for (const m of css.matchAll(RULE)) {
+    if (!/cursor:\s*pointer/.test(m[3])) continue;
+    const sel = m[2].trim();
+    if (/\[data-/.test(sel)) continue;          // actionable by contract
+    bad.push(`${css.slice(0, m.index).split("\n").length}: ${sel}`);
+  }
+  bad.length
+    ? fail("cursor:promises-a-click",
+        `${bad.length} row/cell rule(s) show a hand without requiring a data-* hook — ${bad.join(" | ")}`)
+    : ok("cursor:promises-a-click", "every hand cursor on a cell is tied to an action");
+}
+
+/**
+ * THE PAGES DRILL-IN SETS STATE, NOT THE INPUT (v3.307.0).
+ *
+ * The first fix for MW's dead hand cursor read `#campInput` and wrote its value
+ * before switching tabs — and did nothing at all, because that input only
+ * exists while the Campaign view is rendered. On the Pages tab it is null, the
+ * handler bailed, and the cursor still promised a click that went nowhere: the
+ * reported bug, one layer down, with the fix in place.
+ *
+ * `S.campaignCode` is what the input renders its value from, so the handler
+ * must set STATE and re-render. Touching `campInput` from a Pages handler is
+ * the mistake itself, so its absence is what gets asserted.
+ *
+ * NEGATIVE TEST: put `const inp = document.getElementById('campInput')` back in
+ * that handler, run the suite, watch this fail, revert.
+ */
+{
+  /**
+   * ANCHORED ON `#viewRoot td[data-code]`, the PAGES handler. The campaign
+   * list has its own `td[data-code]` drill-in and that one reads `#campInput`
+   * quite correctly — it already lives on the Campaign view. Matching the
+   * looser selector found that handler first and failed the working code.
+   */
+  const m = html.match(/closest\('#viewRoot td\[data-code\]'\)[\s\S]{0,1600}?\n\s*\}\);/);
+  /**
+   * COMMENTS STRIPPED FIRST. The handler's own comment explains the bug and so
+   * contains the word `campInput`, which tripped the check on correct code —
+   * a guard that fails on the documentation of the thing it guards against is
+   * worse than none, because the fix is to delete the explanation.
+   */
+  const body = (m ? m[0] : "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  const problems = [];
+  if (!body) problems.push("the Pages drill-in handler is gone");
+  else {
+    if (/campInput/.test(body)) problems.push("it reads #campInput, which is null while Pages is rendered");
+    if (!/S\.campaignCode\s*=/.test(body)) problems.push("it does not set S.campaignCode");
+    if (!/goTo\(['"]campaigns['"]\)/.test(body)) problems.push("it does not switch to the campaign view");
+  }
+  problems.length
+    ? fail("pages:drill-in-wired", problems.join(" | "))
+    : ok("pages:drill-in-wired", "campaign rows set state, switch view, then run");
+}
+
 console.log(failures ? `\n${failures} audit check(s) failed` : "\nstatic audit clean");
 process.exit(failures ? 1 : 0);

@@ -283,7 +283,18 @@
   th.num{text-align:right;padding-right:0;padding-left:14px;}
   /* Long ad/campaign names truncate; the full string is on hover. */
   td.trunc{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  td.trunc:hover{cursor:pointer;}
+  /**
+   * A HAND ONLY WHERE A CLICK DOES SOMETHING (MW: "rows in Campaigns that sent
+   * traffic here, have hand cursor, but not clickable").
+   *
+   * `td.trunc:hover{cursor:pointer}` put the hand on EVERY truncated cell in
+   * the app, whether or not anything happened when you clicked it. The full
+   * string on hover is the affordance for a truncated cell, and a pointer
+   * promises a click rather than a tooltip — the same mistake v3.61.2 fixed in
+   * the other direction for `[data-tip]` chips. Actionable cells opt in.
+   */
+  td[data-code]{cursor:pointer;}
+  td[data-code]:hover{color:var(--violet);}
   td{padding:9px 0;border-bottom:1px solid var(--line);color:var(--ink-2);}
   td.strong{color:var(--ink);font-weight:500;}
   td.num{text-align:right;font-variant-numeric:tabular-nums;padding-left:14px;}
@@ -7213,15 +7224,20 @@ function renderPages() {
       <table class="roomy sortable"><thead><tr>
         <th>utm_campaign</th><th class="num">Sessions</th><th class="num">Engagement</th><th class="num">Key events</th>
       </tr></thead><tbody>
-      ${d.campaigns.map(c => `<tr>
-        <td class="trunc" style="max-width:0;" title="${esc(c.campaign)}">${esc(c.campaign)}</td>
+      ${/* Clicking a row opens that campaign on the Campaign tab. data-code is
+            the app's existing drill-in contract — the campaign list uses it —
+            and the FULL utm string is passed rather than the bare number,
+            because the Campaign tab prefix-matches and the longer string is the
+            more precise request. */
+      d.campaigns.map(c => `<tr>
+        <td class="trunc" style="max-width:0;" data-code="${esc(c.campaign)}" data-tip="${esc(c.campaign)} \u2014 click to analyse">${esc(c.campaign)}</td>
         <td class="num">${num(c.sessions)}</td>
         <td class="num">${pct(c.engagementRate)}</td>
         <td class="num">${num(c.keyEvents)}</td>
       </tr>`).join('')}
       </tbody></table>
-      <div class="note">Only tagged traffic appears here. The gap between total sessions and the sum of these rows is
-      traffic that arrived without a utm_campaign — organic, direct, or an untagged link.</div>
+      <div class="note">Click a campaign to analyse it. Only tagged traffic appears here &mdash; the gap between total
+      sessions and the sum of these rows arrived without a utm_campaign: organic, direct, or an untagged link.</div>
     </div>` : ''}
 
     ${d.variants.length > 1 ? `<div class="card mt">
@@ -7300,6 +7316,33 @@ function wirePages() {
   };
   go.addEventListener('click', run);
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') run(); });
+
+  /**
+   * DELEGATED, because the campaigns table is re-rendered on every load and a
+   * handler bound to the rows dies with them. Same contract as the campaign
+   * list's drill-in: `td[data-code]` carries the code, the Campaign tab runs it.
+   */
+  document.addEventListener('click', (e) => {
+    const td = e.target.closest('#viewRoot td[data-code]');
+    if (!td || S.view !== 'pages') return;
+    /**
+     * STATE FIRST, THEN THE VIEW, THEN RUN — and in that order for a reason.
+     *
+     * The obvious version set `campInput.value` before switching tabs, and did
+     * nothing at all: `#campInput` only exists while the Campaign view is
+     * rendered, so on the Pages tab it is null and the handler bailed. The
+     * cursor promised a click and the click still went nowhere, which is
+     * exactly the bug MW reported, one layer down.
+     *
+     * `S.campaignCode` is what the input renders its value from, so setting the
+     * state and re-rendering puts the code in the box; `runCampaign` then reads
+     * it back the same way the Analyse button does.
+     */
+    S.campaignCode = td.dataset.code;
+    goTo('campaigns');
+    render();
+    runCampaign();
+  });
 }
 
 /**
@@ -11162,7 +11205,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.306.0';
+const CLIENT_BUILD = '3.307.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
