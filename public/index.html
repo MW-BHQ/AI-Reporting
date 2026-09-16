@@ -2809,27 +2809,47 @@ const colorFor = (i, name) => CHANNEL_COLOR_BY_NAME[String(name || "").trim().to
   || CHANNEL_COLORS[i % CHANNEL_COLORS.length];
 
 /**
- * WHICH CHANNEL EACH SOURCE BELONGS TO, so one colour key serves all five
- * stages. The top two bars still stack by SOURCE — mapping a platform onto a
- * channel ROW breaks whenever that channel is absent from the data, and the bar
- * stops adding up — but a source can safely wear its channel's colour.
+ * EACH PLATFORM IN ITS OWN BRAND COLOUR (MW: "use CI of each brand - faster to
+ * recognize").
  *
- * `null` MEANS THERE IS NO HONEST ANSWER, and those draw in the neutral brand
- * tone rather than being forced into a channel they do not belong to:
- *   · Google Business Profile views and LINE broadcasts have no GA4 channel at
- *     all — a profile view and a delivered message are not sessions.
- *   · `adClicks` is Meta AND Google Ads summed, so it spans Paid Social and
- *     Paid Search; colouring it either one would be a claim the number does not
- *     support.
+ * The top two bars stack by PLATFORM, and a platform's own colour is read
+ * faster than any key can be looked up — nobody has to be told that the red one
+ * is YouTube or the green one is LINE. That recognition is worth more than the
+ * abstract palette it replaces, which is why these override the channel colours
+ * for the source bars only.
+ *
+ * THE TRADE-OFF, STATED: v3.301.0 made a source wear its CHANNEL's colour so
+ * violet meant Organic Search in all five stages. Brand CI breaks that link for
+ * the top two bars — Google Search impressions are Google blue, not Organic
+ * Search violet. It is a fair trade because a brand colour needs no key at all,
+ * but it IS a trade, and the channel bars keep the channel palette because
+ * Organic Search, Direct and Referral are not brands and have no CI to borrow.
+ *
+ * SEPARATION WAS SOLVED, NOT EYEBALLED. Meta and Google both brand in blue, and
+ * Facebook's #1877F2 sits 68 units from Google's #4285F4 on a weighted RGB
+ * distance — indistinguishable in a bar. The set below was searched for maximum
+ * minimum separation and comes out at 117, with Meta pushed to its deep navy
+ * and Facebook organic to a light tint of the same family. Same company reading
+ * as the same family is correct; two companies sharing a blue is not.
+ *
+ * `null` STILL MEANS NO HONEST ANSWER: `adClicks` is Meta AND Google summed, so
+ * it spans two brands as well as two channels, and draws slate.
  */
-const SOURCE_CHANNEL = {
-  "Meta Ads": "paid social", "Google Ads": "paid search", "Google Search": "organic search",
-  "TikTok views": "organic social", "YouTube views": "organic video",
-  "Facebook organic reach": "organic social",
-  "Google Business Profile": null, "LINE broadcasts": null,
-  "Search clicks": "organic search", "Ad clicks": null,
-  "Facebook post engagements": "organic social", "TikTok engagements": "organic social",
-  "Profile website clicks": null, "LINE opens": null,
+const SOURCE_BRAND = {
+  "Meta Ads": "#0A1F8F",                 // Meta, deepened away from Google blue
+  "Facebook organic reach": "#7FA8F5",   // same family, light tint
+  "Google Ads": "#FBBC04",               // Google yellow
+  "Google Search": "#4285F4",            // Google blue
+  "Google Business Profile": "#188038",  // Google green
+  "TikTok views": "#25F4EE",             // TikTok cyan
+  "YouTube views": "#FF0000",            // YouTube red
+  "LINE broadcasts": "#06C755",          // LINE green
+  "Search clicks": "#4285F4",
+  "Facebook post engagements": "#7FA8F5",
+  "TikTok engagements": "#25F4EE",
+  "Profile website clicks": "#188038",
+  "LINE opens": "#06C755",
+  "Ad clicks": null,
 };
 
 function setStatus(kind, text) {
@@ -5530,26 +5550,23 @@ function renderOverview() {
    * organic reach and TikTok views are both Organic Social and now say so. The
    * tooltip separates them; the `::after` hit area makes it reachable.
    *
-   * SRCN is for sources with no honest channel (GBP, LINE, combined ad clicks),
-   * and it is deliberately SLATE rather than brand violet: now that every other
-   * colour names a channel, "no channel" has to look like no channel. The first
-   * attempt used two steps of the brand violet and Google Business Profile came
-   * out a shade off Organic Search — the precise misreading this change exists
-   * to stop. Two steps so adjacent neutrals keep an edge, and neither is
-   * Cross-network's #A8B4D4.
+   * SRCN is the fallback for a source with no single brand — `Ad clicks`, which
+   * sums Meta and Google Ads. Slate, because every other colour in these two
+   * bars names a company and "more than one company" must not look like one.
+   * ONE tone, not two: every other source now carries a brand, so `Ad clicks` is
+   * the only neutral there is and two steps only made which step it got depend
+   * on its position in the sort. Not Cross-network's #A8B4D4.
    */
-  const SRCN = ['#5C6478','#7B8296'];
-  const srcColor = (name, i) => {
-    const ch = SOURCE_CHANNEL[name];
-    return ch ? (CHANNEL_COLOR_BY_NAME[ch] || SRCN[i % SRCN.length]) : SRCN[i % SRCN.length];
-  };
+  const SRCN = '#5C6478';
+  const srcColor = (name) => SOURCE_BRAND[name] || SRCN;
+
   // What each source bar actually draws — the legend must use the same list,
   // in the same order, or the chips point at the wrong segments.
   const drawn = (rows) => rows.filter(r => r.v > 0);
   const srcSeg = (rows, total, offset = 0) => rows.filter(r => r.v > 0).map((r,i) => {
     const pct = (r.v/total)*100;
     const label = pct >= 9 ? `<b class="seg-val">${num(r.v)}</b>` : '';
-    return `<span style="width:${pct}%;background:${srcColor(r.n, offset+i)}" data-tip="${esc(r.n)}: ${num(r.v)}">${label}</span>`;
+    return `<span style="width:${pct}%;background:${srcColor(r.n)}" data-tip="${esc(r.n)}: ${num(r.v)}">${label}</span>`;
   }).join('');
   const impSources = [
     { n:'Meta Ads', v: n0(io.meta) },
@@ -11079,7 +11096,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.301.0';
+const CLIENT_BUILD = '3.302.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

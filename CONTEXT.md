@@ -1,5 +1,43 @@
 ### Recent (September 2026)
 
+**v3.302.0 — each platform in its own brand colour** (MW: "use CI of each brand
+- faster to recognize").
+
+The top two bars stack by PLATFORM, and a platform's own colour is read faster
+than any key can be looked up: nobody needs telling that the red one is YouTube
+or the green one is LINE.
+
+**THE TRADE-OFF AGAINST v3.301.0, STATED.** That release made a source wear its
+CHANNEL's colour so violet meant Organic Search in all five stages. Brand CI
+breaks that link for the top two bars — Google Search impressions are Google
+blue now, not Organic Search violet. Worth it, because a brand colour needs no
+key at all, but it IS a trade. The channel bars keep the channel palette, and
+the name-keyed colours from v3.301.0 stay: Organic Search, Direct and Referral
+are not brands and have no CI to borrow.
+
+**SEPARATION WAS SOLVED, NOT EYEBALLED.** Meta and Google both brand in blue.
+Facebook's own #1877F2 sits **68 units** from Google's #4285F4 on a weighted RGB
+distance — indistinguishable in a bar. The palette was searched for maximum
+minimum separation and returned **117**, with Meta Ads pushed to a deep navy
+(#0A1F8F) and Facebook organic to a light tint of the same family (#7FA8F5).
+Two products of one company reading as one family is correct; two companies
+sharing a blue is not.
+
+**`Ad clicks` STAYS SLATE.** It sums Meta AND Google Ads, so it belongs to two
+brands as well as two channels, and painting it either company's blue is a claim
+the number does not support.
+
+**THE NEUTRAL IS ONE TONE NOW, NOT TWO.** Every other source carries a brand, so
+`Ad clicks` is the only neutral there is — and with two steps, WHICH step it got
+depended on its position in the volume sort, which made the assertion for it
+brittle and the colour meaningless.
+
+**Negative tests, all three confirmed failing before revert:** dropping brand CI
+so every source falls back to neutral; giving the combined `Ad clicks` a brand
+colour; colouring channels by rank again.
+
+### Recent (September 2026)
+
 **v3.301.0 — one colour key across all five funnel stages** (MW: "you should
 keep the channel color across funnels. if the violet mean organic search, then
 use that all five stage").

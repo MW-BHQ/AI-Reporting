@@ -689,7 +689,18 @@ setTimeout(() => {
        * regression here: the bar renders, the tooltip is right, and only the
        * colour silently stops meaning anything.
        */
-      ["source wears its channel colour", 'background:#35C3B4" data-tip="Meta Ads', "html"],
+      /**
+       * EACH PLATFORM IN ITS OWN BRAND COLOUR (MW: "use CI of each brand -
+       * faster to recognize"). Meta Ads must carry Meta's deep navy, not a
+       * palette position and not Paid Social's teal. The hex is the only thing
+       * worth asserting: the bar renders and the tooltip stays right while the
+       * colour silently stops meaning anything.
+       *
+       * #0A1F8F, not Meta's own #1877F2 — that sits 68 units from Google's
+       * #4285F4 on a weighted RGB distance and the two were indistinguishable
+       * in a bar. The palette was searched for maximum minimum separation.
+       */
+      ["source wears its brand colour", 'background:#0A1F8F" data-tip="Meta Ads', "html"],
       /**
        * A CHANNEL'S COLOUR IS ITS NAME'S, NOT ITS RANK'S. Organic Search is
        * SECOND in the fixture above, so a rank-keyed palette would paint it
@@ -702,7 +713,12 @@ setTimeout(() => {
        * views are not sessions; the first cut painted them a shade off Organic
        * Search's violet, which is the misreading this whole change removes.
        */
-      ["no-channel source stays neutral", 'background:#5C6478" data-tip="Google Business Profile', "html"],
+      /**
+       * `Ad clicks` sums Meta AND Google Ads, so it belongs to two brands as
+       * well as two channels and must wear neither — painting it either
+       * company's blue is a claim the number does not support.
+       */
+      ["combined source stays neutral", 'background:#5C6478" data-tip="Ad clicks', "html"],
       ["offsite actions", "Direction requests"],
       ["key events", "Appointment form"],
       ["top packages", "Cardiac screening"],
