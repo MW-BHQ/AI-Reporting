@@ -1,5 +1,48 @@
 ### Recent (September 2026)
 
+**v3.303.0 — the brand colours carry into the channel bars too** (MW: "why wont
+we apply the colors to the the rests of funnel?").
+
+Because a channel is not a brand — but several channels ARE one platform in
+practice, and those should match. That is the line:
+
+| Channel | Colour | Why |
+| --- | --- | --- |
+| Organic Search | Google blue | one platform here |
+| Paid Search | Google Ads yellow | one platform |
+| Paid Social | Meta navy | one platform |
+| Organic / Paid Video | YouTube red | one platform |
+| Organic Social | abstract amber | Facebook AND TikTok AND LINE |
+| Direct, Referral, Unassigned, AI Assistant, SMS, Cross-network | abstract | not platforms at all |
+
+**THIS RESTORES WHAT v3.301.0 WAS FOR.** Google Search impressions and Organic
+Search visits are the same blue again, Meta Ads and Paid Social the same navy,
+YouTube views and Organic Video the same red — one key across five stages, this
+time carried by the brand rather than an abstract palette, so it needs no
+looking up.
+
+**THE APPROXIMATION IS STATED, NOT HIDDEN.** Organic Search is every search
+engine, not only Google, and Paid Social could hold TikTok or LINE ads.
+Colouring them by the platform that dominates them on THIS property is a reading
+aid, not a claim about the data. If Bing or TikTok Ads become material, split the
+channel rather than widen the map — the same rule
+`IMPRESSION_SOURCE_BY_CHANNEL` already carries on the server.
+
+**Separation solved numerically again:** minimum distance 72 across every colour
+in the card. The closest pair, AI Assistant against Facebook organic reach, sits
+in two bars that never appear together — a source and a channel never share a
+stage, so only within-bar separation has to hold.
+
+**Negative tests, all three confirmed failing before revert:** breaking the
+cross-stage link by giving Organic Search back an abstract colour; giving
+multi-brand Organic Social a brand colour; colouring channels by rank.
+
+**The boot funnel fixture gained an Organic Social row**, because the
+"multi-brand channels get no brand" rule had nothing to match against without
+one — the assertion would have passed on an absent channel.
+
+### Recent (September 2026)
+
 **v3.302.0 — each platform in its own brand colour** (MW: "use CI of each brand
 - faster to recognize").
 

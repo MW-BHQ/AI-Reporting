@@ -64,6 +64,13 @@ function overviewFixture() {
       { channel: "Organic Search", visits: 98771,  engagement: 44120,  keyEvents: 5411 },
       { channel: "Direct",         visits: 61228,  engagement: 32006,  keyEvents: 2164 },
       { channel: "Referral",       visits: 21900,  engagement: 10100,  keyEvents: 0 },
+      /**
+       * Organic Social is here so the "a multi-brand channel gets no brand"
+       * rule is actually exercised. It is Facebook AND TikTok AND LINE on this
+       * property, and without a row for it the assertion that it keeps an
+       * abstract tone had nothing to match.
+       */
+      { channel: "Organic Social", visits: 14200,  engagement: 6900,   keyEvents: 410 },
     ],
     keyEventBreakdown: [
       { label: "Appointment form", value: 8112 },
@@ -707,7 +714,22 @@ setTimeout(() => {
        * Direct's blue. Two periods side by side would have shown one channel in
        * two colours — and no single key could span five stages.
        */
-      ["channel colour keyed by name", 'background:#7C6BF5" data-tip="Organic Search', "html"],
+      ["channel colour keyed by name", 'background:#4285F4" data-tip="Organic Search', "html"],
+      /**
+       * THE SAME BLUE IN TWO STAGES. Google Search sits in the Impressions bar
+       * and Organic Search in the Visits bar, and on this property they are the
+       * same platform — so one colour has to carry across both, which is what
+       * MW asked for twice ("keep the channel color across funnels", then "why
+       * wont we apply the colors to the the rests of funnel"). Asserting only
+       * one of the pair would let the link break on the other side.
+       */
+      ["brand carries across stages", 'background:#4285F4" data-tip="Google Search', "html"],
+      /**
+       * AND A MULTI-BRAND CHANNEL MUST NOT BORROW ONE. Organic Social is
+       * Facebook AND TikTok AND LINE; painting it any of their colours would
+       * claim a single platform owns it.
+       */
+      ["mixed channel stays abstract", 'background:#F2A93B" data-tip="Organic Social', "html"],
       /**
        * And a source with NO channel must NOT wear one. Google Business Profile
        * views are not sessions; the first cut painted them a shade off Organic

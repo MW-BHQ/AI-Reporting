@@ -2782,28 +2782,49 @@ const n0 = (v) => (v === null || v === undefined || isNaN(Number(v))) ? 0 : Numb
 
 const CHANNEL_COLORS = ['#7C6BF5','#4B8DF8','#35C3B4','#F2A93B','#F2708F','#3BC97F','#9B8CEF','#6ECBE0','#E8A0C4','#A8B4D4'];
 /**
- * A CHANNEL'S COLOUR IS FIXED TO ITS NAME, NOT ITS RANK.
+ * A CHANNEL'S COLOUR IS FIXED TO ITS NAME, NOT ITS RANK — and where a channel
+ * IS one platform, it wears that platform's CI (MW: "why wont we apply the
+ * colors to the the rests of funnel?").
  *
- * `colorFor(i)` indexed into the palette by position in the funnel array, and
- * that array is sorted by visits — so Organic Search was violet only while it
- * was the biggest channel. Two periods side by side could paint the same
- * channel two colours, and the moment MW asked for one key across all five
- * stages ("if the violet mean organic search, then use that all five stage")
- * the rank-based version could not deliver it.
+ * `colorFor(i)` used to index the palette by position in the funnel array, and
+ * the server sorts that array by visits, so Organic Search was violet only
+ * while it was the biggest channel. Names are the key now.
  *
- * The twelve GA4 default groups this property actually produces are pinned.
- * The eleventh and twelfth used to wrap onto Organic Search's and Direct's
- * colours, so Organic Video and Paid Video were already drawing as other
- * channels before any of this. Anything unrecognised still falls back to the
- * rank-based palette rather than going colourless.
+ * WHICH CHANNELS GET A BRAND, AND WHICH CANNOT:
+ *   · Organic Search -> Google blue, Paid Search -> Google Ads yellow,
+ *     Paid Social -> Meta navy, Organic/Paid Video -> YouTube red. These are one
+ *     platform in practice on this property, so Google Search impressions and
+ *     Organic Search visits are now the same blue, Meta Ads and Paid Social the
+ *     same navy, YouTube views and Organic Video the same red. That restores
+ *     the one-key-across-five-stages MW asked for in v3.301.0, this time via
+ *     the brand rather than an abstract palette.
+ *   · Organic Social is Facebook AND TikTok AND LINE — three brands in one
+ *     channel, so it gets no brand and keeps an abstract tone. Direct, Referral,
+ *     Unassigned, AI Assistant, SMS and Cross-network are not platforms at all
+ *     and never will be.
+ *
+ * A CHANNEL IS STILL NOT A BRAND, and the approximation is stated rather than
+ * hidden: Organic Search is every search engine, not only Google, and Paid
+ * Social could hold TikTok or LINE ads. Colouring them by the platform that
+ * dominates them here is a reading aid, not a claim about the data. If Bing or
+ * TikTok Ads ever become material, split the channel rather than widen this
+ * map — the same rule `IMPRESSION_SOURCE_BY_CHANNEL` carries on the server.
+ *
+ * Separation was solved numerically, not by eye: minimum distance 72 on a
+ * weighted RGB metric across every colour in the card, and the closest pair
+ * (AI Assistant against Facebook organic) sits in two bars that never appear
+ * together — a source and a channel never share a stage.
  */
 const CHANNEL_COLOR_BY_NAME = {
-  "organic search": "#7C6BF5", "direct": "#4B8DF8", "paid social": "#35C3B4",
-  "organic social": "#F2A93B", "paid search": "#F2708F", "referral": "#3BC97F",
-  "ai assistant": "#9B8CEF", "unassigned": "#6ECBE0", "sms": "#E8A0C4",
-  "cross-network": "#A8B4D4", "organic video": "#C86FD1", "paid video": "#2F7FA8",
-  "email": "#5BA55B", "display": "#D9A441", "organic shopping": "#B5532F",
-  "paid shopping": "#8E5AA8", "affiliates": "#7A6248", "audio": "#3E8F7A",
+  // one platform in practice -> that platform's CI
+  "organic search": "#4285F4", "paid search": "#FBBC04", "paid social": "#0A1F8F",
+  "organic video": "#FF0000", "paid video": "#B31217",
+  // several platforms, or none -> abstract
+  "organic social": "#F2A93B", "direct": "#35C3B4", "referral": "#8E5AA8",
+  "ai assistant": "#9B8CEF", "unassigned": "#A8B4D4", "sms": "#E8A0C4",
+  "cross-network": "#7A6248", "email": "#C9556E", "display": "#3E8F7A",
+  "organic shopping": "#5E7CA8", "paid shopping": "#C86FD1", "affiliates": "#DA70D6",
+  "audio": "#556B2F",
 };
 const colorFor = (i, name) => CHANNEL_COLOR_BY_NAME[String(name || "").trim().toLowerCase()]
   || CHANNEL_COLORS[i % CHANNEL_COLORS.length];
@@ -11096,7 +11117,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.302.0';
+const CLIENT_BUILD = '3.303.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
