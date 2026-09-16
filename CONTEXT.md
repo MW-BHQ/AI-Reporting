@@ -1,5 +1,52 @@
 ### Recent (September 2026)
 
+**v3.296.0 — LINE followers, and the tab rename.** MW added a `freinds` tab to
+the same sheet and renamed `raw` to `broadcast`. `LINE_SHEET_TAB` already
+defaulted to `Broadcast`, so only the new tab needed reading.
+
+**SPELLED `freinds`, AND BOTH SPELLINGS ARE ACCEPTED** — same reasoning as
+`utm_camapgin` on the broadcast tab. The name that exists beats the name that
+should exist, and a rename later must not break the report.
+
+**THESE ARE DAILY SNAPSHOTS, NOT INCREMENTS.** `contacts`, `targetReaches` and
+`blocks` are what the account HELD that day. Summing 396 days of `contacts`
+reports eighty million followers. Same class as impression share and bounce
+rate: take a value at a point, or difference two points, never add them up. The
+figure is the LAST day inside the range, growth is last minus first, and a range
+with no rows in the sheet returns null rather than the nearest day outside it —
+a follower count from three months ago presented as today's is worse than none.
+
+**`targetReaches` IS THE DENOMINATOR, NOT `contacts`.** 84,337 of 222,268 have
+blocked the account in MW's export — over a third. Dividing by followers
+understates reach against an audience that can receive nothing: the fixture's
+average broadcast reads 41.3% of targetable and 22.5% of followers.
+
+**DELIVERED IS MESSAGES, NOT PEOPLE — caught before shipping.** The first cut
+divided total deliveries by targetable and called it "% of targetable reach". It
+returned **124%**, because three broadcasts to one audience deliver three times.
+Split into two figures that each mean something:
+- `frequency` — deliveries per targetable follower, legitimately above 1.
+- `avgReach` — the average broadcast's share of targetable, which cannot exceed
+  100% and is what "reach" actually means.
+
+The awareness row now reads "3 broadcasts · deliveries, not people — 1.2 per
+targetable follower" rather than a percentage that looks broken.
+
+**The LINE awareness row is no longer gated on `LINE_ENABLED`.** It was hidden
+because a permanent "unavailable" row trains people to ignore the panel; with
+the sheet live there is something to say. The row carries the SCOPE (one OA,
+four hospitals) and the denominator, and states that unlike every other row in
+that panel its impressions are also in the funnel.
+
+**Negative tests, all three confirmed failing before revert:** summing the
+snapshots instead of taking the last day in range; ignoring the range and
+reading the sheet's last row; dividing by followers instead of targetable. The
+fixture is built so each wrong arithmetic lands on a different wrong number —
+649,900, 230,000 and 219,000 are all reachable by getting it wrong, and only
+222,268 by getting it right.
+
+### Recent (September 2026)
+
 **v3.295.0 — LINE broadcasts enter the Overview funnel.** Step 1 of MW's
 pipeline: Overview, then Campaign, then Page, then its own tab, then one page in
 the Monthly report.

@@ -114,6 +114,27 @@ expect_field "line opens in stage" "$OVERVIEW" "d.totals.clicks>=${IO}.lineOpens
 expect_field "line sends counted"  "$OVERVIEW" "d.lineBroadcast.sends===3?3:undefined"
 expect_field "line tagged strict"  "$OVERVIEW" "d.lineBroadcast.tagged===1?1:undefined"
 expect_field "line untagged known" "$OVERVIEW" "d.lineBroadcast.untagged===2?2:undefined"
+
+echo "--- overview: LINE followers are snapshots, not increments (v3.296.0) ---"
+# contacts/targetReaches/blocks are STOCK figures — what the account held that
+# day. The fixture has four rows and only two are inside 2026-07: summing gives
+# 649,900, the first row gives 219,000, the sheet's last row gives August's
+# 230,000. Only "last day inside the range" gives 222,268, so every wrong
+# arithmetic lands on a different wrong number.
+expect_field "lf followers snap"   "$OVERVIEW" "d.lineBroadcast.followers===222268?222268:undefined"
+expect_field "lf targetable snap"  "$OVERVIEW" "d.lineBroadcast.targetable===121157?121157:undefined"
+expect_field "lf as of last in rng" "$OVERVIEW" "d.lineBroadcast.followersAsOf==='2026-07-31'?'ok':undefined"
+# Growth is a DIFFERENCE of two snapshots — the only arithmetic these support.
+expect_field "lf net is a diff"    "$OVERVIEW" "d.lineBroadcast.netAdded===1948?1948:undefined"
+# DELIVERED IS MESSAGES, NOT PEOPLE. Three sends to one audience deliver three
+# times, so deliveries/audience is a FREQUENCY and legitimately exceeds 1. The
+# share that must never exceed 100% is the AVERAGE broadcast's reach — shipping
+# the first as "% of targetable reach" would have printed 124%.
+expect_field "lf avg reach <=100"  "$OVERVIEW" "d.lineBroadcast.avgReach<=1?'ok':undefined"
+expect_field "lf freq above reach" "$OVERVIEW" "d.lineBroadcast.frequency>d.lineBroadcast.avgReach?'ok':undefined"
+# Targetable is the denominator, never followers: a third of this account has
+# blocked it. 41.3% of targetable would read 22.5% of followers.
+expect_field "lf denom targetable" "$OVERVIEW" "Math.round(d.lineBroadcast.avgReach*1000)===413?413:undefined"
 SA="d.searchAds.byBrand.find(b=>b.key==="
 echo "--- monthly report: per-hospital split must be able to fail ---"
 # The brand comes from the campaign code. A boundary bug here sent every coded

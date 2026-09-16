@@ -1042,6 +1042,28 @@ global.fetch = async (url, opts = {}) => {
      * Window is 2026-07-01..2026-07-31: delivered 90,000 + 60,000 = 150,000,
      * opens 22,000 + 18,000 = 40,000, three sends of which one is tagged.
      */
+    if (/%27freinds%27|%27friends%27|'freinds'|'friends'/i.test(u)) {
+      /**
+       * LINE FOLLOWERS — DAILY SNAPSHOTS (v3.296.0).
+       *
+       * Stock figures, not increments: what the account held that day. The
+       * window is 2026-07-01..2026-07-31, so the answer is the LAST day in it
+       * — 222,268 contacts and 121,157 targetable — and growth is last minus
+       * first, +1,948.
+       *
+       * THE JUNE ROW IS THE TRAP. Summing gives 649,900; taking the first row
+       * gives June's 219,000; reading the last row of the SHEET rather than of
+       * the RANGE gives August's 230,000. Only "last day inside the range" is
+       * 222,268, so each wrong arithmetic produces a different wrong number.
+       */
+      return jsonRes({ spreadsheetId: "mock-line", valueRanges: [{ values: [
+        ["date", "contacts", "targetReaches", "blocks"],
+        ["20260615", "219000", "119000", "80000"],
+        ["20260701", "220320", "119913", "82475"],
+        ["20260731", "222268", "121157", "84337"],
+        ["20260805", "230000", "125000", "86000"],
+      ] }] });
+    }
     if (u.includes("1pk5EA12P") || u.includes("mock-line")) {
       return jsonRes({ spreadsheetId: "mock-line", valueRanges: [{ values: [
         ["utm_camapgin", "broadcastId", "sentDate", "deliveredCount", "open", "clickUU"],

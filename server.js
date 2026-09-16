@@ -1441,6 +1441,7 @@ async function buildOverview(from, to) {
      * where they belong. Only Impressions and Interactions come from here.
      */
     lineBroadcast: buildLine(from, to),
+    lineFriends: buildLineFriends(from, to),
     ga4: ga4Compat(GA4_FUNNEL_DIMS, ["sessions", "engaged_sessions"], from, to),
     keyEvents: ga4KeyEvents(GA4_FUNNEL_DIMS, from, to),
     ga4Ecom: ga4Compat(GA4_FUNNEL_DIMS, GA4_ECOM_METRICS, from, to),
@@ -1602,6 +1603,12 @@ async function buildOverview(from, to) {
   };
 
   const lineOpens = sumOrNull(data.lineEvents, "message_unique_impression");
+  /**
+   * `days === 0` means the range sits outside the follower export, which is a
+   * different statement from "no followers" — the row says so rather than
+   * printing a confident zero.
+   */
+  const lf = (data.lineFriends && data.lineFriends.available && data.lineFriends.days) ? data.lineFriends : null;
   const lineBasis = lineOpens ? "unique opens"
     : (data.line !== null ? "messages sent · per-message opens need request IDs" : "unavailable");
   const lineFollowers = data.line === null ? null : Math.max(0, ...data.line.map((r) => n(r.followers__followers)));
@@ -1672,10 +1679,28 @@ async function buildOverview(from, to) {
       sub: ytTotals && ytTotals.days
         ? `${ytTotals.days} days in the export${ytTotals.hoursWatched ? ` · ${Math.round(ytTotals.hoursWatched).toLocaleString()} hours watched` : ""}`
         : "no rows in the export sheet for this range" },
-    // LINE is listed only while the connector is on. Showing a permanent
-    // "unavailable" row trains people to ignore the panel.
-    ...(LINE_ENABLED ? [{ channel: "LINE", impressions: impressions.line, note: lineBasis,
-      sub: lineFollowers ? `${lineFollowers.toLocaleString()} followers${lineReachable ? ` · ${lineReachable.toLocaleString()} targetable` : ""}` : null }] : []),
+    /**
+     * LINE is listed whenever there is something to say — the broadcast sheet,
+     * or the dormant Windsor connector if it is ever switched back on. A
+     * permanent "unavailable" row trains people to ignore the panel, which is
+     * why this was gated in the first place.
+     *
+     * THE IMPRESSIONS HERE ARE ALSO IN THE FUNNEL, unlike every other row in
+     * this panel, and the note says so. The row exists for the SCOPE and the
+     * denominator: one OA serves all four hospitals, and delivered means
+     * nothing without the size of the audience it went to.
+     */
+    ...((impressions.line !== null || LINE_ENABLED) ? [{
+      channel: "LINE", impressions: impressions.line,
+      note: (lf && lf.targetable && bc && bc.sends)
+        ? `${bc.sends} broadcast${bc.sends === 1 ? "" : "s"} · deliveries, not people — ${(impressions.line / lf.targetable).toFixed(1)} per targetable follower. One OA for all four hospitals, so NOT branch-scoped`
+        : "broadcast deliveries — one OA for all four hospitals, so NOT branch-scoped",
+      sub: lf && lf.followers
+        ? `${lf.followers.toLocaleString()} followers · ${lf.targetable ? `${lf.targetable.toLocaleString()} targetable` : "targetable unknown"}${
+            lf.blocked ? ` · ${lf.blocked.toLocaleString()} blocked` : ""}${
+            lf.netAdded ? ` · ${lf.netAdded > 0 ? "+" : ""}${lf.netAdded.toLocaleString()} in range` : ""}`
+        : (lineFollowers ? `${lineFollowers.toLocaleString()} followers` : "follower count not in the sheet for this range"),
+    }] : []),
   ];
 
   /**
@@ -1933,6 +1958,32 @@ async function buildOverview(from, to) {
       untagged: data.lineBroadcast.untagged,
       openRate: data.lineBroadcast.openRate,
       coverage: data.lineBroadcast.coverage,
+      followers: lf ? lf.followers : null,
+      targetable: lf ? lf.targetable : null,
+      blocked: lf ? lf.blocked : null,
+      netAdded: lf ? lf.netAdded : null,
+      followersAsOf: lf ? lf.asOf : null,
+      /**
+       * TWO DIFFERENT RATIOS, BECAUSE DELIVERED IS NOT PEOPLE.
+       *
+       * `delivered` is summed across every broadcast in the range, so it counts
+       * MESSAGES, not recipients — three sends to the same audience deliver
+       * three times. Dividing that by the audience gave 124% on the fixture,
+       * which reads as a broken metric and would have shipped as "% of
+       * targetable reach".
+       *
+       *   frequency  = deliveries per targetable follower — how often the
+       *                account messaged the same person over the window.
+       *   avgReach   = the AVERAGE broadcast's share of the targetable
+       *                audience, which is the figure that cannot exceed 100%
+       *                and is what "reach" actually means here.
+       *
+       * Both divide by TARGETABLE, never by followers: a third of this account
+       * has blocked it and can receive nothing.
+       */
+      frequency: (lf && lf.targetable && impressions.line) ? impressions.line / lf.targetable : null,
+      avgReach: (lf && lf.targetable && impressions.line && data.lineBroadcast.sends)
+        ? (impressions.line / data.lineBroadcast.sends) / lf.targetable : null,
     } : null,
     ecommerce, forecast, topProducts,
     paid, topAccounts, search, trend,
@@ -5903,6 +5954,86 @@ function monthWeekLabels(from, to) {
  */
 const LINE_SHEET_ID = process.env.LINE_SHEET_ID || "1pk5EA12P-DnkjHvhh9PvsVCFmvvKhk-exSDVP2V82Oc";
 const LINE_SHEET_TAB = process.env.LINE_SHEET_TAB || "Broadcast";
+/**
+ * The follower tab MW added beside the broadcasts. Spelled `freinds` in the
+ * sheet; both spellings are accepted for the same reason `utm_camapgin` is —
+ * the name that exists beats the name that should.
+ */
+const LINE_FRIENDS_TABS = (process.env.LINE_FRIENDS_TAB || "freinds,friends").split(",");
+
+/**
+ * LINE FOLLOWERS — DAILY SNAPSHOTS, NEVER SUMMED (MW, 16 Sep 2026).
+ *
+ * `contacts`, `targetReaches` and `blocks` are stock figures: what the account
+ * held THAT DAY, not what it gained. Summing 396 days of `contacts` reports
+ * eighty million followers. This is the same class as impression share and
+ * bounce rate — take the value at a point, or difference two points, and never
+ * add them up.
+ *
+ * `targetReaches` IS THE BROADCAST DENOMINATOR, not `contacts`. A third of this
+ * account has blocked it (84,337 of 222,268 on the last day in MW's export), so
+ * delivered-over-contacts understates reach against an audience that cannot
+ * receive anything. Both are carried and the UI names which one it divided by.
+ *
+ * THE LAST DAY IN RANGE IS "NOW", the first is the baseline, and the difference
+ * is growth. A range whose days are missing from the sheet returns null rather
+ * than the nearest day outside it — a follower count from three months ago
+ * presented as today's is worse than no follower count.
+ */
+async function buildLineFriends(from, to) {
+  let rows = null;
+  for (const tab of LINE_FRIENDS_TABS) {
+    try {
+      const res = await sheetBatchGet(LINE_SHEET_ID, [`'${tab.trim()}'!A1:H`]);
+      rows = (res[0] && res[0].values) || [];
+      if (rows.length) break;
+    } catch (e) { rows = null; }
+  }
+  if (!rows || rows.length < 2) {
+    logJson("WARNING", "line_friends_unavailable", { tabs: LINE_FRIENDS_TABS });
+    return { available: false };
+  }
+  const head = (rows[0] || []).map((h) => String(h || "").trim().toLowerCase());
+  const ix = (nm) => head.indexOf(nm);
+  const C = { date: ix("date"), contacts: ix("contacts"), reach: ix("targetreaches"), blocks: ix("blocks") };
+  if (C.date < 0 || C.contacts < 0) {
+    logJson("WARNING", "line_friends_columns_missing", { head: head.slice(0, 8) });
+    return { available: false };
+  }
+  /**
+   * The export writes `20250801`, with no separators. Accepted alongside ISO so
+   * a re-export in either style keeps working; anything else is skipped rather
+   * than parsed into a wrong day.
+   */
+  const day = (v) => {
+    const t = String(v || "").trim();
+    let m = t.match(/^(\d{4})-?(\d{2})-?(\d{2})/);
+    return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
+  };
+  const inRange = [];
+  for (const r of rows.slice(1)) {
+    const d = day(r[C.date]);
+    if (!d || d < from || d > to) continue;
+    inRange.push({ d, contacts: n(r[C.contacts]),
+      reach: C.reach >= 0 ? n(r[C.reach]) : null,
+      blocks: C.blocks >= 0 ? n(r[C.blocks]) : null });
+  }
+  if (!inRange.length) return { available: true, days: 0, followers: null, targetable: null };
+  inRange.sort((a, b) => a.d.localeCompare(b.d));
+  const last = inRange[inRange.length - 1], first = inRange[0];
+  return {
+    available: true,
+    days: inRange.length,
+    asOf: last.d,
+    followers: last.contacts,
+    targetable: last.reach,
+    blocked: last.blocks,
+    // Growth across the window, which is a difference of snapshots — the only
+    // arithmetic these figures support.
+    netAdded: last.contacts - first.contacts,
+    blockedAdded: last.blocks !== null && first.blocks !== null ? last.blocks - first.blocks : null,
+  };
+}
 
 async function buildLine(from, to) {
   let rows;
