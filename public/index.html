@@ -5399,6 +5399,21 @@ function renderOverview() {
   const io = d.impressionsBySource || {};
   const oa = d.offsiteActions || {};
   const SRCC = ['#6C5CE7','#4B8DF8','#2E9E6F','#F2A93B','#8FA0C8','#A9B8D8'];
+  /**
+   * A LEGEND FOR THE SOURCE-STACKED BARS (MW: "the legend still no LINE yet").
+   *
+   * The legend under the funnel is built from the GA4 CHANNEL array, so it
+   * names the segments in Visits, Engagement and Value actions and nothing
+   * else. Impressions and Interactions are stacked by SOURCE — a different cut
+   * entirely — and their segments have only a hover title, so Meta Ads,
+   * YouTube, GBP and TikTok were all as unnamed as LINE. MW noticed it when
+   * LINE arrived; it has been true since the source bars were built.
+   *
+   * SAME ORDER, SAME COLOURS, SAME FILTER as `srcSeg`, or the chips point at
+   * the wrong segments — which is worse than no legend at all.
+   */
+  const srcLegend = (rows) => `<div class="legend">${rows.filter(r => r.v > 0).map((r,i) =>
+    `<div><span class="chip" style="background:${SRCC[i%SRCC.length]}"></span>${esc(r.n)}</div>`).join('')}</div>`;
   const srcSeg = (rows, total) => rows.filter(r => r.v > 0).map((r,i) => {
     const pct = (r.v/total)*100;
     const label = pct >= 9 ? `<b class="seg-val">${num(r.v)}</b>` : '';
@@ -5449,12 +5464,14 @@ function renderOverview() {
         <div class="stage-head"><span class="stage-name">Impressions</span>
           <span class="stage-val ${isNA(d.totals.impressions)?'na':''}">${num(d.totals.impressions)}</span></div>
         <div class="bar">${srcSeg(impSources, d.totals.impressions||1)}</div>
+        ${srcLegend(impSources)}
         <div class="stage-note"><b>TOFU.</b> Everything that put us in front of someone: Meta Ads, Google Ads, Search Console, TikTok views, <b>YouTube views</b>, Facebook <b>organic</b> reach and Google Business Profile views. YouTube is one corporate channel and cannot be split by branch, so unlike everything else here it is not scoped to the four hospitals. Facebook contributes organic distribution only, so Meta Ads keeps its boosted and dark posts without either being counted twice. Units differ per platform, so read this as scale rather than one audited total. <b>LINE broadcasts</b> are delivered messages, and like YouTube the OA is one account for all four hospitals, so that figure is group-level. Email sends belong here too but have no connector yet.</div>
       </div>
       <div class="stage minor">
         <div class="stage-head"><span class="stage-name">Interactions</span>
           <span class="stage-val ${isNA(d.totals.clicks)?'na':''}">${num(d.totals.clicks)}</span></div>
         <div class="bar">${srcSeg(clickSources, d.totals.clicks||1)}</div>
+        ${srcLegend(clickSources)}
         <div class="stage-note">The interim step between seeing and visiting: ad and search clicks, plus post engagements, TikTok engagements and profile website clicks. Someone acting on what they saw, without necessarily arriving on the site. Always higher than visits &mdash; a click that bounces before the tag fires never becomes a session.</div>
       </div>
       <div class="stage">
@@ -10927,7 +10944,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.296.0';
+const CLIENT_BUILD = '3.297.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

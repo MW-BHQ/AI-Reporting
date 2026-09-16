@@ -1,5 +1,44 @@
 ### Recent (September 2026)
 
+**v3.297.0 — a legend for the source-stacked bars, and followers come off the
+Overview.**
+
+**THE LEGEND ONLY EVER NAMED THE CHANNEL BARS.** MW: "the legend still no LINE
+yet." It is built from the GA4 channel array, so it labels Visits, Engagement
+and Value actions — the three bars stacked by channel. Impressions and
+Interactions are stacked by SOURCE, a different cut, and their segments carried
+only a hover title. Meta Ads, YouTube, GBP and TikTok were as unnamed as LINE;
+LINE arriving is just what made it visible. `srcLegend` now renders under both,
+built from the same array in the same order with the same `v > 0` filter as
+`srcSeg` — a legend in a different order would point at the wrong segments,
+which is worse than none.
+
+**LINE IS ABSENT FROM VISITS ON PURPOSE.** MW: "i see line in tofu and
+interactions, but not on visits." LINE sessions ARE in that bar — GA4 assigns
+them to a channel group (Organic Social or Referral, depending on the tagging),
+and that bar is cut by channel. Adding a LINE segment would count those sessions
+a second time, which is the rule that kept `clickUU` out in v3.295. Showing LINE
+separately at Visits means re-cutting the whole bar by source, which changes
+what the stage means for every channel.
+
+**FOLLOWERS COME OFF THE OVERVIEW** (MW: "no need to put it in the Overview. i
+just show you that we can have it"). The friends tab was supplied to prove the
+numbers exist so that unplugging Windsor could be confirmed, not to add a line
+to the awareness panel. The row keeps the broadcast count and the scope caveat;
+the follower sub-line is gone. The reader and the payload fields stay — they are
+what the LINE tab consumes at step 4, and their tests stay with them.
+
+**Tab is `friends`**, with `freinds` kept as a fallback in case a sheet never
+gets renamed.
+
+**WINDSOR LINE CAN BE UNPLUGGED.** It supplied two things the sheet did not —
+`followers__followers` and `followers__targeted_reaches` — and the friends tab
+now supplies both. Nothing else on the connector is used. It has been dormant
+since August anyway (`LINE_ENABLED` defaults off), so the funnel has been
+reading the sheet from the day v3.295 shipped.
+
+### Recent (September 2026)
+
 **v3.296.0 — LINE followers, and the tab rename.** MW added a `freinds` tab to
 the same sheet and renamed `raw` to `broadcast`. `LINE_SHEET_TAB` already
 defaulted to `Broadcast`, so only the new tab needed reading.

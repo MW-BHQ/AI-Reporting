@@ -1692,14 +1692,20 @@ async function buildOverview(from, to) {
      */
     ...((impressions.line !== null || LINE_ENABLED) ? [{
       channel: "LINE", impressions: impressions.line,
-      note: (lf && lf.targetable && bc && bc.sends)
-        ? `${bc.sends} broadcast${bc.sends === 1 ? "" : "s"} · deliveries, not people — ${(impressions.line / lf.targetable).toFixed(1)} per targetable follower. One OA for all four hospitals, so NOT branch-scoped`
+      /**
+       * FOLLOWERS ARE NOT SHOWN HERE (MW, 17 Sep 2026: "no need to put it in
+       * the Overview. i just show you that we can have it"). The friends tab
+       * was supplied to prove the numbers exist, not to add a line to this
+       * panel — they belong on the LINE tab at step 4, where reach against a
+       * shrinking targetable audience is the point rather than a footnote.
+       *
+       * The reader and the payload fields stay: they are what step 4 will
+       * consume, and a path nothing exercises is a path nothing verifies.
+       */
+      note: (bc && bc.sends)
+        ? `${bc.sends} broadcast${bc.sends === 1 ? "" : "s"} · delivered messages — one OA for all four hospitals, so NOT branch-scoped`
         : "broadcast deliveries — one OA for all four hospitals, so NOT branch-scoped",
-      sub: lf && lf.followers
-        ? `${lf.followers.toLocaleString()} followers · ${lf.targetable ? `${lf.targetable.toLocaleString()} targetable` : "targetable unknown"}${
-            lf.blocked ? ` · ${lf.blocked.toLocaleString()} blocked` : ""}${
-            lf.netAdded ? ` · ${lf.netAdded > 0 ? "+" : ""}${lf.netAdded.toLocaleString()} in range` : ""}`
-        : (lineFollowers ? `${lineFollowers.toLocaleString()} followers` : "follower count not in the sheet for this range"),
+      sub: null,
     }] : []),
   ];
 
@@ -5955,11 +5961,12 @@ function monthWeekLabels(from, to) {
 const LINE_SHEET_ID = process.env.LINE_SHEET_ID || "1pk5EA12P-DnkjHvhh9PvsVCFmvvKhk-exSDVP2V82Oc";
 const LINE_SHEET_TAB = process.env.LINE_SHEET_TAB || "Broadcast";
 /**
- * The follower tab MW added beside the broadcasts. Spelled `freinds` in the
- * sheet; both spellings are accepted for the same reason `utm_camapgin` is —
- * the name that exists beats the name that should.
+ * The follower tab MW added beside the broadcasts. `friends` is the name (MW
+ * corrected it); `freinds` is kept as a fallback because that is how it was
+ * first written and a sheet that never got renamed must not break the report.
+ * Same reasoning as `utm_camapgin` on the broadcast tab.
  */
-const LINE_FRIENDS_TABS = (process.env.LINE_FRIENDS_TAB || "freinds,friends").split(",");
+const LINE_FRIENDS_TABS = (process.env.LINE_FRIENDS_TAB || "friends,freinds").split(",");
 
 /**
  * LINE FOLLOWERS — DAILY SNAPSHOTS, NEVER SUMMED (MW, 16 Sep 2026).
