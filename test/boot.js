@@ -660,11 +660,29 @@ setTimeout(() => {
      */
     const needs = [
       ["the channel funnel", "Organic Search"],
-      ["impressions by source", "Google Business Profile"],
+      /**
+       * CHECKED IN THE MARKUP, NOT THE VISIBLE TEXT (v3.299.0). The source
+       * names used to appear twice: in the stage prose and in the segment's
+       * hover title. MW removed the prose and moved colour to channels only, so
+       * a source is now identified ONLY by its tooltip — `text` has the tags
+       * stripped, so this stopped matching while the data was arriving
+       * perfectly well.
+       *
+       * Asserting the `data-tip` is stricter than the old prose match, not
+       * looser: the prose was a hard-coded sentence that would have passed with
+       * the bar empty, and this passes only if the segment was actually drawn.
+       */
+      ["impressions by source", 'data-tip="Google Business Profile', "html"],
       ["offsite actions", "Direction requests"],
       ["key events", "Appointment form"],
       ["top packages", "Cardiac screening"],
-      ["YouTube awareness", "YouTube views"],
+      /**
+       * The AWARENESS ROW, which is visible text — "YouTube views" was the
+       * impression-bar label and is now hover-only, so matching it here would
+       * have been testing the wrong panel by accident. The row's own label is
+       * "YouTube"; the caveat asserted below is what gives it meaning.
+       */
+      ["YouTube awareness", "YouTube"],
       /**
        * THE SCOPE CAVEAT IS THE POINT, not the number. Every other figure in
        * Overview is filtered to the four hospitals; the YouTube channel is one
@@ -674,8 +692,9 @@ setTimeout(() => {
        */
       ["YouTube scope caveat", "NOT branch-scoped"],
     ];
-    for (const [what, needle] of needs) {
-      if (!text.includes(needle)) return fail("overview renders", `${what}: "${needle}" missing`);
+    for (const [what, needle, where] of needs) {
+      const hay = where === "html" ? html : text;
+      if (!hay.includes(needle)) return fail("overview renders", `${what}: "${needle}" missing`);
     }
     /**
      * `topProducts` carries 9 rows against a `.slice(0, 8)`, so asserting the

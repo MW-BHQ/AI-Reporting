@@ -253,8 +253,16 @@
   .stage-val{font-size:var(--text-base);font-weight:600;}
   .stage-val.na{color:var(--faint);font-size:var(--text-sm);font-weight:500;}
   .bar{display:flex;height:30px;border-radius:9px;overflow:hidden;background:rgba(140,155,190,.13);}
-  .bar span{display:block;height:100%;transition:width .5s cubic-bezier(.4,0,.2,1);position:relative;}
-  .bar span:hover{filter:brightness(1.08);}
+  .bar span{display:block;height:100%;transition:width .5s cubic-bezier(.4,0,.2,1);position:relative;cursor:pointer;}
+  /**
+   * A HOVER TARGET A MOUSE CAN ACTUALLY HIT. Several segments are now under two
+   * pixels wide, so the tooltip they carry was unreachable in practice. The
+   * pseudo-element widens the hit area either side without moving the segment
+   * or changing the bar's arithmetic, and the brightness lift confirms which
+   * slice is being read.
+   */
+  .bar span::after{content:"";position:absolute;inset:0 -3px;}
+  .bar span:hover{filter:brightness(1.15);}
   .seg-val{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:var(--text-3xs);font-weight:600;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);pointer-events:none;white-space:nowrap;}
   .stage.minor .seg-val{font-size:var(--text-4xs);right:4px;}
   .stage-note{font-size:var(--text-3xs);color:var(--faint);margin-top:5px;}
@@ -755,9 +763,12 @@
   .dot.d-bad{background:#D9534F;}
   /* Floating tooltip: appended to <body> so a table's overflow can never clip
      it, and shown instantly instead of waiting for the browser's title delay. */
-  #tip{position:fixed;z-index:9999;max-width:340px;padding:9px 11px;border-radius:9px;
-    background:#2A3350;color:#fff;font-size:11.5px;line-height:1.55;font-weight:400;
-    box-shadow:0 8px 24px rgba(20,28,55,.28);pointer-events:none;opacity:0;transition:opacity .12s;
+  /* Sized up from 11.5px/400 (MW: "make the tooltip more prominent"). At a
+     pixel-wide slice the tooltip IS the label, so it has to read at a glance
+     rather than be squinted at. */
+  #tip{position:fixed;z-index:9999;max-width:340px;padding:10px 13px;border-radius:9px;
+    background:#1E2540;color:#fff;font-size:13.5px;line-height:1.5;font-weight:600;
+    box-shadow:0 10px 28px rgba(20,28,55,.38);pointer-events:none;opacity:0;transition:opacity .08s;
     white-space:pre-line;text-align:left;letter-spacing:0;}
   #tip.on{opacity:1;}
   /* Sticky header for the wide audience table, so the columns stay identified
@@ -5367,10 +5378,20 @@ function renderOverview() {
     const v = c[key];
     const pct = (v/total)*100;
     if (pct <= 0) return '';
-    // Value shown inside the segment when it's wide enough to hold it;
-    // narrow slivers keep the hover title only, so labels never overlap.
+    /**
+     * Value shown inside the segment when it is wide enough to hold it; narrow
+     * slivers carry the tooltip only, so labels never overlap.
+     *
+     * `data-tip`, NOT `title` (MW: "make the tooltip more prominent - right now
+     * looks like browser defalut which is slow and hard to read"). The browser
+     * waits about a second, renders in the OS font at OS size, and clips to the
+     * window. The project's own tooltip is instant, styled, and positioned
+     * against the viewport so table overflow cannot cut it off — it was already
+     * here, wired to every `[data-tip]` in the document, and the bars were the
+     * one place still using the native one.
+     */
     const label = pct >= 9 ? `<b class="seg-val">${num(v)}</b>` : '';
-    return `<span style="width:${pct}%;background:${colorFor(f.indexOf(c))}" title="${esc(c.channel)}: ${num(v)}">${label}</span>`;
+    return `<span style="width:${pct}%;background:${colorFor(f.indexOf(c))}" data-tip="${esc(c.channel)}: ${num(v)}">${label}</span>`;
   }).join('');
 
   /**
@@ -5386,7 +5407,10 @@ function renderOverview() {
     const pct = (r.v/total)*100;
     if (pct <= 0) return '';
     const label = pct >= 9 ? `<b class="seg-val">${num(r.v)}</b>` : '';
-    return `<span style="width:${pct}%;background:${OFFC[i%OFFC.length]}" title="${esc(r.n)}: ${num(r.v)}">${label}</span>`;
+    // `data-tip` like every other segment — the native tooltip was slow and
+    // rendered in the OS font, and one bar answering differently from the rest
+    // is its own small confusion.
+    return `<span style="width:${pct}%;background:${OFFC[i%OFFC.length]}" data-tip="${esc(r.n)}: ${num(r.v)}">${label}</span>`;
   }).join('');
   /**
    * Stages 1 and 2 are PLATFORM stages, so their bars are built from sources
@@ -5418,16 +5442,26 @@ function renderOverview() {
    * — two chips of one colour in a single legend, which is the exact confusion
    * the legend exists to remove. These fourteen are checked against that list.
    */
-  const SRCC = ['#6C5CE7','#2E9E6F','#8FA0C8','#C86FD1','#E2705A','#5BA55B',
-                '#D9A441','#2F7FA8','#B5532F','#6B7F3A','#8E5AA8','#C9556E',
-                '#3E8F7A','#7A6248'];
+  /**
+   * ONE TONE FOR EVERY SOURCE SEGMENT (MW: "just use them for channels, not
+   * actions (view, clicks), too much headache").
+   *
+   * Colour now carries exactly one meaning in this card — GA4 channel — so a
+   * reader never has to hold two colour keys at once. The source bars alternate
+   * two steps of the same neutral so the boundaries stay visible at a pixel
+   * wide, and the name and number come from the tooltip.
+   *
+   * The old fourteen-colour palette is gone rather than parked: a second key
+   * that nobody reads is the thing MW called a headache.
+   */
+  const SRCC = ['#8E9BC0','#A7B2D0'];
   // What each source bar actually draws — the legend must use the same list,
   // in the same order, or the chips point at the wrong segments.
   const drawn = (rows) => rows.filter(r => r.v > 0);
   const srcSeg = (rows, total, offset = 0) => rows.filter(r => r.v > 0).map((r,i) => {
     const pct = (r.v/total)*100;
     const label = pct >= 9 ? `<b class="seg-val">${num(r.v)}</b>` : '';
-    return `<span style="width:${pct}%;background:${SRCC[(offset+i)%SRCC.length]}" title="${esc(r.n)}: ${num(r.v)}">${label}</span>`;
+    return `<span style="width:${pct}%;background:${SRCC[(offset+i)%SRCC.length]}" data-tip="${esc(r.n)}: ${num(r.v)}">${label}</span>`;
   }).join('');
   const impSources = [
     { n:'Meta Ads', v: n0(io.meta) },
@@ -5472,47 +5506,37 @@ function renderOverview() {
     <div class="card">
       <h2>Funnel &middot; stacked by channel</h2>
       <div class="stage">
-        <div class="stage-head"><span class="stage-name">Impressions</span>
+        <div class="stage-head"><span class="stage-name">TOFU: Impressions</span>
           <span class="stage-val ${isNA(d.totals.impressions)?'na':''}">${num(d.totals.impressions)}</span></div>
         <div class="bar">${srcSeg(impSources, d.totals.impressions||1)}</div>
-        <div class="stage-note"><b>TOFU.</b> Everything that put us in front of someone: Meta Ads, Google Ads, Search Console, TikTok views, <b>YouTube views</b>, Facebook <b>organic</b> reach and Google Business Profile views. YouTube is one corporate channel and cannot be split by branch, so unlike everything else here it is not scoped to the four hospitals. Facebook contributes organic distribution only, so Meta Ads keeps its boosted and dark posts without either being counted twice. Units differ per platform, so read this as scale rather than one audited total. <b>LINE broadcasts</b> are delivered messages, and like YouTube the OA is one account for all four hospitals, so that figure is group-level. Email sends belong here too but have no connector yet.</div>
       </div>
       <div class="stage minor">
         <div class="stage-head"><span class="stage-name">Interactions</span>
           <span class="stage-val ${isNA(d.totals.clicks)?'na':''}">${num(d.totals.clicks)}</span></div>
         <div class="bar">${srcSeg(clickSources, d.totals.clicks||1, impDrawn.length)}</div>
-        <div class="stage-note">The interim step between seeing and visiting: ad and search clicks, plus post engagements, TikTok engagements and profile website clicks. Someone acting on what they saw, without necessarily arriving on the site. Always higher than visits &mdash; a click that bounces before the tag fires never becomes a session.</div>
       </div>
       <div class="stage">
-        <div class="stage-head"><span class="stage-name">Visits</span>
+        <div class="stage-head"><span class="stage-name">MOFU: Visits</span>
           <span class="stage-val ${isNA(d.totals.visits)?'na':''}">${num(d.totals.visits)}</span></div>
         <div class="bar">${seg(f, totalVisits, 'visits')}</div>
-        <div class="stage-note"><b>MOFU.</b> Consideration, and mostly where it happens. GA4 sessions by default channel group &mdash; one consistent source, so channel comparison here is exact.</div>
       </div>
       <div class="stage minor">
         <div class="stage-head"><span class="stage-name">Engagement</span>
           <span class="stage-val ${isNA(d.totals.engagement)?'na':''}">${num(d.totals.engagement)}${d.totals.visits&&d.totals.engagement?` <span style="font-weight:400;">&middot; ${num((d.totals.engagement/d.totals.visits)*100,{pct:true})} of visits</span>`:''}</span></div>
         <div class="bar">${seg(f, totalEng, 'engagement')}</div>
-        <div class="stage-note">GA4 engaged sessions: over 10 seconds, or 2+ screen views, or containing a key event. A subset of visits, so the funnel narrows properly. Not a key event itself &mdash; a quality signal between arriving and acting.</div>
       </div>
       <div class="stage">
-        <div class="stage-head"><span class="stage-name">Value actions</span>
+        <div class="stage-head"><span class="stage-name">BOFU: Value actions</span>
           <span class="stage-val ${isNA(d.totals.keyEvents)?'na':''}">${num(d.totals.keyEvents)}</span></div>
         <div class="bar">${seg(f, d.totals.keyEvents||1, 'keyEvents')}${extraSeg(keExtra, d.totals.keyEvents||1)}</div>
-        <div class="stage-note"><b>BOFU.</b> ${(d.keyEventBreakdown||[]).map(k=>esc(k.label)).join(', ')||'—'}${d.totals.keyEventsOffsite?`, plus <b>${num(d.totals.keyEventsOffsite)}</b> off-site actions worth the same, shown as the grey segments: calls and direction requests from Google Business Profile, messages from Meta ads, and calls placed straight from Google ads.`:''}.</div>
       </div>
-      <!-- ONE LEGEND, AT THE BOTTOM (MW: "we dont need seperate foot note and
-           legend, use only one at the bottom"). It names every segment in the
-           card: the SOURCES that stack Impressions and Interactions first, in
-           the order those bars draw them, then the GA4 CHANNELS that stack
-           Visits, Engagement and Value actions. Two different cuts of the same
-           funnel, which is why a source never appears in the channel bars and
-           a channel never appears in the source bars. -->
-      <div class="legend">${
-        [...impDrawn.map((r,i)=>({n:r.n, c:SRCC[i%SRCC.length]})),
-         ...clickDrawn.map((r,i)=>({n:r.n, c:SRCC[(impDrawn.length+i)%SRCC.length]})),
-         ...f.map((c,i)=>({n:c.channel, c:colorFor(i)}))]
-        .map(e=>`<div><span class="chip" style="background:${e.c}"></span>${esc(e.n)}</div>`).join('')}</div>
+      <!-- COLOUR MEANS CHANNEL, AND ONLY CHANNEL (MW: "just use them for
+           channels, not actions (view, clicks), too much headache"). The source
+           bars are drawn in one neutral tone and identified on hover, so a
+           colour never has two meanings in the same card and the legend stays
+           short enough to read. What each source is lives in CONTEXT.md, not on
+           the slide. -->
+      <div class="legend">${f.map((c,i)=>`<div><span class="chip" style="background:${colorFor(i)}"></span>${esc(c.channel)}</div>`).join('')}</div>
     </div>
 
     <!-- channel table + reach-only -->
@@ -10964,7 +10988,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.298.0';
+const CLIENT_BUILD = '3.299.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

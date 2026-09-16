@@ -1,5 +1,55 @@
 ### Recent (September 2026)
 
+**v3.299.0 — the funnel card loses its prose and its second colour key.**
+
+MW: "TOFU: Impressions, MOFU: Visits, BOFU: Value actions, and delete all
+remarks... for the colors - just use them for channels, not actions (view,
+clicks), too much headache. you just keep the meaning in our project note, the
+users doesn't need to know that much detail."
+
+- **Stage names carry the funnel position**: `TOFU: Impressions`,
+  `MOFU: Visits`, `BOFU: Value actions`. Interactions and Engagement stay
+  unprefixed — they are the minor stages between them.
+- **Every `stage-note` is gone**, all five.
+- **Colour means GA4 channel, and only that.** The source bars draw in two steps
+  of one neutral, so a reader never holds two colour keys at once. The legend is
+  channels again.
+
+**WHAT THE SOURCES MEAN NOW LIVES HERE, WHICH IS THE POINT.** Impressions stacks
+Meta Ads, Google Ads, Search Console impressions, TikTok views, YouTube views,
+Facebook ORGANIC reach (ads excluded, so Meta keeps its boosted and dark posts
+without double counting), Google Business Profile views and LINE broadcast
+deliveries. Interactions stacks ad clicks, search clicks, Facebook post
+engagements, TikTok engagements, GBP website clicks and LINE opens. YouTube and
+LINE are single group-level accounts and cannot be split by branch; the
+awareness panel still says so. Units differ per platform, so the total is scale,
+not one audited figure.
+
+**TOOLTIPS: THE PROJECT'S OWN, NOT THE BROWSER'S** (MW: "make the tooltip more
+prominent - right now looks like browser defalut which is slow and hard to
+read"). A delegated `[data-tip]` tooltip has existed since v3.61 — instant,
+styled, positioned against the viewport so overflow cannot clip it — and the
+funnel bars were the last place still using native `title`. All three helpers
+(`seg`, `srcSeg`, `extraSeg`) converted; zero native titles left on any segment.
+Sized up from 11.5px/400 to 13.5px/600: with colour gone from the source bars
+the tooltip IS the label, so it has to read at a glance.
+
+**AND A HIT AREA A MOUSE CAN REACH.** The thinnest impression slice measures
+**0.3px**. A tooltip on a sliver that narrow is unreachable in practice, so each
+segment gets a `::after` extending 3px either side — the hit area widens without
+moving the segment or touching the bar's arithmetic.
+
+**Two boot assertions were matching the prose, not the data.** `impressions by
+source` looked for "Google Business Profile" in `text`, which has tags stripped
+— it had been passing on the stage-note sentence, and would have passed with the
+bar empty. It now asserts `data-tip="Google Business Profile` in the MARKUP,
+which passes only if the segment was drawn: stricter than what it replaced.
+`YouTube awareness` was matching "YouTube views", the impression-bar label, so
+it was testing the wrong panel by accident; it now matches the awareness row's
+own label.
+
+### Recent (September 2026)
+
 **v3.298.0 — one legend at the bottom, naming every segment in the funnel card**
 (MW: "we dont need seperate foot note and legend, use only one at the bottom").
 
