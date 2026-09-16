@@ -10703,13 +10703,22 @@ async function buildPage(url, from, to) {
     srcS: sessionsBy(["sessionManualSource", "sessionManualMedium"], from, to),
     srcK: keyEventsBy(["sessionManualSource", "sessionManualMedium"], from, to),
     /**
-     * LINE broadcasts, for the page-level LINE funnel. MW confirmed the traffic
-     * is identifiable — `line / social` with 35 sessions on
-     * `/package/obstetric-delivery-packages`, all of it carrying
-     * `260823-01_bgh_tra` — so the sheet joins to the page through the campaign
-     * codes GA4 already reports here.
+     * NO LINE-SPECIFIC PULL HERE, and that is the point (MW, 17 Sep 2026: "i
+     * dont think a seperate card for line is making sense, while other channels
+     * are contributing many more traffic - but there's no a dedicated card.
+     * just make sure that it's reported just like other srouce").
+     *
+     * v3.305.0 gave the Pages tab a LINE card with a delivered/opened/arrived
+     * funnel joined from the broadcast sheet. It worked, and it was wrong:
+     * Facebook and Google send this site far more traffic and get one row each
+     * in Sources like everything else. LINE already appears there as
+     * `line / social` through `srcS` above — the reporting was never missing,
+     * only the card was.
+     *
+     * Removing it also removes a sheet read from every page load. The
+     * broadcast-level detail belongs on the LINE tab, where per-source depth is
+     * the subject rather than an exception.
      */
-    lineBroadcast: buildLine(from, to),
     cmpS: sessionsBy(["sessionManualCampaignName"], from, to),
     cmpK: keyEventsBy(["sessionManualCampaignName"], from, to),
     // Same page, same length of range, one year earlier.
@@ -10867,72 +10876,6 @@ async function buildPage(url, from, to) {
   const sources = group(data.srcS, data.srcK, srcKey, "source");
   const campaigns = group(data.cmpS, data.cmpK, cmpKey, "campaign");
 
-  /**
-   * THE LINE FUNNEL FOR THIS PAGE — delivered, opened, arrived (step 3).
-   *
-   * The broadcast sheet has no destination URL (`cmsUrl` is the LINE Manager
-   * console link), so the join cannot be made on the page. It is made on the
-   * CAMPAIGN CODE instead: GA4 reports which campaigns brought sessions here,
-   * and the sheet reports which broadcasts carried those codes.
-   *
-   * SESSIONS COME FROM GA4, NOT FROM THE SHEET. `line / social` is the arrival;
-   * the sheet's `clickUU` is the same click counted on the other side, and
-   * taking both would double the journey. Same rule as the Overview funnel and
-   * the Campaign tab.
-   *
-   * SESSIONS ARE NOT FILTERED TO THE MATCHED CAMPAIGNS, deliberately. A page can
-   * take LINE traffic from an untagged broadcast, a pinned rich menu or an old
-   * post, and that traffic is real. So `sessions` is every LINE session on this
-   * page while `delivered`/`opens` cover only the broadcasts we can name — which
-   * is why they are labelled separately instead of shown as one clean rate, and
-   * why `arrivalRate` can exceed 100% when untagged sends drive traffic here
-   * too.
-   */
-  const lineSessions = sources
-    .filter((o) => /^line\b/i.test(String(o.source || "")))
-    .reduce((a, o) => a + n(o.sessions), 0);
-  const linePage = (() => {
-    const lb = data.lineBroadcast;
-    const arrived = lineSessions || 0;
-    if (!lb || !lb.available) return { available: false, sessions: arrived };
-    /**
-     * JOINED ON THE CAMPAIGN NUMBER, NOT THE WHOLE STRING.
-     *
-     * A utm_campaign is `YYMMDD-NN` plus a brand and type suffix, and the two
-     * sides do not always carry the same suffix — the fixture has a page taking
-     * `260701-08_bht_tra` while the broadcast was tagged `260701-08_bgh_tra`.
-     * Matching on the full string finds nothing there and the card reports "no
-     * broadcast", which is exactly the false negative the Campaign tab's prefix
-     * rule exists to avoid.
-     *
-     * The number IS the campaign; the suffix is which brand and objective ran
-     * it. Anything without a recognisable code is skipped rather than joined on
-     * a bare prefix, or a remark would match everything.
-     */
-    const codeOf = (v) => {
-      const m = String(v || "").match(/^(\d{6}(?:-\d{2})?)/);
-      return m ? m[1] : null;
-    };
-    const codes = new Set(campaigns.map((c) => codeOf(norm(c.campaign))).filter(Boolean));
-    const mine = (lb.byCampaign || []).filter((c) => {
-      const k = codeOf(norm(c.campaign));
-      return k && codes.has(k);
-    });
-    const delivered = mine.reduce((a, c) => a + c.delivered, 0);
-    const opens = mine.reduce((a, c) => a + c.opens, 0);
-    return {
-      available: true,
-      sessions: arrived,
-      sends: mine.reduce((a, c) => a + c.sends, 0),
-      delivered, opens,
-      openRate: delivered ? opens / delivered : null,
-      // Of the people who opened a broadcast we can name, how many landed here.
-      arrivalRate: opens ? arrived / opens : null,
-      codes: mine.map((c) => c.campaign),
-      untaggedInWindow: lb.untagged,
-      coverage: lb.coverage,
-    };
-  })();
 
   const rate = (a, b) => (b > 0 ? a / b : null);
   const shape = (o) => ({ ...o,
@@ -10994,7 +10937,6 @@ async function buildPage(url, from, to) {
     monthly: [...months.values()].map(shape).sort((a, b) => (a.month < b.month ? -1 : 1)),
     sources: sources.map(shape).sort((a, b) => b.sessions - a.sessions).slice(0, 15),
     campaigns: campaigns.map(shape).sort((a, b) => b.sessions - a.sessions).slice(0, 15),
-    line: linePage,
     daily,
     keyEventBreakdown,
     variants: [...variants.values()].sort((a, b) => b.sessions - a.sessions).slice(0, 12),

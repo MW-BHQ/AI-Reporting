@@ -183,22 +183,17 @@ expect_field "pg real month kept"  "$PAGE1" "d.monthly.find(m=>m.sessions>0).mon
 expect_field "pg daily spans"      "$PAGE1" "d.daily.length===243?243:undefined"
 expect_field "pg daily edges"      "$PAGE1" "(d.daily[0].d==='2026-01-01'&&d.daily[242].d==='2026-08-31')?'ok':undefined"
 
-echo "--- pages: the LINE funnel for one page (v3.305.0) ---"
+echo "--- pages: LINE is reported like any other source (v3.306.0) ---"
+# MW: "just make sure that it's reported just like other srouce". v3.305.0 gave
+# LINE its own card on this tab; Facebook and Google send far more traffic and
+# get one row each in Sources, so LINE gets a row too and nothing more.
+#
+# This asserts the ROW, not a card: `line / social` with its sessions, the same
+# shape every other source has. If the source pull ever stops carrying LINE the
+# tab goes quiet about it, which is the only way this can now break.
 PAGE2="/api/page?url=https://www.bangkokhospital.com/th/bangkok/page/a&from=2026-07-01&to=2026-07-31"
-# ARRIVED COMES FROM GA4, not the sheet: sessions whose source is `line`. The
-# sheet's clickUU is the same click counted on the other side.
-expect_field "pg line sessions"    "$PAGE2" "d.line.sessions===100?100:undefined"
-# JOINED ON THE CAMPAIGN NUMBER, NOT THE WHOLE STRING. The fixture page takes
-# `260701-08_bht_tra` while the broadcast was tagged `260701-08_bgh_tra` — same
-# campaign, different brand suffix. Full-string matching finds nothing and the
-# card reports "no broadcast", a false negative.
-expect_field "pg line joined"      "$PAGE2" "d.line.sends===1?1:undefined"
-expect_field "pg line delivered"   "$PAGE2" "d.line.delivered===90000?90000:undefined"
-expect_field "pg line code"        "$PAGE2" "d.line.codes[0]==='260701-08_bgh_tra'?'ok':undefined"
-# A code that brought no traffic to this page must not be joined in: the
-# fixture's second tagged broadcast (260702-01) is not among this page's
-# campaigns, so 90,000 stands rather than being topped up.
-expect_field "pg line no leak"     "$PAGE2" "d.line.sends===1&&d.line.codes.length===1?'ok':undefined"
+expect_field "pg line is a source" "$PAGE2" "d.sources.some(x=>x.source==='line / social'&&x.sessions>0)?'ok':undefined"
+expect_field "pg line no card"     "$PAGE2" "d.line===undefined?'ok':undefined"
 
 CAMP1="/api/campaign?code=260701-08&from=$FROM&to=$TO"
 LC="d.linkClicks"

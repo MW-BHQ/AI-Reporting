@@ -1,5 +1,39 @@
 ### Recent (September 2026)
 
+**v3.306.0 — the Pages LINE card is removed. Step 3 was already done.**
+
+MW: "i dont think a seperate card for line is making sense, while other channels
+are contributing many more traffic - but there's no a dedicated card. just make
+sure that it's reported just like other srouce."
+
+He is right and v3.305.0 was wrong. Facebook and Google send this site far more
+traffic than LINE and get one row each in Sources; a dedicated LINE card gave
+the smallest source the largest treatment. LINE has been in that table as
+`line / social` all along through the existing `srcS` pull — the REPORTING was
+never missing, only a card nobody asked for.
+
+**WHAT CAME OUT:** the card, the page-level campaign join, `linePage`,
+`lineSessions`, and the `buildLine` call from `buildPage` — which also takes a
+sheet read off every page load.
+
+**WHAT THE STEP ACTUALLY NEEDED WAS A CHECK, NOT A BUILD.** The useful work was
+MW confirming `line / social` appears in GA4 at all; once it did, the Pages tab
+already reported it. Worth remembering before step 4: ask what is already on the
+screen before adding to it.
+
+**THE JOIN ITSELF WAS NOT WASTED.** It proved the sheet joins to GA4 on the
+campaign NUMBER rather than the full string — the fixture page takes
+`260701-08_bht_tra` while the broadcast is tagged `260701-08_bgh_tra`, same
+campaign, different brand suffix. That rule is live on the Campaign tab
+(v3.304.0) and will be needed again on the LINE tab.
+
+**The assertions changed shape with the feature.** Instead of five checks on a
+funnel that no longer exists, two: `line / social` is a row in Sources with
+sessions, and `d.line` is NOT on the payload. The second is the one that keeps
+the card from creeping back.
+
+### Recent (September 2026)
+
 **v3.305.0 — LINE on the Pages tab. Step 3, and it turned out richer than
 planned.**
 

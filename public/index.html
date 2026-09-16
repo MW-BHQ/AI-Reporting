@@ -7172,45 +7172,6 @@ function renderPages() {
       ${esc(humanDate(d.windows.yoy.from))} → ${esc(humanDate(d.windows.yoy.to))}. A page published recently will show no prior figure rather
       than a fall.</div>` : ''}
 
-    ${(() => {
-      /**
-       * THE LINE FUNNEL FOR THIS PAGE: delivered -> opened -> arrived.
-       *
-       * The broadcast sheet has no destination URL, so this is joined on the
-       * campaign NUMBER — GA4 says which campaigns brought sessions here, the
-       * sheet says which broadcasts carried those codes.
-       *
-       * ARRIVED IS EVERY LINE SESSION ON THE PAGE, not only the matched ones, so
-       * it is stated separately rather than folded into one rate. A rich menu or
-       * an untagged broadcast sends real traffic here too, and the arrival share
-       * can legitimately pass 100% when it does — which is itself worth seeing.
-       */
-      const L = d.line;
-      if (!L || (!L.sessions && !(L.available && L.sends))) return '';
-      const card = (b) => `<div class="card mt"><div class="card-title">LINE</div>${b}</div>`;
-      if (!L.available || !L.sends) {
-        return card(`<div class="grid g-2">
-          <div class="stat"><div class="lab">Arrived from LINE</div><div class="val">${num(L.sessions)}</div>
-            <div class="sub">sessions with source <code>line</code></div></div>
-          <div class="stat"><div class="lab">Broadcasts</div><div class="val">\u2014</div>
-            <div class="sub">${L.available===false
-              ? 'broadcast sheet unavailable this run'
-              : 'no broadcast carries a campaign code that brought traffic here'}</div></div>
-        </div>`);
-      }
-      return card(`<div class="grid g-4">
-        <div class="stat"><div class="lab">Delivered</div><div class="val">${num(L.delivered)}</div>
-          <div class="sub">${num(L.sends)} broadcast${L.sends===1?'':'s'} \u00b7 ${L.codes.map(esc).join(', ')}</div></div>
-        <div class="stat"><div class="lab">Opened</div><div class="val">${num(L.opens)}</div>
-          <div class="sub">${L.openRate!=null?num(L.openRate*100,{dp:1})+'% of delivered':'\u2014'}</div></div>
-        <div class="stat"><div class="lab">Arrived from LINE</div><div class="val">${num(L.sessions)}</div>
-          <div class="sub">every LINE session here, tagged or not</div></div>
-        <div class="stat"><div class="lab">Opened \u2192 arrived</div>
-          <div class="val">${L.arrivalRate!=null?num(L.arrivalRate*100,{dp:1})+'%':'\u2014'}</div>
-          <div class="sub">of openers landed on this page</div></div>
-      </div>`);
-    })()}
-
     ${d.monthly.length > 1 ? `<div class="card mt">
       <div class="card-title">Sessions by month</div>
       <svg viewBox="0 0 ${W} ${HH}" width="100%" height="${HH}" preserveAspectRatio="none" style="display:block;">${bars}</svg>
@@ -11201,7 +11162,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.305.0';
+const CLIENT_BUILD = '3.306.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
