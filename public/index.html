@@ -5454,7 +5454,19 @@ function renderOverview() {
    * The old fourteen-colour palette is gone rather than parked: a second key
    * that nobody reads is the thing MW called a headache.
    */
-  const SRCC = ['#8E9BC0','#A7B2D0'];
+  /**
+   * THE BRAND VIOLET, IN TWO STEPS (MW: "use one brand colour, not grey").
+   *
+   * Colour still encodes nothing here — that is the point of one hue. The two
+   * steps exist only so adjacent segments have an edge; either alone would
+   * fuse eight sources into one block.
+   *
+   * DELIBERATELY DEEPER THAN `--violet` (#7C6BF5), which is Organic Search in
+   * the channel key below. Same hue reads as the same brand; a lighter tone
+   * would read as the same CHANNEL, and the whole reason the source palette
+   * went away was to stop one colour meaning two things in one card.
+   */
+  const SRCC = ['#4C3FC4','#6E60E0'];
   // What each source bar actually draws — the legend must use the same list,
   // in the same order, or the chips point at the wrong segments.
   const drawn = (rows) => rows.filter(r => r.v > 0);
@@ -5504,7 +5516,10 @@ function renderOverview() {
 
     <!-- funnel -->
     <div class="card">
-      <h2>Funnel &middot; stacked by channel</h2>
+      <!-- Two cuts, not one: the top two bars stack by SOURCE (one brand tone,
+           named on hover), the lower three by GA4 CHANNEL (the key below). The
+           old title said "stacked by channel" and described half the card. -->
+      <h2>Funnel</h2>
       <div class="stage">
         <div class="stage-head"><span class="stage-name">TOFU: Impressions</span>
           <span class="stage-val ${isNA(d.totals.impressions)?'na':''}">${num(d.totals.impressions)}</span></div>
@@ -10988,7 +11003,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.299.0';
+const CLIENT_BUILD = '3.300.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

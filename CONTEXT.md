@@ -1,5 +1,26 @@
 ### Recent (September 2026)
 
+**v3.300.0 — the source bars take the brand violet** (MW: "use one brand colour,
+not grey").
+
+v3.299.0 drew Impressions and Interactions in neutral grey, which read as
+disabled rather than deliberate. They are now two steps of the brand violet.
+Colour still encodes nothing in those bars — that is what one hue means — and
+the two steps exist only so adjacent segments have an edge; a single tone would
+fuse eight sources into one block.
+
+**DELIBERATELY DEEPER THAN `--violet` (#7C6BF5)**, which is Organic Search in
+the channel key. The same hue reads as the same brand; a lighter step would have
+read as the same CHANNEL, which is the confusion the source palette was removed
+to end. Verified against every rendered legend chip: no clash.
+
+**The card title was describing half of itself.** "Funnel · stacked by channel"
+was written when every bar was a channel bar. The top two stack by SOURCE, and
+grey made that obvious enough for MW to notice. It is now just "Funnel" — two
+cuts of the same data, sources named on hover, channels in the key below.
+
+### Recent (September 2026)
+
 **v3.299.0 — the funnel card loses its prose and its second colour key.**
 
 MW: "TOFU: Impressions, MOFU: Visits, BOFU: Value actions, and delete all
