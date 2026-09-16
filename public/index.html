@@ -7224,20 +7224,24 @@ function renderPages() {
       <table class="roomy sortable"><thead><tr>
         <th>utm_campaign</th><th class="num">Sessions</th><th class="num">Engagement</th><th class="num">Key events</th>
       </tr></thead><tbody>
-      ${/* Clicking a row opens that campaign on the Campaign tab. data-code is
-            the app's existing drill-in contract — the campaign list uses it —
-            and the FULL utm string is passed rather than the bare number,
-            because the Campaign tab prefix-matches and the longer string is the
-            more precise request. */
+      ${/* NOT CLICKABLE (MW: "make it unclickable at all. now when it (organic)
+            and you send the user to Campaign tab is kinda awkward").
+
+            v3.307.0 made these rows open the Campaign tab. Wrong: this column
+            is every utm_campaign value GA4 reports for the page, and plenty of
+            them are not campaign codes at all. Sending "(organic)" to a tab
+            that matches YYMMDD-NN codes lands the reader on an empty result
+            they did not ask for. The tooltip carries the full string, which is
+            all a truncated cell owes the reader. */
       d.campaigns.map(c => `<tr>
-        <td class="trunc" style="max-width:0;" data-code="${esc(c.campaign)}" data-tip="${esc(c.campaign)} \u2014 click to analyse">${esc(c.campaign)}</td>
+        <td class="trunc" style="max-width:0;" data-tip="${esc(c.campaign)}">${esc(c.campaign)}</td>
         <td class="num">${num(c.sessions)}</td>
         <td class="num">${pct(c.engagementRate)}</td>
         <td class="num">${num(c.keyEvents)}</td>
       </tr>`).join('')}
       </tbody></table>
-      <div class="note">Click a campaign to analyse it. Only tagged traffic appears here &mdash; the gap between total
-      sessions and the sum of these rows arrived without a utm_campaign: organic, direct, or an untagged link.</div>
+      <div class="note">Only tagged traffic appears here. The gap between total sessions and the sum of these rows is
+      traffic that arrived without a utm_campaign &mdash; organic, direct, or an untagged link.</div>
     </div>` : ''}
 
     ${d.variants.length > 1 ? `<div class="card mt">
@@ -7316,33 +7320,6 @@ function wirePages() {
   };
   go.addEventListener('click', run);
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') run(); });
-
-  /**
-   * DELEGATED, because the campaigns table is re-rendered on every load and a
-   * handler bound to the rows dies with them. Same contract as the campaign
-   * list's drill-in: `td[data-code]` carries the code, the Campaign tab runs it.
-   */
-  document.addEventListener('click', (e) => {
-    const td = e.target.closest('#viewRoot td[data-code]');
-    if (!td || S.view !== 'pages') return;
-    /**
-     * STATE FIRST, THEN THE VIEW, THEN RUN — and in that order for a reason.
-     *
-     * The obvious version set `campInput.value` before switching tabs, and did
-     * nothing at all: `#campInput` only exists while the Campaign view is
-     * rendered, so on the Pages tab it is null and the handler bailed. The
-     * cursor promised a click and the click still went nowhere, which is
-     * exactly the bug MW reported, one layer down.
-     *
-     * `S.campaignCode` is what the input renders its value from, so setting the
-     * state and re-rendering puts the code in the box; `runCampaign` then reads
-     * it back the same way the Analyse button does.
-     */
-    S.campaignCode = td.dataset.code;
-    goTo('campaigns');
-    render();
-    runCampaign();
-  });
 }
 
 /**
@@ -11205,7 +11182,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.307.0';
+const CLIENT_BUILD = '3.308.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

@@ -1,5 +1,37 @@
 ### Recent (September 2026)
 
+**v3.308.0 — the Pages campaign rows are not clickable at all** (MW: "make it
+unclickable at all. now when it (organic) and you send the user to Campaign tab
+is kinda awkward").
+
+v3.307.0 made them open the Campaign tab. Wrong, and MW named exactly why: that
+column is every `utm_campaign` value GA4 reports for the page, and plenty of them
+are not campaign codes. Sending `(organic)` to a tab that matches `YYMMDD-NN`
+lands the reader on an empty result they never asked for.
+
+**The right answer to "hand cursor but not clickable" was the cursor, not the
+click.** Both halves of v3.307.0 assumed the rows SHOULD navigate; only one half
+was needed. The drill-in, its delegated handler and the `pages:drill-in-wired`
+audit rule are all gone.
+
+**What stays, and is better than before:** the cell keeps `data-tip` rather than
+the native `title`, so the full campaign string appears in the project's own
+tooltip — instant and styled instead of the browser's second-long wait. A
+truncated cell owes the reader the full string on hover and nothing else.
+
+**`cursor:promises-a-click` stays too**, and now guards the plain case: no
+`td`/`tr` rule may set a hand without a `data-*` hook in the selector, and
+nothing on this tab has one.
+
+**Verified in a browser, and the first two attempts verified the wrong thing.**
+`#viewRoot table td.trunc` matched a landing-page cell (native `title`, no
+tooltip) rather than a campaign cell, and the campaigns card sits below the fold
+so a raw `mouse.move` to its coordinates hovered nothing at all. Scrolled into
+view and targeted by `td[data-tip]`: tooltip on with the full code, cursor
+`auto`, hash unchanged after a click.
+
+### Recent (September 2026)
+
 **v3.307.0 — the Pages campaign rows are clickable, and the hand cursor stops
 lying** (MW: "rows in Campaigns that sent traffic here, have hand cursor, but
 not clickable").
