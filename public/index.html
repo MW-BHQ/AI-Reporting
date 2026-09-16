@@ -2233,6 +2233,13 @@
       </div>
 
       <div class="nav-sep"></div>
+      <div class="nav-group">LINE OA</div>
+      <div class="nav-item sub" data-view="line">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.2 9.6 9.6 0 0 1-2.2-.2L5 22l1.2-3.6A8 8 0 0 1 3 11.5C3 6.9 7 3.2 12 3.2s9 3.7 9 8.3z"/></svg>
+        Broadcasts
+      </div>
+
+      <div class="nav-sep"></div>
       <div class="nav-group">E-commerce</div>
       <div class="nav-item sub" data-view="ecom">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h2l2.2 10.2a2 2 0 002 1.6h7.1a2 2 0 002-1.55L21 8H7"/><circle cx="10.5" cy="20" r="1.2"/><circle cx="18" cy="20" r="1.2"/></svg>
@@ -2372,6 +2379,13 @@ const RED = {
   // about 27% across 1,000 broadcasts, so 15% is roughly half the norm. Re-set
   // once there are enough tagged campaigns to see the spread.
   lineOpenRate: 0.15,
+  // Share of friends who have blocked the account. MW's export sits at 38%, so
+  // this flags a materially worse state rather than today's normal.
+  lineBlockShare: 0.45,
+  // New blocks as a share of new friends. PROVISIONAL and the most interesting
+  // number on the tab: MW's 13-month export runs at 44%, which is already high
+  // enough to be a frequency problem. Re-set once a few months are visible.
+  lineBlockGrowth: 0.50,
   // Scroll cards, both fallbacks for when the `engagement` event is absent.
   scrollDepth: 40,
   scrollReach: 0.30,
@@ -2405,6 +2419,7 @@ const S = {
   ecomroas: null, ecomroasKey: null, ecomroasLoading: false, ecomroasError: null,
   gads: null, gadsKey: null, gadsLoading: false, gadsError: null,
   bclub: null, bclubKey: null, bclubLoading: false, bclubError: null,
+  line: null, lineKey: null, lineLoading: false, lineError: null,
   page: null, pageKey: null, pageLoading: false, pageError: null, pageUrl: '',
   audiencesLoading: false, audiencesError: null,
   me: null, users: null, usersLoading: false, usersError: null,
@@ -3047,6 +3062,7 @@ const TITLES = {
   gads: ['Google Ads', 'Spend, campaigns and accounts — newly connected, so start by looking'],
   audiences: ['Audiences', 'Meta audience sets ranked by cost per first-degree result'],
   bclub: ['Better Club', 'Membership revenue, and whether the members we win come back'],
+  line: ['LINE OA', 'What we broadcast, who received it, and what it cost us in blocks'],
   ecom: ['E-commerce', 'Package sales across every online sales channel'],
   ecomcentre: ['E-commerce · Centers', 'Which centers sell, and through which channel'],
   ecompackages: ['E-commerce · Packages', 'Every product, grouped by name — promo re-codes count once'],
@@ -3138,6 +3154,17 @@ async function loadBclub(refresh = false) {
   S.bclub = await res.json(); S.bclubKey = key;
   setStatus('ok', S.bclub.cached ? `cached ${S.bclub.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
   return S.bclub;
+}
+
+async function loadLine(refresh = false) {
+  const key = `${$('from').value}|${$('to').value}`;
+  if (!refresh && S.lineKey === key && S.line) return S.line;
+  setStatus('busy', 'reading the LINE sheets\u2026');
+  const res = await fetch(`/api/line?from=${$('from').value}&to=${$('to').value}${refresh?'&refresh=1':''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,220)}`);
+  S.line = await res.json(); S.lineKey = key;
+  setStatus('ok', S.line.cached ? `cached ${S.line.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.line;
 }
 
 async function loadEcomRoas(refresh = false) {
@@ -3368,6 +3395,7 @@ $('loadBtn').addEventListener('click', async () => {
     else if (S.view === 'ecomroas') { S.ecomroasError = null; await loadEcomRoas(true); }
     else if (S.view === 'gads') { S.gadsError = null; await loadGads(true); }
     else if (S.view === 'bclub') { S.bclubError = null; await loadBclub(true); }
+    else if (S.view === 'line') { S.lineError = null; await loadLine(true); }
     else if (S.view === 'pages') { S.pageError = null; await loadPage(true); }
     else if (S.view === 'users') { S.users = null; await loadUsers(); }
     else if (S.view === 'topics' && S.topicTerm) { await loadTopic(S.topicTerm); }
@@ -3455,6 +3483,7 @@ function render() {
   else if (S.view === 'ecomroas') renderEcomRoas();
   else if (S.view === 'gads') renderGads();
   else if (S.view === 'bclub') renderBclub();
+  else if (S.view === 'line') renderLine();
   else if (S.view === 'report') renderReport();
   else if (S.view === 'pages') renderPages();
   else if (S.view === 'users') renderUsers();
@@ -7082,6 +7111,7 @@ const VIEW_LOADERS = {
   gads:          { load: () => loadGads(),          err: 'gadsError',      busy: 'gadsLoading',      what: 'Google Ads' },
   gadsbench:     { load: () => loadGadsBench(),     err: 'gadsbenchError', busy: 'gadsbenchLoading', what: 'the Google Ads benchmark' },
   bclub:         { load: () => loadBclub(),         err: 'bclubError',     busy: 'bclubLoading',     what: 'the Better Club sheet' },
+  line:          { load: () => loadLine(),          err: 'lineError',      busy: 'lineLoading',      what: 'the LINE sheets' },
   ecomroas:      { load: () => loadEcomRoas(),      err: 'ecomroasError',  busy: 'ecomroasLoading',  what: 'marketplace ad performance' },
   users:         { load: () => loadUsers(),         err: 'usersError',     busy: 'usersLoading',     what: 'the access list' },
 };
@@ -7730,6 +7760,89 @@ function renderGads() {
  * new members against 514 in July — a handful of large bills, not a trend. The
  * count is what stops an executive reading the spike as one.
  */
+/**
+ * THE LINE OA TAB. Step 4 of MW's pipeline, and the first place the broadcast
+ * and friends sheets sit together — which is the point. Delivered on its own is
+ * a volume; delivered against a targetable audience that is shrinking is a
+ * story, and nothing else in the deck can see it.
+ */
+function renderLine() {
+  const d = S.line;
+  if (S.lineError) { const m = S.lineError; $('viewRoot').innerHTML = errorState(m); S.lineError = null; return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('line', 'Reads the LINE OA sheets \u2014 one row per broadcast, plus the daily friend count.'); return; }
+  if (!d.available) { $('viewRoot').innerHTML = errorState(`LINE broadcast sheet unavailable \u2014 ${esc(d.reason || 'unknown error')}`); return; }
+
+  const f = d.friends;
+  /**
+   * FOLLOWER COUNTS ARE EXACT, NEVER ABBREVIATED \u2014 same rule as Better Club
+   * members. "222.3K followers" cannot be reconciled against LINE Manager;
+   * 222,268 can. Delivered and opened keep the abbreviation, where the
+   * magnitude is the point and nobody reconciles a broadcast to the person.
+   */
+  const exact = (v) => (v == null ? '\u2014' : Number(v).toLocaleString());
+
+  const head = `<div class="grid g-4">
+    <div class="stat card"><div class="lab">Broadcasts</div><div class="val">${num(d.sends)}</div>
+      <div class="sub">${d.tagged?`${num(d.tagged)} tagged \u00b7 `:''}${num(d.untagged)} untagged</div></div>
+    <div class="stat card"><div class="lab">Delivered</div><div class="val">${num(d.delivered)}</div>
+      <div class="sub">messages, not people</div></div>
+    <div class="stat card"><div class="lab">Opened</div><div class="val">${num(d.opens)}</div>
+      <div class="sub">${d.openRate!=null?num(d.openRate*100,{dp:1})+'% of delivered':'\u2014'}</div></div>
+    <div class="stat card"><div class="lab">Avg. reach</div>
+      <div class="val">${d.avgReach!=null?num(d.avgReach*100,{dp:1})+'%':'\u2014'}</div>
+      <div class="sub">${d.frequency!=null?`the average broadcast \u00b7 ${num(d.frequency,{dp:1})} sent per follower`:'no follower count for this range'}</div></div>
+  </div>`;
+
+  /**
+   * THE AUDIENCE BLOCK, and the reason the friends tab was worth ingesting.
+   * `targetable` is the denominator, never `followers`: over a third of this
+   * account has blocked it and can receive nothing, so delivered-over-followers
+   * flatters every reach figure.
+   */
+  const audience = f ? `<div class="card mt">
+    <div class="card-title">Audience \u00b7 as at ${esc(humanDate(f.asOf))}</div>
+    <div class="grid g-4">
+      <div class="stat"><div class="lab">Friends</div><div class="val">${exact(f.followers)}</div>
+        <div class="sub">${f.netAdded!=null?`${f.netAdded>0?'+':''}${exact(f.netAdded)} in this range`:'\u2014'}</div></div>
+      <div class="stat"><div class="lab">Targetable</div><div class="val">${exact(f.targetable)}</div>
+        <div class="sub">${f.followers?num(f.targetable/f.followers*100,{dp:1})+'% of friends can be reached':'\u2014'}</div></div>
+      <div class="stat"><div class="lab">Blocked</div>
+        <div class="val" style="color:${f.followers&&f.blocked/f.followers>RED.lineBlockShare?'var(--rose)':'var(--ink)'}">${exact(f.blocked)}</div>
+        <div class="sub">${f.followers?num(f.blocked/f.followers*100,{dp:1})+'% of friends':'\u2014'}</div></div>
+      <div class="stat"><div class="lab">Blocks per new friend</div>
+        <div class="val" style="color:${f.blockShareOfGrowth!=null&&f.blockShareOfGrowth>RED.lineBlockGrowth?'var(--rose)':'var(--ink)'}">${
+          f.blockShareOfGrowth!=null?num(f.blockShareOfGrowth*100,{dp:0})+'%':'\u2014'}</div>
+        <div class="sub">${f.blockedAdded!=null?`${exact(f.blockedAdded)} new blocks against ${exact(f.netAdded)} new friends`:'needs two days of data'}</div></div>
+    </div>
+  </div>` : '';
+
+  const rows = d.broadcasts.map(b => `<tr>
+    <td>${esc(humanDate(b.date))}</td>
+    <td class="trunc" style="max-width:0;" data-tip="${esc(b.campaign||b.note||'untagged')}">${
+      b.campaign?esc(b.campaign):`<span style="color:var(--faint);">${esc(b.note||'untagged')}</span>`}</td>
+    <td class="num">${num(b.delivered)}</td>
+    <td class="num">${num(b.opens)}</td>
+    <td class="num"${b.openRate!=null&&b.openRate<RED.lineOpenRate?' style="color:var(--rose)"':''}>${
+      b.openRate!=null?num(b.openRate*100,{dp:1})+'%':'\u2014'}</td>
+  </tr>`).join('');
+
+  $('viewRoot').innerHTML = `
+    <div class="search"><div>
+      <div class="big">LINE OA <span class="pill">group</span></div>
+      <div class="hint">One official account serves all four hospitals, so nothing here is branch-scoped.</div>
+    </div></div>
+    ${head}
+    ${audience}
+    <div class="card mt">
+      <div class="card-title">Broadcasts \u00b7 ${num(d.broadcasts.length)} in range</div>
+      <table class="roomy sortable"><thead><tr>
+        <th>Sent</th><th>Campaign</th><th class="num">Delivered</th><th class="num">Opened</th><th class="num">Open rate</th>
+      </tr></thead><tbody>${rows||'<tr><td colspan="5" class="num">none</td></tr>'}</tbody></table>
+      <div class="note">An untagged broadcast still reached people &mdash; it just cannot be tied to a campaign. Campaign
+      codes were only added to the LINE sheet from 2026.</div>
+    </div>`;
+}
+
 function renderBclub() {
   const d = S.bclub;
   if (S.bclubError) { const m = S.bclubError; $('viewRoot').innerHTML = errorState(m); S.bclubError = null; return; }
@@ -11182,7 +11295,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.308.0';
+const CLIENT_BUILD = '3.309.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

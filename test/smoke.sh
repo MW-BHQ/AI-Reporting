@@ -183,6 +183,29 @@ expect_field "pg real month kept"  "$PAGE1" "d.monthly.find(m=>m.sessions>0).mon
 expect_field "pg daily spans"      "$PAGE1" "d.daily.length===243?243:undefined"
 expect_field "pg daily edges"      "$PAGE1" "(d.daily[0].d==='2026-01-01'&&d.daily[242].d==='2026-08-31')?'ok':undefined"
 
+echo "--- LINE tab (v3.309.0) ---"
+LINE="/api/line?from=$FROM&to=$TO"
+check "line tab" GET "$LINE"
+# Three July sends: 90,000 + 60,000 + 0 delivered, 22,000 + 18,000 + 0 opened.
+expect_field "ln sends"            "$LINE" "d.sends===3?3:undefined"
+expect_field "ln delivered"        "$LINE" "d.delivered===150000?150000:undefined"
+# EVERY broadcast is a row, tagged or not — the code decides whether it can be
+# ATTRIBUTED, not whether it happened. Two tagged, one Thai remark.
+expect_field "ln rows are all"     "$LINE" "d.broadcasts.length===3?3:undefined"
+expect_field "ln untagged row"     "$LINE" "d.broadcasts.filter(b=>!b.campaign).length===1?1:undefined"
+expect_field "ln remark kept"      "$LINE" "d.broadcasts.some(b=>!b.campaign&&b.note)?'ok':undefined"
+# NEWEST FIRST, so the table opens on what just went out.
+expect_field "ln newest first"     "$LINE" "d.broadcasts[0].date>=d.broadcasts[2].date?'ok':undefined"
+# The friends tab joins in: snapshots, last day IN range.
+expect_field "ln followers"        "$LINE" "d.friends.followers===222268?222268:undefined"
+expect_field "ln targetable"       "$LINE" "d.friends.targetable===121157?121157:undefined"
+# THE FIGURE NOTHING ELSE CAN SEE: new blocks against new friends. It needs BOTH
+# sheets, which is the whole reason this tab exists.
+expect_field "ln block growth"     "$LINE" "d.friends.blockShareOfGrowth>0?'ok':undefined"
+# Avg reach cannot exceed 100%; frequency can, because delivered is messages.
+expect_field "ln avg reach sane"   "$LINE" "d.avgReach<=1?'ok':undefined"
+expect_field "ln freq is messages" "$LINE" "d.frequency>d.avgReach?'ok':undefined"
+
 echo "--- pages: LINE is reported like any other source (v3.306.0) ---"
 # MW: "just make sure that it's reported just like other srouce". v3.305.0 gave
 # LINE its own card on this tab; Facebook and Google send far more traffic and

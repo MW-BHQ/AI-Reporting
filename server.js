@@ -952,6 +952,7 @@ const TABS = [
   { id: "audiences", label: "Audiences" },
   { id: "gads",      label: "Google Ads" },
   { id: "bclub",     label: "Better Club" },
+  { id: "line",      label: "LINE OA" },
   { id: "ecom",      label: "E-commerce" },
   { id: "ecomcentre",label: "E-commerce · Centres" },
   { id: "ecompackages", label: "E-commerce · Packages" },
@@ -6069,7 +6070,7 @@ async function buildLineFriends(from, to) {
       reach: C.reach >= 0 ? n(r[C.reach]) : null,
       blocks: C.blocks >= 0 ? n(r[C.blocks]) : null });
   }
-  if (!inRange.length) return { available: true, days: 0, followers: null, targetable: null };
+  if (!inRange.length) return { available: true, days: 0, followers: null, targetable: null, series: [] };
   inRange.sort((a, b) => a.d.localeCompare(b.d));
   const last = inRange[inRange.length - 1], first = inRange[0];
   return {
@@ -6081,6 +6082,9 @@ async function buildLineFriends(from, to) {
     blocked: last.blocks,
     // Growth across the window, which is a difference of snapshots — the only
     // arithmetic these figures support.
+    // The daily series for the trend. Snapshots, so the chart plots levels and
+    // never a sum — the same rule the headline figures follow.
+    series: inRange,
     netAdded: last.contacts - first.contacts,
     blockedAdded: last.blocks !== null && first.blocks !== null ? last.blocks - first.blocks : null,
   };
@@ -6140,6 +6144,7 @@ async function buildLine(from, to) {
 
   let delivered = 0, opens = 0, sends = 0, tagged = 0;
   const byCampaign = new Map();
+  const broadcasts = [];
   let earliest = null, latest = null;
   for (const r of rows.slice(1)) {
     const d = day(r[C.sent]);
@@ -6150,6 +6155,18 @@ async function buildLine(from, to) {
     const dv = n(r[C.delivered]), op = n(r[C.open]);
     sends += 1; delivered += dv; opens += op;
     const raw = String(r[C.campaign] || "").trim();
+    /**
+     * EVERY broadcast is a row, tagged or not. The campaign code decides
+     * whether it can be ATTRIBUTED, not whether it happened — an untagged send
+     * still reached people and still belongs in the list.
+     */
+    broadcasts.push({
+      id: String(r[C.id] || "").trim(), date: d,
+      campaign: CODE.test(raw) ? raw : null,
+      note: !CODE.test(raw) && raw ? raw : null,
+      delivered: dv, opens: op,
+      openRate: dv ? op / dv : null,
+    });
     if (!CODE.test(raw)) continue;
     tagged += 1;
     const key = raw.toLowerCase();
@@ -6161,6 +6178,10 @@ async function buildLine(from, to) {
   return {
     available: true,
     scope: "group",            // one OA for all four hospitals; see the header note
+    // Every broadcast in the window, newest first, for the LINE tab's table.
+    // Capped because a year of daily sends is 365 rows and nobody reads past
+    // the first screen; the aggregates above already cover the whole window.
+    broadcasts: broadcasts.sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 200),
     sends, delivered, opens,
     openRate: delivered ? opens / delivered : null,
     // How much of the window can be attributed to a campaign at all. Tagging
@@ -10955,6 +10976,61 @@ app.get("/api/page", requireTab("pages"), async (req, res) => {
   } catch (err) {
     logJson("ERROR", "page_failed", { error: String(err.message || err) });
     res.status(err.status || 500).json({ error: err.message || "Page analysis failed" });
+  }
+});
+
+/**
+ * THE LINE TAB. Both sheets in one payload — broadcasts and friends — because
+ * neither means much without the other: delivered is a volume, delivered
+ * against a targetable audience that is shrinking is a story.
+ */
+async function buildLineTab(from, to) {
+  const [bc, fr] = await Promise.all([buildLine(from, to), buildLineFriends(from, to)]);
+  const f = (fr && fr.available && fr.days) ? fr : null;
+  return {
+    range: { from, to },
+    available: !!(bc && bc.available),
+    reason: bc && bc.available ? null : (bc && bc.reason) || "sheet unavailable",
+    scope: "group",
+    sends: bc && bc.available ? bc.sends : null,
+    delivered: bc && bc.available ? bc.delivered : null,
+    opens: bc && bc.available ? bc.opens : null,
+    openRate: bc && bc.available ? bc.openRate : null,
+    tagged: bc && bc.available ? bc.tagged : null,
+    untagged: bc && bc.available ? bc.untagged : null,
+    coverage: bc && bc.available ? bc.coverage : null,
+    broadcasts: bc && bc.available ? bc.broadcasts : [],
+    byCampaign: bc && bc.available ? bc.byCampaign.slice(0, 30) : [],
+    friends: f ? {
+      asOf: f.asOf, followers: f.followers, targetable: f.targetable,
+      blocked: f.blocked, netAdded: f.netAdded, blockedAdded: f.blockedAdded,
+      /**
+       * THE FIGURE NOTHING ELSE IN THE DECK CAN SEE. Blocks grew 7,862 while
+       * contacts grew 17,948 across MW's 13-month export — 44% of net new
+       * friends blocked the account in the same period. That is a broadcast
+       * FREQUENCY question and it only shows up when both series sit together.
+       */
+      blockShareOfGrowth: (f.netAdded > 0 && f.blockedAdded != null) ? f.blockedAdded / f.netAdded : null,
+      series: f.series,
+    } : null,
+    // Deliveries per targetable follower, and the average broadcast's reach.
+    // Delivered is MESSAGES, not people, so the first can exceed 1 and the
+    // second cannot exceed 100%.
+    frequency: (f && f.targetable && bc && bc.available && bc.delivered) ? bc.delivered / f.targetable : null,
+    avgReach: (f && f.targetable && bc && bc.available && bc.sends)
+      ? (bc.delivered / bc.sends) / f.targetable : null,
+  };
+}
+
+app.get("/api/line", requireTab("line"), async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  try {
+    const out = await withCache(`line:${from}:${to}`, req.query.refresh === "1", () => buildLineTab(from, to));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "line_failed", { error: String(err.message || err) });
+    res.status(err.status || 500).json({ error: err.message || "LINE report failed" });
   }
 });
 

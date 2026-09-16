@@ -1,5 +1,48 @@
 ### Recent (September 2026)
 
+**v3.309.0 — the LINE OA tab. Step 4 of MW's pipeline.**
+
+`/api/line`, `requireTab("line")`, nav under its own group. The first place both
+sheets sit together, which is the point: delivered on its own is a volume;
+delivered against a targetable audience that is shrinking is a story.
+
+**FOUR HEADLINE FIGURES:** broadcasts (tagged vs untagged), delivered, opened
+with its rate, and the AVERAGE broadcast's reach against targetable — plus
+frequency beside it, because delivered is MESSAGES and can legitimately exceed
+one per follower while reach cannot exceed 100%.
+
+**THE AUDIENCE BLOCK IS THE REASON THE FRIENDS TAB WAS WORTH INGESTING.**
+`targetable` is the denominator, never `followers`: 84,337 of 222,268 have
+blocked the account, so delivered-over-followers flatters every reach figure by
+more than a third. And `blockShareOfGrowth` — new blocks against new friends —
+needs BOTH sheets and exists nowhere else in the deck. MW's 13-month export runs
+at 44%; the fixture's July window at 96%.
+
+**EVERY BROADCAST IS A ROW, TAGGED OR NOT.** The campaign code decides whether a
+send can be ATTRIBUTED, not whether it happened. Untagged rows show their remark
+in muted type — a Thai note is still what the marketer called it.
+
+Follower counts print EXACT, never abbreviated, the same rule Better Club
+members follow: "222.3K" cannot be reconciled against LINE Manager and 222,268
+can. Delivered and opened keep the abbreviation, where magnitude is the point.
+
+**TWO EXISTING GUARDS CAUGHT ME BUILDING IT:** `dates:human` rejected raw ISO
+dates in the broadcast table, and — the useful one — the missing `VIEW_LOADERS`
+entry meant the Load button rendered, looked right and did nothing. The comment
+above `VIEW_LOADERS` has warned about that exact failure for releases and I
+walked into it anyway, so it is now a test: `views:loader-registered` fails if
+any `loadPrompt(view)` has no loader. A warning in a comment is not a test.
+
+**Three thresholds join `RED`, all provisional:** `lineBlockShare` 0.45 (MW sits
+at 38%), `lineBlockGrowth` 0.50 (MW sits at 44%, already high enough to be a
+frequency problem), and the existing `lineOpenRate` 0.15.
+
+**Negative tests, all three confirmed failing before revert:** dropping untagged
+broadcasts from the table; sorting oldest-first; omitting the `VIEW_LOADERS`
+entry.
+
+### Recent (September 2026)
+
 **v3.308.0 — the Pages campaign rows are not clickable at all** (MW: "make it
 unclickable at all. now when it (organic) and you send the user to Campaign tab
 is kinda awkward").

@@ -746,5 +746,28 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
     : ok("cursor:promises-a-click", "every hand cursor on a cell is tied to an action");
 }
 
+/**
+ * EVERY VIEW THAT OFFERS A LOAD BUTTON CAN ACTUALLY LOAD (v3.309.0).
+ *
+ * `loadPrompt(view)` renders a `[data-load="view"]` button, and the generic
+ * handler looks the view up in `VIEW_LOADERS`. Miss the entry and the button
+ * renders, looks right, and does NOTHING — the comment above `VIEW_LOADERS`
+ * has warned about exactly this for releases, and building the LINE tab walked
+ * straight into it anyway: the tab shipped, the prompt appeared, the button was
+ * inert. A warning in a comment is not a test.
+ */
+{
+  const loaders = new Set();
+  const block = html.match(/const VIEW_LOADERS = \{[\s\S]*?\n\};/);
+  for (const m of (block ? block[0] : "").matchAll(/^\s{2}([a-zA-Z]+):\s*\{/gm)) loaders.add(m[1]);
+  const prompted = new Set();
+  for (const m of html.matchAll(/loadPrompt\(\s*'([a-zA-Z]+)'/g)) prompted.add(m[1]);
+  const missing = [...prompted].filter((v) => !loaders.has(v));
+  missing.length
+    ? fail("views:loader-registered",
+        `${missing.length} view(s) render a Load button with no VIEW_LOADERS entry, so it does nothing — ${missing.join(", ")}`)
+    : ok("views:loader-registered", `all ${prompted.size} load prompts are wired to a loader`);
+}
+
 console.log(failures ? `\n${failures} audit check(s) failed` : "\nstatic audit clean");
 process.exit(failures ? 1 : 0);
