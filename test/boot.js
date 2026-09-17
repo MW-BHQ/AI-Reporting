@@ -339,7 +339,15 @@ function reportFixture() {
       sends: 3, delivered: 150000, opens: 40000, openRate: 40000 / 150000,
       avgReach: 0.41, frequency: 1.24,
       friends: { asOf: "2026-08-31", followers: 222268, targetable: 121157,
-        blocked: 84337, netAdded: 1948, blockedAdded: 1862, blockShareOfGrowth: 0.96, series: [] },
+        blocked: 84337, netAdded: 1948, blockedAdded: 1862, blockShareOfGrowth: 0.96,
+        /**
+         * TARGETABLE FALLS WHILE FRIENDS RISE — the case the card exists for,
+         * and the only fixture shape that proves the colour rule. +1,948
+         * friends against -420 targetable: growth on paper, a smaller reachable
+         * audience in practice. A positive value here would render green and
+         * the alarm branch would never be exercised.
+         */
+        targetableAdded: -420, targetableFrom: 121577, series: [] },
       byBrand: {
         BGH: { sends: 1, delivered: 90000, opens: 22000, sessions: 100, keyEvents: 27 },
         BIH: { sends: 0, delivered: 0, opens: 0, sessions: 0, keyEvents: 0 },
@@ -861,6 +869,10 @@ setTimeout(() => {
         ["friends growth reads green", 'style="color:var(--green);">+'],
         ["new blocks read as alarm", 'style="color:var(--rose);">+'],
         ["untagged row reads muted", '<tr style="color:var(--muted);">'],
+        // Targetable FELL in the fixture, so the card must read the alarm
+        // colour with a signed value — green here would mean the sign test
+        // inverted, and a reader would see a shrinking audience as growth.
+        ["targetable loss reads alarm", 'color:var(--rose)">-420'],
       ].filter(([, needle]) => !html.includes(needle)).map(([what]) => what);
       if (lineSubs.length) errors.push(`LINE page: ${lineSubs.join(", ")} missing`);
       errors.length ? fail("report renders", errors.slice(0, 2).join(" | "))

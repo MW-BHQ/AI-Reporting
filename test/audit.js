@@ -692,11 +692,21 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
                                  // Worth settling with MW before it moves.
     "sp.unmatchedShare>=10",     // Spend: share of spend with no GA4 match
   ];
+  /**
+   * A COMPARISON AGAINST ZERO IS A SIGN, NOT A THRESHOLD.
+   *
+   * `x < 0 ? rose : green` asks which way a change went — there is no editorial
+   * judgement to name and nothing for `RED` to hold. Forcing it into the map
+   * would put `targetableLoss: 0` there, which reads as a tunable and is not
+   * one. Every other literal still has to be named.
+   */
   const INLINE = /([A-Za-z_$][\w$.]*)\s*([<>]=?)\s*(\d*\.?\d+)\s*\?\s*['"`](?:color:)?var\(--rose\)/g;
-  const found = [...html.matchAll(INLINE)].map((m) => ({
-    expr: `${m[1]}${m[2]}${m[3]}`,
-    line: html.slice(0, m.index).split("\n").length,
-  }));
+  const found = [...html.matchAll(INLINE)]
+    .filter((m) => Number(m[3]) !== 0)          // a sign test, not a threshold
+    .map((m) => ({
+      expr: `${m[1]}${m[2]}${m[3]}`,
+      line: html.slice(0, m.index).split("\n").length,
+    }));
   const unlisted = found.filter((f) => !BACKLOG.includes(f.expr));
   const done = BACKLOG.filter((b) => !found.some((f) => f.expr === b));
   const problems = [

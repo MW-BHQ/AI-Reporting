@@ -4779,10 +4779,17 @@ function renderReport() {
           <div class="sub">${f.followers?num(f.targetable/f.followers*100,{dp:1})+'% reachable':'\u2014'}</div></div>
         <div class="stat card"><div class="lab">Blocked</div><div class="val">${Number(f.blocked).toLocaleString()}</div>
           <div class="sub">${f.blockedAdded!=null?`<b style="color:var(--rose);">${f.blockedAdded>0?'+':''}${Number(f.blockedAdded).toLocaleString()}</b> this period`:(f.followers?num(f.blocked/f.followers*100,{dp:1})+'% of friends':'\u2014')}</div></div>
-        <div class="stat card"><div class="lab">Blocks per new friend</div>
-          <div class="val" style="color:${f.blockShareOfGrowth!=null&&f.blockShareOfGrowth>RED.lineBlockGrowth?'var(--rose)':'var(--ink)'}">${
-            f.blockShareOfGrowth!=null?num(f.blockShareOfGrowth*100,{dp:0})+'%':'\u2014'}</div>
-          <div class="sub">${f.netAdded!=null?`Net ${Number(f.netAdded).toLocaleString()} friends gained`:'\u2014'}</div></div>
+        <!-- TARGETABLE GAIN/LOSE (MW), replacing blocks-per-new-friend. It is the
+             figure that decides whether broadcasting still works: friends can
+             grow while the reachable audience shrinks, and a new follower who
+             blocks the account the same week is a net gain on paper and nothing
+             in practice. Down reads as alarm, up reads as growth, on the same
+             colours the cards above use. -->
+        <div class="stat card"><div class="lab">Targetable gain/lose</div>
+          <div class="val" style="color:${f.targetableAdded==null?'var(--ink)':(f.targetableAdded<0?'var(--rose)':'var(--green)')}">${
+            f.targetableAdded==null?'\u2014':`${f.targetableAdded>0?'+':''}${Number(f.targetableAdded).toLocaleString()}`}</div>
+          <div class="sub">${f.targetableAdded!=null&&f.targetableFrom?`${
+            f.targetableAdded/f.targetableFrom>0?'+':''}${num(f.targetableAdded/f.targetableFrom*100,{dp:1})}% on the period`:'\u2014'}</div></div>
       </div>` : ''}
       <div class="card mt">
         <div class="card-title">By hospital \u00b7 from the campaign code</div>
@@ -11442,7 +11449,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.312.1';
+const CLIENT_BUILD = '3.313.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

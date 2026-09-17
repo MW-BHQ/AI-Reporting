@@ -209,6 +209,13 @@ expect_field "rp line friends grp" "$REPORT" "d.line.friends.followers===222268?
 # silently falls back to the share it used to show.
 expect_field "rp line net added"   "$REPORT" "d.line.friends.netAdded===1948?1948:undefined"
 expect_field "rp line blocks added" "$REPORT" "d.line.friends.blockedAdded===1862?1862:undefined"
+# TARGETABLE GAIN/LOSE is a difference of two snapshots — the only arithmetic
+# these figures support. The fixture runs 119,913 -> 121,157 inside the window,
+# so +1,244; summing the column gives 241,070 and reading the sheet's last row
+# outside the range gives 125,000.
+expect_field "rp line targetable +" "$REPORT" "d.line.friends.targetableAdded===1244?1244:undefined"
+# The baseline is carried too, or the percentage has no denominator.
+expect_field "rp line targ from"   "$REPORT" "d.line.friends.targetableFrom===119913?119913:undefined"
 
 echo "--- LINE tab (v3.309.0) ---"
 LINE="/api/line?from=$FROM&to=$TO"

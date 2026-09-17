@@ -6145,6 +6145,14 @@ async function buildLineFriends(from, to) {
     series: inRange,
     netAdded: last.contacts - first.contacts,
     blockedAdded: last.blocks !== null && first.blocks !== null ? last.blocks - first.blocks : null,
+    /**
+     * THE ONE THAT DECIDES WHETHER BROADCASTING STILL WORKS. Friends can grow
+     * while TARGETABLE shrinks — a new follower who blocks the account the same
+     * week is a net gain on paper and nothing at all in practice. This is the
+     * difference of two snapshots, the only arithmetic these figures support.
+     */
+    targetableAdded: last.reach !== null && first.reach !== null ? last.reach - first.reach : null,
+    targetableFrom: first.reach,
   };
 }
 
@@ -11130,6 +11138,9 @@ async function buildLineTab(from, to) {
     friends: f ? {
       asOf: f.asOf, followers: f.followers, targetable: f.targetable,
       blocked: f.blocked, netAdded: f.netAdded, blockedAdded: f.blockedAdded,
+      // Explicit whitelist, like `impressionsBySource` — adding a key to the
+      // reader is not enough, and that is exactly how these two were missed.
+      targetableAdded: f.targetableAdded, targetableFrom: f.targetableFrom,
       /**
        * THE FIGURE NOTHING ELSE IN THE DECK CAN SEE. Blocks grew 7,862 while
        * contacts grew 17,948 across MW's 13-month export — 44% of net new

@@ -1,5 +1,47 @@
 ### Recent (September 2026)
 
+**v3.313.0 — "Blocks per new friend" becomes "Targetable gain/lose" on the LINE
+report page** (MW).
+
+The better question, and the one that decides whether broadcasting still works.
+Friends can grow while the REACHABLE audience shrinks: a follower who blocks the
+account the same week is a net gain on paper and nothing in practice. Blocks per
+new friend circled that fact; the change in targetable states it.
+
+The card reads the signed count with the period's percentage beneath it. Down is
+the alarm colour, up is the growth colour — the same pair the Friends and
+Blocked sub-lines use.
+
+**A DIFFERENCE OF TWO SNAPSHOTS**, like every other figure from the friends
+tab. The fixture runs 119,913 to 121,157 inside the window: summing the column
+gives 241,070 and reading the sheet's last row outside the range gives 125,000,
+so each wrong arithmetic lands somewhere different and only 1,244 is reachable
+by doing it right.
+
+**`targetableFrom` IS CARRIED TOO**, because the percentage needs a denominator
+and the end value is the wrong one.
+
+**A COMPARISON AGAINST ZERO IS A SIGN, NOT A THRESHOLD.** `thresholds:named`
+fired on `targetableAdded < 0` and it was right to look — but wrong here: there
+is no editorial judgement to name, and forcing it into `RED` would add
+`targetableLoss: 0`, which reads as a tunable and is not one. The rule now
+exempts a literal zero and still demands a name for every other number.
+
+**Two explicit whitelists caught the same way.** `buildLineTab`'s `friends`
+object lists its keys, so adding `targetableAdded` to the READER was not enough
+— exactly how `impressionsBySource` lost YouTube once.
+
+**The boot fixture makes targetable FALL while friends rise** (+1,948 against
+-420), because that is the case the card exists for and the only shape that
+exercises the alarm branch. A positive value there renders green and the sign
+test is never tested.
+
+**Negative tests, all three confirmed failing before revert:** summing the
+snapshots; dropping the baseline; inverting the sign so a shrinking audience
+reads as growth.
+
+### Recent (September 2026)
+
 **v3.312.1 — the LINE slide uses the vector logo that was already in the repo.**
 
 MW: "use the existing one - i didnt see you put in, thougth we haven't have
