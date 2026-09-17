@@ -2386,6 +2386,13 @@ const RED = {
   // number on the tab: MW's 13-month export runs at 44%, which is already high
   // enough to be a frequency problem. Re-set once a few months are visible.
   lineBlockGrowth: 0.50,
+  /**
+   * Average organic position. RED MEANS BAD HERE NOW, like everywhere else in
+   * the deck — it used to paint red at 3.5 or BETTER, so the strongest pages on
+   * the tab were the ones flagged. Past 10 is off page one, which is the point
+   * where a ranking stops earning clicks.
+   */
+  organicPosition: 10,
   // Scroll cards, both fallbacks for when the `engagement` event is absent.
   scrollDepth: 40,
   scrollReach: 0.30,
@@ -4773,10 +4780,10 @@ function renderReport() {
              the card already; what a reader wants underneath is which way it
              went. Growth reads green, new blocks read in the alarm colour, and
              the blocks-per-new-friend card names its own denominator. -->
-        <div class="stat card"><div class="lab">Friends</div><div class="val">${Number(f.followers).toLocaleString()}</div>
-          <div class="sub">${f.netAdded!=null?`<b style="color:var(--green);">${f.netAdded>0?'+':''}${Number(f.netAdded).toLocaleString()}</b> this period`:'\u2014'}</div></div>
         <div class="stat card"><div class="lab">Targetable</div><div class="val">${Number(f.targetable).toLocaleString()}</div>
           <div class="sub">${f.followers?num(f.targetable/f.followers*100,{dp:1})+'% reachable':'\u2014'}</div></div>
+        <div class="stat card"><div class="lab">Friends</div><div class="val">${Number(f.followers).toLocaleString()}</div>
+          <div class="sub">${f.netAdded!=null?`<b style="color:var(--green);">${f.netAdded>0?'+':''}${Number(f.netAdded).toLocaleString()}</b> this period`:'\u2014'}</div></div>
         <div class="stat card"><div class="lab">Blocked</div><div class="val">${Number(f.blocked).toLocaleString()}</div>
           <div class="sub">${f.blockedAdded!=null?`<b style="color:var(--rose);">${f.blockedAdded>0?'+':''}${Number(f.blockedAdded).toLocaleString()}</b> this period`:(f.followers?num(f.blocked/f.followers*100,{dp:1})+'% of friends':'\u2014')}</div></div>
         <!-- TARGETABLE GAIN/LOSE (MW), replacing blocks-per-new-friend. It is the
@@ -7680,7 +7687,7 @@ function renderGadsBench() {
         <td class="i18n trunc" title="${esc(t.term)}">${esc(t.term)}${t.campaigns.length?`<div style="font-size:var(--text-3xs);color:var(--faint);">${t.campaigns.map(esc).join(' \u00b7 ')}</div>`:''}</td>
         <td class="num">${num(t.spend,{money:true})}</td>
         <td class="num">${num(t.clicks)}</td>
-        <td class="num" style="font-weight:600;color:${t.organicPosition<=3.5?'var(--rose)':'var(--ink)'}">${t.organicPosition!=null?num(t.organicPosition,{dp:1}):'\u2014'}</td>
+        <td class="num" style="font-weight:600;color:${t.organicPosition!=null&&t.organicPosition>RED.organicPosition?'var(--rose)':'var(--ink)'}">${t.organicPosition!=null?num(t.organicPosition,{dp:1}):'\u2014'}</td>
         <td class="num">${t.organicClicks!=null?num(t.organicClicks):'\u2014'}</td>
         <td class="num">${num(t.conversions,{dp:2})}</td>
       </tr>`).join('')}
@@ -11449,7 +11456,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.313.0';
+const CLIENT_BUILD = '3.314.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

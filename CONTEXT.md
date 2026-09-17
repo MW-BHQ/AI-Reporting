@@ -1,5 +1,30 @@
 ### Recent (September 2026)
 
+**v3.314.0 — card order on the LINE page, and organic position stops flagging
+the winners.**
+
+**1. Targetable now leads, Friends second** (MW: "switch the Targetable and
+friends blocks position for user's digestion logistic"). Targetable is the
+audience a broadcast can actually reach, so the row reads reachable, then total,
+then blocked, then movement.
+
+**2. Pages organic position painted red at 3.5 or BETTER** — the inverse of
+every other rule in the deck, so the strongest pages on the tab were the ones
+flagged. It is now `RED.organicPosition: 10`: red past page one, which is where
+a ranking stops earning clicks. Carried since the threshold backlog was written
+in v3.292.0 and settled here.
+
+**THE BACKLOG GUARD DID ITS JOB IN BOTH DIRECTIONS.** Moving the threshold into
+`RED` made `thresholds:named` fail with "t.organicPosition<=3.5 is no longer
+inline — delete it from the audit's BACKLOG list". The list can only shrink and
+cannot outlive the work, which is exactly what it was built for. Three inline
+thresholds left, on Search Ads and Spend.
+
+**Negative test, confirmed failing before revert:** putting the 3.5 comparison
+back, which the guard reports as a NEW inline threshold.
+
+### Recent (September 2026)
+
 **v3.313.0 — "Blocks per new friend" becomes "Targetable gain/lose" on the LINE
 report page** (MW).
 

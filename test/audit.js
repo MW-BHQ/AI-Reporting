@@ -687,9 +687,6 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
   const BACKLOG = [
     "sh.budgetLostShare>0.15",   // Search Ads: impression share lost to budget
     "sh.rankLostShare>0.4",      // Search Ads: impression share lost to rank
-    "t.organicPosition<=3.5",    // Pages: NOTE — red marks a GOOD position here,
-                                 // the inverse of every other rule on the site.
-                                 // Worth settling with MW before it moves.
     "sp.unmatchedShare>=10",     // Spend: share of spend with no GA4 match
   ];
   /**

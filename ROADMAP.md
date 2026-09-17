@@ -151,12 +151,10 @@ cannot outlive the work.
 - `sh.budgetLostShare > 0.15` — Search Ads, impression share lost to budget
 - `sh.rankLostShare > 0.4` — Search Ads, impression share lost to rank
 - `sp.unmatchedShare >= 10` — Spend, share with no GA4 match
-- `t.organicPosition <= 3.5` — Pages, organic position
-
-**Settle the last one before moving it.** It paints red when the position is
-GOOD, which is the inverse of every other rule in the deck — red elsewhere means
-"look at this because it is bad". Either it is a deliberate highlight and wants a
-different colour, or the comparison is backwards. Ask MW, do not guess.
+**DONE for Pages organic position (v3.314.0).** It painted red at 3.5 or
+BETTER — the inverse of every other rule in the deck — so the strongest pages
+were the ones flagged. It is now `RED.organicPosition: 10`, red past page one.
+Three left:
 
 **Two campaign thresholds also want real numbers**, and neither is a code
 problem:
