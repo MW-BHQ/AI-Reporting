@@ -183,6 +183,28 @@ expect_field "pg real month kept"  "$PAGE1" "d.monthly.find(m=>m.sessions>0).mon
 expect_field "pg daily spans"      "$PAGE1" "d.daily.length===243?243:undefined"
 expect_field "pg daily edges"      "$PAGE1" "(d.daily[0].d==='2026-01-01'&&d.daily[242].d==='2026-08-31')?'ok':undefined"
 
+echo "--- monthly report: the LINE page (v3.311.0) ---"
+# MW: "add the LINE to Monthly report, one page, after TK before Content".
+#
+# PER BRAND FROM THE CAMPAIGN CODE. The report is per hospital and the OA is one
+# account for all four, so the suffix does the work: 260701-08_bgh_tra is BGH's.
+expect_field "rp line available"   "$REPORT" "d.line.available===true?'ok':undefined"
+expect_field "rp line bgh"         "$REPORT" "d.line.byBrand.BGH.delivered===90000?90000:undefined"
+expect_field "rp line wsh"         "$REPORT" "d.line.byBrand.WSH.sends===1?1:undefined"
+# A BRAND WITH NO TAGGED BROADCAST IS ZERO SENDS, not a missing key — the table
+# filters on sends, and an absent key would throw before it could filter.
+expect_field "rp line all brands"  "$REPORT" "['BGH','BIH','BHT','WSH'].every(k=>d.line.byBrand[k])?'ok':undefined"
+# THE UNTAGGED REMAINDER IS CARRIED, never dropped or shared out: a send nobody
+# tagged still reached people, and hiding it understates the channel. One Thai
+# remark in the fixture, 60,000 delivered.
+expect_field "rp line untagged"    "$REPORT" "d.line.untagged.delivered===60000?60000:undefined"
+# The brand rows plus the untagged remainder must equal the group total, or the
+# page silently loses a broadcast.
+expect_field "rp line reconciles"  "$REPORT" "(['BGH','BIH','BHT','WSH'].reduce((a,k)=>a+d.line.byBrand[k].delivered,0)+d.line.untagged.delivered===d.line.delivered)?'ok':undefined"
+# Audience figures stay GROUP-level — friends and blocks belong to the account
+# and there is no honest way to divide them by hospital.
+expect_field "rp line friends grp" "$REPORT" "d.line.friends.followers===222268?222268:undefined"
+
 echo "--- LINE tab (v3.309.0) ---"
 LINE="/api/line?from=$FROM&to=$TO"
 check "line tab" GET "$LINE"

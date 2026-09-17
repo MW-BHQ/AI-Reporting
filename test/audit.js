@@ -769,5 +769,36 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
     : ok("views:loader-registered", `all ${prompted.size} load prompts are wired to a loader`);
 }
 
+/**
+ * THE MONTHLY REPORT'S SLIDE ORDER IS THE BRIEF (v3.311.0).
+ *
+ * MW asks for pages in a position, not just in the deck: "add the LINE to
+ * Monthly report, one page, after TK before Content". A slide that renders
+ * perfectly in the wrong place is still wrong, and nothing else in the suite
+ * reads order — the payload assertions pass whichever way round the two sit.
+ *
+ * Checked in the template source rather than the DOM because that is where the
+ * order is decided, and because a reorder is a one-line edit that looks
+ * harmless in review.
+ */
+{
+  const at = (needle) => html.indexOf(needle);
+  const marks = [
+    ["TikTok", at("coverSlide('TikTok Report')")],
+    ["LINE OA", at("coverSlide('LINE OA')")],
+    ["Popular Content", at("coverSlide('Popular Content')")],
+  ];
+  const missing = marks.filter(([, i]) => i < 0).map(([n]) => n);
+  if (missing.length) {
+    fail("report:slide-order", `slide(s) missing from the monthly report — ${missing.join(", ")}`);
+  } else {
+    const [tk, ln, ct] = marks.map(([, i]) => i);
+    ln > tk && ln < ct
+      ? ok("report:slide-order", "LINE sits after TikTok and before Popular Content")
+      : fail("report:slide-order",
+          `LINE OA must sit after TikTok and before Popular Content (TikTok ${tk}, LINE ${ln}, Content ${ct})`);
+  }
+}
+
 console.log(failures ? `\n${failures} audit check(s) failed` : "\nstatic audit clean");
 process.exit(failures ? 1 : 0);

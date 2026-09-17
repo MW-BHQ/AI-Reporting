@@ -4712,6 +4712,83 @@ function renderReport() {
    * accounts in scope are named on the card rather than assumed to be one.
    */
   const TK = d.tiktok || {};
+  /**
+   * LINE OA, ONE PAGE (MW: "add the LINE to Monthly report, one page, after TK
+   * before Content").
+   *
+   * PER BRAND WHERE THE CAMPAIGN CODE ALLOWS IT. The report is per hospital and
+   * the OA is one account for all four, so the suffix does the work —
+   * `260701-08_bgh_tra` is BGH's. Tagging began in 2026 and covers about a
+   * tenth of the history, so the untagged remainder is printed as its own row
+   * rather than dropped or shared out: a send nobody tagged still reached
+   * people, and pretending otherwise would understate the channel.
+   *
+   * THE AUDIENCE FIGURES STAY GROUP-LEVEL AND SAY SO. Friends, targetable and
+   * blocked belong to the account, not to a hospital, and there is no honest
+   * way to divide them.
+   */
+  const LN = d.line || { available: false };
+  const lineBody = LN.available ? (() => {
+    const f = LN.friends;
+    /**
+     * The brand order comes from the PAYLOAD, not a client-side constant.
+     * `BRAND_KEYS` is server-side only — reaching for it here threw
+     * "BRAND_KEYS is not defined" and took the whole report down with it, since
+     * one bad expression in the template kills every slide after it.
+     */
+    const brandOrder = (d.brands || []).map(b => b.key).filter(k => LN.byBrand[k]);
+    const rows = brandOrder.filter(k => LN.byBrand[k] && LN.byBrand[k].sends)
+      .map(k => { const b = LN.byBrand[k]; return `<tr>
+        <td class="strong">${esc(k)}</td>
+        <td class="num">${num(b.sends)}</td>
+        <td class="num">${num(b.delivered)}</td>
+        <td class="num">${num(b.opens)}</td>
+        <td class="num">${b.delivered?num(b.opens/b.delivered*100,{dp:1})+'%':'\u2014'}</td>
+        <td class="num">${num(b.sessions)}</td>
+        <td class="num">${num(b.keyEvents)}</td>
+      </tr>`; }).join('');
+    const untagged = LN.untagged && LN.untagged.sends ? `<tr>
+        <td class="strong" style="color:var(--muted);">Untagged</td>
+        <td class="num">${num(LN.untagged.sends)}</td>
+        <td class="num">${num(LN.untagged.delivered)}</td>
+        <td class="num">\u2014</td><td class="num">\u2014</td><td class="num">\u2014</td><td class="num">\u2014</td>
+      </tr>` : '';
+    return `
+      <div class="grid g-4">
+        <div class="stat card"><div class="lab">Broadcasts</div><div class="val">${num(LN.sends)}</div>
+          <div class="sub">across all four hospitals</div></div>
+        <div class="stat card"><div class="lab">Delivered</div><div class="val">${num(LN.delivered)}</div>
+          <div class="sub">messages, not people</div></div>
+        <div class="stat card"><div class="lab">Opened</div><div class="val">${num(LN.opens)}</div>
+          <div class="sub">${LN.openRate!=null?num(LN.openRate*100,{dp:1})+'% of delivered':'\u2014'}</div></div>
+        <div class="stat card"><div class="lab">Avg. reach</div>
+          <div class="val">${LN.avgReach!=null?num(LN.avgReach*100,{dp:1})+'%':'\u2014'}</div>
+          <div class="sub">the average broadcast, against targetable</div></div>
+      </div>
+      ${f ? `<div class="grid g-4 mt">
+        <div class="stat card"><div class="lab">Friends</div><div class="val">${Number(f.followers).toLocaleString()}</div>
+          <div class="sub">${f.netAdded!=null?`${f.netAdded>0?'+':''}${Number(f.netAdded).toLocaleString()} this period`:'\u2014'}</div></div>
+        <div class="stat card"><div class="lab">Targetable</div><div class="val">${Number(f.targetable).toLocaleString()}</div>
+          <div class="sub">${f.followers?num(f.targetable/f.followers*100,{dp:1})+'% reachable':'\u2014'}</div></div>
+        <div class="stat card"><div class="lab">Blocked</div><div class="val">${Number(f.blocked).toLocaleString()}</div>
+          <div class="sub">${f.followers?num(f.blocked/f.followers*100,{dp:1})+'% of friends':'\u2014'}</div></div>
+        <div class="stat card"><div class="lab">Blocks per new friend</div>
+          <div class="val" style="color:${f.blockShareOfGrowth!=null&&f.blockShareOfGrowth>RED.lineBlockGrowth?'var(--rose)':'var(--ink)'}">${
+            f.blockShareOfGrowth!=null?num(f.blockShareOfGrowth*100,{dp:0})+'%':'\u2014'}</div>
+          <div class="sub">account-wide \u00b7 cannot be split by hospital</div></div>
+      </div>` : ''}
+      <div class="card mt">
+        <div class="card-title">By hospital \u00b7 from the campaign code</div>
+        <table class="roomy"><thead><tr>
+          <th>Hospital</th><th class="num">Broadcasts</th><th class="num">Delivered</th><th class="num">Opened</th>
+          <th class="num">Open rate</th><th class="num">Visits</th><th class="num">Key events</th>
+        </tr></thead><tbody>${rows}${untagged}</tbody></table>
+        <div class="note">One official account serves all four hospitals, so only broadcasts carrying a campaign code can
+        be attributed to one &mdash; codes were added to the LINE sheet from 2026. Visits and key events count LINE
+        traffic only. Friends, targetable and blocked belong to the account and are not split.</div>
+      </div>`;
+  })() : '';
+
   const tkChannelBody = TK.available ? (() => {
     const c = TK.channel;
     const engMax = Math.max(c.likes, c.comments, c.shares, 1);
@@ -5240,6 +5317,8 @@ function renderReport() {
     ${tkChannelBody ? coverSlide('TikTok Report') : ''}
     ${slide('TikTok', tkChannelBody, false, true, 'tiktok')}
     ${tkTopBody ? slide('TikTok \u00b7 Top performances', tkTopBody, false, true, 'tiktok') : ''}
+    ${lineBody ? coverSlide('LINE OA') : ''}
+    ${lineBody ? slide('LINE OA', lineBody, false, 'BHQ') : ''}
     ${contentBody ? coverSlide('Popular Content') + contentBody : ''}
     ${chatBody ? coverSlide('Chat Bubble') + slide('Chat Bubble', chatBody, false, sel) : ''}
     ${betterAiBody ? coverSlide('Better AI') : ''}
@@ -11334,7 +11413,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.310.0';
+const CLIENT_BUILD = '3.311.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

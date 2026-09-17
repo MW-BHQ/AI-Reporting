@@ -2339,6 +2339,15 @@ async function buildReport(from, to) {
    * the Meta tab's `notes` for the wrong-channel warning (`CHANNEL_ID` unset
    * queries `channel==MINE`, which returns a full run of zeros without erroring).
    */
+  /**
+   * LINE for the monthly report page. `buildLineTab` already merges the two
+   * sheets and joins GA4, so the report reads the same figures the LINE tab
+   * shows rather than deriving its own and drifting from them.
+   */
+  jobs.lineTab = buildLineTab(from, to).catch((e) => {
+    logJson("WARNING", "report_line_unavailable", { error: String(e.message || e) });
+    return null;
+  });
   jobs.youtube = buildYouTube(from, to).catch((e) => {
     logJson("WARN", "youtube_failed", { error: String(e.message || e) });
     return null;
@@ -3895,6 +3904,55 @@ async function buildReport(from, to) {
     appointments,
     gbpRanks: data.gbpRanks || { unavailable: true },
     youtube: data.youtube || { available: false },
+    /**
+     * PER BRAND WHERE THE CODE ALLOWS, GROUP EVERYWHERE ELSE.
+     *
+     * The monthly report is per hospital; the LINE OA is one account for all
+     * four. Printing group figures under a brand heading is the conflation this
+     * project refuses everywhere else, so the campaign suffix does the work:
+     * `260701-08_bgh_tra` is BGH's. Tagging began in 2026 and covers roughly a
+     * tenth of the history, so the untagged remainder is carried separately and
+     * stated rather than silently dropped or silently shared out.
+     */
+    line: (() => {
+      const lt = data.lineTab;
+      if (!lt || !lt.available) return { available: false };
+      const brandOf = (code) => {
+        const m = String(code || "").toLowerCase().match(/^\d{6}(?:-\d{2})?_([a-z]{3})/);
+        const b = m ? m[1].toUpperCase() : null;
+        return BRAND_KEYS.includes(b) ? b : null;
+      };
+      const byBrand = {};
+      for (const k of BRAND_KEYS) byBrand[k] = { sends: 0, delivered: 0, opens: 0, sessions: 0, keyEvents: 0 };
+      let untaggedSends = 0, untaggedDelivered = 0;
+      for (const b of lt.broadcasts) {
+        const k = b.campaign ? brandOf(b.campaign) : null;
+        if (!k) { untaggedSends += 1; untaggedDelivered += n(b.delivered); continue; }
+        byBrand[k].sends += 1;
+        byBrand[k].delivered += n(b.delivered);
+        byBrand[k].opens += n(b.opens);
+        // Sessions are shared across broadcasts on one code, so they are added
+        // once per code rather than once per row.
+        byBrand[k].sessions += 0;
+        byBrand[k].keyEvents += 0;
+      }
+      const seen = new Set();
+      for (const b of lt.broadcasts) {
+        const k = b.campaign ? brandOf(b.campaign) : null;
+        const code = b.campaign ? String(b.campaign).toLowerCase().slice(0, 9) : null;
+        if (!k || !code || seen.has(code)) continue;
+        seen.add(code);
+        byBrand[k].sessions += n(b.sessions);
+        byBrand[k].keyEvents += n(b.keyEvents);
+      }
+      return {
+        available: true, scope: "group",
+        sends: lt.sends, delivered: lt.delivered, opens: lt.opens, openRate: lt.openRate,
+        avgReach: lt.avgReach, frequency: lt.frequency,
+        friends: lt.friends, byBrand,
+        untagged: { sends: untaggedSends, delivered: untaggedDelivered },
+      };
+    })(),
     betterAi: data.betterAi || { available: false },
     tiktok,
     social,

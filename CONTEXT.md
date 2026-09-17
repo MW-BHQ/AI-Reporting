@@ -1,5 +1,45 @@
 ### Recent (September 2026)
 
+**v3.311.0 — LINE gets a page in the Monthly Report. Step 5, the pipeline is
+complete.** MW: "add the LINE to Monthly report, one page, after TK before
+Content."
+
+**PER BRAND FROM THE CAMPAIGN CODE.** The report is per hospital and the OA is
+one account for all four, so printing group figures under a brand heading would
+be the conflation this project refuses everywhere else. The suffix does the
+work: `260701-08_bgh_tra` is BGH's.
+
+**THE UNTAGGED REMAINDER IS ITS OWN ROW.** Tagging began in 2026 and covers
+about a tenth of the history. Those sends are neither dropped nor shared out
+across the brands — a broadcast nobody tagged still reached people, and hiding it
+understates the channel while inventing a split would be worse. The brand rows
+plus that row equal the group total, and a test asserts the reconciliation.
+
+**THE AUDIENCE FIGURES STAY GROUP-LEVEL AND SAY SO.** Friends, targetable,
+blocked and blocks-per-new-friend belong to the account. There is no honest way
+to divide them by hospital, so the card states it rather than implying a split.
+
+**It reads `buildLineTab`**, the same function the LINE tab uses, so the report
+cannot drift from the tab.
+
+**`BRAND_KEYS` IS SERVER-SIDE ONLY** — reaching for it in the client threw
+"BRAND_KEYS is not defined" and took the ENTIRE report down, because one bad
+expression in that template kills every slide after it. The brand order now
+comes from the payload's own `brands` array.
+
+**SLIDE ORDER IS THE BRIEF, AND IS NOW TESTED.** MW asks for pages in a
+position, not just in the deck. Nothing in the suite read order — the payload
+assertions passed whichever way round LINE and Content sat — so
+`report:slide-order` checks the template source: LINE after TikTok, before
+Popular Content. A slide that renders perfectly in the wrong place is still
+wrong, and a reorder is a one-line edit that looks harmless in review.
+
+**Negative tests, all three confirmed failing before revert:** dropping the
+untagged remainder; sharing untagged sends across the brands; moving the page
+after Content.
+
+### Recent (September 2026)
+
 **v3.310.0 — the LINE broadcast table gains Visits and Key events, and the
 campaign code is clickable.**
 
