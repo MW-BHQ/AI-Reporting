@@ -3661,6 +3661,13 @@ function renderReport() {
     youtube:   { label: 'YouTube', mono: 'Y', color: '#FF0000', file: 'youtube.svg' },
     instagram: { label: 'Instagram', mono: 'IG', color: '#C13584', file: 'instagram.svg' },
     line:      { label: 'LINE', mono: 'L', color: '#06C755', file: 'line.svg' },
+    /**
+     * MW's supplied mark, used on the monthly report slide. Kept SEPARATE from
+     * `line` above, which is a true 6-path vector used at chip size all over
+     * the deck: this one is a raster embedded in an SVG wrapper, so it is
+     * sharp at 64px and would soften if it replaced the vector everywhere.
+     */
+    line_oa:   { label: 'LINE', mono: 'L', color: '#06C755', file: 'line-oa.svg' },
     messenger: { label: 'Messenger', mono: 'Me', color: '#00B2FF', file: 'messenger.svg' },
     whatsapp:  { label: 'WhatsApp', mono: 'W', color: '#25D366', file: 'whatsapp.svg' },
     chatgpt:   { label: 'ChatGPT', mono: 'C', color: '#10A37F', file: 'chatgpt.svg' },
@@ -4747,7 +4754,10 @@ function renderReport() {
         <td class="num">${num(b.sessions)}</td>
         <td class="num">${num(b.keyEvents)}</td>
       </tr>`; }).join('');
-    const untagged = LN.untagged && LN.untagged.sends ? `<tr>
+    // The whole row reads muted, numbers included: these sends happened but
+    // cannot be attributed, and a black figure beside a grey label invites the
+    // reader to treat it as a fifth hospital.
+    const untagged = LN.untagged && LN.untagged.sends ? `<tr style="color:var(--muted);">
         <td class="strong" style="color:var(--muted);">Untagged</td>
         <td class="num">${num(LN.untagged.sends)}</td>
         <td class="num">${num(LN.untagged.delivered)}</td>
@@ -4766,23 +4776,49 @@ function renderReport() {
           <div class="sub">the average broadcast, against targetable</div></div>
       </div>
       ${f ? `<div class="grid g-4 mt">
+        <!-- THE SUB-LINES CARRY THE MOVEMENT, NOT THE SHARE (MW). A level is on
+             the card already; what a reader wants underneath is which way it
+             went. Growth reads green, new blocks read in the alarm colour, and
+             the blocks-per-new-friend card names its own denominator. -->
         <div class="stat card"><div class="lab">Friends</div><div class="val">${Number(f.followers).toLocaleString()}</div>
-          <div class="sub">${f.netAdded!=null?`${f.netAdded>0?'+':''}${Number(f.netAdded).toLocaleString()} this period`:'\u2014'}</div></div>
+          <div class="sub">${f.netAdded!=null?`<b style="color:var(--green);">${f.netAdded>0?'+':''}${Number(f.netAdded).toLocaleString()}</b> this period`:'\u2014'}</div></div>
         <div class="stat card"><div class="lab">Targetable</div><div class="val">${Number(f.targetable).toLocaleString()}</div>
           <div class="sub">${f.followers?num(f.targetable/f.followers*100,{dp:1})+'% reachable':'\u2014'}</div></div>
         <div class="stat card"><div class="lab">Blocked</div><div class="val">${Number(f.blocked).toLocaleString()}</div>
-          <div class="sub">${f.followers?num(f.blocked/f.followers*100,{dp:1})+'% of friends':'\u2014'}</div></div>
+          <div class="sub">${f.blockedAdded!=null?`<b style="color:var(--rose);">${f.blockedAdded>0?'+':''}${Number(f.blockedAdded).toLocaleString()}</b> this period`:(f.followers?num(f.blocked/f.followers*100,{dp:1})+'% of friends':'\u2014')}</div></div>
         <div class="stat card"><div class="lab">Blocks per new friend</div>
           <div class="val" style="color:${f.blockShareOfGrowth!=null&&f.blockShareOfGrowth>RED.lineBlockGrowth?'var(--rose)':'var(--ink)'}">${
             f.blockShareOfGrowth!=null?num(f.blockShareOfGrowth*100,{dp:0})+'%':'\u2014'}</div>
-          <div class="sub">account-wide \u00b7 cannot be split by hospital</div></div>
+          <div class="sub">${f.netAdded!=null?`Net ${Number(f.netAdded).toLocaleString()} friends gained`:'\u2014'}</div></div>
       </div>` : ''}
       <div class="card mt">
         <div class="card-title">By hospital \u00b7 from the campaign code</div>
         <table class="roomy"><thead><tr>
           <th>Hospital</th><th class="num">Broadcasts</th><th class="num">Delivered</th><th class="num">Opened</th>
           <th class="num">Open rate</th><th class="num">Visits</th><th class="num">Key events</th>
-        </tr></thead><tbody>${rows}${untagged}</tbody></table>
+        </tr></thead><tbody>${rows}${untagged}${(() => {
+          /**
+           * THE TOTAL ROW IS THE GROUP FIGURE, not the sum of the rows above —
+           * they are the same number only because the untagged remainder is one
+           * of those rows. Reading it off `LN` rather than re-adding the table
+           * means a brand that fails to map can never quietly vanish from the
+           * total, which is the whole reason the untagged row exists.
+           *
+           * Visits and key events are summed from the brand rows, because the
+           * group figure includes campaigns whose code names no hospital.
+           */
+          const sess = brandOrder.reduce((a,k)=>a+n0(LN.byBrand[k].sessions),0);
+          const ke = brandOrder.reduce((a,k)=>a+n0(LN.byBrand[k].keyEvents),0);
+          return `<tr class="tot">
+            <td class="strong">Total</td>
+            <td class="num">${num(LN.sends)}</td>
+            <td class="num">${num(LN.delivered)}</td>
+            <td class="num">${num(LN.opens)}</td>
+            <td class="num">${LN.openRate!=null?num(LN.openRate*100,{dp:1})+'%':'\u2014'}</td>
+            <td class="num">${num(sess)}</td>
+            <td class="num">${num(ke)}</td>
+          </tr>`;
+        })()}</tbody></table>
         <div class="note">One official account serves all four hospitals, so only broadcasts carrying a campaign code can
         be attributed to one &mdash; codes were added to the LINE sheet from 2026. Visits and key events count LINE
         traffic only. Friends, targetable and blocked belong to the account and are not split.</div>
@@ -5318,7 +5354,7 @@ function renderReport() {
     ${slide('TikTok', tkChannelBody, false, true, 'tiktok')}
     ${tkTopBody ? slide('TikTok \u00b7 Top performances', tkTopBody, false, true, 'tiktok') : ''}
     ${lineBody ? coverSlide('LINE OA') : ''}
-    ${lineBody ? slide('LINE OA', lineBody, false, 'BHQ') : ''}
+    ${lineBody ? slide('LINE OA', lineBody, false, 'BHQ', 'line_oa') : ''}
     ${contentBody ? coverSlide('Popular Content') + contentBody : ''}
     ${chatBody ? coverSlide('Chat Bubble') + slide('Chat Bubble', chatBody, false, sel) : ''}
     ${betterAiBody ? coverSlide('Better AI') : ''}
@@ -11413,7 +11449,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.311.0';
+const CLIENT_BUILD = '3.312.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

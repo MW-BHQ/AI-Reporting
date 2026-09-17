@@ -1,5 +1,41 @@
 ### Recent (September 2026)
 
+**v3.312.0 — six corrections to the LINE report page, all from MW.**
+
+1. **The LINE mark on the slide.** Registered as `line_oa` and kept SEPARATE
+   from the existing `line` entry: that one is a true six-path vector used at
+   chip size across the deck, MW's file is a raster inside an SVG wrapper. Sharp
+   at 64px, and it would soften the chips if it replaced the vector everywhere.
+2. **Friends growth reads green**, on the number only.
+3. **Blocked now shows the CHANGE, in the alarm colour** — `+1,862 this period`
+   rather than `37.9% of friends`. The level is already on the card; the
+   sub-line's job is which way it went.
+4. **Blocks per new friend names its denominator** — `Net 1,948 friends gained`,
+   replacing a scope caveat the table's own note already carries.
+5. **The untagged row reads muted throughout**, numbers included. A black figure
+   beside a grey label invites the reader to treat it as a fifth hospital.
+6. **A Total row.** Taken from `LN` rather than re-added from the table, so a
+   brand that fails to map can never quietly vanish from the total — the whole
+   reason the untagged row exists. Visits and key events ARE summed from the
+   brand rows, because the group figure includes campaigns whose code names no
+   hospital.
+
+**THE COLOUR IS ASSERTED WITH THE TEXT.** A sub-line printing "+1,948" in
+default ink has lost the only thing that made it worth changing, so the checks
+match `style="color:var(--green);">+` rather than the number.
+
+**AND THEY HAD TO MOVE INTO THE REPORT CHECK.** Written first into boot's
+OVERVIEW assertions, where they failed — the LINE page is a report slide and the
+Overview render never draws it. Then they passed for the wrong reason until the
+boot report fixture gained a `line` object: without it the slide never rendered
+and every assertion about it certified an absent page.
+
+**Negative tests, all three confirmed failing before revert:** dropping the
+green, restoring the blocked share instead of the change, and leaving the
+untagged row in default ink.
+
+### Recent (September 2026)
+
 **v3.311.0 — LINE gets a page in the Monthly Report. Step 5, the pipeline is
 complete.** MW: "add the LINE to Monthly report, one page, after TK before
 Content."

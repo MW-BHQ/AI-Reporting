@@ -326,6 +326,27 @@ function reportFixture() {
      * Also deliberately 4 days short of the month, so the 500-row-cap warning
      * has to render.
      */
+    /**
+     * THE LINE REPORT PAGE. Without this the slide never renders, and the
+     * assertions on its coloured sub-lines pass on an absent page — the same
+     * failure shape that let a dozen other checks certify nothing.
+     *
+     * BGH tagged, one untagged remainder, and BOTH deltas present: the Friends
+     * sub-line needs `netAdded` and the Blocked sub-line needs `blockedAdded`,
+     * and a fixture carrying only one of them would hide half the change.
+     */
+    line: { available: true, scope: "group",
+      sends: 3, delivered: 150000, opens: 40000, openRate: 40000 / 150000,
+      avgReach: 0.41, frequency: 1.24,
+      friends: { asOf: "2026-08-31", followers: 222268, targetable: 121157,
+        blocked: 84337, netAdded: 1948, blockedAdded: 1862, blockShareOfGrowth: 0.96, series: [] },
+      byBrand: {
+        BGH: { sends: 1, delivered: 90000, opens: 22000, sessions: 100, keyEvents: 27 },
+        BIH: { sends: 0, delivered: 0, opens: 0, sessions: 0, keyEvents: 0 },
+        BHT: { sends: 0, delivered: 0, opens: 0, sessions: 0, keyEvents: 0 },
+        WSH: { sends: 1, delivered: 0, opens: 0, sessions: 0, keyEvents: 0 },
+      },
+      untagged: { sends: 1, delivered: 60000 } },
     youtube: { available: true, source: "studio-export",
       totals: { days: 27, views: 1104891, hoursWatched: 15304, likes: 1482,
         comments: null, shares: 1372, subsNet: 356 },
@@ -827,6 +848,21 @@ setTimeout(() => {
     setTimeout(() => {
       const root = d.getElementById("viewRoot");
       const html = root ? root.innerHTML : "";
+      /**
+       * THE LINE PAGE'S SUB-LINES CARRY MOVEMENT, IN COLOUR (MW). A level is on
+       * the card already; underneath, growth reads green and new blocks read in
+       * the alarm colour. The colour is asserted WITH the text, because a
+       * sub-line printing "+1,948" in default ink has lost the only thing that
+       * made it worth changing — and this had to live in the REPORT check, not
+       * the Overview one: the LINE page is a report slide and the Overview
+       * render never draws it.
+       */
+      const lineSubs = [
+        ["friends growth reads green", 'style="color:var(--green);">+'],
+        ["new blocks read as alarm", 'style="color:var(--rose);">+'],
+        ["untagged row reads muted", '<tr style="color:var(--muted);">'],
+      ].filter(([, needle]) => !html.includes(needle)).map(([what]) => what);
+      if (lineSubs.length) errors.push(`LINE page: ${lineSubs.join(", ")} missing`);
       errors.length ? fail("report renders", errors.slice(0, 2).join(" | "))
                     : ok("report renders", `${Math.round(html.length / 1024)}kb`);
       /^[\s\S]*Something went wrong[\s\S]*$/.test(html)

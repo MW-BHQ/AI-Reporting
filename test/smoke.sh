@@ -204,6 +204,11 @@ expect_field "rp line reconciles"  "$REPORT" "(['BGH','BIH','BHT','WSH'].reduce(
 # Audience figures stay GROUP-level — friends and blocks belong to the account
 # and there is no honest way to divide them by hospital.
 expect_field "rp line friends grp" "$REPORT" "d.line.friends.followers===222268?222268:undefined"
+# The sub-lines now print the CHANGE, so both deltas must be on the payload —
+# net friends gained and new blocks. Without `blockedAdded` the Blocked card
+# silently falls back to the share it used to show.
+expect_field "rp line net added"   "$REPORT" "d.line.friends.netAdded===1948?1948:undefined"
+expect_field "rp line blocks added" "$REPORT" "d.line.friends.blockedAdded===1862?1862:undefined"
 
 echo "--- LINE tab (v3.309.0) ---"
 LINE="/api/line?from=$FROM&to=$TO"
