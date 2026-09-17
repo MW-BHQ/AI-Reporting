@@ -2387,6 +2387,21 @@ const RED = {
   // enough to be a frequency problem. Re-set once a few months are visible.
   lineBlockGrowth: 0.50,
   /**
+   * Search Ads: impression share lost, split two ways because the two lead to
+   * OPPOSITE decisions. Budget-lost is a money problem — more spend buys the
+   * impressions back. Rank-lost is a quality problem and more money buys almost
+   * nothing, so it tolerates a much higher figure before it is worth flagging.
+   */
+  budgetLostShare: 0.15,
+  rankLostShare: 0.40,
+  /**
+   * Spend with no GA4 match, as a PERCENTAGE (10 = 10%, not 0.10 — this one
+   * arrives already multiplied and the units nearly went in wrong here). Past a
+   * tenth of spend unattributed, the tagging is the story rather than the
+   * performance.
+   */
+  spendUnmatched: 10,
+  /**
    * Average organic position. RED MEANS BAD HERE NOW, like everywhere else in
    * the deck — it used to paint red at 3.5 or BETTER, so the strongest pages on
    * the tab were the ones flagged. Past 10 is off page one, which is the point
@@ -7545,10 +7560,10 @@ function renderGadsBench() {
           <div class="val">${num(sh.impressionShare*100,{dp:1})}%</div>
           <div class="sub">${num(sh.wonImpressions)} won of ${num(sh.eligibleImpressions)} eligible</div></div>
         <div class="stat"><div class="lab">Lost to budget</div>
-          <div class="val" style="color:${sh.budgetLostShare>0.15?'var(--rose)':'var(--ink)'}">${num(sh.budgetLostShare*100,{dp:1})}%</div>
+          <div class="val" style="color:${sh.budgetLostShare>RED.budgetLostShare?'var(--rose)':'var(--ink)'}">${num(sh.budgetLostShare*100,{dp:1})}%</div>
           <div class="sub">more money would have bought these</div></div>
         <div class="stat"><div class="lab">Lost to ad rank</div>
-          <div class="val" style="color:${sh.rankLostShare>0.4?'var(--rose)':'var(--ink)'}">${num(sh.rankLostShare*100,{dp:1})}%</div>
+          <div class="val" style="color:${sh.rankLostShare>RED.rankLostShare?'var(--rose)':'var(--ink)'}">${num(sh.rankLostShare*100,{dp:1})}%</div>
           <div class="sub">money alone would not</div></div>
       </div>
       ${(() => {
@@ -10188,7 +10203,7 @@ function renderAudit() {
         <div class="val">${num(tr.untaggedKeyEvents)}</div>
         <div class="sub">can't be credited to any campaign</div></div>
       <div class="stat card"><div class="lab">Unattributable ad spend</div>
-        <div class="val ${isNA(sp.unmatched)?'na':''}" style="${sp.unmatchedShare>=10?'color:var(--rose)':''}">${num(sp.unmatched,{money:true})}</div>
+        <div class="val ${isNA(sp.unmatched)?'na':''}" style="${sp.unmatchedShare>=RED.spendUnmatched?'color:var(--rose)':''}">${num(sp.unmatched,{money:true})}</div>
         <div class="sub">${sp.unmatchedShare!=null?num(sp.unmatchedShare,{pct:true})+' of '+num(sp.total,{money:true}):''}</div></div>
       <div class="stat card"><div class="lab">Codes tracking properly</div>
         <div class="val">${num(d.taggedCodes)}</div>
@@ -11456,7 +11471,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.314.0';
+const CLIENT_BUILD = '3.315.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

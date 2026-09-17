@@ -1,5 +1,29 @@
 ### Recent (September 2026)
 
+**v3.315.0 — the threshold backlog is empty.** Search Ads' budget-lost and
+rank-lost shares and Spend's unmatched share are now named entries in `RED`, and
+`thresholds:named` reports "0 on other tabs still pending".
+
+**BUDGET-LOST AND RANK-LOST STAY TWO NUMBERS**, 15% and 40%, because they lead
+to opposite decisions: budget-lost is a money problem and more spend buys the
+impressions back; rank-lost is a quality problem where more money buys almost
+nothing. One shared threshold would have implied they are the same kind of miss.
+
+**`thresholds:units` IS NEW, AND IT CAUGHT THE SLIP I ALMOST MADE.** The block
+mixes fractions (`bounceRate: 0.70`) with values that arrive already scaled
+(`spendUnmatched: 10` for 10%). Writing 10% as `0.10` on a percentage field
+fails silently in the worst way — every campaign turns red at once, which reads
+as a catastrophe rather than a bug. Fractions must sit below 1, scaled entries at
+or above it, and the scaled ones are listed by name because nothing in the code
+can infer which is which. Writing the check found two more scaled entries I had
+not thought about: `landingToVisit` and `scrollDepth`.
+
+**Negative tests, both directions confirmed failing before revert:** an inline
+threshold put back on Search Ads; 10% written as `0.10`; and 70% written as `70`
+on a fraction field.
+
+### Recent (September 2026)
+
 **v3.314.0 — card order on the LINE page, and organic position stops flagging
 the winners.**
 

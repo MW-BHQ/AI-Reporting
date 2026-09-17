@@ -136,36 +136,18 @@ rate-limited LINE call was being displayed as a confident 0.
 Kept short on purpose. MW's rule: if neither of us remembers an item, it was not
 important. Things land here only when he says to note them.
 
-### Named colour thresholds across the whole War Room (MW, 13 Sep 2026)
+### Named colour thresholds across the whole War Room  ✅ done (v3.315.0)
 
-MW asked what turns a figure red, and the honest answer was "read six style
-attributes". The campaign tab is done in v3.292.0 — every red threshold is a
-named entry in the `RED` block at the top of the client script, with a comment
-saying what it means and why that number. The rest of the deck is not.
+Every colour threshold in the app is a named entry in the `RED` block at the top
+of the client script, with a comment saying what it means and why that number.
+The campaign tab landed in v3.292.0, Pages organic position in v3.314.0, and
+Search Ads and Spend in v3.315.0.
 
-**Four inline thresholds remain, on three tabs.** They are listed by expression
-in the `thresholds:named` audit check, which fails on any NEW inline threshold
-and also fails if a listed one has been moved — so the list can only shrink and
-cannot outlive the work.
-
-- `sh.budgetLostShare > 0.15` — Search Ads, impression share lost to budget
-- `sh.rankLostShare > 0.4` — Search Ads, impression share lost to rank
-- `sp.unmatchedShare >= 10` — Spend, share with no GA4 match
-**DONE for Pages organic position (v3.314.0).** It painted red at 3.5 or
-BETTER — the inverse of every other rule in the deck — so the strongest pages
-were the ones flagged. It is now `RED.organicPosition: 10`, red past page one.
-Three left:
-
-**Two campaign thresholds also want real numbers**, and neither is a code
-problem:
-- `engagedPageViews: 0.30` is inherited from the scroll-reach card it replaced in
-  v3.288 and was never re-based. That card measured "reached 50% depth"; the
-  `engagement` event fires at 60% scroll AND on other triggers, so the natural
-  range is probably higher and 30% may never fire. Needs a few months of real
-  values.
-- `landingToVisit: 50` now also drives the Lost sessions card, which used to be
-  red on any value above zero and was therefore red permanently on a campaign of
-  any size.
+The `thresholds:named` audit check keeps it that way: any `var(--rose)` chosen by
+comparing against a bare number fails, except a comparison with zero, which is a
+sign rather than a judgement. `thresholds:units` checks the scale, because the
+block mixes fractions (`bounceRate: 0.70`) with already-scaled values
+(`spendUnmatched: 10`) and writing one as the other turns every row red at once.
 
 ### Shopee and LINE as first-class sources (MW, "one day")
 

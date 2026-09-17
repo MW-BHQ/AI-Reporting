@@ -684,11 +684,13 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
    * moved to `RED` ALSO fails, which forces the entry to be deleted — the list
    * can only shrink, and it cannot quietly outlive the work.
    */
-  const BACKLOG = [
-    "sh.budgetLostShare>0.15",   // Search Ads: impression share lost to budget
-    "sh.rankLostShare>0.4",      // Search Ads: impression share lost to rank
-    "sp.unmatchedShare>=10",     // Spend: share of spend with no GA4 match
-  ];
+  /**
+   * EMPTY, AND THAT IS THE POINT (v3.315.0). Every colour threshold in the app
+   * is now a named entry in `RED`. The list is still checked in both
+   * directions, so a new inline threshold fails here and there is nothing left
+   * to delete — which is how a backlog is supposed to end.
+   */
+  const BACKLOG = [];
   /**
    * A COMPARISON AGAINST ZERO IS A SIGN, NOT A THRESHOLD.
    *
@@ -805,6 +807,37 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
       : fail("report:slide-order",
           `LINE OA must sit after TikTok and before Popular Content (TikTok ${tk}, LINE ${ln}, Content ${ct})`);
   }
+}
+
+/**
+ * `RED` VALUES CARRY TWO DIFFERENT UNITS, SO THE SCALE IS ASSERTED (v3.315.0).
+ *
+ * Most entries are fractions (`bounceRate: 0.70`) because the field they meet
+ * is a fraction. Two are not: `spendUnmatched` and `organicPosition` are
+ * compared against values that arrive already scaled — a percentage and a
+ * position. Writing `spendUnmatched: 0.10` for "10%" is the obvious slip and it
+ * fails silently in the worst way: every campaign turns red at once, which
+ * reads as a catastrophe rather than a bug.
+ *
+ * Fractions must sit below 1, the scaled pair at or above it. Neither can be
+ * inferred from the code, so both lists are stated here and a new entry has to
+ * join one of them.
+ */
+{
+  const block = html.match(/const RED = \{[\s\S]*?\n\};/);
+  // `landingToVisit` and `scrollDepth` meet figures that arrive as percentages
+  // too, and `organicPosition` meets a rank. Everything else meets a fraction.
+  const SCALED = ["spendUnmatched", "organicPosition", "landingToVisit", "scrollDepth"];
+  const bad = [];
+  for (const m of (block ? block[0] : "").matchAll(/^\s{2}([a-zA-Z]+):\s*([\d.]+)\s*,/gm)) {
+    const [, key, raw] = m;
+    const v = Number(raw);
+    if (SCALED.includes(key)) { if (v < 1) bad.push(`${key}=${raw} should be scaled (>= 1)`); }
+    else if (v >= 1) bad.push(`${key}=${raw} should be a fraction (< 1), or be listed as scaled`);
+  }
+  bad.length
+    ? fail("thresholds:units", bad.join(" | "))
+    : ok("thresholds:units", "every RED threshold matches the scale of the field it meets");
 }
 
 console.log(failures ? `\n${failures} audit check(s) failed` : "\nstatic audit clean");
