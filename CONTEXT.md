@@ -1,5 +1,21 @@
 ### Recent (September 2026)
 
+**v3.312.1 — the LINE slide uses the vector logo that was already in the repo.**
+
+MW: "use the existing one - i didnt see you put in, thougth we haven't have
+one." `public/brand/line.svg` has been there all along, a true six-path vector
+already registered in `PLATFORM` and used at chip size across the deck.
+v3.312.0 added his supplied file beside it as `line_oa`; both that entry and the
+file are gone.
+
+**The judgement stands, the extra asset does not.** A raster inside an SVG
+wrapper is the wrong asset for a mark drawn at chip size, and there was never a
+reason to carry two files when the better one already existed. Worth recording
+as the actual lesson: check `public/brand/` before adding a logo — the answer
+was already in the repo and a grep would have found it.
+
+### Recent (September 2026)
+
 **v3.312.0 — six corrections to the LINE report page, all from MW.**
 
 1. **The LINE mark on the slide.** Registered as `line_oa` and kept SEPARATE

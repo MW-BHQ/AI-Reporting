@@ -3661,13 +3661,6 @@ function renderReport() {
     youtube:   { label: 'YouTube', mono: 'Y', color: '#FF0000', file: 'youtube.svg' },
     instagram: { label: 'Instagram', mono: 'IG', color: '#C13584', file: 'instagram.svg' },
     line:      { label: 'LINE', mono: 'L', color: '#06C755', file: 'line.svg' },
-    /**
-     * MW's supplied mark, used on the monthly report slide. Kept SEPARATE from
-     * `line` above, which is a true 6-path vector used at chip size all over
-     * the deck: this one is a raster embedded in an SVG wrapper, so it is
-     * sharp at 64px and would soften if it replaced the vector everywhere.
-     */
-    line_oa:   { label: 'LINE', mono: 'L', color: '#06C755', file: 'line-oa.svg' },
     messenger: { label: 'Messenger', mono: 'Me', color: '#00B2FF', file: 'messenger.svg' },
     whatsapp:  { label: 'WhatsApp', mono: 'W', color: '#25D366', file: 'whatsapp.svg' },
     chatgpt:   { label: 'ChatGPT', mono: 'C', color: '#10A37F', file: 'chatgpt.svg' },
@@ -5354,7 +5347,7 @@ function renderReport() {
     ${slide('TikTok', tkChannelBody, false, true, 'tiktok')}
     ${tkTopBody ? slide('TikTok \u00b7 Top performances', tkTopBody, false, true, 'tiktok') : ''}
     ${lineBody ? coverSlide('LINE OA') : ''}
-    ${lineBody ? slide('LINE OA', lineBody, false, 'BHQ', 'line_oa') : ''}
+    ${lineBody ? slide('LINE OA', lineBody, false, 'BHQ', 'line') : ''}
     ${contentBody ? coverSlide('Popular Content') + contentBody : ''}
     ${chatBody ? coverSlide('Chat Bubble') + slide('Chat Bubble', chatBody, false, sel) : ''}
     ${betterAiBody ? coverSlide('Better AI') : ''}
@@ -11449,7 +11442,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.312.0';
+const CLIENT_BUILD = '3.312.1';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
