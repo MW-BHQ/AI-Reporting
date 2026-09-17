@@ -1,5 +1,48 @@
 ### Recent (September 2026)
 
+**v3.310.0 — the LINE broadcast table gains Visits and Key events, and the
+campaign code is clickable.**
+
+**SESSIONS AND KEY EVENTS ARE LINE'S ONLY**, filtered to `line` as the source
+rather than to the campaign code alone. A campaign usually runs on Meta and
+Google as well, so its total sessions are mostly not LINE's — attributing them to
+a broadcast would credit the send with traffic it never sent. Key events are
+counted per event name and summed, the same way every other tab does it, so
+`login` stays out.
+
+**JOINED ON THE CAMPAIGN NUMBER**, the same rule the Campaign tab uses: the
+sheet may say `260701-08_bgh_tra` while GA4 reports `260701-08_bht_tra` for the
+same campaign run under another brand.
+
+**SHARED, NOT SPLIT.** When several broadcasts carry one code, GA4 knows the
+campaign drove the sessions but cannot know which send did. Dividing by the
+number of broadcasts would invent a number, so the campaign figure appears on
+each row with a `shared` pill saying not to add the column up.
+
+**A DASH, NEVER A ZERO,** for an untagged row or an unreachable GA4 — "this
+broadcast drove nobody" is a different statement from "this broadcast cannot be
+attributed", and `ga4Available: false` says so in the note.
+
+**THE CAMPAIGN CELL IS CLICKABLE HERE, and it was right to remove it from
+Pages** (MW: "here is making sense"). On Pages that column is every
+`utm_campaign` value GA4 reports, `(organic)` included; in this table a value is
+either a real code or it is null and renders as the untagged remark, carrying no
+`data-code` and so no hand. Verified in a browser: the untagged row has no
+`data-code`, the tagged ones do, and a click lands on the Campaign tab with the
+code in the box.
+
+**A FIXTURE THAT COULD NOT TELL THE FILTER FROM ITS ABSENCE.** The sessions pull
+asks for `sessionManualCampaignName` ALONE and filters on the source, so the
+stub had no source column to filter and returned the same number either way —
+the assertion passed whether the filter was there or not. The stub now reads the
+captured `BEGINS_WITH` and answers 100 scoped to LINE, 600 unscoped.
+
+**Negative tests, all four confirmed failing before revert:** counting every
+source instead of LINE; joining on the whole campaign string; showing zero for
+an untagged broadcast; and (from v3.309.0) the missing loader entry.
+
+### Recent (September 2026)
+
 **v3.309.0 — the LINE OA tab. Step 4 of MW's pipeline.**
 
 `/api/line`, `requireTab("line")`, nav under its own group. The first place both

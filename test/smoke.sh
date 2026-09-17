@@ -205,6 +205,18 @@ expect_field "ln block growth"     "$LINE" "d.friends.blockShareOfGrowth>0?'ok':
 # Avg reach cannot exceed 100%; frequency can, because delivered is messages.
 expect_field "ln avg reach sane"   "$LINE" "d.avgReach<=1?'ok':undefined"
 expect_field "ln freq is messages" "$LINE" "d.frequency>d.avgReach?'ok':undefined"
+# VISITS AND KEY EVENTS ARE LINE'S ONLY, filtered to `line` as the source. A
+# campaign usually runs on Meta and Google too, and crediting a broadcast with
+# those sessions would be a lie. The fixture's LINE source carries 100 sessions.
+expect_field "ln row sessions"     "$LINE" "d.broadcasts.find(b=>b.campaign&&b.campaign.startsWith('260701-08')).sessions===100?100:undefined"
+expect_field "ln row key events"   "$LINE" "d.broadcasts.find(b=>b.campaign&&b.campaign.startsWith('260701-08')).keyEvents>0?'ok':undefined"
+# AN UNTAGGED ROW CANNOT BE ATTRIBUTED, so it is null — a dash with a reason,
+# never a zero that reads as "this broadcast drove nobody".
+expect_field "ln untagged is null" "$LINE" "d.broadcasts.find(b=>!b.campaign).sessions===null?'ok':undefined"
+# JOINED ON THE CAMPAIGN NUMBER: the sheet says `260701-08_bgh_tra`, GA4 reports
+# `260701-08_bht_tra` for the same campaign under another brand. Matching the
+# whole string finds nothing and every row reads zero.
+expect_field "ln joined by number" "$LINE" "d.broadcasts.some(b=>b.sessions>0)?'ok':undefined"
 
 echo "--- pages: LINE is reported like any other source (v3.306.0) ---"
 # MW: "just make sure that it's reported just like other srouce". v3.305.0 gave

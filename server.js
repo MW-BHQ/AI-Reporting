@@ -10985,7 +10985,60 @@ app.get("/api/page", requireTab("pages"), async (req, res) => {
  * against a targetable audience that is shrinking is a story.
  */
 async function buildLineTab(from, to) {
-  const [bc, fr] = await Promise.all([buildLine(from, to), buildLineFriends(from, to)]);
+  /**
+   * WHAT THE BROADCASTS ACTUALLY DROVE — sessions and key events, per campaign,
+   * from GA4 (MW: "after open rate, add visits (sessions) and Key Events from
+   * GA4").
+   *
+   * FILTERED TO `line` AS THE SOURCE, not just to the campaign code. A campaign
+   * usually runs on Meta and Google as well as LINE, so the campaign's total
+   * sessions are mostly not LINE's — attributing them to a broadcast would
+   * credit the send with traffic it never sent.
+   *
+   * KEY EVENTS ARE COUNTED PER EVENT NAME AND SUMMED, the same way every other
+   * tab does it, so `login` stays out. Putting `eventName` on the sessions
+   * report instead would multiply sessions across events.
+   */
+  const lineSource = withBranch({
+    filter: { fieldName: "sessionManualSource",
+      stringFilter: { matchType: "BEGINS_WITH", value: "line", caseSensitive: false } },
+  });
+  const ga4 = (dims, metrics, filter) => ga4RunReport({
+    dimensions: dims, metrics, from, to, dimensionFilter: filter, limit: 5000,
+  }).catch((e) => {
+    logJson("WARNING", "line_ga4_unavailable", { error: String(e.message || e) });
+    return null;
+  });
+
+  const [bc, fr, sess, kev] = await Promise.all([
+    buildLine(from, to),
+    buildLineFriends(from, to),
+    ga4(["sessionManualCampaignName"], ["sessions"], lineSource),
+    ga4(["sessionManualCampaignName", "eventName"], ["keyEvents"], {
+      andGroup: { expressions: [lineSource,
+        { filter: { fieldName: "eventName", inListFilter: { values: KEY_EVENT_NAMES } } }] },
+    }),
+  ]);
+
+  /**
+   * Keyed on the campaign NUMBER, the same join the Campaign tab uses: the
+   * sheet may carry `260701-08_bgh_tra` while GA4 reports `260701-08_bht_tra`
+   * for the same campaign run under another brand.
+   */
+  const codeOf = (v) => {
+    const m = String(v || "").trim().toLowerCase().match(/^(\d{6}(?:-\d{2})?)/);
+    return m ? m[1] : null;
+  };
+  const sessByCode = new Map(), kevByCode = new Map();
+  for (const r of (sess || [])) {
+    const k = codeOf(r.sessionManualCampaignName);
+    if (k) sessByCode.set(k, (sessByCode.get(k) || 0) + n(r.sessions));
+  }
+  for (const r of (kev || [])) {
+    const k = codeOf(r.sessionManualCampaignName);
+    if (k) kevByCode.set(k, (kevByCode.get(k) || 0) + n(r.keyEvents));
+  }
+  const ga4Available = sess !== null;
   const f = (fr && fr.available && fr.days) ? fr : null;
   return {
     range: { from, to },
@@ -10999,7 +11052,22 @@ async function buildLineTab(from, to) {
     tagged: bc && bc.available ? bc.tagged : null,
     untagged: bc && bc.available ? bc.untagged : null,
     coverage: bc && bc.available ? bc.coverage : null,
-    broadcasts: bc && bc.available ? bc.broadcasts : [],
+    ga4Available,
+    broadcasts: bc && bc.available ? bc.broadcasts.map((b) => {
+      const k = b.campaign ? codeOf(b.campaign) : null;
+      /**
+       * SHARED, NOT SPLIT, when several broadcasts carry one code. GA4 knows
+       * the campaign drove the sessions; it cannot know which send did, and
+       * dividing them by the number of broadcasts would invent a number. The
+       * same figure appears on each row with `shared` set, so the column is
+       * read per campaign and never summed.
+       */
+      const sameCode = k ? bc.broadcasts.filter((o) => o.campaign && codeOf(o.campaign) === k).length : 0;
+      return { ...b,
+        sessions: k && ga4Available ? (sessByCode.get(k) || 0) : null,
+        keyEvents: k && ga4Available ? (kevByCode.get(k) || 0) : null,
+        shared: sameCode > 1 ? sameCode : 0 };
+    }) : [],
     byCampaign: bc && bc.available ? bc.byCampaign.slice(0, 30) : [],
     friends: f ? {
       asOf: f.asOf, followers: f.followers, targetable: f.targetable,

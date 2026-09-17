@@ -7816,14 +7816,30 @@ function renderLine() {
     </div>
   </div>` : '';
 
+  /**
+   * THE CAMPAIGN CELL IS CLICKABLE HERE, and only where it is tagged (MW: "here
+   * is making sense"). On the Pages tab this column is every `utm_campaign`
+   * value GA4 reports, `(organic)` included, so clicking was nonsense; in this
+   * table a value is either a real campaign code or it is null and renders as
+   * the untagged remark, which carries no `data-code` and so no hand.
+   *
+   * SESSIONS AND KEY EVENTS ARE LINE'S ONLY, filtered to `line` as the source —
+   * a campaign's total sessions are mostly Meta's and Google's, and crediting
+   * those to a broadcast would be a lie. A dash means the row cannot be
+   * attributed (untagged) or GA4 was unreachable, never that nobody came.
+   */
   const rows = d.broadcasts.map(b => `<tr>
     <td>${esc(humanDate(b.date))}</td>
-    <td class="trunc" style="max-width:0;" data-tip="${esc(b.campaign||b.note||'untagged')}">${
+    <td class="trunc" style="max-width:0;"${b.campaign?` data-code="${esc(b.campaign)}"`:''} data-tip="${
+      esc(b.campaign ? `${b.campaign} \u2014 click to analyse` : (b.note||'untagged'))}">${
       b.campaign?esc(b.campaign):`<span style="color:var(--faint);">${esc(b.note||'untagged')}</span>`}</td>
     <td class="num">${num(b.delivered)}</td>
     <td class="num">${num(b.opens)}</td>
     <td class="num"${b.openRate!=null&&b.openRate<RED.lineOpenRate?' style="color:var(--rose)"':''}>${
       b.openRate!=null?num(b.openRate*100,{dp:1})+'%':'\u2014'}</td>
+    <td class="num">${b.sessions==null?'\u2014':num(b.sessions)}${
+      b.shared?` <span class="pill grey" data-tip="${b.shared} broadcasts carry this campaign code, so GA4 cannot tell which one drove these sessions. The figure is the campaign's, shown on each row — do not add the column up.">shared</span>`:''}</td>
+    <td class="num">${b.keyEvents==null?'\u2014':num(b.keyEvents)}</td>
   </tr>`).join('');
 
   $('viewRoot').innerHTML = `
@@ -7837,11 +7853,34 @@ function renderLine() {
       <div class="card-title">Broadcasts \u00b7 ${num(d.broadcasts.length)} in range</div>
       <table class="roomy sortable"><thead><tr>
         <th>Sent</th><th>Campaign</th><th class="num">Delivered</th><th class="num">Opened</th><th class="num">Open rate</th>
-      </tr></thead><tbody>${rows||'<tr><td colspan="5" class="num">none</td></tr>'}</tbody></table>
-      <div class="note">An untagged broadcast still reached people &mdash; it just cannot be tied to a campaign. Campaign
-      codes were only added to the LINE sheet from 2026.</div>
+        <th class="num">Visits</th><th class="num">Key events</th>
+      </tr></thead><tbody>${rows||'<tr><td colspan="7" class="num">none</td></tr>'}</tbody></table>
+      <div class="note">Click a campaign to analyse it. Visits and key events count LINE traffic only, not the whole
+      campaign. An untagged broadcast still reached people &mdash; it just cannot be tied to a campaign, and campaign
+      codes were only added to the LINE sheet from 2026.${
+        d.ga4Available===false?' <b>GA4 was unreachable this run, so visits and key events are not measured rather than zero.</b>':''}</div>
     </div>`;
 }
+
+/**
+ * CAMPAIGN DRILL-IN, LINE TAB ONLY.
+ *
+ * Delegated from `document` because the table is rebuilt on every load, and
+ * scoped to `S.view === 'line'`: the Pages tab has a column of the same shape
+ * where clicking is wrong, because there the values include `(organic)`.
+ *
+ * STATE FIRST, THEN THE VIEW, THEN RUN. `#campInput` does not exist while this
+ * tab is rendered, so writing to it before switching does nothing at all —
+ * which is precisely how the Pages version failed in v3.307.0.
+ */
+document.addEventListener('click', (e) => {
+  const td = e.target.closest('#viewRoot td[data-code]');
+  if (!td || S.view !== 'line') return;
+  S.campaignCode = td.dataset.code;
+  goTo('campaigns');
+  render();
+  runCampaign();
+});
 
 function renderBclub() {
   const d = S.bclub;
@@ -11295,7 +11334,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.309.0';
+const CLIENT_BUILD = '3.310.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

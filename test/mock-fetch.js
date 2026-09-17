@@ -382,6 +382,23 @@ function ga4Report(body) {
          * a filter that drops zero-click channels still produced ten cards and
          * the "cards never disappear" guard tested nothing.
          */
+        /**
+         * THE LINE TAB'S SOURCE FILTER HAS TO CHANGE THE ANSWER (v3.310.0).
+         *
+         * Its sessions pull asks for `sessionManualCampaignName` ALONE and
+         * filters on `sessionManualSource BEGINS_WITH line`. With no source
+         * dimension in the request the stub had no column to filter, so
+         * filtered and unfiltered returned the same number and the assertion
+         * passed whether or not the filter was there — the exact shape of an
+         * assertion that certifies nothing.
+         *
+         * 100 when scoped to LINE, 600 when not. A campaign runs on Meta and
+         * Google as well, and crediting a broadcast with those sessions is the
+         * bug this separates.
+         */
+        : (m === "sessions" && dims.includes("sessionManualCampaignName")
+           && !dims.includes("sessionManualSource") && !page)
+          ? (beginsWith.sessionManualSource ? "100" : "600")
         : (m === "eventCount" && (dims.includes("linkId") || dims.includes("customEvent:Click_ID")))
           ? (String(page).indexOf("/bangkok-bone-brain/") >= 0
                 && String(vals.join(" ")).indexOf("telegram") >= 0 ? "0"
