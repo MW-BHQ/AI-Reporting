@@ -6494,13 +6494,10 @@ function renderCampaignBody(d) {
         </div>
         <div class="note">Matched by date only: these are all LINE messages sent on the campaign's launch date (from the code ${esc(d.code||'')}). Opens and clicks aren't recorded for OA Manager sends, so delivery volume is the honest ceiling here.</div>
       </div>`:''}
-      ${d.lineMessages&&d.lineMessages.messages.length?`<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
-        <div style="font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:10px;">LINE broadcasts · ${d.lineMessages.messages.length} message(s)</div>
-        <div class="grid g-3">
-          <div class="stat"><div class="lab">Delivered</div><div class="val">${num(d.lineMessages.delivered)}</div></div>
-          <div class="stat"><div class="lab">Opened</div><div class="val">${num(d.lineMessages.opens)}</div></div>
-          <div class="stat"><div class="lab">Link clicks</div><div class="val">${num(d.lineMessages.clicks)}</div></div>
-        </div></div>`:''}
+      ${/* The Windsor per-message LINE block was removed in v3.316.0 — the
+            broadcast sheet reports delivery and opens per broadcast WITH the
+            campaign code, so the LINE card above says the same thing from a
+            source that is actually connected. */''}
       ${(d.shortLinks||[]).length?`<div class="note"><b>Registered short links:</b> ${d.shortLinks.slice(0,8).map(l=>`<code style="font-size:var(--text-2xs);">${esc(l)}</code>`).join(' &middot; ')}${d.shortLinks.length>8?` +${d.shortLinks.length-8} more`:''}<br>Organic posts are found by searching post text for these links, so a post only appears here if it used a link registered in UTM Builder 2026. LINE broadcasts and EDM can't be matched this way &mdash; those platforms don't expose message content.</div>`:'<div class="note">No short links are registered against this code in UTM Builder 2026, so organic posts can\'t be matched.</div>'}
     </div>`:''}
 
@@ -6599,7 +6596,7 @@ function renderCampaignBody(d) {
               title="${esc(v.code)}">${esc(v.code)}${
               v.adNames&&v.adNames.length?` <span class="pill grey">${v.adNames.length}</span>`:''}</td>
             <td>${esc(v.source||'—')}${v.medium?' <span style="color:var(--faint)">/ '+esc(v.medium)+'</span>':''}</td>
-            <td class="num">${num(v.impressions)}${v.organicSource?' <span class="pill grey" title="From organic Facebook posts matched by short link — not ad-platform data">org</span>':''}${v.lineSent?' <span class="pill grey" title="LINE messages delivered on the campaign date — delivery volume, not views. LINE never reports views or clicks for OA Manager sends.">sent</span>':''}</td>
+            <td class="num">${num(v.impressions)}${v.organicSource?' <span class="pill grey" title="From organic Facebook posts matched by short link — not ad-platform data">org</span>':''}</td>
             <td class="num">${num(v.clicks)}${v.organicSource?' <span class="pill grey" title="From organic Facebook posts matched by short link — not ad-platform data">org</span>':''}</td>
             <td class="num">${num(v.spend,{money:true,bare:true})}${v.spendEstimated?' <span class="pill grey" title="Split across variants by visit share">~</span>':''}</td>
             <td class="num">${num(v.visits)}</td>
@@ -6862,11 +6859,6 @@ function renderUsers() {
     </div>
     ${chips(u)}
   </div>`;
-  const LEGACY_ROW = (u) => `<tr data-email="${esc(u.email)}">
-    <td class="strong">${esc(u.email)}</td>
-    <td class="num"><button class="btn btn-ghost" data-save="${esc(u.email)}" style="padding:5px 10px;font-size:var(--text-2xs);">Save</button></td>
-    <td class="num"><button class="btn btn-ghost" data-del="${esc(u.email)}" style="padding:5px 10px;font-size:var(--text-2xs);color:var(--rose);">Remove</button></td>
-  </tr>`;
 
   $('viewRoot').innerHTML = `
     ${d.persistence!=='gcs'?`<div class="warnbox"><b>Changes won't survive a restart.</b> No storage bucket is configured, so the access list is held in memory only and resets whenever Cloud Run cold-starts. Set <code>ACCESS_BUCKET</code> to a Cloud Storage bucket to make it durable.</div>`:''}
@@ -7099,8 +7091,6 @@ const GOAL_FULL = {
   PAGE_LIKES:'Page likes', THRUPLAY:'Video thruplay', REACH:'Reach', IMPRESSIONS:'Impressions',
   AD_RECALL_LIFT:'Ad recall lift',
 };
-const RANK_LABEL = { ABOVE_AVERAGE:'above', AVERAGE:'avg', BELOW_AVERAGE_35:'bottom 35%', BELOW_AVERAGE_20:'bottom 20%', BELOW_AVERAGE_10:'bottom 10%' };
-const RANK_CLASS = { ABOVE_AVERAGE:'green', AVERAGE:'grey', BELOW_AVERAGE_35:'warn', BELOW_AVERAGE_20:'warn', BELOW_AVERAGE_10:'warn' };
 // Compact Q/E/C readout: a coloured dot per metric, aligned under the header
 // letters. Below-average carries its band figure, since "bottom 20%" is a
 // materially worse place to sit than "bottom 35%".
@@ -7219,7 +7209,6 @@ const channelColour = (name) => {
   for (let i = 0; i < String(name).length; i++) hash = (hash * 31 + String(name).charCodeAt(i)) % 9973;
   return CH_FALLBACK[hash % CH_FALLBACK.length];
 };
-const CH_COLORS = Object.values(CHANNEL_CI);
 /**
  * Every view except Overview waits for a deliberate click before fetching.
  *
@@ -11471,7 +11460,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.315.0';
+const CLIENT_BUILD = '3.316.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

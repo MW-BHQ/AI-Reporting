@@ -1,5 +1,44 @@
 ### Recent (September 2026)
 
+**v3.316.0 — the Windsor LINE connector and its dead code are gone.** MW is
+freeing two connector slots for Shopee and Lazada, so anything Windsor-shaped
+that nothing reads had to go. **156 lines removed, 30 added.**
+
+**WHAT WENT WITH IT, and this is the part worth recording** — the connector was
+one line, but three features were built on top of it and all three had been
+superseded by the broadcast sheet:
+
+1. `LINE_ENABLED` / `lineWindsor()` and the two `windsor("line")` jobs.
+2. **Per-message insights** (`lineMessages`) — delivery and opens by
+   `message_request_id`, which only worked where a request ID had been logged.
+   The sheet reports the same per broadcast, with the campaign code attached.
+3. **The same-day heuristic** (`lineSameDay`) — it matched a campaign code's
+   `YYMMDD` against LINE's delivery volume for that date and stamped the result
+   on the GA4 line-source row with a "sent" pill, because LINE was otherwise
+   blind. The sheet ended that: delivery arrives per broadcast WITH the code on
+   it, so there is nothing left to infer from a date. A heuristic that outlives
+   its own replacement is a second answer waiting to disagree with the first.
+
+`impressions.line` and `impressions.lineOpens` now read the sheet and nothing
+else — no fallback chain, no dormant branch.
+
+**Six orphaned constants also removed:** `KEY_EVENT_LABELS` and `PAID_MEDIUM_RE`
+on the server; `LEGACY_ROW`, `RANK_LABEL`, `RANK_CLASS` and `CH_COLORS` on the
+client. Each declared once and referenced nowhere.
+
+**A DELETION SCRIPT THAT COUNTS BRACES CANNOT READ A TEMPLATE LITERAL.**
+Removing `LEGACY_ROW` took its opening line and left the body behind as loose
+HTML in the middle of a function — `client parses` caught it immediately. Worth
+remembering before the next automated tidy: in this file, brace depth is not a
+reliable end-of-statement signal.
+
+**Still on Windsor, and load-bearing:** `google_my_business` (11 calls),
+`google_ads` (11), `facebook` (9), `tiktok_organic` (4), `facebook_organic` (3).
+GA4, Search Console and YouTube touch it nowhere — GA4 and GSC are on the direct
+APIs, YouTube reads a sheet.
+
+### Recent (September 2026)
+
 **v3.315.0 — the threshold backlog is empty.** Search Ads' budget-lost and
 rank-lost shares and Spend's unmatched share are now named entries in `RED`, and
 `thresholds:named` reports "0 on other tabs still pending".

@@ -1169,16 +1169,6 @@ async function windsorUncached(connector, fields, from, to, { accounts, filters,
   return Array.isArray(json) ? json : json.data || [];
 }
 
-/**
- * LINE was disconnected from Windsor in Aug 2026 and replaced with Google Ads.
- * Every call site already treated a null result as "unavailable", so the
- * connector is simply skipped rather than removed: set LINE_ENABLED=1 if it is
- * ever reconnected and the whole LINE path returns without a code change.
- * Left as a flag rather than deleted because the request-ID join and the
- * same-day broadcast heuristic took real work to get right.
- */
-const LINE_ENABLED = process.env.LINE_ENABLED === "1";
-const lineWindsor = (...args) => (LINE_ENABLED ? windsor("line", ...args) : Promise.resolve(null));
 
 /** Parallel jobs. A failure yields null (not []) so it reads as "unavailable". */
 async function runJobs(jobs) {
@@ -1239,7 +1229,6 @@ const KEY_EVENTS = [
   { name: "better_ai_result", label: "Better AI result" },
 ];
 const KEY_EVENT_NAMES = KEY_EVENTS.map((e) => e.name);
-const KEY_EVENT_LABELS = Object.fromEntries(KEY_EVENTS.map((e) => [e.name, e.label]));
 
 
 /**
@@ -1405,7 +1394,6 @@ const PLATFORM_SOURCE_HINTS = {
  * hand-typed field and was wrong on the campaign that exposed this. The
  * utm_campaign code decides now. Do not reintroduce it as a match condition.
  */
-const PAID_MEDIUM_RE = /(cpc|ppc|paid|display|video|banner)/i;
 
 // ------------------------------------------------------------- /api/overview
 
@@ -1500,13 +1488,6 @@ async function buildOverview(from, to) {
     fbOrganic: windsor("facebook_organic",
       ["date", "page_impressions", "page_impressions_organic", "post_engagements"], from, to),
     ttOrganic: windsor("tiktok_organic", ["date", "video_views", "likes", "comments", "shares"], from, to),
-    line: lineWindsor(["date", "message__broadcast", "message__targeting", "message__api_broadcast",
-      "message__api_narrowcast", "message__api_multicast", "message__api_push",
-      "followers__followers", "followers__targeted_reaches"], from, to),
-    // Separate call: the message-event table carries actual opens/clicks, which
-    // is a real impression rather than a send count. LINE returns null for any
-    // value under 20, so small sends legitimately come back empty.
-    lineEvents: lineWindsor(["date", "message_delivered", "message_unique_impression", "message_unique_click"], from, to),
   });
 
   const ga4 = data.ga4;
@@ -1570,50 +1551,26 @@ async function buildOverview(from, to) {
      * reach = broadcast + targeted + API push sends. Opens are preferred if they
      * ever start reporting.
      */
-    line: (() => {
-      /**
-       * THE BROADCAST SHEET WINS (MW, 16 Sep 2026: "deliveredCount = imp").
-       *
-       * The Windsor `line` connector below is DORMANT — `LINE_ENABLED` defaults
-       * to off because it was never authorised — so this key existed and was
-       * always null, which is why the funnel note still claims LINE "has no
-       * connector yet". The sheet is the live source; Windsor stays as the
-       * fallback it already was, in case it is ever switched on.
-       *
-       * DELIVERED, NOT OPENS. Delivery is the impression: the message reached
-       * the device. Opens are the INTERACTION stage, where they narrow properly
-       * against delivery instead of sitting at the same width.
-       */
-      if (bcDelivered !== null) return bcDelivered;
-      const opens = sumOrNull(data.lineEvents, "message_unique_impression");
-      if (opens) return opens;
-      if (data.line === null) return null;
-      // Every outbound send type LINE reports. Reply/greeting/chat/auto-response
-      // are excluded on purpose: they're conversational, not campaign reach.
-      return ["message__broadcast", "message__targeting", "message__api_broadcast",
-        "message__api_narrowcast", "message__api_multicast", "message__api_push"]
-        .reduce((a, f) => a + n(sumOrNull(data.line, f)), 0);
-    })(),
     /**
-     * Opens, for the Interactions stage. Same source preference as `line`
-     * above — sheet first, dormant Windsor connector second — so the bar
-     * segment and the stage total can never disagree about which source they
-     * came from.
+     * DELIVERED IS THE IMPRESSION, from the broadcast sheet (MW: "deliveredCount
+     * = imp"). Opens are the INTERACTION stage below, where they narrow properly
+     * against delivery instead of sitting at the same width.
+     *
+     * The Windsor `line` connector that used to back these was removed in
+     * v3.316.0: it had been dormant behind `LINE_ENABLED` since August, never
+     * authorised, and the sheet gives more than it ever did — per broadcast,
+     * per campaign, plus blocks, which Windsor never reported.
      */
-    lineOpens: bcOpens ?? sumOrNull(data.lineEvents, "message_unique_impression"),
+    line: bcDelivered,
+    lineOpens: bcOpens,
   };
 
-  const lineOpens = sumOrNull(data.lineEvents, "message_unique_impression");
   /**
    * `days === 0` means the range sits outside the follower export, which is a
    * different statement from "no followers" — the row says so rather than
    * printing a confident zero.
    */
   const lf = (data.lineFriends && data.lineFriends.available && data.lineFriends.days) ? data.lineFriends : null;
-  const lineBasis = lineOpens ? "unique opens"
-    : (data.line !== null ? "messages sent · per-message opens need request IDs" : "unavailable");
-  const lineFollowers = data.line === null ? null : Math.max(0, ...data.line.map((r) => n(r.followers__followers)));
-  const lineReachable = data.line === null ? null : Math.max(0, ...data.line.map((r) => n(r.followers__targeted_reaches)));
 
   // ---- funnel by GA4 channel group ----
   const chanMap = new Map();
@@ -1681,17 +1638,16 @@ async function buildOverview(from, to) {
         ? `${ytTotals.days} days in the export${ytTotals.hoursWatched ? ` · ${Math.round(ytTotals.hoursWatched).toLocaleString()} hours watched` : ""}`
         : "no rows in the export sheet for this range" },
     /**
-     * LINE is listed whenever there is something to say — the broadcast sheet,
-     * or the dormant Windsor connector if it is ever switched back on. A
-     * permanent "unavailable" row trains people to ignore the panel, which is
-     * why this was gated in the first place.
+     * LINE is listed whenever the sheet has something to say. A permanent
+     * "unavailable" row trains people to ignore the panel, which is why this
+     * was gated in the first place.
      *
      * THE IMPRESSIONS HERE ARE ALSO IN THE FUNNEL, unlike every other row in
      * this panel, and the note says so. The row exists for the SCOPE and the
      * denominator: one OA serves all four hospitals, and delivered means
      * nothing without the size of the audience it went to.
      */
-    ...((impressions.line !== null || LINE_ENABLED) ? [{
+    ...(impressions.line !== null ? [{
       channel: "LINE", impressions: impressions.line,
       /**
        * FOLLOWERS ARE NOT SHOWN HERE (MW, 17 Sep 2026: "no need to put it in
@@ -4608,35 +4564,6 @@ async function buildCampaign(code, from, to) {
   }
   const uniqueLinks = [...new Set(shortLinks)];
 
-  // LINE per-message insights, only possible when request IDs were logged.
-  const lineReqIds = [];
-  for (const [c, entry] of sheets.links.entries()) {
-    if (norm(c).startsWith(needle)) lineReqIds.push(...(entry.lineRequestIds || []));
-  }
-  let lineMessages = null;
-  if (LINE_ENABLED && lineReqIds.length) {
-    try {
-      const rows = await lineWindsor(
-        ["message_request_id", "message_send_time", "message_delivered", "message_unique_impression", "message_unique_click"],
-        from, to, { options: { message_request_ids: [...new Set(lineReqIds)].join(",") } });
-      const list = (rows || []).filter((r) => r.message_request_id).map((r) => ({
-        requestId: r.message_request_id,
-        sentAt: r.message_send_time || null,
-        delivered: n(r.message_delivered),
-        opens: n(r.message_unique_impression),
-        clicks: n(r.message_unique_click),
-      }));
-      lineMessages = {
-        messages: list,
-        delivered: list.reduce((a, m) => a + m.delivered, 0),
-        opens: list.reduce((a, m) => a + m.opens, 0),
-        clicks: list.reduce((a, m) => a + m.clicks, 0),
-      };
-    } catch (e) {
-      logJson("WARNING", "line_message_insights_failed", { error: String(e.message || e) });
-    }
-  }
-
   /**
    * Organic reach for the campaign. Ad platforms report their own impressions,
    * but an organic Facebook post carrying the campaign's short link is invisible
@@ -4873,58 +4800,16 @@ async function buildCampaign(code, from, to) {
     }
   }
 
-  // Same-day heuristic: the campaign code starts with YYMMDD, and LINE's
-  // delivery table does report how many broadcast messages went out per day.
-  // A broadcast sent on the campaign's launch date is very likely the campaign
-  // broadcast, so surface that day's send volume, clearly labelled as a
-  // same-day match rather than a tracked link. Opens/clicks stay unknowable
-  // for OA Manager sends (no request IDs).
-  // Only for campaigns that actually ran on LINE (a GA4 line-source variant
-  // exists): the date heuristic exists because LINE is blind, and it has no
-  // business firing for FB/IG/ads campaigns that merely share a launch date.
-  let lineSameDay = null;
-  const isLineCampaign = variants.some((v) => norm(v.source || "").includes("line"));
-  const codeDigits = String(code || "").match(/^(\d{2})(\d{2})(\d{2})/);
-  if (isLineCampaign && codeDigits) {
-    const codeDate = `20${codeDigits[1]}-${codeDigits[2]}-${codeDigits[3]}`;
-    // Windsor's raw connector API and its metadata API disagree on LINE field
-    // naming (plain "broadcast" vs prefixed "message__broadcast"), so try the
-    // plain names first and fall back to the prefixed ones.
-    const attempts = [
-      ["broadcast", "targeting", "api_broadcast", "api_narrowcast", "api_multicast", "api_push"],
-      ["message__broadcast", "message__targeting", "message__api_broadcast", "message__api_narrowcast", "message__api_multicast", "message__api_push"],
-    ];
-    for (const flds of attempts) {
-      try {
-        const rows = await lineWindsor(["date", ...flds], codeDate, codeDate);
-        if (!rows || !rows.length) continue;
-        const sum = (name) => rows.reduce((a, r) => a + n(r[name] !== undefined ? r[name] : r[`message__${name.replace(/^message__/, "")}`]), 0);
-        const broadcasts = sum(flds[0]) + sum(flds[2]);
-        const targeted = sum(flds[1]) + sum(flds[3]) + sum(flds[4]) + sum(flds[5]);
-        if (broadcasts + targeted > 0) { lineSameDay = { date: codeDate, broadcasts, targeted }; break; }
-      } catch (e) {
-        logJson("WARNING", "line_same_day_attempt_failed", { fields: flds[0], error: String(e.message || e) });
-      }
-    }
-  }
-
-
-  // LINE can never report views or clicks for OA Manager sends, but delivery
-  // volume on the campaign date exists — put it in the LINE row's Impr column,
-  // flagged as "sent" so nobody reads delivery as views.
-  if (lineSameDay) {
-    // GA4 splits LINE into broadcast-style rows (medium paid/broadcast) and the
-    // rich menu (persistent tap menu, no send event). Delivery volume belongs
-    // only to the send-style row — never stamp it on richmenu.
-    const lineRows = variants.filter((v) =>
-      norm(v.source || "").includes("line") && v.spend == null && v.impressions == null
-      && !norm(v.medium || "").includes("richmenu"));
-    const lineOrg = lineRows.find((v) => /paid|broadcast|social/.test(norm(v.medium || ""))) || lineRows[0];
-    if (lineOrg) {
-      lineOrg.impressions = n(lineSameDay.broadcasts) + n(lineSameDay.targeted);
-      lineOrg.lineSent = true;
-    }
-  }
+  /**
+   * THE LINE SAME-DAY HEURISTIC IS GONE (v3.316.0).
+   *
+   * It matched a campaign code's YYMMDD against Windsor's LINE delivery volume
+   * for that date and stamped the result on the GA4 line-source row, because
+   * LINE was otherwise blind. The broadcast sheet ended that: it reports
+   * delivery per broadcast WITH the campaign code on it, so there is nothing
+   * left to infer from a date. A heuristic that survives its own replacement is
+   * just a second answer waiting to disagree with the first.
+   */
 
   const paidImpressions = anyAdMatch ? byPlatform.reduce((a, p) => a + n(p.impressions), 0) : null;
   const totals = {
@@ -5630,7 +5515,7 @@ async function buildCampaign(code, from, to) {
     goalResultLabel: goalDef ? goalDef.resultLabel : null,
     goalResults, goalCostPerResult: goalResults && totals0Spend(byPlatform) ? totals0Spend(byPlatform) / goalResults : null,
     offSiteGoal, adLeads, adMessages,
-    lineMessages, lineSameDay, lineRequestIdsFound: lineReqIds.length,
+
     sheetErrors: sheets.errors,
     unattributedSpend,
     quality: (() => {
