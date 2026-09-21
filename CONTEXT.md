@@ -1,5 +1,40 @@
 ### Recent (September 2026)
 
+**v3.318.0 — nav order and the Shopee commission block.**
+
+- **Channels sits under Report, Shopee under Channels**, both inside the
+  E-commerce group (MW). Shopee had its own group beside LINE; a marketplace is
+  a sales CHANNEL, so it belongs beside the other channel views.
+- **The commission block moves to the bottom** of the Shopee tab. It answers
+  "what did Shopee take", which is a reconciliation question, not the first
+  thing a reader wants.
+
+**WHAT THE CONNECTOR CANNOT DO, established by pulling the data rather than
+guessing.** MW asked for shop views, product views, repeat views, add-to-cart,
+checkout, cart age, average items per checkout, and source/medium. None of those
+exist on the Shopee connector — it carries orders, settlement, returns, wallet
+and products, and nothing about traffic or baskets. Orders have no line items,
+so "average items per checkout" has no denominator either.
+
+**COUPONS ARE A SHOP-LEVEL LUMP, NOT PER ORDER.** Every per-order voucher field
+reads zero, and a single row with a NULL `order_id` carries the totals —
+349,082 in seller discount, 8,470 in Shopee vouchers, 450 in coins. `buildShopee`
+already skips zero-value settlement rows, so that aggregate row is excluded from
+the fee maths, which is correct but also means the discount totals are not yet
+reported anywhere.
+
+**`order_buyer_username` IS POPULATED**, and one buyer appears twice inside a
+single week. That is the opening for repeat-buyer, cohort and retention
+analysis — the honest substitute for the on-platform funnel Shopee does not
+expose.
+
+**OFF-SITE SHOPEE CAMPAIGNS ARE ALREADY CONNECTED**, on a different connector:
+the Meta accounts `BHQ Shopee x ADA` and `BHQ Shopee x EGG`, plus
+`Bangkok Hospital_TH1JHJMNT9 x Lazada CPAS`. Spend against Shopee orders is a
+join across two connectors, not a missing field.
+
+### Recent (September 2026)
+
 **v3.317.0 — the Shopee tab.** First marketplace data in the War Room, and the
 first net revenue figure anywhere in it.
 
