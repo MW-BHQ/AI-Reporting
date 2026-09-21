@@ -699,6 +699,65 @@ function ga4Report(body) {
 global.fetch = async (url, opts = {}) => {
   const u = String(url);
 
+  if (u.includes("connectors.windsor.ai/shopee")) {
+    if (process.env.MOCK_FAIL_CONNECTOR === "shopee") return jsonRes({ error: "simulated failure" }, 500);
+    const want = (new URL(u)).searchParams.get("fields") || "";
+    /**
+     * SHOPEE — THREE TABLES, ANSWERED SEPARATELY, because the server asks for
+     * them in three requests on purpose. Mixing fields from two tables in one
+     * Windsor call cross-joins the rows, and a stub that happily answered a
+     * mixed request would hide that.
+     *
+     * The numbers mirror the real shop: a ~5.35% commission and a ~3.21%
+     * transaction fee, so Shopee's cut lands near 8.6% and escrow is the rest.
+     * `4900 - 262 - 157 = 4481` against a reported escrow of 4480 is Shopee's
+     * own rounding, not a bug to fix.
+     */
+    if (want.includes("order_id") && !want.includes("settlement") && !want.includes("return_")) {
+      return jsonRes([
+        // Two COMPLETED, one SHIPPED — all three are live revenue.
+        { order_id: "A1", order_create_time: "2026-07-03T04:00:00+00:00", order_status: "COMPLETED",
+          order_total_amount: 4900, order_payment_method: "Credit Card/Debit Card", order_currency: "THB" },
+        { order_id: "A2", order_create_time: "2026-07-03T09:00:00+00:00", order_status: "COMPLETED",
+          order_total_amount: 35000, order_payment_method: "QR PromptPay", order_currency: "THB" },
+        { order_id: "A3", order_create_time: "2026-07-20T06:00:00+00:00", order_status: "SHIPPED",
+          order_total_amount: 5200, order_payment_method: "SPayLater", order_currency: "THB" },
+        /**
+         * CANCELLED KEEPS ITS AMOUNT. Shopee does not zero the order row, so
+         * counting every order as revenue overstates the range by exactly this
+         * 22,000 — and it settles at zero escrow, so gross and net would
+         * disagree for a reason nobody could see.
+         */
+        { order_id: "A4", order_create_time: "2026-07-21T02:00:00+00:00", order_status: "CANCELLED",
+          order_total_amount: 22000, order_payment_method: "QR PromptPay", order_currency: "THB" },
+      ]);
+    }
+    if (want.includes("settlement")) {
+      return jsonRes([
+        { settlement_order_id: "A1", settlement_escrow_amount: 4480, settlement_order_selling_price: 4900,
+          settlement_commission_fee: 262, settlement_service_fee: 0, settlement_seller_transaction_fee: 157,
+          settlement_ads_fee: 0, settlement_voucher_from_seller: 0 },
+        { settlement_order_id: "A2", settlement_escrow_amount: 32002, settlement_order_selling_price: 35000,
+          settlement_commission_fee: 1873, settlement_service_fee: 0, settlement_seller_transaction_fee: 1124,
+          settlement_ads_fee: 0, settlement_voucher_from_seller: 0 },
+        // A cancelled order settles at zero and must be skipped, not averaged
+        // in as a 100% fee order.
+        { settlement_order_id: "A4", settlement_escrow_amount: 0, settlement_order_selling_price: 0,
+          settlement_commission_fee: 0, settlement_service_fee: 0, settlement_seller_transaction_fee: 0,
+          settlement_ads_fee: 0, settlement_voucher_from_seller: 0 },
+        // A3 has shipped but NOT settled — settlement lags, and the count of
+        // settled orders must not equal the count of live ones.
+      ]);
+    }
+    if (want.includes("return_")) {
+      return jsonRes([
+        { return_id: "R1", return_order_id: "A1", return_create_time: "2026-07-11T00:00:00+00:00",
+          return_refund_amount: 4900, return_reason: "CHANGE_MIND", return_status: "ACCEPTED" },
+      ]);
+    }
+    return jsonRes([]);
+  }
+
   if (u.includes("connectors.windsor.ai/google_my_business")) {
     if (process.env.MOCK_FAIL_CONNECTOR === "google_my_business") return jsonRes({ error: "simulated failure" }, 500);
     const want = (new URL(u)).searchParams.get("fields") || "";

@@ -217,6 +217,30 @@ expect_field "rp line targetable +" "$REPORT" "d.line.friends.targetableAdded===
 # The baseline is carried too, or the percentage has no denominator.
 expect_field "rp line targ from"   "$REPORT" "d.line.friends.targetableFrom===119913?119913:undefined"
 
+echo "--- Shopee tab (v3.317.0) ---"
+SHOP="/api/shopee?from=$FROM&to=$TO"
+check "shopee tab" GET "$SHOP"
+# Four orders: three live (4,900 + 35,000 + 5,200) and one CANCELLED at 22,000.
+# CANCELLED IS NOT A SALE — Shopee keeps the row at its full amount, so counting
+# every order reads 67,100 and overstates the range by exactly the cancellation.
+expect_field "sp live orders"      "$SHOP" "d.liveOrders===3?3:undefined"
+expect_field "sp gross excl cancel" "$SHOP" "d.gross===45100?45100:undefined"
+expect_field "sp cancelled value"  "$SHOP" "d.cancelledValue===22000?22000:undefined"
+# THE TAKE RATE IS ONE DIVISION OF TWO TOTALS, not a mean of per-order rates —
+# that would weight a 4,900 order the same as a 35,000 one. 3,416 / 39,900.
+expect_field "sp take rate"        "$SHOP" "Math.round(d.settlement.takeRate*10000)===856?856:undefined"
+expect_field "sp escrow"           "$SHOP" "d.settlement.escrow===36482?36482:undefined"
+# A CANCELLED ORDER SETTLES AT ZERO and must be skipped, not counted as an
+# order that paid 100% in fees. Two settled, not three.
+expect_field "sp settled skips 0"  "$SHOP" "d.settlement.settled===2?2:undefined"
+# SETTLEMENT LAGS: the shipped order has not settled, so settled < live. Equal
+# counts would mean the lag was being papered over.
+expect_field "sp lag is visible"   "$SHOP" "d.settlement.settled<d.liveOrders?'ok':undefined"
+# Sold is settled orders only, so it must not equal gross.
+expect_field "sp sold not gross"   "$SHOP" "d.settlement.sold===39900?39900:undefined"
+expect_field "sp returns"          "$SHOP" "d.returns.count===1&&d.returns.value===4900?'ok':undefined"
+expect_field "sp payment split"    "$SHOP" "d.payments.length===3?3:undefined"
+
 echo "--- LINE tab (v3.309.0) ---"
 LINE="/api/line?from=$FROM&to=$TO"
 check "line tab" GET "$LINE"

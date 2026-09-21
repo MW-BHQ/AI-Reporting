@@ -1,5 +1,47 @@
 ### Recent (September 2026)
 
+**v3.317.0 — the Shopee tab.** First marketplace data in the War Room, and the
+first net revenue figure anywhere in it.
+
+**WHAT THE CONNECTOR ACTUALLY HAS**, checked with `get_fields` before a line was
+written: orders, **settlement**, returns, wallet and products. Lazada, checked
+the same way, has a Products table and nothing else — no orders, no revenue —
+so MW parked it ("seems useless") and it is not built.
+
+**THREE CALLS, NOT ONE.** Windsor exposes orders, settlement and returns as
+separate tables on one connector; asking for fields from two of them in a single
+request cross-joins the rows, the same trap the `facebook` connector sets with
+per-row counters.
+
+**CANCELLED IS NOT A SALE.** Shopee keeps a cancelled order at its full amount,
+so counting every row overstates the range — by 22,000 of 67,100 in the fixture.
+Cancellations settle at zero escrow, so gross and net would have disagreed for a
+reason nobody could see.
+
+**THE TAKE RATE IS ONE DIVISION OF TWO TOTALS.** A mean of per-order rates
+weights a ฿990 order like a ฿97,000 one. On MW's shop it comes to **8.56%** —
+5.35% commission plus 3.21% transaction fee.
+
+**SOLD PRICE ONLY** (MW: "dont mind the list price, use the sold price"). The
+connector also reports `settlement_order_original_price`, which runs about
+double the sold price on this shop. Real, striking, and not what was asked for,
+so it is not on the page.
+
+**SETTLEMENT LAGS AND THE PAGE SAYS SO** (MW: "nevermind the settlement lag. we
+will see only what available"). The card reads "2 of 3 orders settled" rather
+than blending an incomplete net into the gross, and the fixture has a shipped
+order that has not settled so the two counts can never silently converge.
+
+**SVG COLUMNS, NOT `.bar`.** The first cut reused the funnel's STACKED bar —
+its spans are `display:block;float:left` at full height, so a column chart built
+from it rendered as two full-height blocks. SVG also needs no print twin.
+
+**Negative tests, all three confirmed failing before revert:** counting
+cancelled orders as revenue; including zero-value settlement rows; averaging
+per-order take rates instead of dividing the totals.
+
+### Recent (September 2026)
+
 **v3.316.0 — the Windsor LINE connector and its dead code are gone.** MW is
 freeing two connector slots for Shopee and Lazada, so anything Windsor-shaped
 that nothing reads had to go. **156 lines removed, 30 added.**

@@ -2239,6 +2239,11 @@
         Broadcasts
       </div>
 
+      <div class="nav-item sub" data-view="shopee">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h16l-1.2 11.2a2 2 0 0 1-2 1.8H7.2a2 2 0 0 1-2-1.8L4 8z"/><path d="M8.5 8V6.2a3.5 3.5 0 1 1 7 0V8"/></svg>
+        Shopee
+      </div>
+
       <div class="nav-sep"></div>
       <div class="nav-group">E-commerce</div>
       <div class="nav-item sub" data-view="ecom">
@@ -2378,6 +2383,15 @@ const RED = {
   // LINE open rate on the campaign tab. PROVISIONAL — MW's export averages
   // about 27% across 1,000 broadcasts, so 15% is roughly half the norm. Re-set
   // once there are enough tagged campaigns to see the spread.
+  /**
+   * Shopee's cut of the sold price. The shop runs near 8.6% — a 5.35%
+   * commission plus a 3.21% transaction fee — so 10% flags a change in the fee
+   * structure rather than today's normal.
+   */
+  shopeeTakeRate: 0.10,
+  // Cancelled orders as a share of all orders. Marketplace cancellation is
+  // normal; a fifth of them is not.
+  shopeeCancelRate: 0.20,
   lineOpenRate: 0.15,
   // Share of friends who have blocked the account. MW's export sits at 38%, so
   // this flags a materially worse state rather than today's normal.
@@ -2442,6 +2456,7 @@ const S = {
   gads: null, gadsKey: null, gadsLoading: false, gadsError: null,
   bclub: null, bclubKey: null, bclubLoading: false, bclubError: null,
   line: null, lineKey: null, lineLoading: false, lineError: null,
+  shopee: null, shopeeKey: null, shopeeLoading: false, shopeeError: null,
   page: null, pageKey: null, pageLoading: false, pageError: null, pageUrl: '',
   audiencesLoading: false, audiencesError: null,
   me: null, users: null, usersLoading: false, usersError: null,
@@ -3085,6 +3100,7 @@ const TITLES = {
   audiences: ['Audiences', 'Meta audience sets ranked by cost per first-degree result'],
   bclub: ['Better Club', 'Membership revenue, and whether the members we win come back'],
   line: ['LINE OA', 'What we broadcast, who received it, and what it cost us in blocks'],
+  shopee: ['Shopee', 'What the storefront sold, and what actually reached the bank'],
   ecom: ['E-commerce', 'Package sales across every online sales channel'],
   ecomcentre: ['E-commerce · Centers', 'Which centers sell, and through which channel'],
   ecompackages: ['E-commerce · Packages', 'Every product, grouped by name — promo re-codes count once'],
@@ -3176,6 +3192,17 @@ async function loadBclub(refresh = false) {
   S.bclub = await res.json(); S.bclubKey = key;
   setStatus('ok', S.bclub.cached ? `cached ${S.bclub.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
   return S.bclub;
+}
+
+async function loadShopee(refresh = false) {
+  const key = `${$('from').value}|${$('to').value}`;
+  if (!refresh && S.shopeeKey === key && S.shopee) return S.shopee;
+  setStatus('busy', 'reading Shopee\u2026');
+  const res = await fetch(`/api/shopee?from=${$('from').value}&to=${$('to').value}${refresh?'&refresh=1':''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,220)}`);
+  S.shopee = await res.json(); S.shopeeKey = key;
+  setStatus('ok', S.shopee.cached ? `cached ${S.shopee.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.shopee;
 }
 
 async function loadLine(refresh = false) {
@@ -3418,6 +3445,7 @@ $('loadBtn').addEventListener('click', async () => {
     else if (S.view === 'gads') { S.gadsError = null; await loadGads(true); }
     else if (S.view === 'bclub') { S.bclubError = null; await loadBclub(true); }
     else if (S.view === 'line') { S.lineError = null; await loadLine(true); }
+    else if (S.view === 'shopee') { S.shopeeError = null; await loadShopee(true); }
     else if (S.view === 'pages') { S.pageError = null; await loadPage(true); }
     else if (S.view === 'users') { S.users = null; await loadUsers(); }
     else if (S.view === 'topics' && S.topicTerm) { await loadTopic(S.topicTerm); }
@@ -3506,6 +3534,7 @@ function render() {
   else if (S.view === 'gads') renderGads();
   else if (S.view === 'bclub') renderBclub();
   else if (S.view === 'line') renderLine();
+  else if (S.view === 'shopee') renderShopee();
   else if (S.view === 'report') renderReport();
   else if (S.view === 'pages') renderPages();
   else if (S.view === 'users') renderUsers();
@@ -7238,6 +7267,7 @@ const VIEW_LOADERS = {
   gadsbench:     { load: () => loadGadsBench(),     err: 'gadsbenchError', busy: 'gadsbenchLoading', what: 'the Google Ads benchmark' },
   bclub:         { load: () => loadBclub(),         err: 'bclubError',     busy: 'bclubLoading',     what: 'the Better Club sheet' },
   line:          { load: () => loadLine(),          err: 'lineError',      busy: 'lineLoading',      what: 'the LINE sheets' },
+  shopee:        { load: () => loadShopee(),        err: 'shopeeError',    busy: 'shopeeLoading',    what: 'the Shopee storefront' },
   ecomroas:      { load: () => loadEcomRoas(),      err: 'ecomroasError',  busy: 'ecomroasLoading',  what: 'marketplace ad performance' },
   users:         { load: () => loadUsers(),         err: 'usersError',     busy: 'usersLoading',     what: 'the access list' },
 };
@@ -7892,6 +7922,127 @@ function renderGads() {
  * a volume; delivered against a targetable audience that is shrinking is a
  * story, and nothing else in the deck can see it.
  */
+/**
+ * THE SHOPEE TAB.
+ *
+ * The question this answers and nothing else in the deck can: what did the
+ * storefront sell, and how much of it actually reached the bank. Gross is what
+ * customers paid; escrow is what Shopee transferred after its cut.
+ *
+ * SOLD PRICE THROUGHOUT (MW: "dont mind the list price, use the sold price").
+ * The connector also reports an original price that runs about double on this
+ * shop; it is deliberately not on the page.
+ */
+function renderShopee() {
+  const d = S.shopee;
+  if (S.shopeeError) { const m = S.shopeeError; $('viewRoot').innerHTML = errorState(m); S.shopeeError = null; return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('shopee', 'Reads the Shopee storefront \u2014 orders, settlement and returns.'); return; }
+  if (!d.available) { $('viewRoot').innerHTML = errorState(`Shopee unavailable \u2014 ${esc(d.reason || 'unknown error')}`); return; }
+
+  const st = d.settlement || {};
+  const rt = d.returns || {};
+  const maxDay = Math.max(1, ...d.daily.map(x => x.value));
+
+  /**
+   * CANCELLATIONS ARE OUT OF GROSS, and the card says how much was lost rather
+   * than hiding it: Shopee keeps a cancelled order at its full amount, so
+   * counting every row would overstate the range by exactly that sum.
+   */
+  const head = `<div class="grid g-4">
+    <div class="stat card"><div class="lab">Orders</div><div class="val">${num(d.liveOrders)}</div>
+      <div class="sub">${d.cancelled?`${num(d.cancelled)} cancelled, excluded`:'none cancelled'}</div></div>
+    <div class="stat card"><div class="lab">Gross sales (THB)</div><div class="val">${num(d.gross,{money:true,bare:true})}</div>
+      <div class="sub">what customers paid</div></div>
+    <div class="stat card"><div class="lab">Average order (THB)</div><div class="val">${d.aov!=null?num(d.aov,{money:true,bare:true}):'\u2014'}</div>
+      <div class="sub">across live orders</div></div>
+    <div class="stat card"><div class="lab">Cancelled</div>
+      <div class="val" style="color:${d.cancelRate!=null&&d.cancelRate>RED.shopeeCancelRate?'var(--rose)':'var(--ink)'}">${
+        d.cancelRate!=null?num(d.cancelRate*100,{dp:1})+'%':'\u2014'}</div>
+      <div class="sub">${d.cancelledValue?`THB ${num(d.cancelledValue,{money:true,bare:true})} not sold`:'nothing lost'}</div></div>
+  </div>`;
+
+  /**
+   * THE MONEY THAT ARRIVED. `escrow` is the transfer; everything between it and
+   * the sold price is Shopee's. The take rate divides the two TOTALS once — a
+   * mean of per-order rates would weight a 990-baht order like a 97,000 one.
+   *
+   * SETTLED ORDERS ARE FEWER THAN LIVE ONES and the card says so. Settlement
+   * lags shipping by days, so a recent range is always partly unsettled; MW
+   * accepted that ("we will see only what available") and it is labelled rather
+   * than blended into the gross.
+   */
+  const money = st.available ? `<div class="card mt">
+    <div class="card-title">What reached the bank &middot; ${num(st.settled)} of ${num(d.liveOrders)} orders settled</div>
+    <div class="grid g-4">
+      <div class="stat"><div class="lab">Sold (THB)</div><div class="val">${num(st.sold,{money:true,bare:true})}</div>
+        <div class="sub">settled orders only</div></div>
+      <div class="stat"><div class="lab">Received (THB)</div><div class="val">${num(st.escrow,{money:true,bare:true})}</div>
+        <div class="sub">${st.netRate!=null?num(st.netRate*100,{dp:1})+'% of sold':'\u2014'}</div></div>
+      <div class="stat"><div class="lab">Shopee's cut (THB)</div>
+        <div class="val" style="color:${st.takeRate!=null&&st.takeRate>RED.shopeeTakeRate?'var(--rose)':'var(--ink)'}">${num(st.fees,{money:true,bare:true})}</div>
+        <div class="sub">${st.takeRate!=null?num(st.takeRate*100,{dp:2})+'% take rate':'\u2014'}</div></div>
+      <div class="stat"><div class="lab">Returns (THB)</div><div class="val">${rt.available?num(rt.value,{money:true,bare:true}):'\u2014'}</div>
+        <div class="sub">${rt.available?`${num(rt.count)} refund${rt.count===1?'':'s'}`:'not measured'}</div></div>
+    </div>
+    <table class="roomy mt"><thead><tr><th>Fee</th><th class="num">THB</th><th class="num">% of sold</th></tr></thead><tbody>
+      ${[['Commission', st.commission], ['Transaction fee', st.txn], ['Service fee', st.service],
+         ['Ads fee', st.ads], ['Seller vouchers', st.voucher]]
+        .filter(([, v]) => v > 0)
+        .map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${num(v,{money:true,bare:true})}</td>
+          <td class="num">${st.sold?num(v/st.sold*100,{dp:2})+'%':'\u2014'}</td></tr>`).join('')}
+      <tr class="tot"><td class="strong">Total taken</td><td class="num">${num(st.fees,{money:true,bare:true})}</td>
+        <td class="num">${st.takeRate!=null?num(st.takeRate*100,{dp:2})+'%':'\u2014'}</td></tr>
+    </tbody></table>
+  </div>` : '<div class="card mt"><div class="note" style="margin-top:0;">Settlement data was unavailable this run, so the amount received is not measured &mdash; not zero.</div></div>';
+
+  const pay = `<div class="card mt">
+    <div class="card-title">How they paid</div>
+    <table class="roomy"><thead><tr><th>Method</th><th class="num">Orders</th><th class="num">Value (THB)</th><th class="num">Share</th></tr></thead><tbody>
+      ${d.payments.map(p => `<tr><td>${esc(p.method)}</td><td class="num">${num(p.orders)}</td>
+        <td class="num">${num(p.value,{money:true,bare:true})}</td>
+        <td class="num">${d.gross?num(p.value/d.gross*100,{dp:1})+'%':'\u2014'}</td></tr>`).join('')}
+    </tbody></table>
+  </div>`;
+
+  /**
+   * SVG COLUMNS, NOT `.bar`. The first cut reused `.bar`, which is the funnel's
+   * STACKED bar — its spans are `display:block;float:left` and full height, so
+   * a column chart built from it came out as two full-height blocks. `.bar` is
+   * one shape with one meaning; this is a different shape.
+   *
+   * SVG also prints. The print pipeline swaps canvases for SVG twins, and
+   * something already drawn as SVG needs no twin at all.
+   */
+  const CW = 720, CH = 120;
+  const bw = CW / Math.max(d.daily.length, 1);
+  const cols = d.daily.map((x, i) => {
+    const h = Math.max(1, (x.value / maxDay) * (CH - 2));
+    return `<rect x="${(i*bw).toFixed(1)}" y="${(CH-h).toFixed(1)}" width="${Math.max(1, bw-1.5).toFixed(1)}" height="${h.toFixed(1)}"
+      rx="2" fill="#EE4D2D"><title>${esc(humanDate(x.d))}: THB ${num(x.value,{money:true,bare:true})} \u00b7 ${num(x.orders)} order${x.orders===1?'':'s'}</title></rect>`;
+  }).join('');
+  const trend = d.daily.length > 1 ? `<div class="card mt">
+    <div class="card-title">Sales by day (THB)</div>
+    <svg viewBox="0 0 ${CW} ${CH}" width="100%" height="${CH}" preserveAspectRatio="none" style="display:block;">${cols}</svg>
+    <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
+      <span>${esc(humanDate(d.daily[0].d))}</span><span>${esc(humanDate(d.daily[d.daily.length-1].d))}</span></div>
+  </div>` : '';
+
+  const ret = (rt.available && rt.reasons.length) ? `<div class="card mt">
+    <div class="card-title">Why they returned</div>
+    <table class="roomy"><thead><tr><th>Reason</th><th class="num">Returns</th><th class="num">Refunded (THB)</th></tr></thead><tbody>
+      ${rt.reasons.map(r => `<tr><td>${esc(r.reason)}</td><td class="num">${num(r.count)}</td>
+        <td class="num">${num(r.value,{money:true,bare:true})}</td></tr>`).join('')}
+    </tbody></table>
+  </div>` : '';
+
+  $('viewRoot').innerHTML = `
+    <div class="search"><div>
+      <div class="big">Shopee <span class="pill">BangkokHospital_Official</span></div>
+      <div class="hint">One storefront. Gross is what customers paid; received is what Shopee transferred after its cut.</div>
+    </div></div>
+    ${head}${money}${trend}${pay}${ret}`;
+}
+
 function renderLine() {
   const d = S.line;
   if (S.lineError) { const m = S.lineError; $('viewRoot').innerHTML = errorState(m); S.lineError = null; return; }
@@ -11460,7 +11611,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.316.0';
+const CLIENT_BUILD = '3.317.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

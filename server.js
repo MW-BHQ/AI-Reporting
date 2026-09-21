@@ -953,6 +953,7 @@ const TABS = [
   { id: "gads",      label: "Google Ads" },
   { id: "bclub",     label: "Better Club" },
   { id: "line",      label: "LINE OA" },
+  { id: "shopee",    label: "Shopee" },
   { id: "ecom",      label: "E-commerce" },
   { id: "ecomcentre",label: "E-commerce · Centres" },
   { id: "ecompackages", label: "E-commerce · Packages" },
@@ -10935,6 +10936,130 @@ app.get("/api/page", requireTab("pages"), async (req, res) => {
  * neither means much without the other: delivered is a volume, delivered
  * against a targetable audience that is shrinking is a story.
  */
+/**
+ * SHOPEE — the marketplace storefront, one shop (`BangkokHospital_Official`).
+ *
+ * THREE SEPARATE CALLS, NOT ONE. Windsor exposes orders, settlement and returns
+ * as different tables on the same connector; asking for fields from two of them
+ * in a single request fans the rows out into a cross join, which is the same
+ * trap the `facebook` connector sets with per-row counters. Each table is
+ * fetched on its own and joined here on the order id.
+ *
+ * SOLD PRICE, NOT LIST PRICE (MW: "dont mind the list price, use the sold
+ * price"). The connector also reports `settlement_order_original_price`, which
+ * runs roughly double the sold price on this shop — a real number, and not the
+ * one being asked for.
+ *
+ * SETTLEMENT LAGS AND THAT IS ACCEPTED (MW: "nevermind the settlement lag. we
+ * will see only what available"). An order settles days after it ships, so the
+ * net figure for a recent range is incomplete by design. It is labelled as
+ * settled rather than silently blended into the gross.
+ */
+async function buildShopee(from, to) {
+  const call = (fields) => windsor("shopee", fields, from, to).catch((e) => {
+    logJson("WARNING", "shopee_table_unavailable", { fields: fields[0], error: String(e.message || e) });
+    return null;
+  });
+  const [orders, settle, returns] = await Promise.all([
+    call(["order_id", "order_create_time", "order_status", "order_total_amount",
+      "order_payment_method", "order_currency"]),
+    call(["settlement_order_id", "settlement_escrow_amount", "settlement_order_selling_price",
+      "settlement_commission_fee", "settlement_service_fee", "settlement_seller_transaction_fee",
+      "settlement_ads_fee", "settlement_voucher_from_seller"]),
+    call(["return_id", "return_order_id", "return_create_time", "return_refund_amount",
+      "return_reason", "return_status"]),
+  ]);
+  if (orders === null) return { available: false, reason: "Shopee orders unavailable" };
+
+  const day = (v) => String(v || "").slice(0, 10);
+  /**
+   * CANCELLED IS NOT A SALE. Shopee keeps the row with its original amount, so
+   * counting every order as revenue overstates the month by whatever was
+   * cancelled — and cancellations settle at zero escrow, so gross and net
+   * would disagree for a reason nobody could see.
+   */
+  const CANCELLED = /cancel|unpaid|invalid/i;
+  const live = orders.filter((r) => !CANCELLED.test(String(r.order_status || "")));
+  const cancelled = orders.filter((r) => CANCELLED.test(String(r.order_status || "")));
+
+  const gross = live.reduce((a, r) => a + n(r.order_total_amount), 0);
+  const cancelledValue = cancelled.reduce((a, r) => a + n(r.order_total_amount), 0);
+
+  const byStatus = new Map(), byPayment = new Map(), byDay = new Map();
+  for (const r of orders) {
+    const st = String(r.order_status || "unknown");
+    byStatus.set(st, (byStatus.get(st) || 0) + 1);
+  }
+  for (const r of live) {
+    const pm = String(r.order_payment_method || "unknown");
+    const p = byPayment.get(pm) || { method: pm, orders: 0, value: 0 };
+    p.orders += 1; p.value += n(r.order_total_amount);
+    byPayment.set(pm, p);
+    const d = day(r.order_create_time);
+    if (!d) continue;
+    const e = byDay.get(d) || { d, orders: 0, value: 0 };
+    e.orders += 1; e.value += n(r.order_total_amount);
+    byDay.set(d, e);
+  }
+
+  /**
+   * FEES AND NET, from the settlement table. `escrow_amount` is what actually
+   * reaches the bank; everything between it and the sold price is Shopee's.
+   * The take rate is computed ONCE at the end from the two totals — a mean of
+   * per-order rates would weight a ฿990 order the same as a ฿97,000 one.
+   */
+  let sold = 0, escrow = 0, commission = 0, service = 0, txn = 0, ads = 0, voucher = 0, settled = 0;
+  for (const r of (settle || [])) {
+    const sp = n(r.settlement_order_selling_price);
+    if (!sp) continue;                       // cancelled rows settle at zero
+    settled += 1;
+    sold += sp;
+    escrow += n(r.settlement_escrow_amount);
+    commission += n(r.settlement_commission_fee);
+    service += n(r.settlement_service_fee);
+    txn += n(r.settlement_seller_transaction_fee);
+    ads += n(r.settlement_ads_fee);
+    voucher += n(r.settlement_voucher_from_seller);
+  }
+  const fees = commission + service + txn + ads;
+
+  const byReason = new Map();
+  for (const r of (returns || [])) {
+    const k = String(r.return_reason || "unknown");
+    const e = byReason.get(k) || { reason: k, count: 0, value: 0 };
+    e.count += 1; e.value += n(r.return_refund_amount);
+    byReason.set(k, e);
+  }
+
+  return {
+    available: true,
+    orders: orders.length,
+    liveOrders: live.length,
+    gross,
+    aov: live.length ? gross / live.length : null,
+    cancelled: cancelled.length,
+    cancelledValue,
+    cancelRate: orders.length ? cancelled.length / orders.length : null,
+    settlement: settle === null ? { available: false } : {
+      available: true, settled, sold, escrow,
+      commission, service, txn, ads, voucher, fees,
+      // One division at the end, never an average of per-order rates.
+      takeRate: sold ? fees / sold : null,
+      netRate: sold ? escrow / sold : null,
+    },
+    returns: returns === null ? { available: false } : {
+      available: true,
+      count: returns.length,
+      value: returns.reduce((a, r) => a + n(r.return_refund_amount), 0),
+      reasons: [...byReason.values()].sort((a, b) => b.count - a.count).slice(0, 10),
+    },
+    statuses: [...byStatus.entries()].map(([status, count]) => ({ status, count }))
+      .sort((a, b) => b.count - a.count),
+    payments: [...byPayment.values()].sort((a, b) => b.value - a.value),
+    daily: [...byDay.values()].sort((a, b) => a.d.localeCompare(b.d)),
+  };
+}
+
 async function buildLineTab(from, to) {
   /**
    * WHAT THE BROADCASTS ACTUALLY DROVE — sessions and key events, per campaign,
@@ -11043,6 +11168,18 @@ async function buildLineTab(from, to) {
       ? (bc.delivered / bc.sends) / f.targetable : null,
   };
 }
+
+app.get("/api/shopee", requireTab("shopee"), async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  try {
+    const out = await withCache(`shopee:${from}:${to}`, req.query.refresh === "1", () => buildShopee(from, to));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "shopee_failed", { error: String(err.message || err) });
+    res.status(err.status || 500).json({ error: err.message || "Shopee report failed" });
+  }
+});
 
 app.get("/api/line", requireTab("line"), async (req, res) => {
   const { from, to } = req.query;
