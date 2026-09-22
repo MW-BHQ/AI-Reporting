@@ -717,11 +717,14 @@ global.fetch = async (url, opts = {}) => {
       return jsonRes([
         // Two COMPLETED, one SHIPPED — all three are live revenue.
         { order_id: "A1", order_create_time: "2026-07-03T04:00:00+00:00", order_status: "COMPLETED",
-          order_total_amount: 4900, order_payment_method: "Credit Card/Debit Card", order_currency: "THB" },
+          order_total_amount: 4900, order_payment_method: "Credit Card/Debit Card", order_currency: "THB",
+          order_buyer_username: "repeat_buyer" },
         { order_id: "A2", order_create_time: "2026-07-03T09:00:00+00:00", order_status: "COMPLETED",
-          order_total_amount: 35000, order_payment_method: "QR PromptPay", order_currency: "THB" },
+          order_total_amount: 35000, order_payment_method: "QR PromptPay", order_currency: "THB",
+          order_buyer_username: "one_off" },
         { order_id: "A3", order_create_time: "2026-07-20T06:00:00+00:00", order_status: "SHIPPED",
-          order_total_amount: 5200, order_payment_method: "SPayLater", order_currency: "THB" },
+          order_total_amount: 5200, order_payment_method: "SPayLater", order_currency: "THB",
+          order_buyer_username: "repeat_buyer" },
         /**
          * CANCELLED KEEPS ITS AMOUNT. Shopee does not zero the order row, so
          * counting every order as revenue overstates the range by exactly this
@@ -729,7 +732,8 @@ global.fetch = async (url, opts = {}) => {
          * disagree for a reason nobody could see.
          */
         { order_id: "A4", order_create_time: "2026-07-21T02:00:00+00:00", order_status: "CANCELLED",
-          order_total_amount: 22000, order_payment_method: "QR PromptPay", order_currency: "THB" },
+          order_total_amount: 22000, order_payment_method: "QR PromptPay", order_currency: "THB",
+          order_buyer_username: "one_off" },
       ]);
     }
     if (want.includes("settlement")) {
@@ -745,6 +749,17 @@ global.fetch = async (url, opts = {}) => {
         { settlement_order_id: "A4", settlement_escrow_amount: 0, settlement_order_selling_price: 0,
           settlement_commission_fee: 0, settlement_service_fee: 0, settlement_seller_transaction_fee: 0,
           settlement_ads_fee: 0, settlement_voucher_from_seller: 0 },
+        /**
+         * THE SHOP-LEVEL DISCOUNT LUMP, with a NULL order id — exactly how the
+         * API returns it. Skipped by the fee maths because its selling price is
+         * zero, and it is the ONLY discount figure the connector gives, so it
+         * has to be captured on the way past rather than dropped.
+         */
+        { settlement_order_id: null, settlement_escrow_amount: 0, settlement_order_selling_price: 0,
+          settlement_commission_fee: 0, settlement_service_fee: 0, settlement_seller_transaction_fee: 0,
+          settlement_ads_fee: 0, settlement_voucher_from_seller: 0,
+          settlement_seller_discount: 349082, settlement_shopee_discount: 0,
+          settlement_voucher_from_shopee: 8470, settlement_coins: 450 },
         // A3 has shipped but NOT settled — settlement lags, and the count of
         // settled orders must not equal the count of live ones.
       ]);

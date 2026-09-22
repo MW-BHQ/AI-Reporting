@@ -240,6 +240,29 @@ expect_field "sp lag is visible"   "$SHOP" "d.settlement.settled<d.liveOrders?'o
 expect_field "sp sold not gross"   "$SHOP" "d.settlement.sold===39900?39900:undefined"
 expect_field "sp returns"          "$SHOP" "d.returns.count===1&&d.returns.value===4900?'ok':undefined"
 expect_field "sp payment split"    "$SHOP" "d.payments.length===3?3:undefined"
+# REPEAT BUYERS — the honest substitute for the on-platform funnel Shopee does
+# not expose. Two buyers, one of whom ordered twice (4,900 + 5,200).
+expect_field "sp repeat buyers"    "$SHOP" "d.buyers.repeat===1&&d.buyers.total===2?'ok':undefined"
+expect_field "sp repeat value"     "$SHOP" "d.buyers.repeatValue===10100?10100:undefined"
+# THE CANCELLED ORDER'S BUYER MUST NOT COUNT AS A LIVE ONE, or a buyer who
+# bought nothing inflates the denominator and depresses the repeat rate.
+expect_field "sp buyers are live"  "$SHOP" "d.buyers.top.reduce((a,b)=>a+b.value,0)===45100?'ok':undefined"
+# OFF-SITE SPEND COMES FROM META, matched on the account NAME containing
+# "shopee" — the Shopee connector has no traffic source at all.
+expect_field "sp ad spend joined"  "$SHOP" "d.ads.spend===10?10:undefined"
+expect_field "sp ad account named" "$SHOP" "d.ads.accounts.join()==='BHQ Shopee x EGG'?'ok':undefined"
+# DISCOUNTS ARE A SHOP-LEVEL LUMP on a row with a NULL order id. It is skipped
+# by the fee maths (selling price zero) and must still be captured on the way
+# past — it is the only discount figure the connector gives.
+expect_field "sp promo lump kept"  "$SHOP" "d.promo.sellerDiscount===349082?349082:undefined"
+expect_field "sp promo not in fees" "$SHOP" "d.settlement.fees===3416?3416:undefined"
+# CANCELLATION BY METHOD: QR PromptPay took two orders and lost one.
+expect_field "sp pay risk split"   "$SHOP" "d.paymentRisk.find(p=>/PromptPay/.test(p.method)).cancelled===1?'ok':undefined"
+# BANDS, NOT A MEAN — this catalogue is bimodal and an average describes no real
+# order. Two small orders and one large, in different bands.
+expect_field "sp bands bimodal"    "$SHOP" "d.bands.filter(b=>b.orders).length===2?2:undefined"
+# Bangkok time: order_create_time carries +00:00, so 04:00Z is 11:00 local.
+expect_field "sp hour is bangkok"  "$SHOP" "d.hours[11].orders===1?'ok':undefined"
 
 echo "--- LINE tab (v3.309.0) ---"
 LINE="/api/line?from=$FROM&to=$TO"

@@ -10960,14 +10960,28 @@ async function buildShopee(from, to) {
     logJson("WARNING", "shopee_table_unavailable", { fields: fields[0], error: String(e.message || e) });
     return null;
   });
-  const [orders, settle, returns] = await Promise.all([
+  /**
+   * OFF-SITE SHOPEE ADS COME FROM META, NOT SHOPEE. The Shopee connector has no
+   * traffic source at all, but two Meta accounts exist purely to drive this
+   * storefront — `BHQ Shopee x ADA` and `BHQ Shopee x EGG`. Spend against
+   * orders is a join across connectors, not a missing field.
+   *
+   * IT IS SPEND BESIDE ORDERS, NOT ATTRIBUTION, and the UI says so. Shopee
+   * never tells us which order came from an ad, and an ad seen today can sell
+   * next week. Cost per order here is a ratio of two totals over one window —
+   * useful as a trend, wrong as a claim about any single sale.
+   */
+  const metaShopee = windsor("facebook", ["account_name", "spend"], from, to).catch(() => null);
+
+  const [orders, settle, returns, metaRows] = await Promise.all([
     call(["order_id", "order_create_time", "order_status", "order_total_amount",
-      "order_payment_method", "order_currency"]),
+      "order_payment_method", "order_currency", "order_buyer_username"]),
     call(["settlement_order_id", "settlement_escrow_amount", "settlement_order_selling_price",
       "settlement_commission_fee", "settlement_service_fee", "settlement_seller_transaction_fee",
       "settlement_ads_fee", "settlement_voucher_from_seller"]),
     call(["return_id", "return_order_id", "return_create_time", "return_refund_amount",
       "return_reason", "return_status"]),
+    metaShopee,
   ]);
   if (orders === null) return { available: false, reason: "Shopee orders unavailable" };
 
@@ -11009,9 +11023,24 @@ async function buildShopee(from, to) {
    * per-order rates would weight a ฿990 order the same as a ฿97,000 one.
    */
   let sold = 0, escrow = 0, commission = 0, service = 0, txn = 0, ads = 0, voucher = 0, settled = 0;
+  /**
+   * DISCOUNTS ARRIVE AS A SHOP-LEVEL LUMP. Every per-order voucher field reads
+   * zero and one row with a NULL `order_id` carries the totals. It is kept here
+   * rather than dropped with the other zero-value rows, because it is the only
+   * discount figure the connector gives — and it can never be attributed to an
+   * order, which the UI states.
+   */
+  const promo = { sellerDiscount: 0, shopeeDiscount: 0, sellerVoucher: 0, shopeeVoucher: 0, coins: 0 };
   for (const r of (settle || [])) {
     const sp = n(r.settlement_order_selling_price);
-    if (!sp) continue;                       // cancelled rows settle at zero
+    if (!sp) {
+      promo.sellerDiscount += n(r.settlement_seller_discount);
+      promo.shopeeDiscount += n(r.settlement_shopee_discount);
+      promo.sellerVoucher += n(r.settlement_voucher_from_seller);
+      promo.shopeeVoucher += n(r.settlement_voucher_from_shopee);
+      promo.coins += n(r.settlement_coins);
+      continue;                              // cancelled rows settle at zero
+    }
     settled += 1;
     sold += sp;
     escrow += n(r.settlement_escrow_amount);
@@ -11021,7 +11050,83 @@ async function buildShopee(from, to) {
     ads += n(r.settlement_ads_fee);
     voucher += n(r.settlement_voucher_from_seller);
   }
+  /**
+   * Meta accounts whose NAME mentions Shopee. Matching on the name rather than
+   * a hard-coded id so a third agency account joins by being named, not by a
+   * code change — and if the naming ever drifts the figure goes to null rather
+   * than quietly counting the wrong accounts.
+   */
+  const shopeeAds = (metaRows || []).filter((r) => /shopee/i.test(String(r.account_name || "")));
+  const adSpend = metaRows === null ? null : shopeeAds.reduce((a, r) => a + n(r.spend), 0);
   const fees = commission + service + txn + ads;
+
+  /**
+   * REPEAT BUYERS — the honest substitute for the on-platform funnel Shopee
+   * does not expose (MW asked for product/repeat views; the connector has no
+   * traffic at all). `order_buyer_username` is populated, and one buyer already
+   * appears twice inside a single week.
+   *
+   * WITHIN THE WINDOW ONLY, and the UI says so. A buyer whose first order was
+   * last month reads as "new" here, so this understates repeat behaviour on a
+   * short range — a real limit, and better stated than silently wrong.
+   */
+  const byBuyer = new Map();
+  for (const r of live) {
+    const b = String(r.order_buyer_username || "").trim();
+    if (!b) continue;
+    const e = byBuyer.get(b) || { buyer: b, orders: 0, value: 0 };
+    e.orders += 1; e.value += n(r.order_total_amount);
+    byBuyer.set(b, e);
+  }
+  const buyers = [...byBuyer.values()];
+  const repeatBuyers = buyers.filter((b) => b.orders > 1);
+  const repeatValue = repeatBuyers.reduce((a, b) => a + b.value, 0);
+
+  /**
+   * CANCELLATION BY PAYMENT METHOD. A method that takes the order and then
+   * fails is a checkout problem, not a demand problem, and the two look
+   * identical in a single cancellation rate.
+   */
+  const byPay = new Map();
+  for (const r of orders) {
+    const pm = String(r.order_payment_method || "unknown");
+    const e = byPay.get(pm) || { method: pm, orders: 0, cancelled: 0, value: 0 };
+    e.orders += 1;
+    if (CANCELLED.test(String(r.order_status || ""))) e.cancelled += 1;
+    else e.value += n(r.order_total_amount);
+    byPay.set(pm, e);
+  }
+
+  /**
+   * WHEN ORDERS HAPPEN, in Bangkok time. `order_create_time` carries a `+00:00`
+   * offset, so the hour is shifted by seven — reading it raw would put the
+   * evening peak in the early afternoon and send every broadcast at the wrong
+   * time.
+   */
+  const byHour = Array.from({ length: 24 }, (_, h) => ({ hour: h, orders: 0, value: 0 }));
+  const byWeekday = Array.from({ length: 7 }, (_, d) => ({ day: d, orders: 0, value: 0 }));
+  for (const r of live) {
+    const t = Date.parse(String(r.order_create_time || ""));
+    if (!Number.isFinite(t)) continue;
+    const bkk = new Date(t + 7 * 3600 * 1000);
+    const h = bkk.getUTCHours(), wd = bkk.getUTCDay();
+    byHour[h].orders += 1; byHour[h].value += n(r.order_total_amount);
+    byWeekday[wd].orders += 1; byWeekday[wd].value += n(r.order_total_amount);
+  }
+
+  /**
+   * ORDER VALUE BANDS. A mean hides a bimodal catalogue, and this shop is
+   * visibly bimodal — a cluster of small packages and a cluster of large ones.
+   * An average sitting between them describes no order that was ever placed.
+   */
+  const BANDS = [[0, 1000], [1000, 3000], [3000, 6000], [6000, 12000],
+                 [12000, 30000], [30000, 60000], [60000, Infinity]];
+  const bands = BANDS.map(([lo, hi]) => ({ lo, hi: hi === Infinity ? null : hi, orders: 0, value: 0 }));
+  for (const r of live) {
+    const v = n(r.order_total_amount);
+    const i = BANDS.findIndex(([lo, hi]) => v >= lo && v < hi);
+    if (i >= 0) { bands[i].orders += 1; bands[i].value += v; }
+  }
 
   const byReason = new Map();
   for (const r of (returns || [])) {
@@ -11053,6 +11158,26 @@ async function buildShopee(from, to) {
       value: returns.reduce((a, r) => a + n(r.return_refund_amount), 0),
       reasons: [...byReason.values()].sort((a, b) => b.count - a.count).slice(0, 10),
     },
+    buyers: {
+      total: buyers.length,
+      repeat: repeatBuyers.length,
+      repeatRate: buyers.length ? repeatBuyers.length / buyers.length : null,
+      repeatValue,
+      repeatValueShare: gross ? repeatValue / gross : null,
+      ordersPerBuyer: buyers.length ? live.length / buyers.length : null,
+      top: buyers.sort((a, b) => b.value - a.value).slice(0, 10),
+    },
+    promo,
+    ads: adSpend === null ? { available: false } : {
+      available: true, spend: adSpend,
+      accounts: shopeeAds.map((r) => r.account_name),
+      costPerOrder: live.length ? adSpend / live.length : null,
+      // Spend as a share of what the storefront sold in the same window.
+      costOfSale: gross ? adSpend / gross : null,
+    },
+    paymentRisk: [...byPay.values()].map((p) => ({ ...p,
+      cancelRate: p.orders ? p.cancelled / p.orders : null })).sort((a, b) => b.orders - a.orders),
+    hours: byHour, weekdays: byWeekday, bands,
     statuses: [...byStatus.entries()].map(([status, count]) => ({ status, count }))
       .sort((a, b) => b.count - a.count),
     payments: [...byPayment.values()].sort((a, b) => b.value - a.value),

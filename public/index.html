@@ -2391,6 +2391,12 @@ const RED = {
   // Cancelled orders as a share of all orders. Marketplace cancellation is
   // normal; a fifth of them is not.
   shopeeCancelRate: 0.20,
+  /**
+   * Repeat buyers as a share of buyers, WITHIN the range. Health packages are a
+   * considered purchase, so a low repeat rate is normal and this flags a
+   * storefront that is purely one-and-done rather than a bad month.
+   */
+  shopeeRepeatRate: 0.05,
   lineOpenRate: 0.15,
   // Share of friends who have blocked the account. MW's export sits at 38%, so
   // this flags a materially worse state rather than today's normal.
@@ -7994,6 +8000,111 @@ function renderShopee() {
     </tbody></table>
   </div>` : '<div class="card mt"><div class="note" style="margin-top:0;">Settlement data was unavailable this run, so the amount received is not measured &mdash; not zero.</div></div>';
 
+  const bu = d.buyers || {};
+  const ad = d.ads || {};
+  /**
+   * REPEAT BUYERS AND COST PER ORDER — the two figures that say whether the
+   * storefront is worth running. Everything else on this tab describes what
+   * happened; these two say whether it should happen again.
+   *
+   * BOTH CARRY THEIR LIMIT IN THE SUB-LINE. Repeat is measured WITHIN the range,
+   * so a buyer whose first order was last month reads as new; and Shopee never
+   * says which order came from an ad, so cost per order is spend beside orders,
+   * not attribution.
+   */
+  const commercial = `<div class="grid g-4 mt">
+    <div class="stat card"><div class="lab">Buyers</div><div class="val">${num(bu.total)}</div>
+      <div class="sub">${bu.ordersPerBuyer!=null?num(bu.ordersPerBuyer,{dp:2})+' orders each':'\u2014'}</div></div>
+    <div class="stat card"><div class="lab">Repeat buyers</div>
+      <div class="val" style="color:${bu.repeatRate!=null&&bu.repeatRate<RED.shopeeRepeatRate?'var(--rose)':'var(--ink)'}">${
+        bu.repeatRate!=null?num(bu.repeatRate*100,{dp:1})+'%':'\u2014'}</div>
+      <div class="sub">${num(bu.repeat)} of ${num(bu.total)} \u00b7 bought more than once in this range</div></div>
+    <div class="stat card"><div class="lab">Ad spend (THB)</div>
+      <div class="val">${ad.available?num(ad.spend,{money:true,bare:true}):'\u2014'}</div>
+      <div class="sub">${ad.available?`Meta: ${ad.accounts.map(esc).join(', ')||'no Shopee account'}`:'Meta unavailable this run'}</div></div>
+    <div class="stat card"><div class="lab">Cost per order (THB)</div>
+      <div class="val">${ad.available&&ad.costPerOrder!=null?num(ad.costPerOrder,{money:true,bare:true}):'\u2014'}</div>
+      <div class="sub">${ad.available&&ad.costOfSale!=null?num(ad.costOfSale*100,{dp:1})+'% of sales \u00b7 spend beside orders, not attribution':'\u2014'}</div></div>
+  </div>`;
+
+  /**
+   * A METHOD THAT TAKES THE ORDER AND THEN FAILS is a checkout problem, not a
+   * demand problem, and one blended cancellation rate cannot tell them apart.
+   */
+  const risk = `<div class="card mt">
+    <div class="card-title">Cancellation by payment method</div>
+    <table class="roomy"><thead><tr><th>Method</th><th class="num">Orders</th><th class="num">Cancelled</th>
+      <th class="num">Cancel rate</th><th class="num">Value kept (THB)</th></tr></thead><tbody>
+      ${d.paymentRisk.map(p => `<tr><td>${esc(p.method)}</td><td class="num">${num(p.orders)}</td>
+        <td class="num">${num(p.cancelled)}</td>
+        <td class="num"${p.cancelRate>RED.shopeeCancelRate?' style="color:var(--rose)"':''}>${num(p.cancelRate*100,{dp:1})}%</td>
+        <td class="num">${num(p.value,{money:true,bare:true})}</td></tr>`).join('')}
+    </tbody></table>
+  </div>`;
+
+  /**
+   * BANDS, NOT A MEAN. This catalogue is visibly bimodal — small packages and
+   * large ones — and an average sitting between the two clusters describes no
+   * order anyone ever placed.
+   */
+  const maxBand = Math.max(1, ...d.bands.map(b => b.orders));
+  const bands = `<div class="card mt">
+    <div class="card-title">What sells, by price</div>
+    <table class="roomy"><thead><tr><th>Order value (THB)</th><th class="num">Orders</th>
+      <th class="num">Value (THB)</th><th>Share of orders</th></tr></thead><tbody>
+      ${d.bands.filter(b => b.orders).map(b => `<tr>
+        <td>${b.hi==null?`${num(b.lo)}+`:`${num(b.lo)} \u2013 ${num(b.hi)}`}</td>
+        <td class="num">${num(b.orders)}</td><td class="num">${num(b.value,{money:true,bare:true})}</td>
+        <td><div style="background:var(--line);border-radius:3px;height:8px;width:100%;">
+          <div style="background:#EE4D2D;height:8px;border-radius:3px;width:${(b.orders/maxBand*100).toFixed(1)}%;"></div></div></td>
+      </tr>`).join('')}
+    </tbody></table>
+  </div>`;
+
+  const WD = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const maxH = Math.max(1, ...d.hours.map(h => h.orders));
+  const maxW = Math.max(1, ...d.weekdays.map(x => x.orders));
+  /**
+   * Bangkok time. `order_create_time` carries a `+00:00` offset, so reading the
+   * hour raw puts the evening peak in the early afternoon.
+   */
+  const timing = `<div class="grid g-2 mt">
+    <div class="card"><div class="card-title">When they order &middot; hour (Bangkok)</div>
+      <svg viewBox="0 0 480 90" width="100%" height="90" preserveAspectRatio="none" style="display:block;">
+        ${d.hours.map((h,i) => `<rect x="${(i*20).toFixed(1)}" y="${(90-Math.max(1,h.orders/maxH*88)).toFixed(1)}"
+          width="18" height="${Math.max(1,h.orders/maxH*88).toFixed(1)}" rx="2" fill="#EE4D2D"
+          ><title>${String(i).padStart(2,'0')}:00 \u2014 ${num(h.orders)} order${h.orders===1?'':'s'}</title></rect>`).join('')}
+      </svg>
+      <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
+        <span>00:00</span><span>12:00</span><span>23:00</span></div></div>
+    <div class="card"><div class="card-title">&hellip; and which day</div>
+      <table class="roomy"><tbody>
+        ${d.weekdays.map((x,i) => `<tr><td>${WD[i]}</td><td class="num">${num(x.orders)}</td>
+          <td><div style="background:var(--line);border-radius:3px;height:8px;width:100%;">
+            <div style="background:#EE4D2D;height:8px;border-radius:3px;width:${(x.orders/maxW*100).toFixed(1)}%;"></div></div></td></tr>`).join('')}
+      </tbody></table></div>
+  </div>`;
+
+  /**
+   * DISCOUNTS ARE A SHOP-LEVEL LUMP and the card says so. Every per-order
+   * voucher field is zero; the totals arrive on one row with no order id, so
+   * they can never be tied to a sale, a product or a campaign.
+   */
+  const pr = d.promo || {};
+  const promoTotal = n0(pr.sellerDiscount) + n0(pr.shopeeDiscount) + n0(pr.sellerVoucher) + n0(pr.shopeeVoucher) + n0(pr.coins);
+  const promo = promoTotal ? `<div class="card mt">
+    <div class="card-title">Discounts given</div>
+    <table class="roomy"><thead><tr><th>Type</th><th class="num">THB</th></tr></thead><tbody>
+      ${[['Seller discount', pr.sellerDiscount], ['Shopee discount', pr.shopeeDiscount],
+         ['Seller voucher', pr.sellerVoucher], ['Shopee voucher', pr.shopeeVoucher], ['Shopee coins', pr.coins]]
+        .filter(([, v]) => n0(v) > 0)
+        .map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${num(v,{money:true,bare:true})}</td></tr>`).join('')}
+      <tr class="tot"><td class="strong">Total</td><td class="num">${num(promoTotal,{money:true,bare:true})}</td></tr>
+    </tbody></table>
+    <div class="note">Shopee reports these for the shop, not per order &mdash; they cannot be tied to a sale, a product
+    or a campaign, so they sit beside the numbers above rather than inside them.</div>
+  </div>` : '';
+
   const pay = `<div class="card mt">
     <div class="card-title">How they paid</div>
     <table class="roomy"><thead><tr><th>Method</th><th class="num">Orders</th><th class="num">Value (THB)</th><th class="num">Share</th></tr></thead><tbody>
@@ -8039,7 +8150,7 @@ function renderShopee() {
       <div class="big">Shopee <span class="pill">BangkokHospital_Official</span></div>
       <div class="hint">One storefront. Gross is what customers paid; received is what Shopee transferred after its cut.</div>
     </div></div>
-    ${head}${trend}${pay}${ret}${money}`;
+    ${head}${commercial}${trend}${bands}${timing}${risk}${pay}${promo}${ret}${money}`;
 }
 
 function renderLine() {
@@ -11610,7 +11721,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.318.0';
+const CLIENT_BUILD = '3.319.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

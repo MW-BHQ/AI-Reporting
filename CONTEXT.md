@@ -1,5 +1,47 @@
 ### Recent (September 2026)
 
+**v3.319.0 — six analyses on the Shopee tab, built from what the connector
+actually has.** MW asked for an on-platform funnel — shop views, product views,
+repeat views, add-to-cart, cart age, items per checkout, source/medium. None of
+that exists on this connector. These are the honest substitutes.
+
+**1. REPEAT BUYERS.** `order_buyer_username` is populated, so new vs returning,
+repeat rate, and the share of revenue from repeat buyers are all real.
+Measured WITHIN the range and the card says so: a buyer whose first order was
+last month reads as new, which understates repeat behaviour on a short window.
+
+**2. OFF-SITE AD SPEND, JOINED ACROSS CONNECTORS.** The Shopee connector has no
+traffic source at all, but Meta carries `BHQ Shopee x ADA` and
+`BHQ Shopee x EGG` — accounts that exist purely to drive this storefront.
+Matched on the account NAME containing "shopee", so a third agency account joins
+by being named rather than by a code change. It is SPEND BESIDE ORDERS, NOT
+ATTRIBUTION, and the sub-line says so: Shopee never reveals which order came
+from an ad, and an ad seen today can sell next week.
+
+**3. CANCELLATION BY PAYMENT METHOD.** A method that takes the order and then
+fails is a checkout problem, not a demand problem, and one blended cancellation
+rate cannot tell them apart.
+
+**4. ORDER VALUE IN BANDS, NOT A MEAN.** The catalogue is visibly bimodal —
+small packages and large ones — and an average sitting between the two clusters
+describes no order anyone ever placed.
+
+**5. WHEN THEY ORDER, IN BANGKOK TIME.** `order_create_time` carries a `+00:00`
+offset, so reading the hour raw puts the evening peak in the early afternoon.
+Seven hours are added explicitly and the negative test pins it.
+
+**6. DISCOUNTS, AS THE SHOP-LEVEL LUMP THEY ARE.** Every per-order voucher field
+reads zero; the totals arrive on one row with a NULL `order_id` — 349,082 seller
+discount, 8,470 Shopee vouchers, 450 coins. That row is skipped by the fee maths
+because its selling price is zero, so it has to be captured on the way past. The
+card states they cannot be tied to a sale, a product or a campaign.
+
+**Negative tests, all four confirmed failing before revert:** counting cancelled
+orders' buyers; taking every Meta account rather than the Shopee ones; dropping
+the discount lump with the other zero rows; reading the order hour as UTC.
+
+### Recent (September 2026)
+
 **v3.318.0 — nav order and the Shopee commission block.**
 
 - **Channels sits under Report, Shopee under Channels**, both inside the
