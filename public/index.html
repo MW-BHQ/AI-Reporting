@@ -8105,6 +8105,63 @@ function renderShopee() {
     or a campaign, so they sit beside the numbers above rather than inside them.</div>
   </div>` : '';
 
+  const cat = d.catalogue || {};
+  const mv = d.movement || {};
+  /**
+   * WHAT SOLD, RECONSTRUCTED FROM STOCK. Shopee's connector has no line items,
+   * so best-sellers are impossible from orders — but stock falls as coupons
+   * sell, and the difference between two snapshots IS units sold.
+   *
+   * A RESTOCK RAISES STOCK, so those SKUs are excluded rather than netted off:
+   * one restock of 50 would otherwise cancel 50 real sales elsewhere. The count
+   * of excluded listings is shown, so the gap is visible rather than assumed
+   * away.
+   */
+  const sold = (mv.available && mv.ready) ? `<div class="card mt">
+    <div class="card-title">What sold &middot; ${num(mv.units)} units since ${esc(humanDate(mv.since))}</div>
+    <table class="roomy"><thead><tr><th>Package</th><th class="num">Units</th>
+      <th class="num">Price (THB)</th><th class="num">Value (THB)</th></tr></thead><tbody>
+      ${mv.top.map(x => `<tr><td class="trunc" style="max-width:0;" data-tip="${esc(x.name)}">${esc(x.name)}</td>
+        <td class="num">${num(x.units)}</td><td class="num">${num(x.price,{money:true,bare:true})}</td>
+        <td class="num">${num(x.value,{money:true,bare:true})}</td></tr>`).join('')}
+    </tbody></table>
+    <div class="note">Shopee reports no line items, so this is the FALL in each listing's stock between two daily
+    snapshots &mdash; a close proxy for units sold, not a figure from the orders table.${
+      mv.restocked?` ${num(mv.restocked)} listing${mv.restocked===1?' was':'s were'} restocked in this window and cannot be read this way, so ${mv.restocked===1?'it is':'they are'} excluded rather than counted as negative sales.`:''}</div>
+  </div>` : (mv.available ? `<div class="card mt">
+    <div class="card-title">What sold</div>
+    <div class="note" style="margin-top:0;">${esc(mv.note || 'Not ready yet.')} A stock snapshot is written on every load, so
+    this fills in from tomorrow.</div>
+  </div>` : '');
+
+  /**
+   * ZERO DISCOUNT IS THE ACTIONABLE ROW. On Shopee a listing priced at its
+   * original shows no struck-out price and no discount badge; on a shelf where
+   * the median package is nearly half off, it reads as the expensive option
+   * whatever it is worth.
+   */
+  const catalogue = cat.available ? `<div class="card mt">
+    <div class="card-title">Catalogue &middot; ${num(cat.count)} live packages</div>
+    <div class="grid g-3">
+      <div class="stat"><div class="lab">Median discount</div>
+        <div class="val">${cat.medianDiscount!=null?num(cat.medianDiscount*100,{dp:0})+'%':'\u2014'}</div>
+        <div class="sub">off the original price</div></div>
+      <div class="stat"><div class="lab">No discount shown</div>
+        <div class="val" style="color:${cat.noDiscount?'var(--rose)':'var(--ink)'}">${num(cat.noDiscount)}</div>
+        <div class="sub">no badge on a shelf where most have one</div></div>
+      <div class="stat"><div class="lab">Low stock</div><div class="val">${num(cat.lowStock.length)}</div>
+        <div class="sub">under 120 coupons left</div></div>
+    </div>
+    ${cat.noDiscountItems.length?`<table class="roomy mt"><thead><tr><th>Priced at full list</th><th class="num">Price (THB)</th></tr></thead><tbody>
+      ${cat.noDiscountItems.map(i => `<tr><td class="trunc" style="max-width:0;" data-tip="${esc(i.name)}">${esc(i.name)}</td>
+        <td class="num">${num(i.price,{money:true,bare:true})}</td></tr>`).join('')}
+    </tbody></table>`:''}
+    ${cat.lowStock.length?`<table class="roomy mt"><thead><tr><th>Running low</th><th class="num">Coupons left</th></tr></thead><tbody>
+      ${cat.lowStock.map(i => `<tr><td class="trunc" style="max-width:0;" data-tip="${esc(i.name)}">${esc(i.name)}</td>
+        <td class="num">${num(i.stock)}</td></tr>`).join('')}
+    </tbody></table>`:''}
+  </div>` : '';
+
   const pay = `<div class="card mt">
     <div class="card-title">How they paid</div>
     <table class="roomy"><thead><tr><th>Method</th><th class="num">Orders</th><th class="num">Value (THB)</th><th class="num">Share</th></tr></thead><tbody>
@@ -8150,7 +8207,7 @@ function renderShopee() {
       <div class="big">Shopee <span class="pill">BangkokHospital_Official</span></div>
       <div class="hint">One storefront. Gross is what customers paid; received is what Shopee transferred after its cut.</div>
     </div></div>
-    ${head}${commercial}${trend}${bands}${timing}${risk}${pay}${promo}${ret}${money}`;
+    ${head}${commercial}${sold}${trend}${catalogue}${bands}${timing}${risk}${pay}${promo}${ret}${money}`;
 }
 
 function renderLine() {
@@ -11721,7 +11778,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.319.0';
+const CLIENT_BUILD = '3.320.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

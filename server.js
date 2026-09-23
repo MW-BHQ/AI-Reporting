@@ -5947,6 +5947,13 @@ function monthWeekLabels(from, to) {
  * `utm_camapgin`. It is matched as written and normalised here rather than
  * "corrected" in the sheet, because the export will keep producing the typo.
  */
+/**
+ * Where the daily Shopee stock snapshots live. Falls back to the access bucket
+ * so the feature works wherever the app already has write access, and degrades
+ * to "not ready" rather than failing when there is no bucket at all.
+ */
+const SHOPEE_SNAP_BUCKET = process.env.SHOPEE_SNAP_BUCKET || process.env.BENCH_BUCKET || process.env.ACCESS_BUCKET || "";
+
 const LINE_SHEET_ID = process.env.LINE_SHEET_ID || "1pk5EA12P-DnkjHvhh9PvsVCFmvvKhk-exSDVP2V82Oc";
 const LINE_SHEET_TAB = process.env.LINE_SHEET_TAB || "Broadcast";
 /**
@@ -10973,7 +10980,26 @@ async function buildShopee(from, to) {
    */
   const metaShopee = windsor("facebook", ["account_name", "spend"], from, to).catch(() => null);
 
-  const [orders, settle, returns, metaRows] = await Promise.all([
+  /**
+   * THE CATALOGUE — and the trick that recovers what the API refuses to give.
+   *
+   * Shopee's connector has NO line items, so best-sellers are genuinely
+   * impossible from orders. But `product_available_stock` falls as coupons
+   * sell, so the DIFFERENCE between two snapshots of the same SKU is units
+   * sold. A snapshot is written on every load and compared against the newest
+   * one older than the window; over a few days that reconstructs per-product
+   * sales the orders table cannot express.
+   *
+   * IT IS A DIFFERENCE, NOT A SALES FIGURE, and the UI says so. A restock
+   * RAISES stock, so a rise is not a negative sale — it is an unknown, and
+   * those SKUs are excluded rather than netted off. Same rule as every other
+   * snapshot in this codebase: difference two points, never sum them.
+   */
+  const products = windsor("shopee", ["product_id", "product_name", "product_status",
+    "product_available_stock", "product_current_price", "product_original_price"], from, to)
+    .catch(() => null);
+
+  const [orders, settle, returns, metaRows, prodRows] = await Promise.all([
     call(["order_id", "order_create_time", "order_status", "order_total_amount",
       "order_payment_method", "order_currency", "order_buyer_username"]),
     call(["settlement_order_id", "settlement_escrow_amount", "settlement_order_selling_price",
@@ -10982,6 +11008,7 @@ async function buildShopee(from, to) {
     call(["return_id", "return_order_id", "return_create_time", "return_refund_amount",
       "return_reason", "return_status"]),
     metaShopee,
+    products,
   ]);
   if (orders === null) return { available: false, reason: "Shopee orders unavailable" };
 
@@ -11056,6 +11083,93 @@ async function buildShopee(from, to) {
    * code change — and if the naming ever drifts the figure goes to null rather
    * than quietly counting the wrong accounts.
    */
+  /**
+   * CATALOGUE HEALTH, and units sold reconstructed from stock movement.
+   *
+   * ZERO DISCOUNT IS THE ACTIONABLE ONE. On Shopee a listing with no struck-out
+   * price carries no discount badge, and on a shelf where everything else shows
+   * one it reads as the expensive option. These are named rather than counted.
+   */
+  const catalogue = (() => {
+    if (prodRows === null) return { available: false };
+    const live = prodRows.filter((r) => /normal/i.test(String(r.product_status || "")));
+    const items = live.map((r) => {
+      const cur = n(r.product_current_price), orig = n(r.product_original_price);
+      return {
+        id: String(r.product_id || ""), name: String(r.product_name || "").replace(/\s*-\s*Bangkok Hospital.*$/i, "").trim(),
+        price: cur, original: orig,
+        // Discount is null, not zero, when there is no original to compare to.
+        discount: orig > 0 && cur > 0 ? (orig - cur) / orig : null,
+        stock: n(r.product_available_stock),
+      };
+    });
+    const noDiscount = items.filter((i) => i.discount !== null && i.discount <= 0.001);
+    const deep = [...items].filter((i) => i.discount !== null).sort((a, b) => b.discount - a.discount);
+    return {
+      available: true,
+      count: items.length,
+      noDiscount: noDiscount.length,
+      noDiscountItems: noDiscount.sort((a, b) => b.price - a.price).slice(0, 10),
+      medianDiscount: (() => {
+        const d = items.map((i) => i.discount).filter((v) => v !== null).sort((a, b) => a - b);
+        return d.length ? d[Math.floor(d.length / 2)] : null;
+      })(),
+      deepest: deep.slice(0, 8),
+      lowStock: items.filter((i) => i.stock > 0 && i.stock < 120).sort((a, b) => a.stock - b.stock).slice(0, 10),
+      outOfStock: items.filter((i) => i.stock === 0).map((i) => i.name).slice(0, 10),
+      items,
+    };
+  })();
+
+  /**
+   * UNITS SOLD, from the fall in stock between two snapshots. Written on every
+   * load; the comparison uses the newest snapshot taken BEFORE the window
+   * opened, so the movement covers roughly the range being viewed.
+   *
+   * A RISE IS A RESTOCK, NOT A NEGATIVE SALE, so those SKUs are dropped rather
+   * than netted off — otherwise one restock of 50 would cancel 50 real sales
+   * elsewhere and the table would quietly understate the shop.
+   */
+  const movement = await (async () => {
+    if (!catalogue.available || !SHOPEE_SNAP_BUCKET) return { available: false };
+    const today = new Date().toISOString().slice(0, 10);
+    const snap = Object.fromEntries(catalogue.items.map((i) => [i.id, i.stock]));
+    try {
+      const index = (await gcsRead("shopee/stock-index.json", SHOPEE_SNAP_BUCKET)) || { days: [] };
+      const prior = index.days.filter((d) => d < from).sort().pop();
+      if (!index.days.includes(today)) {
+        await gcsWrite(`shopee/stock-${today}.json`, { day: today, stock: snap }, SHOPEE_SNAP_BUCKET);
+        await gcsWrite("shopee/stock-index.json",
+          { days: [...new Set([...index.days, today])].sort().slice(-400) }, SHOPEE_SNAP_BUCKET);
+      }
+      if (!prior) {
+        return { available: true, ready: false, since: null,
+          note: "No earlier stock snapshot than this range — units sold appear once a snapshot predates the window." };
+      }
+      const before = await gcsRead(`shopee/stock-${prior}.json`, SHOPEE_SNAP_BUCKET);
+      if (!before) return { available: true, ready: false, since: prior, note: "The earlier snapshot could not be read." };
+      const sold = catalogue.items.map((i) => {
+        const was = before.stock[i.id];
+        if (was == null) return null;                 // listing did not exist then
+        const delta = was - i.stock;
+        if (delta <= 0) return null;                  // restocked, or unmoved
+        return { name: i.name, units: delta, price: i.price, value: delta * i.price };
+      }).filter(Boolean).sort((a, b) => b.value - a.value);
+      return {
+        available: true, ready: true, since: prior,
+        units: sold.reduce((a, x) => a + x.units, 0),
+        value: sold.reduce((a, x) => a + x.value, 0),
+        top: sold.slice(0, 12),
+        // Listings whose stock ROSE — restocked in the window, so their sales
+        // cannot be read from the difference and are not guessed at.
+        restocked: catalogue.items.filter((i) => before.stock[i.id] != null && before.stock[i.id] < i.stock).length,
+      };
+    } catch (e) {
+      logJson("WARNING", "shopee_stock_snapshot_failed", { error: String(e.message || e) });
+      return { available: false };
+    }
+  })();
+
   const shopeeAds = (metaRows || []).filter((r) => /shopee/i.test(String(r.account_name || "")));
   const adSpend = metaRows === null ? null : shopeeAds.reduce((a, r) => a + n(r.spend), 0);
   const fees = commission + service + txn + ads;
@@ -11167,7 +11281,7 @@ async function buildShopee(from, to) {
       ordersPerBuyer: buyers.length ? live.length / buyers.length : null,
       top: buyers.sort((a, b) => b.value - a.value).slice(0, 10),
     },
-    promo,
+    promo, catalogue, movement,
     ads: adSpend === null ? { available: false } : {
       available: true, spend: adSpend,
       accounts: shopeeAds.map((r) => r.account_name),

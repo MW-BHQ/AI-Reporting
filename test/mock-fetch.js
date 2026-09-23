@@ -699,6 +699,25 @@ function ga4Report(body) {
 global.fetch = async (url, opts = {}) => {
   const u = String(url);
 
+  /**
+   * THE SHOPEE STOCK SNAPSHOT STORE. Units sold are the FALL in a listing's
+   * stock between two daily snapshots, so without a prior snapshot the whole
+   * feature reports "not ready" and every rule inside it goes untested.
+   *
+   * The prior day is set BELOW the current stock for P1 and P3 (sales) and
+   * ABOVE it for P2 (a restock), because a restock must be EXCLUDED rather
+   * than counted as a negative sale — one restock of 50 would otherwise cancel
+   * 50 real sales elsewhere.
+   */
+  if (u.includes("storage.googleapis.com") && u.includes("shopee%2Fstock")) {
+    if (u.includes("stock-index.json")) return jsonRes({ days: ["2026-06-01"] });
+    if (u.includes("uploadType=media")) return jsonRes({ ok: true });
+    return jsonRes({ day: "2026-06-01", stock: { P1: 120, P2: 250, P3: 350, P5: 200 } });
+  }
+  if (u.includes("storage.googleapis.com") && u.includes("uploadType=media") && u.includes("shopee")) {
+    return jsonRes({ ok: true });
+  }
+
   if (u.includes("connectors.windsor.ai/shopee")) {
     if (process.env.MOCK_FAIL_CONNECTOR === "shopee") return jsonRes({ error: "simulated failure" }, 500);
     const want = (new URL(u)).searchParams.get("fields") || "";
@@ -762,6 +781,33 @@ global.fetch = async (url, opts = {}) => {
           settlement_voucher_from_shopee: 8470, settlement_coins: 450 },
         // A3 has shipped but NOT settled — settlement lags, and the count of
         // settled orders must not equal the count of live ones.
+      ]);
+    }
+    if (want.includes("product_")) {
+      /**
+       * FOUR LISTINGS THAT EACH TEST A DIFFERENT RULE:
+       *   P1 deep discount and low stock — appears in both lists.
+       *   P2 ZERO discount — priced at its original, so it carries no discount
+       *      badge on a shelf where everything else does. The actionable one.
+       *   P3 normal.
+       *   P4 DELETED — must never reach the catalogue counts.
+       */
+      return jsonRes([
+        { product_id: "P1", product_name: "Deep Package - Bangkok Hospital [E-Coupon]", product_status: "NORMAL",
+          product_available_stock: 99, product_current_price: 29000, product_original_price: 99990 },
+        { product_id: "P2", product_name: "Full Price Package - Bangkok Hospital [E-Coupon]", product_status: "NORMAL",
+          product_available_stock: 300, product_current_price: 190000, product_original_price: 190000 },
+        { product_id: "P3", product_name: "Mid Package - Bangkok Hospital [E-Coupon]", product_status: "NORMAL",
+          product_available_stock: 340, product_current_price: 8500, product_original_price: 15775 },
+        { product_id: "P4", product_name: "Retired Package - Bangkok Hospital", product_status: "DELETED",
+          product_available_stock: 0, product_current_price: 1000, product_original_price: 2000 },
+        /**
+         * NO ORIGINAL PRICE. Discount must be NULL, not zero: zero reads as
+         * "priced at full list" and would put this on the no-discount table,
+         * which is a recommendation to change a price nobody set.
+         */
+        { product_id: "P5", product_name: "Unpriced Package - Bangkok Hospital [E-Coupon]", product_status: "NORMAL",
+          product_available_stock: 200, product_current_price: 7000, product_original_price: 0 },
       ]);
     }
     if (want.includes("return_")) {

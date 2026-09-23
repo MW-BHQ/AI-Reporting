@@ -263,6 +263,30 @@ expect_field "sp pay risk split"   "$SHOP" "d.paymentRisk.find(p=>/PromptPay/.te
 expect_field "sp bands bimodal"    "$SHOP" "d.bands.filter(b=>b.orders).length===2?2:undefined"
 # Bangkok time: order_create_time carries +00:00, so 04:00Z is 11:00 local.
 expect_field "sp hour is bangkok"  "$SHOP" "d.hours[11].orders===1?'ok':undefined"
+# CATALOGUE. Four listings, one DELETED — a retired listing must never reach the
+# counts or every "live packages" figure drifts upward forever.
+expect_field "sp cat excludes dead" "$SHOP" "d.catalogue.count===4?4:undefined"
+# A LISTING WITH NO ORIGINAL PRICE has a NULL discount, not zero — zero reads as
+# "priced at full list" and would recommend changing a price nobody set.
+expect_field "sp cat null discount" "$SHOP" "d.catalogue.items.find(i=>i.original===0).discount===null?'ok':undefined"
+# ZERO DISCOUNT IS THE ACTIONABLE ROW: priced at its original, so it shows no
+# struck-out price on a shelf where the median package is nearly half off.
+expect_field "sp cat no-discount"  "$SHOP" "d.catalogue.noDiscountItems[0].name==='Full Price Package'?'ok':undefined"
+# Discount is NULL, not zero, when there is no original to compare against —
+# zero would read as "full price" and put the item on the list above.
+expect_field "sp cat median disc"  "$SHOP" "Math.round(d.catalogue.medianDiscount*100)===46?46:undefined"
+expect_field "sp cat low stock"    "$SHOP" "d.catalogue.lowStock[0].stock===99?99:undefined"
+# UNITS SOLD FROM STOCK MOVEMENT. With no earlier snapshot it must say NOT READY
+# rather than reporting zero sales — a shop that sold nothing and a shop with no
+# history look identical otherwise.
+# UNITS SOLD FROM STOCK MOVEMENT, against a snapshot from 01 Jun. P1 fell
+# 120 -> 99 (21 sold) and P3 fell 350 -> 340 (10), so 31 units.
+expect_field "sp units from stock" "$SHOP" "d.movement.units===31?31:undefined"
+expect_field "sp movement ready"   "$SHOP" "d.movement.ready===true&&d.movement.since==='2026-06-01'?'ok':undefined"
+# A RESTOCK IS EXCLUDED, NOT NETTED OFF. P2 rose 250 -> 300; counted as a
+# negative sale it would cancel 50 real units and read 19 above.
+expect_field "sp restock excluded" "$SHOP" "d.movement.restocked===1?1:undefined"
+expect_field "sp top is by value"  "$SHOP" "d.movement.top[0].name==='Deep Package'?'ok':undefined"
 
 echo "--- LINE tab (v3.309.0) ---"
 LINE="/api/line?from=$FROM&to=$TO"

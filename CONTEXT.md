@@ -1,5 +1,51 @@
 ### Recent (September 2026)
 
+**v3.320.0 — best-sellers, reconstructed from stock movement.** MW: "this is
+very little insight compare to what is really useful." He was right, and the
+reason was that the PRODUCTS table had never been touched.
+
+**SHOPEE HAS NO LINE ITEMS — confirmed, not assumed.** `get_fields` was asked
+directly for `order_item_name`, `item_sku`, `order_item_quantity` and six other
+spellings; none exist. Best-sellers are genuinely impossible from the orders
+table, and no amount of joining changes that.
+
+**SO THE STOCK IS THE MEASUREMENT.** Every listing is an e-coupon with a finite
+`product_available_stock`, and it falls as coupons sell. A snapshot is written
+to GCS on every load; units sold is the FALL between the newest snapshot older
+than the window and today. That recovers per-product sales the API refuses to
+express.
+
+**A RESTOCK RAISES STOCK, SO IT IS EXCLUDED, NOT NETTED OFF.** One restock of 50
+would otherwise cancel 50 real sales elsewhere and the table would quietly
+understate the shop. The count of excluded listings is printed, so the gap is
+visible rather than assumed away.
+
+**AND IT SAYS WHEN IT CANNOT ANSWER.** With no snapshot older than the range it
+reports "not ready" rather than zero units — a shop that sold nothing and a shop
+with no history are different statements, and the negative test pins the
+difference.
+
+**THE CATALOGUE, ALSO PREVIOUSLY UNUSED.** 118 live packages, median discount,
+low stock, and the actionable one: listings priced AT their original. On Shopee
+those show no struck-out price and no discount badge, and on a shelf where the
+median package is nearly half off they read as the expensive option whatever
+they are worth. `DELETED` listings are excluded, or the live count drifts upward
+forever.
+
+**DISCOUNT IS NULL, NOT ZERO, when there is no original price** — zero reads as
+"priced at full list" and would put the item on the fix-this table, which is a
+recommendation to change a price nobody set.
+
+**Negative tests, all confirmed failing before revert:** counting DELETED
+listings; treating a missing original as zero discount; reporting zero units
+with no prior snapshot; counting a restock as a negative sale.
+
+**The GCS snapshot store is stubbed in the fixture**, with one listing that ROSE
+between snapshots — without it the whole movement feature reported "not ready"
+and every rule inside it went untested.
+
+### Recent (September 2026)
+
 **v3.319.0 — six analyses on the Shopee tab, built from what the connector
 actually has.** MW asked for an on-platform funnel — shop views, product views,
 repeat views, add-to-cart, cart age, items per checkout, source/medium. None of
