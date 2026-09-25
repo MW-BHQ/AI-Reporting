@@ -1,5 +1,15 @@
 ### Recent (September 2026)
 
+**v3.329.0 — Date range picker.** MW: the two native date boxes were "quite
+hard to use". One button (`1 – 31 Jan 2025 · 31 days`) opens a panel: nine
+presets left, two months right, month/year selects to jump, click a month
+title for the whole month, future days disabled, Esc/outside-click/Cancel
+close. The range is PENDING until Apply, which writes `#from`/`#to` (now
+hidden inputs — every reader unchanged) and reloads. Code that sets the
+inputs itself (GBP's year, long-range tabs, campaign "fix range") is shown
+by `syncDateLabel()`, called from the header render. The LM/7D/30D/90D/MTD
+chips are gone; their presets live in the panel. No library.
+
 **v3.328.0 — Shopee: no Meta Shopee account is a dash, not 0.** MW's Jan 2025
 screenshot showed "Meta ad spend 0 · no Shopee account". No Shopee-named Meta
 account ran, so spend is unmeasured: `ads.spend` null, `ads.noAccount` true.
