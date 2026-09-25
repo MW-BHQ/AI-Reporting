@@ -1,5 +1,10 @@
 ### Recent (September 2026)
 
+**v3.335.0 — Shopee bar labels at the house size, on every bar.** MW: labels
+too big, some bars unlabelled. Labels now 9.5px/600 like `ratingDotLabels`,
+as HTML over a stretched SVG so they never scale with width; every bar is
+labelled up to 45 bars, every other (plus the tallest) beyond.
+
 **v3.334.0 — Shopee: search clicks under Organic; labelled bars; add-to-cart
 columns.** MW: the search-clicks footnote was invisible; bars need data
 labels; "Cart (THB)" was unclear next to Sales.

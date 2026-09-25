@@ -196,6 +196,8 @@
    * untouched; the picker only writes them on Apply.
    */
   .dates{position:relative;}
+  .bar-wrap{position:relative;width:100%;}
+  .bar-lab{position:absolute;transform:translateX(-50%);font:600 9.5px Poppins,sans-serif;color:var(--muted);white-space:nowrap;line-height:1;}
   .dp-btn{display:flex;align-items:center;gap:8px;background:var(--glass);border:1px solid var(--line);border-radius:12px;padding:7px 12px;font-family:inherit;font-size:var(--text-xs);color:var(--ink);cursor:pointer;white-space:nowrap;}
   .dp-btn:hover{border-color:var(--violet);}
   .dp-btn .dp-n{color:var(--muted);}
@@ -8138,23 +8140,25 @@ function renderShopee() {
    */
   const sa = d.shopeeAds || {};
   /**
-   * LABELLED BARS (v3.334.0). MW: data labels on the bars, so no tooltip is
-   * needed. The SVG keeps its aspect ratio (no preserveAspectRatio="none")
-   * so the labels are not stretched. When bars are too narrow for a label
-   * (long ranges), every k-th bar is labelled plus the tallest, never a
-   * crowd of overlapping numbers.
+   * LABELLED BARS (v3.334.0, v3.335.0). Every bar carries its value, at the
+   * house label size (9.5px/600, as `ratingDotLabels` on Google Profile).
+   * Bars are SVG stretched to the card; labels are HTML placed by percentage,
+   * so they stay 9.5px at any width instead of scaling with the drawing.
+   * Only past 45 bars (a quarter-plus range) is every other bar labelled —
+   * the tallest always is.
    */
   const kfmt = (v) => v >= 1e6 ? (v/1e6).toFixed(v >= 1e7 ? 0 : 1) + 'M' : v >= 1e3 ? (v/1e3).toFixed(v >= 1e4 ? 0 : 1) + 'K' : String(Math.round(v));
   const bars = (xs, key, colour, H) => {
-    const W3 = 720, top = 14, mx = Math.max(1, ...xs.map(x => x[key])), bw3 = W3 / Math.max(xs.length, 1);
-    const every = Math.max(1, Math.ceil(26 / bw3));
+    const n = Math.max(xs.length, 1), mx = Math.max(1, ...xs.map(x => x[key]));
+    const every = xs.length > 45 ? 2 : 1;
     const peak = xs.reduce((a, x, i) => (x[key] > xs[a][key] ? i : a), 0);
-    return `<svg viewBox="0 0 ${W3} ${H + top}" width="100%" style="display:block;overflow:visible;">${xs.map((x, i) => {
-      const h = Math.max(1, x[key] / mx * (H - 2)), xx = i * bw3, w3 = Math.max(1, bw3 - 1.5);
-      const lab = (i % every === 0 || i === peak) && x[key] > 0
-        ? `<text x="${(xx + w3 / 2).toFixed(1)}" y="${(top + H - h - 3).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--muted)">${kfmt(x[key])}</text>` : '';
-      return `<rect x="${xx.toFixed(1)}" y="${(top + H - h).toFixed(1)}" width="${w3.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${colour}"></rect>${lab}`;
-    }).join('')}</svg>`;
+    const W3 = 1000, bw3 = W3 / n;
+    const rects = xs.map((x, i) => { const h = Math.max(1, x[key] / mx * H);
+      return `<rect x="${(i*bw3).toFixed(1)}" y="${(H-h).toFixed(1)}" width="${Math.max(1, bw3*0.86).toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${colour}"></rect>`; }).join('');
+    const labels = xs.map((x, i) => (i % every && i !== peak) ? '' :
+      `<span class="bar-lab" style="left:${((i + 0.43) / n * 100).toFixed(3)}%;bottom:${(Math.max(1, x[key] / mx * H) + 2).toFixed(1)}px;">${kfmt(x[key])}</span>`).join('');
+    return `<div class="bar-wrap" style="height:${H + 16}px;"><svg viewBox="0 0 ${W3} ${H}" width="100%" height="${H}" preserveAspectRatio="none"
+      style="position:absolute;left:0;bottom:0;display:block;">${rects}</svg>${labels}</div>`;
   };
   /**
    * DAILY SPEND vs CREDITED SALES — two strips on one day axis, each on its
@@ -11923,7 +11927,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.334.0';
+const CLIENT_BUILD = '3.335.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
