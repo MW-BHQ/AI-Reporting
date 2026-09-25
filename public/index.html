@@ -7995,18 +7995,21 @@ function renderShopee() {
    */
   const op = sc.offPlatform || {};
   const offsite = op.available ? `<div class="card mt">
-    <div class="card-title">Traffic from outside Shopee &middot; THB ${num(op.sales,{money:true,bare:true})} credited${
+    <div class="card-title">Channels from outside Shopee &middot; THB ${num(op.sales,{money:true,bare:true})} credited${
       op.shareOfSales!=null?` (${pc(op.shareOfSales,0)} of confirmed)`:''}</div>
     <table class="roomy"><thead><tr><th>Channel</th><th class="num">Visits</th><th class="num">Orders</th>
       <th class="num">Conversion</th><th class="num">Sales (THB)</th></tr></thead><tbody>
       ${op.channels.map(c => `<tr><td>${esc(c.channel)}</td><td class="num">${num(c.visits)}</td><td class="num">${num(c.orders)}</td>
         <td class="num">${pc(c.conversion)}</td><td class="num">${num(c.sales,{money:true,bare:true})}</td></tr>`).join('')}
     </tbody></table>
-    ${op.campaigns.length?`<table class="roomy mt"><thead><tr><th>Campaign</th><th>Channels</th><th class="num">Visits</th>
+  </div>` : '';
+  const offCampaigns = (op.available && op.campaigns.length) ? `<div class="card mt">
+    <div class="card-title">Campaigns from outside Shopee</div>
+    <table class="roomy"><thead><tr><th>Campaign</th><th>Channels</th><th class="num">Visits</th>
       <th class="num">Orders</th><th class="num">Sales (THB)</th></tr></thead><tbody>
       ${op.campaigns.map(c => `<tr><td>${esc(c.campaign)}</td><td class="trunc" style="max-width:0;" data-tip="${esc(c.channels.join(', '))}">${esc(c.channels.join(', '))}</td>
         <td class="num">${num(c.visits)}</td><td class="num">${num(c.orders)}</td><td class="num">${num(c.sales,{money:true,bare:true})}</td></tr>`).join('')}
-    </tbody></table>`:''}
+    </tbody></table>
   </div>` : '';
 
   const pp = sc.products || {};
@@ -8046,7 +8049,7 @@ function renderShopee() {
       <div class="big">Shopee <span class="pill">BangkokHospital_Official</span></div>
       <div class="hint">One storefront, from Shopee Seller Centre. Confirmed sales are orders Shopee has confirmed.</div>
     </div></div>
-    ${head}${commercial}${funnel}${traffic}${offsite}${sold}${trend}${promos}`;
+    ${head}${commercial}${funnel}${traffic}${offsite}${offCampaigns}${sold}${trend}${promos}`;
 }
 
 function renderLine() {
@@ -11617,7 +11620,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.322.0';
+const CLIENT_BUILD = '3.323.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

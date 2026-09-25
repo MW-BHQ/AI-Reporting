@@ -1,5 +1,8 @@
 ### Recent (September 2026)
 
+**v3.323.0 — Shopee channels and campaigns are two cards** (MW: "channel and
+campaign should be separate to 2 blocks"). Same data, no server change.
+
 **v3.322.0 — Windsor Shopee connector removed.** MW: "remove the shopee from
 windsor, looklike no use now". The tab is now the Seller Centre sheet plus Meta
 spend on the `*Shopee*` accounts. Gone with Windsor: cancellations and payment
