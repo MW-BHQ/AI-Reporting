@@ -1,5 +1,9 @@
 ### Recent (September 2026)
 
+**v3.332.0 — Buyer Behaviour removed.** MW: "behavior also not normalize".
+The buyer profile is Gender and Age only (`Buyer Gender`, `Buyer Age`).
+Purchasing power, frequency, recency and the column-A month markers are gone.
+
 **v3.331.0 — Shopee buyer profile ("Who buys").** Brand Portal > Consumer
 Insights > Buyer, monthly export. Tabs `Buyer Gender`, `Buyer Age`,
 `Buyer Behaviour` (`SHOPEE_BUYER_TABS`); MW dropped location, preferences

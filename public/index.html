@@ -8173,8 +8173,7 @@ function renderShopee() {
 
   /**
    * WHO BUYS (v3.331.0) — Brand Portal buyer profile, monthly. Several months
-   * are summed as buyer-months, so the card says so; frequency and recency
-   * are the latest month's trailing-12-month view and are labelled that way.
+   * are summed as buyer-months, so the card says so. Gender and age only.
    */
   const by = d.buyers || {};
   const bMon = (m) => { const [y, mo] = String(m).split('.'); return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+mo - 1]} ${y}`; };
@@ -8207,9 +8206,6 @@ function renderShopee() {
     <div class="grid g-2 mt" style="column-gap:32px;row-gap:18px;">
       ${bTable('Gender', by.gender)}
       ${bTable('Age', by.age)}
-      ${bTable('Spend per buyer', by.power, 'Shopee bands, USD')}
-      ${bTable('Orders in the last 12 months', by.frequency, by.latest ? 'as of ' + bMon(by.latest) : '')}
-      ${bTable('Last purchase before this one', by.recency, by.latest ? 'as of ' + bMon(by.latest) : '')}
     </div>
   </div>`;
 
@@ -11885,7 +11881,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.331.0';
+const CLIENT_BUILD = '3.332.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

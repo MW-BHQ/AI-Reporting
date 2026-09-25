@@ -295,14 +295,13 @@ expect_field "cmp mom ads spend"  "$D1" "Math.abs(d.compare.mom.adsSpend-(1000/9
 expect_field "cmp partial dash"   "$SHOP" "d.compare.mom===null&&d.compare.yoy===null?'ok':undefined"
 expect_field "cmp windows"        "$SHOP" "d.compare.windows.prev.from==='2026-05-31'&&d.compare.windows.yoy.from==='2025-07-01'?'ok':undefined"
 # BUYER PROFILE (July): All rows only (All+TH doubles to 20), June out, the
-# "2026.7" rows out; Behaviour months from the column-A markers.
+# "2026.7" rows out. Behaviour was removed (v3.332.0).
 expect_field "by months"          "$SHOP" "d.buyers.months.join()==='2026.07'?'ok':undefined"
 expect_field "by gender total"    "$SHOP" "d.buyers.gender.all.total===10?10:undefined"
 expect_field "by female share"    "$SHOP" "d.buyers.gender.all.rows.find(r=>r.k==='female').share===0.6?'ok':undefined"
 expect_field "by new share"       "$SHOP" "d.buyers.newShare===0.6?'ok':undefined"
+expect_field "by no behaviour"    "$SHOP" "d.buyers.power===undefined&&d.buyers.frequency===undefined?'ok':undefined"
 expect_field "by age 55+"         "$SHOP" "d.buyers.age.all.rows.find(r=>r.k==='>55').share===0.5?'ok':undefined"
-expect_field "by power marker"    "$SHOP" "d.buyers.power.all.rows.find(r=>r.k==='>=\$200').n===8?8:undefined"
-expect_field "by frequency latest" "$SHOP" "d.buyers.latest==='2026.07'&&d.buyers.frequency.all.rows.find(r=>r.k==='1').n===7?'ok':undefined"
 # A range shorter than a month has no whole month: said, not zero.
 expect_field "by part month"      "/api/shopee?from=2026-07-01&to=2026-07-01" "d.buyers.available===false&&/whole months/.test(d.buyers.reason)?'ok':undefined"
 expect_field "sc no windsor"      "$SHOP" "d.settlement===undefined&&d.catalogue===undefined?'ok':undefined"
