@@ -11234,29 +11234,39 @@ async function buildShopee(from, to) {
   ]);
   if (!seller.available) return { available: false, reason: seller.reason, lastDay: seller.lastDay || null };
   const shopeeAds = (metaRows || []).filter((r) => /shopee/i.test(String(r.account_name || "")));
-  const spend = metaRows === null ? null : shopeeAds.reduce((a, r) => a + n(r.spend), 0);
+  /**
+   * NO SHOPEE-NAMED META ACCOUNT IN THE RANGE IS NOT ZERO SPEND. Jan 2025 on
+   * live showed "0 · no Shopee account": the accounts did not exist or did not
+   * run, which is unmeasured, not a measured nothing. Dash plus the reason.
+   */
+  const spend = metaRows === null || !shopeeAds.length ? null : shopeeAds.reduce((a, r) => a + n(r.spend), 0);
   const f = seller.funnel;
   const op = seller.offPlatform;
   const metaSales = op.available
     ? op.channels.filter((c) => /facebook|instagram/i.test(c.channel)).reduce((a, c) => a + c.sales, 0) : null;
+  const sa = seller.shopeeAds && seller.shopeeAds.available ? seller.shopeeAds : null;
+  /**
+   * ALL AD COST OF SALE: every KNOWN ad spend over confirmed sales, with the
+   * parts named so a missing half is visible rather than silently summed as 0.
+   */
+  const parts = [spend != null && "Meta", sa && "Shopee Ads"].filter(Boolean);
+  const totalSpend = parts.length ? (spend || 0) + (sa ? sa.spend : 0) : null;
   return {
     available: true,
     ...seller,
     aov: f.orders ? f.sales / f.orders : null,
-    ads: spend === null ? { available: false } : {
-      available: true, spend,
+    ads: {
+      available: metaRows !== null,
+      noAccount: metaRows !== null && !shopeeAds.length,
+      spend,
       accounts: [...new Set(shopeeAds.map((r) => r.account_name))],
       metaSales,
       // One division of two totals over the window.
       salesPerBaht: spend && metaSales != null ? metaSales / spend : null,
-      costPerOrder: f.orders ? spend / f.orders : null,
-      /**
-       * ALL AD COST OF SALE: Meta's Shopee accounts plus Shopee Ads, over
-       * confirmed sales. The one figure that needs no attribution model —
-       * total spend against total sales in the same window.
-       */
-      totalSpend: spend + (seller.shopeeAds && seller.shopeeAds.available ? seller.shopeeAds.spend : 0),
-      costOfSale: f.sales ? (spend + (seller.shopeeAds && seller.shopeeAds.available ? seller.shopeeAds.spend : 0)) / f.sales : null,
+      costPerOrder: spend != null && f.orders ? spend / f.orders : null,
+      spendParts: parts,
+      totalSpend,
+      costOfSale: totalSpend != null && f.sales ? totalSpend / f.sales : null,
     },
   };
 }

@@ -282,6 +282,9 @@ expect_field "so items per order" "$SHOP" "d.funnel.itemsPerOrder===1.25?1.25:un
 expect_field "so repeat view"     "$SHOP" "d.funnel.viewsPerProductVisitor===1.5?1.5:undefined"
 # ALL AD COST OF SALE: Meta 10 + Shopee Ads 1,700, over confirmed 32,000.
 expect_field "sa cost of sale"    "$SHOP" "d.ads.costOfSale===1710/32000?'ok':undefined"
+# NO SHOPEE-NAMED META ACCOUNT: spend is null, not 0, and the all-ad figure
+# names only the part it has (Shopee Ads 500 + 200 over confirmed 12,000).
+expect_field "sp meta no account" "/api/shopee?from=2026-07-02&to=2026-07-31" "(a=>a.available&&a.noAccount&&a.spend===null&&a.salesPerBaht===null&&a.spendParts.join()==='Shopee Ads'&&a.totalSpend===700)(d.ads)?'ok':undefined"
 expect_field "sc no windsor"      "$SHOP" "d.settlement===undefined&&d.catalogue===undefined?'ok':undefined"
 expect_field "sc last day"        "$SHOP" "d.lastDay==='2026-07-02'?'ok':undefined"
 

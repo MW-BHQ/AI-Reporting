@@ -7953,14 +7953,14 @@ function renderShopee() {
 
   const ad = d.ads || {};
   const commercial = `<div class="grid g-4 mt">
-    <div class="stat card"><div class="lab">Meta ad spend (THB)</div><div class="val">${ad.available?num(ad.spend,{money:true,bare:true}):'\u2014'}</div>
-      <div class="sub">${ad.available?(ad.accounts.map(esc).join(', ')||'no Shopee account'):'Meta unavailable this run'}</div></div>
-    <div class="stat card"><div class="lab">Sales from Meta (THB)</div><div class="val">${ad.available&&ad.metaSales!=null?num(ad.metaSales,{money:true,bare:true}):'\u2014'}</div>
+    <div class="stat card"><div class="lab">Meta ad spend (THB)</div><div class="val">${ad.spend!=null?num(ad.spend,{money:true,bare:true}):'\u2014'}</div>
+      <div class="sub">${!ad.available?'Meta unavailable this run':ad.noAccount?'no Meta account named Shopee ran in this range':ad.accounts.map(esc).join(', ')}</div></div>
+    <div class="stat card"><div class="lab">Sales from Meta (THB)</div><div class="val">${ad.metaSales!=null?num(ad.metaSales,{money:true,bare:true}):'\u2014'}</div>
       <div class="sub">credited by Shopee to Facebook and Instagram links</div></div>
     <div class="stat card"><div class="lab">Sales per THB spent</div><div class="val">${ad.salesPerBaht!=null?num(ad.salesPerBaht,{dp:1}):'\u2014'}</div>
       <div class="sub">Shopee-credited Meta sales over spend</div></div>
-    <div class="stat card"><div class="lab">All ad spend (THB)</div><div class="val">${ad.available&&ad.totalSpend!=null?num(ad.totalSpend,{money:true,bare:true}):'\u2014'}</div>
-      <div class="sub">${ad.costOfSale!=null?`${pc(ad.costOfSale)} of confirmed sales \u00b7 Meta + Shopee Ads`:'\u2014'}</div></div>
+    <div class="stat card"><div class="lab">All ad spend (THB)</div><div class="val">${ad.totalSpend!=null?num(ad.totalSpend,{money:true,bare:true}):'\u2014'}</div>
+      <div class="sub">${ad.costOfSale!=null?`${pc(ad.costOfSale)} of confirmed sales \u00b7 ${ad.spendParts.join(' + ')}`:'\u2014'}</div></div>
   </div>`;
 
   /**
@@ -11675,7 +11675,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.327.0';
+const CLIENT_BUILD = '3.328.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

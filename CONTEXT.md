@@ -1,5 +1,12 @@
 ### Recent (September 2026)
 
+**v3.328.0 — Shopee: no Meta Shopee account is a dash, not 0.** MW's Jan 2025
+screenshot showed "Meta ad spend 0 · no Shopee account". No Shopee-named Meta
+account ran, so spend is unmeasured: `ads.spend` null, `ads.noAccount` true.
+All-ad spend names its parts (`spendParts`), e.g. "Shopee Ads" alone.
+Live Jan 2025 check: confirmed ฿2.34M; Shopee Ads 62%, outside 13%, organic
+estimate 24%; 30 of 31 ad days (1 Jan absent from the export).
+
 **v3.327.0 — Shopee: where sales came from, items per order, repeat view.**
 - SOURCES: Shopee Ads credit, outside-Shopee credit, and ORGANIC (search and
   feed) as confirmed sales minus both. An ESTIMATE: credits are gross and

@@ -869,7 +869,9 @@ global.fetch = async (url, opts = {}) => {
         mk("BGH x ADA", 100), mk("BIH x ADA", 80), mk("BHT x ADA", 60),
         mk("BGH x EGG", 50), mk("WSH x ADA", 30),
         mk("BHQ x AIQ", 40), mk("BHQ Inter x ADA", 20),
-        mk("BHQ Shopee x EGG", 10),
+        // A range where no Shopee-named account ran (from 2026-07-02): spend
+        // is UNMEASURED, a dash, never 0 (v3.328.0, MW's Jan 2025 screenshot).
+        ...(/date_from=2026-07-02/.test(u) ? [] : [mk("BHQ Shopee x EGG", 10)]),
         mk("Some New Account", 7),   // must land in UNMAPPED, never vanish
 
       ]});
