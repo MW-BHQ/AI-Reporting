@@ -8017,16 +8017,17 @@ function renderShopee() {
   const offCampaigns = (op.available && op.campaigns.length) ? `<div class="card mt">
     <div class="card-title">Campaigns from outside Shopee</div>
     <table class="roomy"><thead><tr><th>Campaign</th><th>Channels</th><th class="num">Visits</th>
-      <th class="num">Orders</th><th class="num">Sales (THB)</th></tr></thead><tbody>
+      <th class="num">Cart (THB)</th><th class="num">Orders</th><th class="num">Sales (THB)</th></tr></thead><tbody>
       ${op.campaigns.map(c => `<tr><td>${esc(c.campaign)}</td><td class="trunc" style="max-width:0;" data-tip="${esc(c.channels.join(', '))}">${esc(c.channels.join(', '))}</td>
-        <td class="num">${num(c.visits)}</td><td class="num">${num(c.orders)}</td><td class="num">${num(c.sales,{money:true,bare:true})}</td></tr>`).join('')}
+        <td class="num">${num(c.visits)}</td><td class="num">${num(c.cartValue,{money:true,bare:true})}</td>
+        <td class="num">${num(c.orders)}</td><td class="num">${num(c.sales,{money:true,bare:true})}</td></tr>`).join('')}
     </tbody></table>
   </div>` : '';
 
   const pp = sc.products || {};
   const sold = pp.available ? `<div class="card mt">
     <div class="card-title">What sold from outside traffic &middot; ${num(pp.units)} units</div>
-    <table class="roomy"><thead><tr><th>Package</th><th>Sold through</th><th class="num">Units</th><th class="num">Sales (THB)</th></tr></thead><tbody>
+    <table class="roomy"><thead><tr><th style="width:58%;">Package</th><th style="width:26%;">Sold through</th><th class="num" style="width:6%;">Units</th><th class="num" style="width:10%;">Sales (THB)</th></tr></thead><tbody>
       ${pp.top.map(x => { const ch = (x.channels||[]).map(c => `${c.channel} ${pc(c.share,0)}`).join(' \u00b7 ');
         return `<tr><td class="trunc" style="max-width:0;" data-tip="${esc(x.name)}">${esc(x.name)}</td>
         <td class="trunc" style="max-width:0;" data-tip="${esc(ch)}">${esc(ch)}</td>
@@ -11633,7 +11634,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.324.0';
+const CLIENT_BUILD = '3.325.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

@@ -11065,8 +11065,9 @@ async function buildShopeeSeller(from, to) {
     e.orders += spNum(r.orders); e.units += spNum(r.unitssold); e.sales += spNum(r.saleslocalcurrency);
     chan.set(c, e);
     const k = String(r.campaigndescription || "(not set)").trim();
-    const g = camp.get(k) || { campaign: k, visits: 0, orders: 0, sales: 0, channels: new Set() };
+    const g = camp.get(k) || { campaign: k, visits: 0, cartUnits: 0, cartValue: 0, orders: 0, sales: 0, channels: new Set() };
     g.visits += spNum(r.visits); g.orders += spNum(r.orders); g.sales += spNum(r.saleslocalcurrency); g.channels.add(c);
+    g.cartUnits += spNum(r.addtocartunits); g.cartValue += spNum(r.addtocartvaluelocalcurrency);
     camp.set(k, g);
   }
   /**

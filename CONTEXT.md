@@ -1,5 +1,10 @@
 ### Recent (September 2026)
 
+**v3.325.0 — Shopee campaigns carry cart value; Package column widened.** MW's
+screenshot: Thai package names truncated at ~25 characters while "Sold through"
+held three short labels. Package 58%, Sold through 26%. Sheet access confirmed
+working on live (shared since v3.321.0).
+
 **v3.324.0 — Shopee: package × channel, new buyers, carts, unconfirmed.**
 - PACKAGE × CHANNEL from Products By Day's `Channel`: each package lists the
   channels that sold it with their share of its sales.

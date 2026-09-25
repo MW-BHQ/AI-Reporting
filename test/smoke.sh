@@ -245,6 +245,8 @@ expect_field "sc pages/visitor"   "$SHOP" "d.traffic.pagesPerVisitor===2.25?2.25
 # OFF-PLATFORM: 01/08 is outside; DD/MM dates, not DD-MM.
 expect_field "sc offsite sales"   "$SHOP" "d.offPlatform.sales===17000?17000:undefined"
 expect_field "sc offsite top"     "$SHOP" "d.offPlatform.channels[0].channel==='Website'?'ok':undefined"
+# CAMPAIGN CART: heart26 is Facebook 8,000 + Instagram 2,000; 01/08 is outside.
+expect_field "sc campaign cart"   "$SHOP" "d.offPlatform.campaigns.find(c=>c.campaign==='heart26').cartValue===10000?10000:undefined"
 expect_field "sc campaign merge"  "$SHOP" "d.offPlatform.campaigns.find(c=>c.campaign==='heart26').sales===8000?'ok':undefined"
 # SHOPEE-CREDITED META SALES: Facebook + Instagram, not Website.
 expect_field "sc meta sales"      "$SHOP" "d.ads.metaSales===8000?8000:undefined"
