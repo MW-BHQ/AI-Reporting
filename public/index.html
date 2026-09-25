@@ -8137,6 +8137,22 @@ function renderShopee() {
    * near 40x, and a share of sales that is a credit, not a split.
    */
   const sa = d.shopeeAds || {};
+  /**
+   * DAILY SPEND vs CREDITED SALES — two strips on one day axis, each on its
+   * own scale. One chart with two y-axes would invite reading the crossing
+   * point as break-even; two strips cannot be misread that way.
+   */
+  const adStrip = (key, colour, label) => {
+    const xs = sa.daily || [], W2 = 720, H2 = 44, mx = Math.max(1, ...xs.map(x => x[key])), bw2 = W2 / Math.max(xs.length, 1);
+    return `<div class="lab" style="margin:10px 0 4px">${label}</div>
+      <svg viewBox="0 0 ${W2} ${H2}" width="100%" height="${H2}" preserveAspectRatio="none" style="display:block;">${xs.map((x, i) => {
+        const h = Math.max(1, x[key] / mx * (H2 - 2));
+        return `<rect x="${(i*bw2).toFixed(1)}" y="${(H2-h).toFixed(1)}" width="${Math.max(1, bw2-1.5).toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${colour}"><title>${esc(humanDate(x.d))}: THB ${num(x[key],{money:true,bare:true})}</title></rect>`;
+      }).join('')}</svg>`;
+  };
+  const adTrend = sa.available && (sa.daily || []).length > 1 ? `${adStrip('spend', '#F5A28D', 'Spend by day (THB)')}${adStrip('sales', '#EE4D2D', 'Sales credited by day (THB)')}
+    <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
+      <span>${esc(humanDate(sa.daily[0].d))}</span><span>${esc(humanDate(sa.daily[sa.daily.length-1].d))}</span></div>` : '';
   const shopeeAds = sa.available ? `<div class="card mt">
     <div class="card-title">Shopee Ads &middot; Shopee-credited${sa.days < d.days ? ` <span class="pill">${num(sa.days)} of ${num(d.days)} days</span>` : ''}</div>
     <div class="grid g-4">
@@ -8149,6 +8165,7 @@ function renderShopee() {
       <div class="stat"><div class="lab">Clicks</div><div class="val">${num(sa.clicks)}</div>
         <div class="sub">${pc(sa.ctr,2)} CTR \u00b7 THB ${sa.cpc!=null?num(sa.cpc,{dp:2}):'\u2014'} per click</div>${cmp('adsClicks')}</div>
     </div>
+    ${adTrend}
   </div>` : `<div class="card mt"><div class="card-title">Shopee Ads</div>
     <div class="note" style="margin-top:0;">${esc(sa.reason || 'unavailable')} &mdash; not measured, not zero.</div></div>`;
 
@@ -8169,6 +8186,10 @@ function renderShopee() {
         <td style="width:30%;"><div style="background:var(--line);border-radius:3px;height:8px;">
           <div style="background:#EE4D2D;height:8px;border-radius:3px;width:${v!=null&&sf.sales?Math.min(100,v/sf.sales*100).toFixed(1):0}%;"></div></div></td></tr>`).join('')}
     </tbody></table>
+    ${sf.searchClicks!=null?`<div class="note cmp-row" style="margin-top:10px;">
+      <span>Organic evidence: ${num(sf.searchClicks)} clicks on products from Shopee search${sf.searchShare!=null?` \u00b7 ${pc(sf.searchShare,0)} of product visitors`:''}</span>
+      <span class="cmp-pair">${chip(C.mom && C.mom.searchClicks, W.prev ? `MoM \u2014 ${humanDate(W.prev.from)} to ${humanDate(W.prev.to)}` : 'MoM')} MoM</span>
+      <span class="cmp-pair">${chip(C.yoy && C.yoy.searchClicks, W.yoy ? `YoY \u2014 ${humanDate(W.yoy.from)} to ${humanDate(W.yoy.to)}` : 'YoY')} YoY</span></div>`:''}
   </div>` : '';
 
   /**
@@ -8271,24 +8292,34 @@ function renderShopee() {
     </tbody></table>
   </div>` : '';
 
+  /**
+   * PLACEMENTS — utm_content of the link that brought the visit: which spot
+   * on the website or post sells on Shopee. Shopee-credited, like channels.
+   */
+  const placements = (op.available && (op.placements || []).length) ? `<div class="card mt">
+    <div class="card-title">Placements from outside Shopee &middot; ad content</div>
+    <table class="roomy"><thead><tr><th>Placement</th><th>Channels</th><th class="num">Visits</th><th class="num">Cart (THB)</th>
+      <th class="num">Orders</th><th class="num">Conversion</th><th class="num">Sales (THB)</th></tr></thead><tbody>
+      ${op.placements.map(c => `<tr><td>${esc(c.content)}</td><td class="trunc" style="max-width:0;" data-tip="${esc(c.channels.join(', '))}">${esc(c.channels.join(', '))}</td>
+        <td class="num">${num(c.visits)}</td><td class="num">${num(c.cartValue,{money:true,bare:true})}</td><td class="num">${num(c.orders)}</td>
+        <td class="num">${pc(c.conversion)}</td><td class="num">${num(c.sales,{money:true,bare:true})}</td></tr>`).join('')}
+    </tbody></table>
+  </div>` : '';
+
   const pp = sc.products || {};
   const sold = pp.available ? `<div class="card mt">
     <div class="card-title">What sold from outside traffic &middot; ${num(pp.units)} units</div>
-    <table class="roomy"><thead><tr><th style="width:58%;">Package</th><th style="width:26%;">Sold through</th><th class="num" style="width:6%;">Units</th><th class="num" style="width:10%;">Sales (THB)</th></tr></thead><tbody>
+    <table class="roomy"><thead><tr><th style="width:44%;">Package</th><th style="width:20%;">Sold through</th><th style="width:20%;">Campaigns</th><th class="num" style="width:6%;">Units</th><th class="num" style="width:10%;">Sales (THB)</th></tr></thead><tbody>
       ${pp.top.map(x => { const ch = (x.channels||[]).map(c => `${c.channel} ${pc(c.share,0)}`).join(' \u00b7 ');
+        const cps = (x.campaigns||[]).map(c => `${c.campaign} ${pc(c.share,0)}`).join(' \u00b7 ');
         return `<tr><td class="trunc" style="max-width:0;" data-tip="${esc(x.name)}">${esc(x.name)}</td>
         <td class="trunc" style="max-width:0;" data-tip="${esc(ch)}">${esc(ch)}</td>
+        <td class="trunc" style="max-width:0;" data-tip="${esc(cps)}">${esc(cps)}</td>
         <td class="num">${num(x.units)}</td><td class="num">${num(x.sales,{money:true,bare:true})}</td></tr>`; }).join('')}
     </tbody></table>
   </div>` : '';
 
-  const promos = (sc.promotions || []).length ? `<div class="card mt">
-    <div class="card-title">Promotions running in this range &middot; whole-period figures</div>
-    <table class="roomy"><thead><tr><th>Promotion</th><th>Period</th><th class="num">Orders</th><th class="num">Sales (THB)</th></tr></thead><tbody>
-      ${sc.promotions.map(p => `<tr><td>${esc(p.name)}</td><td>${esc(humanDate(p.start))} \u2013 ${esc(humanDate(p.end))}</td>
-        <td class="num">${num(p.orders)}</td><td class="num">${num(p.sales,{money:true,bare:true})}</td></tr>`).join('')}
-    </tbody></table>
-  </div>` : '';
+
 
 
   const CW = 720, CH = 120;
@@ -8310,7 +8341,7 @@ function renderShopee() {
       <div class="big">Shopee <span class="pill">BangkokHospital_Official</span></div>
       <div class="hint">One storefront, from Shopee Seller Centre. Confirmed sales are orders Shopee has confirmed.</div>
     </div></div>
-    ${head}${commercial}${shopeeAds}${sources}${funnel}${traffic}${buyers}${offsite}${offCampaigns}${sold}${trend}${promos}`;
+    ${head}${commercial}${shopeeAds}${sources}${funnel}${traffic}${buyers}${offsite}${offCampaigns}${placements}${sold}${trend}`;
 }
 
 function renderLine() {
@@ -11881,7 +11912,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.332.0';
+const CLIENT_BUILD = '3.333.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

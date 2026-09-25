@@ -254,7 +254,18 @@ expect_field "sc meta sales"      "$SHOP" "d.ads.metaSales===8000?8000:undefined
 expect_field "sc product top"     "$SHOP" "d.products.top[0].name==='Cool Sculpting 2 points'&&d.products.top[0].sales===38000?'ok':undefined"
 expect_field "sc product units"   "$SHOP" "d.products.units===3?3:undefined"
 # PROMOTIONS that OVERLAP the window only; January's does not.
-expect_field "sc promo overlap"   "$SHOP" "d.promotions.length===1&&d.promotions[0].name==='Mid-Year Heart'?'ok':undefined"
+# CAMPAIGN TAB DROPPED (v3.333.0): not requested, so its absence cannot fail
+# the batch; the payload no longer carries promotions.
+expect_field "sc no promotions"   "$SHOP" "d.promotions===undefined?'ok':undefined"
+# SEARCH CLICKS 5 + 2 over 1,000 product visitors.
+expect_field "sc search clicks"   "$SHOP" "d.funnel.searchClicks===7&&d.funnel.searchShare===0.007?'ok':undefined"
+# PLACEMENTS: "checkup" is Facebook 5,000 + Instagram 3,000, over two channels.
+expect_field "sc placement merge" "$SHOP" "(p=>p.sales===8000&&p.channels.length===2)(d.offPlatform.placements.find(p=>p.content==='checkup'))?'ok':undefined"
+expect_field "sc placement top"   "$SHOP" "d.offPlatform.placements[0].content==='footer'?'ok':undefined"
+# PACKAGE x CAMPAIGN: Aqua Peel 50/50 webpackage2026 and heart26.
+expect_field "sc pkg x campaign"  "$SHOP" "(p=>p.campaigns.length===2&&p.campaigns.every(c=>c.share===0.5))(d.products.top.find(p=>/Aqua/.test(p.name)))?'ok':undefined"
+# ADS DAILY in date order; the All-only 03/07 included.
+expect_field "sa daily"           "$SHOP" "d.shopeeAds.daily.map(x=>x.d).join()==='2026-07-01,2026-07-02,2026-07-03'&&d.shopeeAds.daily[0].spend===1000?'ok':undefined"
 # THE STOCK HEURISTIC IS GONE — one answer for units, not two.
 # NEW BUYERS per channel: Website 1 of 2; 01/08 (9 new) is outside.
 expect_field "sc new buyers"      "$SHOP" "d.offPlatform.newBuyers===2&&d.offPlatform.channels.find(c=>c.channel==='Website').newShare===0.5?'ok':undefined"

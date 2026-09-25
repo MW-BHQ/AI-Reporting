@@ -1,5 +1,24 @@
 ### Recent (September 2026)
 
+**v3.333.0 — Shopee tab audit: Campaign tab dropped; four analyses added.**
+MW asked for full use of every tab, since each is exported by hand.
+- CAMPAIGN (promotions) TAB REMOVED from `SHOPEE_TABS` before MW deletes it
+  — a listed tab missing from the sheet fails the whole batchGet. Figures were
+  whole-promotion-life and the shop's promotions are always-on.
+- Off-Platform Products By Item deleted by MW; Instructions tab kept (team
+  guide, never read by code).
+- SEARCH CLICKS (Product Views): clicks on the shop's products from Shopee
+  search, shown under the sources card as organic EVIDENCE, with MoM/YoY.
+  Jan 2025: 2,189 against 7,764 product visitors.
+- PLACEMENTS (Off-Platform `Ad Content` = utm_content): which website/post
+  spot sells on Shopee (`package`, `footer`, `main1-1`...).
+- PACKAGE × CAMPAIGN on the what-sold table.
+- SHOPEE ADS DAILY: spend and credited sales as two strips, each on its own
+  scale — not one dual-axis chart, whose crossing point reads as break-even.
+- Not used, and nothing extra to export: Terminal (always `all`), USD columns,
+  Campaign Info In Parameter (the full tag; campaign + content cover it).
+  MW declined day-of-week.
+
 **v3.332.0 — Buyer Behaviour removed.** MW: "behavior also not normalize".
 The buyer profile is Gender and Age only (`Buyer Gender`, `Buyer Age`).
 Purchasing power, frequency, recency and the column-A month markers are gone.

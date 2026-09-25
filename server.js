@@ -10958,7 +10958,13 @@ app.get("/api/page", requireTab("pages"), async (req, res) => {
  * this one (the `lineSameDay` lesson, v3.316.0).
  */
 const SHOPEE_SHEET_ID = process.env.SHOPEE_SHEET_ID || "17T21LhWMSxIkg8GWZKS6tFQ6Q1x0mssDXx5pLX7r-kg";
-const SHOPEE_TABS = ["Sales", "Traffic", "Product Views", "Campaign",
+/**
+ * The Campaign (promotions) tab was dropped in v3.333.0: its figures cover a
+ * promotion's whole life and cannot be split by month, and the shop's
+ * promotions are always-on. A tab listed here that is missing from the sheet
+ * fails the WHOLE batchGet, so it came out of this list before MW deleted it.
+ */
+const SHOPEE_TABS = ["Sales", "Traffic", "Product Views",
   "Off-Platform Traffic", "Off-Platform Products By Day"];
 
 const spKey = (h) => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -11125,7 +11131,7 @@ async function readShopeeAds(from, to, raw) {
     const had = byDay.get(r._day);
     if (!had || shop || !had.shop) byDay.set(r._day, { shop, r });
   }
-  const rows = [...byDay.values()].map((x) => x.r);
+  const rows = [...byDay.values()].map((x) => x.r).sort((a, b) => a._day.localeCompare(b._day));
   if (!rows.length) return { available: false, reason: "no Shopee Ads rows in this range" };
   const sum = (k) => rows.reduce((a, r) => a + spNum(r[k]), 0);
   const t = {
@@ -11138,6 +11144,8 @@ async function readShopeeAds(from, to, raw) {
   t.cpc = t.clicks ? t.spend / t.clicks : null;
   t.roas = t.spend ? t.sales / t.spend : null;
   t.costPerOrder = t.orders ? t.spend / t.orders : null;
+  /** DAILY spend against credited sales (v3.333.0), for the trend strip. */
+  t.daily = rows.map((r) => ({ d: r._day, spend: spNum(r.adsspendlocalcurrency), sales: spNum(r.grosssaleslocalcurrency) }));
   return t;
 }
 
@@ -11190,6 +11198,13 @@ async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
   // REPEAT VIEW: product page views per product visitor. Shop-wide only; the
   // export has no per-shopper rows, so "viewed again after carting" is out.
   f.viewsPerProductVisitor = div(f.productViews, f.productVisitors);
+  /**
+   * SHOPEE SEARCH CLICKS (v3.333.0) — clicks on the shop's products from
+   * Shopee search results. The one on-Shopee organic signal in any export:
+   * evidence under the organic estimate, not a split of sales.
+   */
+  f.searchClicks = pv.length ? sum(pv, "searchclicks") : null;
+  f.searchShare = div(f.searchClicks, f.productVisitors);
   // Placed but never confirmed — cancelled or unpaid before Shopee confirmed it.
   f.unconfirmedSales = f.placedSales != null ? Math.max(0, f.placedSales - f.sales) : null;
 
@@ -11215,7 +11230,7 @@ async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
    * parameter), which is what the Meta-spend card could never claim.
    */
   const opt = tab["Off-Platform Traffic"].filter(inWin);
-  const chan = new Map(), camp = new Map();
+  const chan = new Map(), camp = new Map(), place = new Map();
   for (const r of opt) {
     const c = String(r.channelname || "Unknown").trim();
     const e = chan.get(c) || { channel: c, visits: 0, cartUnits: 0, cartValue: 0, buyers: 0, newBuyers: 0, orders: 0, units: 0, sales: 0 };
@@ -11223,6 +11238,16 @@ async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
     e.newBuyers += spNum(r.newbuyers); e.cartValue += spNum(r.addtocartvaluelocalcurrency);
     e.orders += spNum(r.orders); e.units += spNum(r.unitssold); e.sales += spNum(r.saleslocalcurrency);
     chan.set(c, e);
+    /**
+     * PLACEMENTS (v3.333.0): Ad Content is the utm_content of the link —
+     * which spot on the website or post (`package`, `footer`, `main1-1`)
+     * the visit came from. Same credited figures as channels.
+     */
+    const ac = String(r.adcontent || "(not set)").trim();
+    const pl = place.get(ac) || { content: ac, visits: 0, cartValue: 0, orders: 0, sales: 0, channels: new Set() };
+    pl.visits += spNum(r.visits); pl.cartValue += spNum(r.addtocartvaluelocalcurrency);
+    pl.orders += spNum(r.orders); pl.sales += spNum(r.saleslocalcurrency); pl.channels.add(c);
+    place.set(ac, pl);
     const k = String(r.campaigndescription || "(not set)").trim();
     const g = camp.get(k) || { campaign: k, visits: 0, cartUnits: 0, cartValue: 0, orders: 0, sales: 0, channels: new Set() };
     g.visits += spNum(r.visits); g.orders += spNum(r.orders); g.sales += spNum(r.saleslocalcurrency); g.channels.add(c);
@@ -11253,7 +11278,7 @@ async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
   for (const r of tab["Off-Platform Products By Day"].filter(inWin)) {
     const name = String(r.productname || "").replace(/\s*-\s*Bangkok Hospital.*$/i, "").trim();
     if (!name) continue;
-    const e = prod.get(name) || { name, units: 0, sales: 0, byChannel: new Map() };
+    const e = prod.get(name) || { name, units: 0, sales: 0, byChannel: new Map(), byCampaign: new Map() };
     const u = spNum(r.grossunitssold), v = spNum(r.grosssaleslocalcurrency);
     e.units += u; e.sales += v;
     /** PACKAGE × CHANNEL: which link sells which package. */
@@ -11261,24 +11286,18 @@ async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
     const x = e.byChannel.get(c) || { channel: c, units: 0, sales: 0 };
     x.units += u; x.sales += v;
     e.byChannel.set(c, x);
+    /** PACKAGE × CAMPAIGN (v3.333.0): which campaign sells which package. */
+    const cp = String(r.campaigndescription || "(not set)").trim();
+    const y = e.byCampaign.get(cp) || { campaign: cp, units: 0, sales: 0 };
+    y.units += u; y.sales += v;
+    e.byCampaign.set(cp, y);
     prod.set(name, e);
   }
-  const products = [...prod.values()].map(({ byChannel, ...p }) => ({ ...p,
+  const products = [...prod.values()].map(({ byChannel, byCampaign, ...p }) => ({ ...p,
     channels: [...byChannel.values()].map((x) => ({ ...x, share: div(x.sales, p.sales) }))
+      .sort((a, b) => b.sales - a.sales),
+    campaigns: [...byCampaign.values()].map((x) => ({ ...x, share: div(x.sales, p.sales) }))
       .sort((a, b) => b.sales - a.sales) })).sort((a, b) => b.sales - a.sales);
-
-  /**
-   * PROMOTIONS report their WHOLE period, not the window — Shopee gives no
-   * daily split. Only promotions that overlap the window are listed, and the
-   * UI says the figures are lifetime.
-   */
-  const promotions = tab["Campaign"].map((r) => {
-    const m = String(r.promotionperiod || "").match(/(\d{2}-\d{2}-\d{4}).*?-\s*(\d{2}-\d{2}-\d{4})/);
-    return m ? { name: String(r.promotionname || "").trim(), type: String(r.promotiontype || "").trim(),
-      start: spDay(m[1]), end: spDay(m[2]), status: String(r.status || "").trim(),
-      sales: spNum(r.salesconfirmedorderthb), orders: spNum(r.ordersconfirmedorder),
-      units: spNum(r.unitssoldconfirmedorder) } : null;
-  }).filter((p) => p && p.name && p.start <= to && p.end >= from).sort((a, b) => b.sales - a.sales);
 
   return {
     available: sales.length > 0 || traffic.length > 0 || opt.length > 0,
@@ -11293,9 +11312,10 @@ async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
       channels,
       campaigns: [...camp.values()].map((g) => ({ ...g, channels: [...g.channels] }))
         .sort((a, b) => b.sales - a.sales || b.visits - a.visits).slice(0, 15),
+      placements: [...place.values()].map((g) => ({ ...g, channels: [...g.channels], conversion: div(g.orders, g.visits) }))
+        .sort((a, b) => b.sales - a.sales || b.visits - a.visits).slice(0, 15),
     },
     products: { available: products.length > 0, units: products.reduce((a, p) => a + p.units, 0), top: products.slice(0, 12) },
-    promotions,
     ...await (async () => {
       const a = await adsP;
       const shopeeAds = a.available ? { ...a, shareOfSales: div(a.sales, f.sales) } : a;
@@ -11381,6 +11401,7 @@ async function buildShopee(from, to) {
       conversion: pct(f.conversion, cf.conversion), visits: pct(f.visits, cf.visits),
       pageViews: pct(st.pageViews, ct.pageViews), bounceRate: pct(st.bounceRate, ct.bounceRate),
       avgTimeSec: pct(st.avgTimeSec, ct.avgTimeSec), newFollowers: pct(st.newFollowers, ct.newFollowers),
+      searchClicks: pct(f.searchClicks, cf.searchClicks),
       adsSpend: adsOk ? pct(sa2.spend, ca.spend) : null, adsSales: adsOk ? pct(sa2.sales, ca.sales) : null,
       adsRoas: adsOk ? pct(sa2.roas, ca.roas) : null, adsClicks: adsOk ? pct(sa2.clicks, ca.clicks) : null,
     };
