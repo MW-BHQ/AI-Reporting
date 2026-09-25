@@ -285,6 +285,15 @@ expect_field "sa cost of sale"    "$SHOP" "d.ads.costOfSale===1710/32000?'ok':un
 # NO SHOPEE-NAMED META ACCOUNT: spend is null, not 0, and the all-ad figure
 # names only the part it has (Shopee Ads 500 + 200 over confirmed 12,000).
 expect_field "sp meta no account" "/api/shopee?from=2026-07-02&to=2026-07-31" "(a=>a.available&&a.noAccount&&a.spend===null&&a.salesPerBaht===null&&a.spendParts.join()==='Shopee Ads'&&a.totalSpend===700)(d.ads)?'ok':undefined"
+# MoM / YoY. One day (01-07) against 30-06: sales 20,000 vs 99,999; Shopee
+# Ads spend 1,000 vs 9,000. The July window's previous span (June) has ONE
+# pasted day for July's two, so it is a dash, not a -99% collapse; there is
+# no July 2025 at all.
+D1="/api/shopee?from=2026-07-01&to=2026-07-01"
+expect_field "cmp mom sales"      "$D1" "Math.abs(d.compare.mom.sales-(20000/99999-1))<1e-9?'ok':undefined"
+expect_field "cmp mom ads spend"  "$D1" "Math.abs(d.compare.mom.adsSpend-(1000/9000-1))<1e-9?'ok':undefined"
+expect_field "cmp partial dash"   "$SHOP" "d.compare.mom===null&&d.compare.yoy===null?'ok':undefined"
+expect_field "cmp windows"        "$SHOP" "d.compare.windows.prev.from==='2026-05-31'&&d.compare.windows.yoy.from==='2025-07-01'?'ok':undefined"
 expect_field "sc no windsor"      "$SHOP" "d.settlement===undefined&&d.catalogue===undefined?'ok':undefined"
 expect_field "sc last day"        "$SHOP" "d.lastDay==='2026-07-02'?'ok':undefined"
 

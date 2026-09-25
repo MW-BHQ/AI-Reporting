@@ -11007,14 +11007,25 @@ function spRows(values) {
  * not a split. The export's days are GMT+8, one hour off Bangkok.
  */
 const SHOPEE_ADS_TAB = process.env.SHOPEE_ADS_TAB || "Shopee Ads";
-async function readShopeeAds(from, to) {
-  let res;
-  try {
-    res = await sheetBatchGet(SHOPEE_SHEET_ID, [`'${SHOPEE_ADS_TAB}'!A1:R`]);
-  } catch (e) {
-    logJson("WARNING", "shopee_ads_tab_unavailable", { error: String(e.message || e) });
+/**
+ * ONE READ OF THE SHEET PER REQUEST (v3.330.0). The tab now computes three
+ * windows — selected, previous, year ago — from the same rows, so the two
+ * reads are started once and shared; each window only filters.
+ */
+function loadShopeeRaw() {
+  const settle = (p) => p.then((res) => ({ res }), (err) => ({ err }));
+  return {
+    main: settle(sheetBatchGet(SHOPEE_SHEET_ID, SHOPEE_TABS.map((t) => `'${t}'!A1:AF`))),
+    ads: settle(sheetBatchGet(SHOPEE_SHEET_ID, [`'${SHOPEE_ADS_TAB}'!A1:R`])),
+  };
+}
+async function readShopeeAds(from, to, raw) {
+  const got = await raw.ads;
+  if (got.err) {
+    logJson("WARNING", "shopee_ads_tab_unavailable", { error: String(got.err.message || got.err) });
     return { available: false, reason: `no "${SHOPEE_ADS_TAB}" tab in the sheet` };
   }
+  const res = got.res;
   const byDay = new Map();
   for (const r of spRows(res[0] && res[0].values)) {
     if (!r._day || r._day < from || r._day > to) continue;
@@ -11038,15 +11049,15 @@ async function readShopeeAds(from, to) {
   return t;
 }
 
-async function buildShopeeSeller(from, to) {
-  let res;
-  const adsP = readShopeeAds(from, to).catch(() => ({ available: false, reason: "unavailable" }));
-  try {
-    res = await sheetBatchGet(SHOPEE_SHEET_ID, SHOPEE_TABS.map((t) => `'${t}'!A1:AF`));
-  } catch (e) {
+async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
+  const adsP = readShopeeAds(from, to, raw).catch(() => ({ available: false, reason: "unavailable" }));
+  const got = await raw.main;
+  if (got.err) {
+    const e = got.err;
     logJson("WARNING", "shopee_sheet_unavailable", { error: String(e.message || e) });
     return { available: false, reason: /40[34]/.test(String(e.message)) ? "sheet not shared with the service account" : "sheet unavailable" };
   }
+  const res = got.res;
   const tab = Object.fromEntries(SHOPEE_TABS.map((t, i) => [t, spRows(res[i] && res[i].values)]));
   const inWin = (r) => r._day && r._day >= from && r._day <= to;
   /**
@@ -11228,9 +11239,13 @@ async function buildShopeeSeller(from, to) {
  * sales, it is a measured return, not spend beside orders.
  */
 async function buildShopee(from, to) {
-  const [seller, metaRows] = await Promise.all([
-    buildShopeeSeller(from, to).catch(() => ({ available: false, reason: "sheet unavailable" })),
+  const raw = loadShopeeRaw();
+  const cw = comparisonWindows(from, to);
+  const [seller, metaRows, prevS, yoyS] = await Promise.all([
+    buildShopeeSeller(from, to, raw).catch(() => ({ available: false, reason: "sheet unavailable" })),
     windsor("facebook", ["account_name", "spend"], from, to).catch(() => null),
+    buildShopeeSeller(cw.prev.from, cw.prev.to, raw).catch(() => null),
+    buildShopeeSeller(cw.yoy.from, cw.yoy.to, raw).catch(() => null),
   ]);
   if (!seller.available) return { available: false, reason: seller.reason, lastDay: seller.lastDay || null };
   const shopeeAds = (metaRows || []).filter((r) => /shopee/i.test(String(r.account_name || "")));
@@ -11251,9 +11266,36 @@ async function buildShopee(from, to) {
    */
   const parts = [spend != null && "Meta", sa && "Shopee Ads"].filter(Boolean);
   const totalSpend = parts.length ? (spend || 0) + (sa ? sa.spend : 0) : null;
+  /**
+   * MoM / YoY (v3.330.0) — previous equal-length window and the same dates a
+   * year back, from `comparisonWindows` like every other tab.
+   *
+   * ONLY A FULLY COVERED WINDOW IS COMPARED. The sheet starts in Jan 2025 and
+   * is pasted by hand, so a comparison window is often partly or wholly
+   * missing; ten days against thirty-one would read as a collapse. A window
+   * with fewer daily rows than the selected one is a dash, not a number. The
+   * ads block is checked on its own day count, since it is its own paste.
+   */
+  const cmp = (o) => {
+    if (!o || !o.available || o.days !== seller.days) return null;
+    const pct = (a, b) => (a != null && b ? a / b - 1 : null);
+    const cf = o.funnel, ct = o.traffic || {}, st = seller.traffic || {};
+    const ca = o.shopeeAds, sa2 = seller.shopeeAds;
+    const adsOk = ca && ca.available && sa2 && sa2.available && ca.days === sa2.days;
+    return {
+      sales: pct(f.sales, cf.sales), orders: pct(f.orders, cf.orders),
+      aov: pct(f.orders ? f.sales / f.orders : null, cf.orders ? cf.sales / cf.orders : null),
+      conversion: pct(f.conversion, cf.conversion), visits: pct(f.visits, cf.visits),
+      pageViews: pct(st.pageViews, ct.pageViews), bounceRate: pct(st.bounceRate, ct.bounceRate),
+      avgTimeSec: pct(st.avgTimeSec, ct.avgTimeSec), newFollowers: pct(st.newFollowers, ct.newFollowers),
+      adsSpend: adsOk ? pct(sa2.spend, ca.spend) : null, adsSales: adsOk ? pct(sa2.sales, ca.sales) : null,
+      adsRoas: adsOk ? pct(sa2.roas, ca.roas) : null, adsClicks: adsOk ? pct(sa2.clicks, ca.clicks) : null,
+    };
+  };
   return {
     available: true,
     ...seller,
+    compare: { windows: cw, mom: cmp(prevS), yoy: cmp(yoyS) },
     aov: f.orders ? f.sales / f.orders : null,
     ads: {
       available: metaRows !== null,

@@ -8095,16 +8095,28 @@ function renderShopee() {
   const pc = (v, dp = 1) => v != null ? num(v * 100, { dp }) + '%' : '\u2014';
   const mmss = (s) => s == null ? '\u2014' : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
   const maxDay = Math.max(1, ...d.daily.map(x => x.value));
+  /**
+   * MoM / YoY chips (v3.330.0). A dash means the comparison window is not
+   * fully in the sheet — never a fall to zero. `bad` flips the colour for a
+   * figure where up is worse (bounce rate).
+   */
+  const C = d.compare || {}, W = C.windows || {};
+  const chip = (v, tip, bad) => v == null
+    ? `<span class="dlt none" data-tip="${esc(tip + ' \u2014 that window is not fully in the sheet')}">\u2014</span>`
+    : `<span class="dlt ${(bad ? -v : v)>0.005?'up':((bad ? -v : v)<-0.005?'down':'flat')}" data-tip="${esc(tip)}">${changeText(v, Math.abs(v)>=1?0:1)}</span>`;
+  const cmp = (k, bad) => `<div class="note cmp-row" style="margin-top:6px">
+    <span class="cmp-pair">${chip(C.mom && C.mom[k], W.prev ? `MoM \u2014 ${humanDate(W.prev.from)} to ${humanDate(W.prev.to)}` : 'MoM', bad)} MoM</span>
+    <span class="cmp-pair">${chip(C.yoy && C.yoy[k], W.yoy ? `YoY \u2014 ${humanDate(W.yoy.from)} to ${humanDate(W.yoy.to)}` : 'YoY', bad)} YoY</span></div>`;
 
   const head = `<div class="grid g-4">
     <div class="stat card"><div class="lab">Confirmed sales (THB)</div><div class="val">${sf.sales!=null?num(sf.sales,{money:true,bare:true}):'\u2014'}</div>
-      <div class="sub">${sf.unconfirmedSales!=null?`THB ${num(sf.unconfirmedSales,{money:true,bare:true})} placed, not confirmed`:'\u2014'}</div></div>
+      <div class="sub">${sf.unconfirmedSales!=null?`THB ${num(sf.unconfirmedSales,{money:true,bare:true})} placed, not confirmed`:'\u2014'}</div>${cmp('sales')}</div>
     <div class="stat card"><div class="lab">Orders</div><div class="val">${sf.orders!=null?num(sf.orders):'\u2014'}</div>
-      <div class="sub">${sf.units!=null?`${sf.itemsPerOrder!=null?num(sf.itemsPerOrder,{dp:2}):'\u2014'} items per order \u00b7 ${pc(sf.confirmRate)} of placed confirmed`:'\u2014'}</div></div>
+      <div class="sub">${sf.units!=null?`${sf.itemsPerOrder!=null?num(sf.itemsPerOrder,{dp:2}):'\u2014'} items per order \u00b7 ${pc(sf.confirmRate)} of placed confirmed`:'\u2014'}</div>${cmp('orders')}</div>
     <div class="stat card"><div class="lab">Average order (THB)</div><div class="val">${d.aov!=null?num(d.aov,{money:true,bare:true}):'\u2014'}</div>
-      <div class="sub">confirmed orders</div></div>
+      <div class="sub">confirmed orders</div>${cmp('aov')}</div>
     <div class="stat card"><div class="lab">Conversion</div><div class="val">${pc(sf.conversion, 2)}</div>
-      <div class="sub">${sf.visits!=null?`confirmed buyers per visit \u00b7 ${num(sf.visits)} visits`:'\u2014'}</div></div>
+      <div class="sub">${sf.visits!=null?`confirmed buyers per visit \u00b7 ${num(sf.visits)} visits`:'\u2014'}</div>${cmp('conversion')}</div>
   </div>`;
 
   const ad = d.ads || {};
@@ -8129,13 +8141,13 @@ function renderShopee() {
     <div class="card-title">Shopee Ads &middot; Shopee-credited${sa.days < d.days ? ` <span class="pill">${num(sa.days)} of ${num(d.days)} days</span>` : ''}</div>
     <div class="grid g-4">
       <div class="stat"><div class="lab">Spend (THB)</div><div class="val">${num(sa.spend,{money:true,bare:true})}</div>
-        <div class="sub">${sa.costPerOrder!=null?`THB ${num(sa.costPerOrder,{money:true,bare:true})} per order`:'\u2014'}</div></div>
+        <div class="sub">${sa.costPerOrder!=null?`THB ${num(sa.costPerOrder,{money:true,bare:true})} per order`:'\u2014'}</div>${cmp('adsSpend')}</div>
       <div class="stat"><div class="lab">Sales credited (THB)</div><div class="val">${num(sa.sales,{money:true,bare:true})}</div>
-        <div class="sub">${sa.shareOfSales!=null?`${pc(sa.shareOfSales,0)} of confirmed sales`:'\u2014'} \u00b7 ${num(sa.orders)} orders</div></div>
+        <div class="sub">${sa.shareOfSales!=null?`${pc(sa.shareOfSales,0)} of confirmed sales`:'\u2014'} \u00b7 ${num(sa.orders)} orders</div>${cmp('adsSales')}</div>
       <div class="stat"><div class="lab">ROAS</div><div class="val">${sa.roas!=null?num(sa.roas,{dp:1})+'\u00d7':'\u2014'}</div>
-        <div class="sub">7-day, any shop product</div></div>
+        <div class="sub">7-day, any shop product</div>${cmp('adsRoas')}</div>
       <div class="stat"><div class="lab">Clicks</div><div class="val">${num(sa.clicks)}</div>
-        <div class="sub">${pc(sa.ctr,2)} CTR \u00b7 THB ${sa.cpc!=null?num(sa.cpc,{dp:2}):'\u2014'} per click</div></div>
+        <div class="sub">${pc(sa.ctr,2)} CTR \u00b7 THB ${sa.cpc!=null?num(sa.cpc,{dp:2}):'\u2014'} per click</div>${cmp('adsClicks')}</div>
     </div>
   </div>` : `<div class="card mt"><div class="card-title">Shopee Ads</div>
     <div class="note" style="margin-top:0;">${esc(sa.reason || 'unavailable')} &mdash; not measured, not zero.</div></div>`;
@@ -8177,13 +8189,13 @@ function renderShopee() {
   const tr = sc.traffic;
   const traffic = tr ? `<div class="grid g-4 mt">
     <div class="stat card"><div class="lab">Shop page views</div><div class="val">${num(tr.pageViews)}</div>
-      <div class="sub">${tr.pagesPerVisitor!=null?num(tr.pagesPerVisitor,{dp:2})+' per visitor':'\u2014'}</div></div>
+      <div class="sub">${tr.pagesPerVisitor!=null?num(tr.pagesPerVisitor,{dp:2})+' per visitor':'\u2014'}</div>${cmp('pageViews')}</div>
     <div class="stat card"><div class="lab">Bounce rate</div><div class="val">${pc(tr.bounceRate)}</div>
-      <div class="sub">weighted by daily visitors</div></div>
+      <div class="sub">weighted by daily visitors</div>${cmp('bounceRate', true)}</div>
     <div class="stat card"><div class="lab">Avg. time</div><div class="val">${mmss(tr.avgTimeSec)}</div>
-      <div class="sub">per visitor</div></div>
+      <div class="sub">per visitor</div>${cmp('avgTimeSec')}</div>
     <div class="stat card"><div class="lab">New followers</div><div class="val">${num(tr.newFollowers)}</div>
-      <div class="sub">${tr.visitors?pc(tr.newVisitors/tr.visitors,0)+' of visitors new':'\u2014'}</div></div>
+      <div class="sub">${tr.visitors?pc(tr.newVisitors/tr.visitors,0)+' of visitors new':'\u2014'}</div>${cmp('newFollowers')}</div>
   </div>` : '';
 
   /**
@@ -11831,7 +11843,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.329.0';
+const CLIENT_BUILD = '3.330.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

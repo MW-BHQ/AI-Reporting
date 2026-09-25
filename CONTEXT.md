@@ -1,5 +1,16 @@
 ### Recent (September 2026)
 
+**v3.330.0 — Shopee MoM / YoY.** Twelve cards carry MoM and YoY chips: the
+four headline cards, the four Shopee Ads stats, the four traffic cards.
+Windows from `comparisonWindows` (equal span before; same dates a year back).
+- ONLY A FULLY COVERED WINDOW IS COMPARED: fewer daily Sales rows than the
+  selected window → dash ("not fully in the sheet"). The sheet starts Jan 2025
+  and is pasted by hand; 1 day against 31 would read as −97%. Ads compared on
+  their own day count. Negative-tested.
+- The sheet is read ONCE per request (`loadShopeeRaw`) and shared by the three
+  windows.
+- Bounce rate's colour is inverted (up is worse).
+
 **v3.329.0 — Date range picker.** MW: the two native date boxes were "quite
 hard to use". One button (`1 – 31 Jan 2025 · 31 days`) opens a panel: nine
 presets left, two months right, month/year selects to jump, click a month
