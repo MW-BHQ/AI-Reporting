@@ -1,5 +1,19 @@
 ### Recent (September 2026)
 
+**v3.331.0 — Shopee buyer profile ("Who buys").** Brand Portal > Consumer
+Insights > Buyer, monthly export. Tabs `Buyer Gender`, `Buyer Age`,
+`Buyer Behaviour` (`SHOPEE_BUYER_TABS`); MW dropped location, preferences
+and top products as not stackable month on month.
+- WHOLE MONTHS ONLY; several months are SUMMED as buyer-months (labelled).
+- `All` rows, not the per-category `TH` rows: with two categories the TH rows
+  double-count a buyer of both. Fixture: All+TH doubles 10 to 20.
+- BEHAVIOUR HAS NO DATE COLUMN: MW types the month alone in column A above
+  each month's paste. Frequency and recency are trailing-12-month views and
+  show the latest month only; purchasing power sums.
+- `2025.10` in a number cell displays `2025.1`: one digit after the dot is a
+  tens month (`buyerMonth`). Negative-tested.
+- A range under a whole month says "pick one or more whole months".
+
 **v3.330.0 — Shopee MoM / YoY.** Twelve cards carry MoM and YoY chips: the
 four headline cards, the four Shopee Ads stats, the four traffic cards.
 Windows from `comparisonWindows` (equal span before; same dates a year back).

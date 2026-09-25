@@ -11017,6 +11017,127 @@ function loadShopeeRaw() {
   return {
     main: settle(sheetBatchGet(SHOPEE_SHEET_ID, SHOPEE_TABS.map((t) => `'${t}'!A1:AF`))),
     ads: settle(sheetBatchGet(SHOPEE_SHEET_ID, [`'${SHOPEE_ADS_TAB}'!A1:R`])),
+    buyers: settle(sheetBatchGet(SHOPEE_SHEET_ID, SHOPEE_BUYER_TABS.map((t) => `'${t}'!A1:J`))),
+  };
+}
+
+/**
+ * SHOPEE BUYER PROFILE (v3.331.0) — Brand Portal > Consumer Insights > Buyer,
+ * one MONTHLY export at a time. MW kept three sheets of it: Gender, Age and
+ * Behaviour; the rest (location tiers, preferences, top products) do not
+ * stack month on month.
+ *
+ * MONTHLY SNAPSHOTS OF UNIQUE BUYERS. A month counts only if it lies wholly
+ * inside the selected range — there is no daily split to prorate. Several
+ * months are SUMMED as buyer-months: someone who bought in two months counts
+ * twice, so shares are month-weighted and the total is not a head count.
+ *
+ * `All` ROWS, NOT `TH`. The export repeats each figure under `All` and under
+ * the shop's category row. With one category they match; with two, summing
+ * the category rows double-counts a buyer of both. `All` is the de-duplicated
+ * shop figure. TH rows are used only when a month has no All rows.
+ *
+ * BEHAVIOUR HAS NO DATE COLUMN. MW types the month (`2025.01`) alone in
+ * column A above each month's paste; rows below belong to it. Frequency and
+ * recency are trailing-12-month distributions as of that month, so they are
+ * NOT summed: the latest whole month in the range is shown. Purchasing power
+ * is within-month spend, so it sums like gender and age.
+ */
+const SHOPEE_BUYER_TABS = (process.env.SHOPEE_BUYER_TABS || "Buyer Gender,Buyer Age,Buyer Behaviour").split(",");
+const BUYER_FILTER = { buyers: "all", "new buyers": "new", "existing buyers": "existing" };
+/**
+ * `2025.01` — or what Sheets makes of it. Typed into a number cell, 2025.10
+ * DISPLAYS as `2025.1`, while 2025.01 keeps its zero; so one digit after a
+ * dot is a tens month (October), never January. `2025-01` also accepted.
+ */
+function buyerMonth(v) {
+  const m = String(v == null ? "" : v).trim().match(/^(\d{4})([.\-/])(\d{1,2})$/);
+  if (!m) return null;
+  const mo = m[2] === "." && m[3].length === 1 ? Number(m[3]) * 10 : Number(m[3]);
+  return mo >= 1 && mo <= 12 ? `${m[1]}.${String(mo).padStart(2, "0")}` : null;
+}
+function monthsInside(from, to) {
+  const out = [];
+  let [y, m] = from.slice(0, 7).split("-").map(Number);
+  for (;;) {
+    const first = `${y}-${String(m).padStart(2, "0")}-01`;
+    if (first > to) break;
+    const last = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+    if (first >= from && last <= to) out.push(`${y}.${String(m).padStart(2, "0")}`);
+    m += 1; if (m > 12) { m = 1; y += 1; }
+  }
+  return out;
+}
+async function readShopeeBuyers(from, to, raw) {
+  const got = await raw.buyers;
+  if (got.err) return { available: false, reason: `no "${SHOPEE_BUYER_TABS.join('", "')}" tabs in the sheet` };
+  const months = monthsInside(from, to);
+  if (!months.length) return { available: false, reason: "monthly data — pick one or more whole months" };
+  const want = new Set(months);
+  /** rows: [{month, all, filter, key, n}] from one of the three sheets. */
+  const facts = (values, keyCol) => {
+    const out = [];
+    let head = null;
+    for (const r of values || []) {
+      if (/^date$/i.test(String(r[0] || "").trim())) { head = r.map(spKey); continue; }
+      if (!head) continue;
+      const o = {}; head.forEach((k, i) => { if (k) o[k] = r[i]; });
+      const month = buyerMonth(o.date);
+      const f = BUYER_FILTER[String(o.buyerfilter || "").trim().toLowerCase()];
+      if (!want.has(month) || !f) continue;
+      out.push({ month, all: /^all$/i.test(String(o.region || "").trim()), filter: f,
+        key: String(o[keyCol] || "").trim(), n: spNum(o.numberofbuyers) });
+    }
+    return out;
+  };
+  const behaviour = (values) => {
+    const out = [];
+    let month = null, block = null, head = null;
+    for (const r of values || []) {
+      const c0 = String(r[0] == null ? "" : r[0]).trim();
+      if (buyerMonth(c0) && !r.slice(1).some((c) => String(c || "").trim())) { month = buyerMonth(c0); head = null; continue; }
+      const t = c0.match(/Purchasing (Power|Frequency|Recency)/i);
+      if (t) { block = t[1].toLowerCase(); head = null; continue; }
+      if (/^region$/i.test(c0)) { head = r.map(spKey); continue; }
+      if (!head || !block || !month || !want.has(month)) continue;
+      const o = {}; head.forEach((k, i) => { if (k) o[k] = r[i]; });
+      const f = BUYER_FILTER[String(o.buyerfilter || "").trim().toLowerCase()];
+      if (!f) continue;
+      out.push({ month, block, all: /^all$/i.test(String(o.region || "").trim()), filter: f,
+        key: String(o[`purchasing${block}`] || "").trim(), n: spNum(o.numberofbuyers) });
+    }
+    return out;
+  };
+  /** Keep All rows for a month that has them, else the shop rows. */
+  const dedupe = (rows) => {
+    const hasAll = new Set(rows.filter((r) => r.all).map((r) => r.month + (r.block || "")));
+    return rows.filter((r) => r.all === hasAll.has(r.month + (r.block || "")));
+  };
+  const dist = (rows, filter) => {
+    const m = new Map();
+    for (const r of rows) if (r.filter === filter) m.set(r.key, (m.get(r.key) || 0) + r.n);
+    const total = [...m.values()].reduce((a, b) => a + b, 0);
+    return { total, rows: [...m].map(([k, n]) => ({ k, n, share: total ? n / total : null })) };
+  };
+  const three = (rows) => ({ all: dist(rows, "all"), new: dist(rows, "new"), existing: dist(rows, "existing") });
+  const res = got.res;
+  const gender = dedupe(facts(res[0] && res[0].values, "gender"));
+  const age = dedupe(facts(res[1] && res[1].values, "agegroup"));
+  const beh = dedupe(behaviour(res[2] && res[2].values));
+  const found = [...new Set([...gender, ...age, ...beh].map((r) => r.month))].sort();
+  if (!found.length) return { available: false, reason: `no buyer rows for ${months.join(", ")}` };
+  const latest = [...new Set(beh.filter((r) => r.block !== "power").map((r) => r.month))].sort().pop() || null;
+  const g = three(gender);
+  return {
+    available: true,
+    months: found, missing: months.filter((m) => !found.includes(m)),
+    buyerMonths: g.all.total || null,
+    newShare: g.new.total + g.existing.total ? g.new.total / (g.new.total + g.existing.total) : null,
+    gender: g, age: three(age),
+    power: three(beh.filter((r) => r.block === "power")),
+    latest,
+    frequency: latest ? three(beh.filter((r) => r.block === "frequency" && r.month === latest)) : null,
+    recency: latest ? three(beh.filter((r) => r.block === "recency" && r.month === latest)) : null,
   };
 }
 async function readShopeeAds(from, to, raw) {
@@ -11051,6 +11172,7 @@ async function readShopeeAds(from, to, raw) {
 
 async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
   const adsP = readShopeeAds(from, to, raw).catch(() => ({ available: false, reason: "unavailable" }));
+  const buyersP = readShopeeBuyers(from, to, raw).catch(() => ({ available: false, reason: "unavailable" }));
   const got = await raw.main;
   if (got.err) {
     const e = got.err;
@@ -11216,7 +11338,7 @@ async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
        */
       const known = shopeeAds.available && opt.length > 0 && f.sales != null;
       const rest = known ? f.sales - shopeeAds.sales - offTotal.sales : null;
-      return { shopeeAds, sources: known ? {
+      return { shopeeAds, buyers: await buyersP, sources: known ? {
         shopeeAds: shopeeAds.sales, offPlatform: offTotal.sales,
         organic: rest >= 0 ? rest : null, overCredited: rest < 0,
       } : null };

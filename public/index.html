@@ -8171,6 +8171,48 @@ function renderShopee() {
     </tbody></table>
   </div>` : '';
 
+  /**
+   * WHO BUYS (v3.331.0) — Brand Portal buyer profile, monthly. Several months
+   * are summed as buyer-months, so the card says so; frequency and recency
+   * are the latest month's trailing-12-month view and are labelled that way.
+   */
+  const by = d.buyers || {};
+  const bMon = (m) => { const [y, mo] = String(m).split('.'); return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+mo - 1]} ${y}`; };
+  const bTable = (title, t, note) => {
+    if (!t || !t.all || !t.all.rows.length) return '';
+    const cell = (grp, k) => { const r = (t[grp] && t[grp].rows || []).find(x => x.k === k); return r && r.share != null ? pc(r.share, 0) : '\u2014'; };
+    return `<div><div class="lab" style="margin-bottom:6px">${title}${note ? ` <span class="muted">\u00b7 ${note}</span>` : ''}</div>
+      <table class="roomy"><thead><tr><th></th><th class="num">All</th><th class="num">New</th><th class="num">Existing</th></tr></thead><tbody>
+      ${t.all.rows.map(r => `<tr><td>${esc(r.k.charAt(0).toUpperCase() + r.k.slice(1))}</td><td class="num">${cell('all', r.k)}</td>
+        <td class="num">${cell('new', r.k)}</td><td class="num">${cell('existing', r.k)}</td></tr>`).join('')}
+      </tbody></table></div>`;
+  };
+  const topAge = by.available && by.age.all.rows.length ? by.age.all.rows.reduce((a, b) => (b.n > a.n ? b : a)) : null;
+  const female = by.available ? by.gender.all.rows.find(r => r.k === 'female') : null;
+  const buyers = !by.available ? `<div class="card mt"><div class="card-title">Who buys</div>
+    <div class="note" style="margin-top:0;">${esc(by.reason || 'unavailable')} &mdash; not measured, not zero.</div></div>`
+  : `<div class="card mt">
+    <div class="card-title">Who buys &middot; ${by.months.length === 1 ? esc(bMon(by.months[0])) : `${esc(bMon(by.months[0]))} \u2013 ${esc(bMon(by.months[by.months.length-1]))}`}${
+      by.missing.length ? ` <span class="pill">${num(by.missing.length)} month${by.missing.length>1?'s':''} not in the sheet</span>` : ''}</div>
+    <div class="grid g-4">
+      <div class="stat"><div class="lab">Buyers</div><div class="val">${by.buyerMonths!=null?num(by.buyerMonths):'\u2014'}</div>
+        <div class="sub">${by.months.length>1?'unique per month, months summed':'unique buyers in the month'}</div></div>
+      <div class="stat"><div class="lab">New buyers</div><div class="val">${pc(by.newShare,0)}</div>
+        <div class="sub">no confirmed order in the 12 months before</div></div>
+      <div class="stat"><div class="lab">Female</div><div class="val">${female?pc(female.share,0):'\u2014'}</div>
+        <div class="sub">of buyers</div></div>
+      <div class="stat"><div class="lab">Largest age group</div><div class="val">${topAge?esc(topAge.k):'\u2014'}</div>
+        <div class="sub">${topAge?pc(topAge.share,0)+' of buyers':'\u2014'}</div></div>
+    </div>
+    <div class="grid g-2 mt" style="column-gap:32px;row-gap:18px;">
+      ${bTable('Gender', by.gender)}
+      ${bTable('Age', by.age)}
+      ${bTable('Spend per buyer', by.power, 'Shopee bands, USD')}
+      ${bTable('Orders in the last 12 months', by.frequency, by.latest ? 'as of ' + bMon(by.latest) : '')}
+      ${bTable('Last purchase before this one', by.recency, by.latest ? 'as of ' + bMon(by.latest) : '')}
+    </div>
+  </div>`;
+
   const stages = [['Visits', sf.visits],
     [`Viewed a product${sf.viewsPerProductVisitor!=null?` <span class="muted">\u00b7 ${num(sf.viewsPerProductVisitor,{dp:1})} views each</span>`:''}`, sf.productVisitors], ['Added to cart', sf.cartVisitors],
     ['Placed an order', sf.placedBuyers], ['Confirmed', sf.buyers]];
@@ -8272,7 +8314,7 @@ function renderShopee() {
       <div class="big">Shopee <span class="pill">BangkokHospital_Official</span></div>
       <div class="hint">One storefront, from Shopee Seller Centre. Confirmed sales are orders Shopee has confirmed.</div>
     </div></div>
-    ${head}${commercial}${shopeeAds}${sources}${funnel}${traffic}${offsite}${offCampaigns}${sold}${trend}${promos}`;
+    ${head}${commercial}${shopeeAds}${sources}${funnel}${traffic}${buyers}${offsite}${offCampaigns}${sold}${trend}${promos}`;
 }
 
 function renderLine() {
@@ -11843,7 +11885,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.330.0';
+const CLIENT_BUILD = '3.331.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

@@ -1,4 +1,4 @@
-# BHQ War Room — handover at v3.330.0
+# BHQ War Room — handover at v3.331.0
 
 Written for a fresh session. MW is bringing a NEW source of Shopee data, so the
 Shopee section matters most — read it before touching anything there.
@@ -8,7 +8,7 @@ Shopee section matters most — read it before touching anything there.
 - Repo `MW-BHQ/AI-Reporting`, branch `main`, working dir `/home/claude/bkh/`.
 - Auto-deploys to Cloud Run `ai-reporting-git`, `asia-southeast1`,
   project `ai-reporting-503911`. Live at `w.bkhos.co`.
-- Current version **3.330.0**. Bump BOTH `package.json` and `CLIENT_BUILD` in
+- Current version **3.331.0**. Bump BOTH `package.json` and `CLIENT_BUILD` in
   `public/index.html`, and add a CONTEXT.md entry.
 - MW supplies a session-scoped GitHub PAT. Ask for it; do not look for one.
 

@@ -1092,6 +1092,41 @@ global.fetch = async (url, opts = {}) => {
      * ORGANIC: July 32,000 - 14,000 - 17,000 = 1,000. On 01-07 alone the
      * credits (8,000 + 14,000) exceed confirmed 20,000 — no honest remainder.
      */
+    /**
+     * BUYER PROFILE TABS (v3.331.0), one July 2026 export pasted as-is.
+     *   - Every figure under BOTH `All` and the shop's `TH` row: summing both
+     *     doubles July to 20 buyers. Right: 10.
+     *   - June rows OUTSIDE a July window.
+     *   - Rows dated `2026.7`: a one-digit month after a dot is a tens month
+     *     (Sheets shows 2026.10 as 2026.1), so this is "70" — invalid, skipped.
+     *     A naive pad would read it as July and add 99.
+     *   - Behaviour has no date column: `2026.06` / `2026.07` sit alone in
+     *     column A above each month's blocks.
+     */
+    if (/Buyer(%20|\+| )Gender/.test(u)) {
+      if (process.env.MOCK_FAIL_CONNECTOR === "shopee-buyers") return jsonRes({ error: { code: 400 } }, 400);
+      const g = (mo, reg, gen, f, n) => [mo, reg, reg === "All" ? "All" : "Unspecified", reg === "All" ? "All" : "BangkokHospital_Official",
+        "All", gen, f, n, "0%"];
+      const both = (mo, gen, f, n) => [g(mo, "All", gen, f, n), g(mo, "TH", gen, f, n)];
+      const GH = ["Date", "Region", "Brand Name", "Shop Name", "Category", "Gender", "Buyer Filter", "Number of Buyers", "% of Buyers"];
+      const AH = ["Date", "Region", "Brand Name", "Shop Name", "Category", "Age Group", "Buyer Filter", "Number of Buyers", "% of Buyers"];
+      const BH = (k) => ["Region", "Brand Name", "Shop Name", "Category", "Buyer Filter", k, "Number of Buyers", "% of Buyers"];
+      const b = (reg, f, k, n) => [reg, "All", "All", "All", f, k, n, "0%"];
+      const bb = (f, k, n) => [b("All", f, k, n), b("TH", f, k, n)];
+      return jsonRes({ spreadsheetId: "mock-shopee", valueRanges: [
+        { values: [GH, ...both("2026.06", "male", "Buyers", "50"),
+          ...both("2026.07", "male", "Buyers", "4"), ...both("2026.07", "female", "Buyers", "6"),
+          ...both("2026.07", "male", "New Buyers", "3"), ...both("2026.07", "female", "New Buyers", "3"),
+          ...both("2026.07", "male", "Existing Buyers", "1"), ...both("2026.07", "female", "Existing Buyers", "3"),
+          g("2026.7", "All", "male", "Buyers", "99")] },
+        { values: [AH, ...both("2026.07", "35-44", "Buyers", "5"), ...both("2026.07", ">55", "Buyers", "5"),
+          ...both("2026.07", "35-44", "New Buyers", "4"), ...both("2026.07", ">55", "New Buyers", "2")] },
+        { values: [["2026.06"], ["Buyers' Purchasing Power"], BH("Purchasing Power"), ...bb("Buyers", ">=$200", "77"),
+          ["2026.07"], ["Buyers' Purchasing Power"], BH("Purchasing Power"), ...bb("Buyers", ">=$200", "8"), ...bb("Buyers", "$100-200", "2"),
+          ["Buyers' Purchasing Frequency"], BH("Purchasing Frequency"), ...bb("Buyers", "1", "7"), ...bb("Buyers", "2-3", "3"),
+          ["Buyers' Purchasing Recency"], BH("Purchasing Recency"), ...bb("Existing Buyers", "Within 1 Month", "2"), ...bb("Existing Buyers", "2-4 months ago", "2")] },
+      ] });
+    }
     if (/(%27|')Shopee(%20|\+| )Ads(%27|')/.test(u)) {
       if (process.env.MOCK_FAIL_CONNECTOR === "shopee-ads") return jsonRes({ error: { code: 400, message: "Unable to parse range" } }, 400);
       const AH = ["Date", "Region", "Shop Name", "Shop ID", "Impressions", "Clicks", "CTR", "Orders", "Gross Sales(USD)",
