@@ -1,113 +1,133 @@
-# BHQ War Room — handover at v3.284.0
+# BHQ War Room — handover at v3.320.0
 
-Written because the previous session's judgement had visibly degraded: a working
-feature was removed by over-thinking, a units regression shipped, and two test
-assertions turned out to assert nothing. Read the four open items first — they
-are corrections MW asked for and they are all specified precisely enough to just
-do.
+Written for a fresh session. MW is bringing a NEW source of Shopee data, so the
+Shopee section matters most — read it before touching anything there.
 
 ## Where things are
 
 - Repo `MW-BHQ/AI-Reporting`, branch `main`, working dir `/home/claude/bkh/`.
-- Auto-deploys to Cloud Run `ai-reporting`, `asia-southeast1`,
-  project `ai-reporting-503911`.
-- Current version **3.284.0**. Bump BOTH `package.json` and `CLIENT_BUILD` in
-  `public/index.html`, and add a CONTEXT.md entry — the audit FAILS without one.
-- Before every push: `ECOM_SHEET_ID=mock npm test` must exit 0, and
-  `python3 test/print-overflow.py 900 <port>` must exit 0.
-- Mock server:
-  `WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ECOM_SHEET_ID=mock ADMIN_EMAILS=admin@bkh.test ACCESS_BUCKET=mock-bucket PORT=8412 node --require ./test/mock-fetch.js server.js`
-  It dies between bash calls — start it and use it in the SAME command.
+- Auto-deploys to Cloud Run `ai-reporting-git`, `asia-southeast1`,
+  project `ai-reporting-503911`. Live at `w.bkhos.co`.
+- Current version **3.320.0**. Bump BOTH `package.json` and `CLIENT_BUILD` in
+  `public/index.html`, and add a CONTEXT.md entry.
 - MW supplies a session-scoped GitHub PAT. Ask for it; do not look for one.
 
-## OPEN — four corrections from MW, in his words
-
-### 1. Bring back average scroll depth
-"can you find average scroll depth? you just average all scroll depth events
-fired in the page."
-
-He is right and the previous session was wrong to remove it. The code already
-computed it correctly — `wsum / ev`, each threshold weighted by its event count
-— and it was replaced with a reach figure after an argument about single-
-threshold containers that does not apply here: this property tracks 25/50/75/90.
-
-`server.js`, in the campaign `quality` block: `scrollDepth` is still computed and
-still on the payload. `scrollReach` was added beside it. The card in
-`public/index.html` renders `scrollReach` only. Put the average back. Keeping
-both is fine if they fit.
-
-### 2. Missing (THB) labels — A REGRESSION, fix first
-"Ad platform performance > Cost per link click you missed (THB)."
-
-v3.284.0 moved the baht symbol out of every money VALUE in the campaign tab but
-only added `(THB)` to four labels. Every other money figure is now unitless,
-which is worse than before the change. Confirmed still missing:
-
-- `Cost per link click` (Ad platform performance)
-- `Landing page views` — its sub-line is a cost per view
-- `Cost per ${d.goalResultLabel}`
-- the funnel note and any other prose carrying a figure
-
-Find them with: values using `{money:true,bare:true}` whose label has no `(THB)`.
-`num(v,{money:true,bare:true})` keeps the rounding rules (satang below 100, K/M
-above) and drops the glyph — do NOT use `{dp:0}`, which flattens THB 4.08 to "4".
-
-### 3. Email — read every Click_URL, pattern-match it
-"you just find all click_url in the page then filter out which falls into email
-address pattern."
-
-The current code only reads the `contact_link*` events, which exist only where a
-GTM trigger fired — and `Click | email` fires solely on
-`Click URL contains info@bangkokhospital.com`. Every other department inbox is
-therefore invisible.
-
-The fix is to widen the SOURCE, not the pattern. `contact_us` fires from
-`Click | Contact URL`, whose regex is `^(tel:|mailto:|https?://(line\.me|...))`
-— that catches EVERY `mailto:`, whatever the address. It sends `Click_URL`, and
-`Click_URL` is a registered custom dimension (since Jul 2025, with
-`Click_Classes`, `Click_ID`, `Click_Text`).
-
-So: pull `contact_us` with `customEvent:Click_URL`, campaign-filtered, and treat
-any value matching an email pattern as an email click. Dedupe against the
-contact-link source the same way the other overlaps are handled — per channel,
-the HIGHER of the two, never the sum.
-
-### 4. Google Ads landing views — use GA4, not the connector
-"you just look in GA4 see how many visit came from source/medium google/cpc or
-google/paid search."
-
-The previous session established that Google Ads has no landing-page-view metric
-(true — checked all 2,902 connector fields) and then rendered a dash, which is
-not what MW wants. GA4 has the answer: sessions where source/medium is
-`google / cpc` (also `google / paid search`) for this campaign.
-
-The campaign already pulls GA4 by `session_manual_source` and
-`session_manual_medium` (`GA4_MAIN_DIMS`), so the number is likely already in
-`variants` — no new request needed. Fill the Google Ads landing-views cell from
-it and label it so nobody reads it as a Meta-style landing page view.
+### Before every push
+```
+ECOM_SHEET_ID=mock npm test                      # must exit 0
+python3 test/print-overflow.py 900 <port>        # must exit 0
+```
+Mock server (dies between bash calls — start it in the SAME command):
+```
+WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ECOM_SHEET_ID=mock \
+ADMIN_EMAILS=admin@bkh.test ACCESS_BUCKET=mock-bucket PORT=8412 \
+node --require ./test/mock-fetch.js server.js
+```
 
 ## How MW works
 
-- Terse, reads the DEPLOYED output, catches naming and layout errors fast.
-  When he says something is wrong he is right — trace to root cause first.
+- Terse. Reads the DEPLOYED output and catches naming and layout errors fast.
+  When he says something is wrong, he is right — trace to root cause first.
 - One block of issues per turn; work through them and push. No incremental
   approval requests.
 - He deletes footnotes on sight. Explanations belong in code and CONTEXT.md.
-- Never show a 0 for something that was not measured — dash plus a reason. This
-  is the single most repeated correction in the project's history.
-- `/i-have-adhd` is on: lead with the next action, number the steps, no preamble.
+- `/i-have-adhd` is usually on: lead with the next action, number the steps, no
+  preamble, plain words. He will say so if a reply is too dense.
+- Never show 0 for something that was not measured — dash plus a reason. The
+  single most repeated correction in this project's history.
+
+## SHOPEE — read this first
+
+**Current state (v3.317–v3.320).** Own tab, `/api/shopee`, `requireTab("shopee")`,
+nav under `Report > Channels > Shopee`. Windsor connector, account `250344218`
+(`BangkokHospital_Official`), one shop.
+
+**What the Windsor connector has:** orders, settlement, returns, wallet,
+products. **No line items** — confirmed by asking `get_fields` for nine
+spellings of item name/sku/quantity. **No traffic, views, cart or source/medium.**
+
+**What is built:**
+- Gross (cancelled excluded), AOV, cancellation rate
+- Settlement: sold, escrow, fee breakdown, take rate (~8.56% on this shop —
+  5.35% commission + 3.21% transaction fee)
+- Repeat buyers from `order_buyer_username`
+- Off-site ad spend joined from META accounts named `*Shopee*` — spend BESIDE
+  orders, never attribution
+- Cancellation by payment method, order value bands, hour/weekday (Bangkok)
+- Catalogue: live SKUs, median discount, zero-discount listings, low stock
+- **Units sold reconstructed from stock movement** — snapshots to GCS on every
+  load, units = the FALL between snapshots
+
+**Traps that cost time here:**
+- Orders, settlement and returns are SEPARATE tables. Fields from two of them in
+  one Windsor call cross-join the rows.
+- Cancelled orders keep their full amount and settle at ZERO escrow.
+- Discounts arrive as a shop-level lump on a row with a NULL `order_id`.
+- `order_create_time` is UTC — add 7h for Bangkok or the evening peak lands in
+  the afternoon.
+- A restock RAISES stock, so it cannot be read as a negative sale.
+
+**If MW's new source has line items, order-level traffic, or Seller Centre
+funnel data**, the honest move is to REPLACE the stock-movement reconstruction
+rather than run both — a heuristic that outlives its replacement is a second
+answer waiting to disagree with the first. That exact mistake was made with LINE
+(`lineSameDay`) and cleaned up in v3.316.0.
+
+## LINE — complete, five steps
+
+Overview funnel → Campaign tab → Pages (source row only) → LINE OA tab →
+Monthly Report page. Reads two tabs of one Google Sheet
+(`1pk5EA12P-DnkjHvhh9PvsVCFmvvKhk-exSDVP2V82Oc`): `Broadcast` and `friends`.
+- `deliveredCount` = impressions, `open` = INTERACTIONS (not Engagement — that
+  stage is GA4 engaged sessions and must stay a subset of visits).
+- Clicks are ignored: the session is already counted at Visits.
+- The `utm_camapgin` header is MISSPELLED in the sheet. Matched as written.
+- One OA serves all four hospitals → group-scoped, stated everywhere.
+- Windsor's LINE connector was removed in v3.316.0.
+
+## Windsor connectors
+
+**In use:** `google_my_business` (11 calls), `google_ads` (11), `facebook` (9),
+`tiktok_organic` (4), `facebook_organic` (3), `shopee`, `lazada`.
+**Disconnected/dead:** `line`, GA4, Search Console, YouTube — GA4 and GSC are on
+the direct Google APIs, YouTube reads a Sheet.
+**Lazada is catalogue-only** — Products table, no orders, no revenue. MW parked
+it; nothing is built.
+
+**ALWAYS call `get_fields` before writing any Windsor pull.** Most repeated
+mistake on this project. MCP approval is per chat session.
+
+## Open items
+
+1. Verify v3.314–v3.320 on deployed data — MW has not reviewed them yet.
+2. Shopee stock snapshots only start producing units-sold once a snapshot
+   predates the viewed window. First useful day is the day after deploy.
+3. Marketplace revenue is still OUTSIDE every headline revenue figure. Deliberate
+   — decide explicitly before joining it.
+4. PDF: campaign sheet has a ~6% blank tail. Residual is prep-vs-print text
+   wrapping; closing it risks a second page. Left alone on purpose.
 
 ## Traps that have each cost a release
 
-- **Verify Windsor field names with `get_fields` before writing code.** Most
-  repeated mistake on the project.
-- **Ratios cannot be summed or averaged across rows** — impression share, bounce
-  rate, scroll depth. Pull the components, divide once at the end.
-- **Declaration order**: a `const` used before it is defined throws "Cannot
-  access before initialization". Hit three times, most recently v3.279.
-- **Write a negative test for every guard.** Break the code, watch the assertion
-  fail, revert. Several assertions in this suite were decorative until this was
-  done — two of them in v3.284 alone.
-- **`.slide.pn tbody tr` reveals hidden rows in print**, and `print-prep` must
-  mirror any print-only rule that changes block height or `@page` is sized wrong.
-- **The SVG twin is what prints**, not the canvas.
+- **Verify Windsor field names with `get_fields` first.**
+- **Ratios and snapshots cannot be summed** — impression share, bounce rate,
+  scroll depth, follower counts. Difference two points, or divide once at the end.
+- **GA4 reports must be paginated.** `rowCount` is the authority; a short page is
+  NOT the end of the report (v3.293.0).
+- **Empty months produce no GA4 row** — pad the range or a chart silently starts
+  late (v3.294.0).
+- **Declaration order**: a `const` used before definition throws.
+- **Write a negative test for every guard.** Break it, watch it fail, revert.
+  Dozens of assertions in this suite were decorative until this was done — the
+  most common cause is a FIXTURE that cannot tell right from wrong, not a bad
+  assertion.
+- **The SVG twin is what prints**, not the canvas. `print-prep` must mirror any
+  print rule that changes height (v3.290.0).
+- **Backticks inside an HTML comment end a template literal** (`js:comment-backtick`).
+- **`BRAND_KEYS` is server-side only** — using it in the client kills the whole
+  report.
+- **Every view that renders a Load button needs a `VIEW_LOADERS` entry**, or the
+  button does nothing (`views:loader-registered`).
+- **Colour thresholds live in the `RED` block**, checked by `thresholds:named`
+  and `thresholds:units`. The block mixes fractions (0.70) with scaled values
+  (10 = 10%).
