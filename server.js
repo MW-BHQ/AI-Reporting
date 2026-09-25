@@ -5947,13 +5947,6 @@ function monthWeekLabels(from, to) {
  * `utm_camapgin`. It is matched as written and normalised here rather than
  * "corrected" in the sheet, because the export will keep producing the typo.
  */
-/**
- * Where the daily Shopee stock snapshots live. Falls back to the access bucket
- * so the feature works wherever the app already has write access, and degrades
- * to "not ready" rather than failing when there is no bucket at all.
- */
-const SHOPEE_SNAP_BUCKET = process.env.SHOPEE_SNAP_BUCKET || process.env.BENCH_BUCKET || process.env.ACCESS_BUCKET || "";
-
 const LINE_SHEET_ID = process.env.LINE_SHEET_ID || "1pk5EA12P-DnkjHvhh9PvsVCFmvvKhk-exSDVP2V82Oc";
 const LINE_SHEET_TAB = process.env.LINE_SHEET_TAB || "Broadcast";
 /**
@@ -10962,6 +10955,186 @@ app.get("/api/page", requireTab("pages"), async (req, res) => {
  * net figure for a recent range is incomplete by design. It is labelled as
  * settled rather than silently blended into the gross.
  */
+/**
+ * SHOPEE SELLER CENTRE — MW's Google Sheet of Seller Centre / Brand Portal
+ * exports (v3.321.0). This is the source the Windsor connector could never be:
+ * visits, product views, add-to-cart, placed vs confirmed, and off-platform
+ * traffic by channel and UTM, with units per product.
+ *
+ * THE TABS ARE PASTED EXPORTS, not tables. Sales and Traffic open with a
+ * range-summary row (`01-01-2025-31-01-2025`) and repeat their header above
+ * the daily block; months may be pasted one under another. So a row counts
+ * only if its first cell is ONE day, and columns are mapped from the nearest
+ * header row above it — by name, never by position.
+ *
+ * VISITORS ARE DAILY UNIQUES, SO A RANGE SUM IS VISITS. January's summary row
+ * says 11,347 visitors; the daily rows sum to 14,514. Summing is the only
+ * thing an arbitrary window can do, and the UI calls it visits. Every rate
+ * (bounce, conversion, time on page) is rebuilt from totals, never averaged.
+ *
+ * REPLACES THE STOCK-MOVEMENT RECONSTRUCTION. Units now come from Shopee
+ * itself; the snapshot heuristic was a second answer waiting to disagree with
+ * this one (the `lineSameDay` lesson, v3.316.0).
+ */
+const SHOPEE_SHEET_ID = process.env.SHOPEE_SHEET_ID || "17T21LhWMSxIkg8GWZKS6tFQ6Q1x0mssDXx5pLX7r-kg";
+const SHOPEE_TABS = ["Sales", "Traffic", "Product Views", "Campaign",
+  "Off-Platform Traffic", "Off-Platform Products By Day"];
+
+const spKey = (h) => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+/** `12-01-2025` or `12/01/2025` → `2025-01-12`; a range or a header → null. */
+const spDay = (v) => {
+  const m = String(v == null ? "" : v).trim().match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  return m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : null;
+};
+/** "41,130" → 41130, "25.00%" → 0.25, "00:01:05" → 65, "-" → 0. */
+const spNum = (v) => {
+  const s = String(v == null ? "" : v).trim();
+  if (/^\d+:\d{2}:\d{2}$/.test(s)) { const [h, m, x] = s.split(":").map(Number); return h * 3600 + m * 60 + x; }
+  const pct = s.endsWith("%");
+  const x = Number(s.replace(/[,%\s]/g, ""));
+  return Number.isFinite(x) ? (pct ? x / 100 : x) : 0;
+};
+/** Rows of one tab as objects keyed by normalised header, days only, one per date+row. */
+function spRows(values) {
+  let head = null;
+  const out = [];
+  for (const r of values || []) {
+    if (/^(date|promotion name)/i.test(String(r[0] || "").trim())) { head = r.map(spKey); continue; }
+    if (!head) continue;
+    const o = { _day: spDay(r[0]) };
+    head.forEach((k, i) => { if (k) o[k] = r[i]; });
+    out.push(o);
+  }
+  return out;
+}
+
+async function buildShopeeSeller(from, to) {
+  let res;
+  try {
+    res = await sheetBatchGet(SHOPEE_SHEET_ID, SHOPEE_TABS.map((t) => `'${t}'!A1:AF`));
+  } catch (e) {
+    logJson("WARNING", "shopee_sheet_unavailable", { error: String(e.message || e) });
+    return { available: false, reason: /40[34]/.test(String(e.message)) ? "sheet not shared with the service account" : "sheet unavailable" };
+  }
+  const tab = Object.fromEntries(SHOPEE_TABS.map((t, i) => [t, spRows(res[i] && res[i].values)]));
+  const inWin = (r) => r._day && r._day >= from && r._day <= to;
+  /**
+   * ONE ROW PER DAY on the daily tabs. A month pasted twice would otherwise
+   * double it; the later paste wins, because a re-export is a correction.
+   */
+  const byDay = (rows) => [...new Map(rows.filter(inWin).map((r) => [r._day, r])).values()];
+  const sum = (rows, k) => rows.reduce((a, r) => a + spNum(r[k]), 0);
+
+  const sales = byDay(tab["Sales"]);
+  const traffic = byDay(tab["Traffic"]);
+  const pv = byDay(tab["Product Views"]);
+  const lastDay = [...tab["Sales"], ...tab["Traffic"]].map((r) => r._day).filter(Boolean).sort().pop() || null;
+
+  const visits = sales.length ? sum(sales, "visitorsvisit") : null;
+  const f = {
+    visits,
+    productVisitors: pv.length ? sum(pv, "productvisitorsvisit") : null,
+    productViews: pv.length ? sum(pv, "productpageviews") : null,
+    cartVisitors: pv.length ? sum(pv, "productvisitorsaddtocart") : null,
+    cartUnits: pv.length ? sum(pv, "unitsaddtocart") : null,
+    placedBuyers: sales.length ? sum(sales, "buyersplacedorders") : null,
+    placedOrders: sales.length ? sum(sales, "ordersplacedorders") : null,
+    placedSales: sales.length ? sum(sales, "salesplacedordersthb") : null,
+    buyers: sales.length ? sum(sales, "buyersconfirmedorders") : null,
+    orders: sales.length ? sum(sales, "ordersconfirmedorders") : null,
+    units: sales.length ? sum(sales, "unitsconfirmedorders") : null,
+    sales: sales.length ? sum(sales, "salesconfirmedordersthb") : null,
+  };
+  const div = (a, b) => (a != null && b ? a / b : null);
+  f.conversion = div(f.buyers, f.visits);
+  f.cartRate = div(f.cartVisitors, f.productVisitors);
+  f.confirmRate = div(f.orders, f.placedOrders);
+  f.salesPerVisit = div(f.sales, f.visits);
+
+  /**
+   * TRAFFIC RATES ARE WEIGHTED BY THAT DAY'S VISITORS. A quiet holiday with a
+   * 60% bounce must not count as much as a campaign day with 2,000 visitors.
+   */
+  const tv = sum(traffic, "visitors");
+  const tr = traffic.length ? {
+    pageViews: sum(traffic, "pageviews"),
+    visitors: tv,
+    newVisitors: sum(traffic, "newvisitors"),
+    returningVisitors: sum(traffic, "existingvisitors"),
+    newFollowers: sum(traffic, "newfollowers"),
+    bounceRate: tv ? traffic.reduce((a, r) => a + spNum(r.bouncerate) * spNum(r.visitors), 0) / tv : null,
+    avgTimeSec: tv ? traffic.reduce((a, r) => a + spNum(r.avgtimespent) * spNum(r.visitors), 0) / tv : null,
+  } : null;
+  if (tr) tr.pagesPerVisitor = div(tr.pageViews, tr.visitors);
+
+  /**
+   * OFF-PLATFORM — traffic Shopee received from links outside Shopee, with the
+   * orders it credits to each. This is Shopee's own attribution (its tracking
+   * parameter), which is what the Meta-spend card could never claim.
+   */
+  const opt = tab["Off-Platform Traffic"].filter(inWin);
+  const chan = new Map(), camp = new Map();
+  for (const r of opt) {
+    const c = String(r.channelname || "Unknown").trim();
+    const e = chan.get(c) || { channel: c, visits: 0, cartUnits: 0, buyers: 0, orders: 0, units: 0, sales: 0 };
+    e.visits += spNum(r.visits); e.cartUnits += spNum(r.addtocartunits); e.buyers += spNum(r.buyers);
+    e.orders += spNum(r.orders); e.units += spNum(r.unitssold); e.sales += spNum(r.saleslocalcurrency);
+    chan.set(c, e);
+    const k = String(r.campaigndescription || "(not set)").trim();
+    const g = camp.get(k) || { campaign: k, visits: 0, orders: 0, sales: 0, channels: new Set() };
+    g.visits += spNum(r.visits); g.orders += spNum(r.orders); g.sales += spNum(r.saleslocalcurrency); g.channels.add(c);
+    camp.set(k, g);
+  }
+  const channels = [...chan.values()].map((e) => ({ ...e, conversion: div(e.orders, e.visits) }))
+    .sort((a, b) => b.sales - a.sales || b.visits - a.visits);
+  const offTotal = channels.reduce((a, e) => ({ visits: a.visits + e.visits, orders: a.orders + e.orders, sales: a.sales + e.sales }),
+    { visits: 0, orders: 0, sales: 0 });
+
+  /** WHAT SOLD — per product, from Shopee's own off-platform line items. */
+  const prod = new Map();
+  for (const r of tab["Off-Platform Products By Day"].filter(inWin)) {
+    const name = String(r.productname || "").replace(/\s*-\s*Bangkok Hospital.*$/i, "").trim();
+    if (!name) continue;
+    const e = prod.get(name) || { name, units: 0, sales: 0 };
+    e.units += spNum(r.grossunitssold); e.sales += spNum(r.grosssaleslocalcurrency);
+    prod.set(name, e);
+  }
+  const products = [...prod.values()].sort((a, b) => b.sales - a.sales);
+
+  /**
+   * PROMOTIONS report their WHOLE period, not the window — Shopee gives no
+   * daily split. Only promotions that overlap the window are listed, and the
+   * UI says the figures are lifetime.
+   */
+  const promotions = tab["Campaign"].map((r) => {
+    const m = String(r.promotionperiod || "").match(/(\d{2}-\d{2}-\d{4}).*?-\s*(\d{2}-\d{2}-\d{4})/);
+    return m ? { name: String(r.promotionname || "").trim(), type: String(r.promotiontype || "").trim(),
+      start: spDay(m[1]), end: spDay(m[2]), status: String(r.status || "").trim(),
+      sales: spNum(r.salesconfirmedorderthb), orders: spNum(r.ordersconfirmedorder),
+      units: spNum(r.unitssoldconfirmedorder) } : null;
+  }).filter((p) => p && p.name && p.start <= to && p.end >= from).sort((a, b) => b.sales - a.sales);
+
+  return {
+    available: sales.length > 0 || traffic.length > 0 || opt.length > 0,
+    reason: (sales.length || traffic.length || opt.length) ? null : (lastDay && lastDay < from ? `sheet runs to ${lastDay}` : "no rows in this range"),
+    lastDay,
+    days: sales.length,
+    funnel: f,
+    traffic: tr,
+    offPlatform: {
+      available: opt.length > 0, ...offTotal,
+      shareOfSales: div(offTotal.sales, f.sales),
+      channels,
+      campaigns: [...camp.values()].map((g) => ({ ...g, channels: [...g.channels] }))
+        .sort((a, b) => b.sales - a.sales || b.visits - a.visits).slice(0, 15),
+    },
+    products: { available: products.length > 0, units: products.reduce((a, p) => a + p.units, 0), top: products.slice(0, 12) },
+    promotions,
+    daily: sales.map((r) => ({ d: r._day, visits: spNum(r.visitorsvisit), orders: spNum(r.ordersconfirmedorders),
+      value: spNum(r.salesconfirmedordersthb) })).sort((a, b) => a.d.localeCompare(b.d)),
+  };
+}
+
 async function buildShopee(from, to) {
   const call = (fields) => windsor("shopee", fields, from, to).catch((e) => {
     logJson("WARNING", "shopee_table_unavailable", { fields: fields[0], error: String(e.message || e) });
@@ -10981,25 +11154,15 @@ async function buildShopee(from, to) {
   const metaShopee = windsor("facebook", ["account_name", "spend"], from, to).catch(() => null);
 
   /**
-   * THE CATALOGUE — and the trick that recovers what the API refuses to give.
-   *
-   * Shopee's connector has NO line items, so best-sellers are genuinely
-   * impossible from orders. But `product_available_stock` falls as coupons
-   * sell, so the DIFFERENCE between two snapshots of the same SKU is units
-   * sold. A snapshot is written on every load and compared against the newest
-   * one older than the window; over a few days that reconstructs per-product
-   * sales the orders table cannot express.
-   *
-   * IT IS A DIFFERENCE, NOT A SALES FIGURE, and the UI says so. A restock
-   * RAISES stock, so a rise is not a negative sale — it is an unknown, and
-   * those SKUs are excluded rather than netted off. Same rule as every other
-   * snapshot in this codebase: difference two points, never sum them.
+   * THE CATALOGUE — live listings, price and stock. Units sold used to be
+   * reconstructed from stock falls between snapshots; since v3.321.0 they come
+   * from Shopee's own Seller Centre export instead (`buildShopeeSeller`).
    */
   const products = windsor("shopee", ["product_id", "product_name", "product_status",
     "product_available_stock", "product_current_price", "product_original_price"], from, to)
     .catch(() => null);
 
-  const [orders, settle, returns, metaRows, prodRows] = await Promise.all([
+  const [orders, settle, returns, metaRows, prodRows, seller] = await Promise.all([
     call(["order_id", "order_create_time", "order_status", "order_total_amount",
       "order_payment_method", "order_currency", "order_buyer_username"]),
     call(["settlement_order_id", "settlement_escrow_amount", "settlement_order_selling_price",
@@ -11009,6 +11172,7 @@ async function buildShopee(from, to) {
       "return_reason", "return_status"]),
     metaShopee,
     products,
+    buildShopeeSeller(from, to).catch(() => ({ available: false, reason: "sheet unavailable" })),
   ]);
   if (orders === null) return { available: false, reason: "Shopee orders unavailable" };
 
@@ -11084,7 +11248,7 @@ async function buildShopee(from, to) {
    * than quietly counting the wrong accounts.
    */
   /**
-   * CATALOGUE HEALTH, and units sold reconstructed from stock movement.
+   * CATALOGUE HEALTH.
    *
    * ZERO DISCOUNT IS THE ACTIONABLE ONE. On Shopee a listing with no struck-out
    * price carries no discount badge, and on a shelf where everything else shows
@@ -11119,55 +11283,6 @@ async function buildShopee(from, to) {
       outOfStock: items.filter((i) => i.stock === 0).map((i) => i.name).slice(0, 10),
       items,
     };
-  })();
-
-  /**
-   * UNITS SOLD, from the fall in stock between two snapshots. Written on every
-   * load; the comparison uses the newest snapshot taken BEFORE the window
-   * opened, so the movement covers roughly the range being viewed.
-   *
-   * A RISE IS A RESTOCK, NOT A NEGATIVE SALE, so those SKUs are dropped rather
-   * than netted off — otherwise one restock of 50 would cancel 50 real sales
-   * elsewhere and the table would quietly understate the shop.
-   */
-  const movement = await (async () => {
-    if (!catalogue.available || !SHOPEE_SNAP_BUCKET) return { available: false };
-    const today = new Date().toISOString().slice(0, 10);
-    const snap = Object.fromEntries(catalogue.items.map((i) => [i.id, i.stock]));
-    try {
-      const index = (await gcsRead("shopee/stock-index.json", SHOPEE_SNAP_BUCKET)) || { days: [] };
-      const prior = index.days.filter((d) => d < from).sort().pop();
-      if (!index.days.includes(today)) {
-        await gcsWrite(`shopee/stock-${today}.json`, { day: today, stock: snap }, SHOPEE_SNAP_BUCKET);
-        await gcsWrite("shopee/stock-index.json",
-          { days: [...new Set([...index.days, today])].sort().slice(-400) }, SHOPEE_SNAP_BUCKET);
-      }
-      if (!prior) {
-        return { available: true, ready: false, since: null,
-          note: "No earlier stock snapshot than this range — units sold appear once a snapshot predates the window." };
-      }
-      const before = await gcsRead(`shopee/stock-${prior}.json`, SHOPEE_SNAP_BUCKET);
-      if (!before) return { available: true, ready: false, since: prior, note: "The earlier snapshot could not be read." };
-      const sold = catalogue.items.map((i) => {
-        const was = before.stock[i.id];
-        if (was == null) return null;                 // listing did not exist then
-        const delta = was - i.stock;
-        if (delta <= 0) return null;                  // restocked, or unmoved
-        return { name: i.name, units: delta, price: i.price, value: delta * i.price };
-      }).filter(Boolean).sort((a, b) => b.value - a.value);
-      return {
-        available: true, ready: true, since: prior,
-        units: sold.reduce((a, x) => a + x.units, 0),
-        value: sold.reduce((a, x) => a + x.value, 0),
-        top: sold.slice(0, 12),
-        // Listings whose stock ROSE — restocked in the window, so their sales
-        // cannot be read from the difference and are not guessed at.
-        restocked: catalogue.items.filter((i) => before.stock[i.id] != null && before.stock[i.id] < i.stock).length,
-      };
-    } catch (e) {
-      logJson("WARNING", "shopee_stock_snapshot_failed", { error: String(e.message || e) });
-      return { available: false };
-    }
   })();
 
   const shopeeAds = (metaRows || []).filter((r) => /shopee/i.test(String(r.account_name || "")));
@@ -11281,13 +11396,21 @@ async function buildShopee(from, to) {
       ordersPerBuyer: buyers.length ? live.length / buyers.length : null,
       top: buyers.sort((a, b) => b.value - a.value).slice(0, 10),
     },
-    promo, catalogue, movement,
+    promo, catalogue, seller,
     ads: adSpend === null ? { available: false } : {
       available: true, spend: adSpend,
       accounts: shopeeAds.map((r) => r.account_name),
       costPerOrder: live.length ? adSpend / live.length : null,
       // Spend as a share of what the storefront sold in the same window.
       costOfSale: gross ? adSpend / gross : null,
+      /**
+       * NOW MEASURED, NOT BESIDE: Shopee credits orders to Facebook/Instagram
+       * links through its own tracking parameter. Sales per baht is that
+       * credited figure over Meta's Shopee-account spend — still two sources,
+       * but no longer two unrelated totals.
+       */
+      metaSales: seller && seller.offPlatform && seller.offPlatform.available
+        ? seller.offPlatform.channels.filter((c) => /facebook|instagram/i.test(c.channel)).reduce((a, c) => a + c.sales, 0) : null,
     },
     paymentRisk: [...byPay.values()].map((p) => ({ ...p,
       cancelRate: p.orders ? p.cancelled / p.orders : null })).sort((a, b) => b.orders - a.orders),

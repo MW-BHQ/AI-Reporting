@@ -699,25 +699,6 @@ function ga4Report(body) {
 global.fetch = async (url, opts = {}) => {
   const u = String(url);
 
-  /**
-   * THE SHOPEE STOCK SNAPSHOT STORE. Units sold are the FALL in a listing's
-   * stock between two daily snapshots, so without a prior snapshot the whole
-   * feature reports "not ready" and every rule inside it goes untested.
-   *
-   * The prior day is set BELOW the current stock for P1 and P3 (sales) and
-   * ABOVE it for P2 (a restock), because a restock must be EXCLUDED rather
-   * than counted as a negative sale — one restock of 50 would otherwise cancel
-   * 50 real sales elsewhere.
-   */
-  if (u.includes("storage.googleapis.com") && u.includes("shopee%2Fstock")) {
-    if (u.includes("stock-index.json")) return jsonRes({ days: ["2026-06-01"] });
-    if (u.includes("uploadType=media")) return jsonRes({ ok: true });
-    return jsonRes({ day: "2026-06-01", stock: { P1: 120, P2: 250, P3: 350, P5: 200 } });
-  }
-  if (u.includes("storage.googleapis.com") && u.includes("uploadType=media") && u.includes("shopee")) {
-    return jsonRes({ ok: true });
-  }
-
   if (u.includes("connectors.windsor.ai/shopee")) {
     if (process.env.MOCK_FAIL_CONNECTOR === "shopee") return jsonRes({ error: "simulated failure" }, 500);
     const want = (new URL(u)).searchParams.get("fields") || "";
@@ -1169,6 +1150,71 @@ global.fetch = async (url, opts = {}) => {
    * unhandled-URL branch and fails loudly, which is the correct outcome.
    */
   if (u.includes("sheets.googleapis.com")) {
+  /**
+   * SHOPEE SELLER CENTRE SHEET (v3.321.0). Pasted exports, with every trap the
+   * real file sets. Window 2026-07-01..2026-07-31.
+   *
+   *   - A RANGE-SUMMARY ROW (`01-07-2026-31-07-2026`) under the first header.
+   *     Counting it doubles the month.
+   *   - 02-07 PASTED TWICE; the later paste (600 visits) is the correction.
+   *     Summing both gives 2,100 visits, first-wins gives 1,500. Right: 1,600.
+   *   - 30-06 and 01/08 OUTSIDE the window.
+   *   - BOUNCE and TIME are rates: weighted by visitors, 35% and 105s. The
+   *     plain mean of the two days is 30% and 90s.
+   *   - "Units(Confirmed Orders)" has no space — matched by normalised name.
+   *   - Off-platform dates are DD/MM/YYYY, the daily tabs DD-MM-YYYY.
+   */
+  if (u.includes("17T21LhWM")) {
+    if (process.env.MOCK_FAIL_CONNECTOR === "shopee-sheet") return jsonRes({ error: { code: 403 } }, 403);
+    const SH = ["Date", "Visitors (Visit)", "Buyers (Placed Orders)", "Units (Placed Orders)", "Orders (Placed Orders)",
+      "Sales (Placed Orders) (THB)", "Conversion Rate (Visit to Placed)", "Buyers (Confirmed Orders)",
+      "Units(Confirmed Orders)", "Orders (Confirmed Orders)", "Sales(Confirmed Orders) (THB)",
+      "Sales per Buyer (Confirmed Orders) (THB)", "Conversion Rate", "Conversion Rate (Placed to Confirmed)"];
+    const TH = ["Date", "Page Views", "Avg. Page Views", "Avg. Time Spent", "Bounce Rate", "Visitors",
+      "New Visitors", "Existing Visitors", "New Followers"];
+    const OPT = ["Date(DD/MM/YYYY)", "Region", "Shop Name", "Shop ID", "Terminal", "Channel Name", "Campaign Description",
+      "Campaign Info In Parameter", "Ad Content", "Visits", "Add To Cart Units", "Buyers", "Orders", "Sales(USD)",
+      "Sales(Local currency)", "Item Conversion Rate", "Unique Visitors", "New Buyers", "Add To Cart Value(USD)",
+      "Add To Cart Value(Local currency)", "Units Sold"];
+    const opt = (d, ch, camp, v, o, s, un) => [d, "TH", "BangkokHospital_Official", "250344218", "all", ch, camp,
+      "s250344218_ss_th_x_" + camp, "(not set)", v, "0", String(o), String(o), "0", s, "0", v, "0", "0", "0", String(un)];
+    const PBD = ["Date", "Region", "Shop Name", "Shop ID", "Product Name", "Product ID", "Terminal", "Channel",
+      "Campaign Description", "Campaign Info In Parameters", "Ad Content", "Gross Units Sold", "Gross Sales(USD)",
+      "Gross Sales(Local currency)"];
+    const pbd = (d, name, un, s) => [d, "TH", "BangkokHospital_Official", "250344218", name, "1", "all", "Website", "x", "x", "x", String(un), "0", s];
+    return jsonRes({ spreadsheetId: "mock-shopee", valueRanges: [
+      { values: [SH.slice(0, 10),
+        ["01-07-2026-31-07-2026", "99,999", "9", "9", "9", "999,999", "1%", "9", "9", "9", "999,999", "1", "1%", "1%"],
+        [], SH,
+        ["30-06-2026", "9,999", "9", "9", "9", "99,999", "1%", "9", "9", "9", "99,999", "1", "1%", "1%"],
+        ["01-07-2026", "1,000", "3", "4", "3", "30,000", "0.30%", "2", "3", "2", "20,000", "10,000.00", "0.20%", "66.67%"],
+        ["02-07-2026", "500", "1", "1", "1", "5,000", "0.20%", "1", "1", "1", "5,000", "5,000.00", "0.20%", "100.00%"],
+        [], SH,
+        ["02-07-2026", "600", "2", "2", "2", "12,000", "0.33%", "2", "2", "2", "12,000", "6,000.00", "0.33%", "100.00%"]] },
+      { values: [TH, ["01-07-2026-31-07-2026", "99,999", "1", "00:09:00", "90.00%", "99,999", "1", "1", "1"], [], TH,
+        ["01-07-2026", "300", "3.00", "00:01:00", "20.00%", "100", "60", "40", "5"],
+        ["02-07-2026", "600", "2.00", "00:02:00", "40.00%", "300", "200", "100", "7"]] },
+      { values: [["Date", "Product Visitors (Visit)", "Product Page Views", "Items Visited", "Product Bounce Visitors",
+        "Product Bounce Rate", "Search Clicks", "Likes", "Product Visitors (Add to Cart)", "Units (Add to Cart)"],
+        ["01-07-2026", "800", "1,200", "10", "100", "12.50%", "5", "1", "40", "50"],
+        ["02-07-2026", "200", "300", "5", "50", "25.00%", "2", "0", "10", "10"]] },
+      { values: [["Promotion Name", "Promotion Type", "Promotion Period", "Status", "Sales (Placed Order) (THB)",
+        "Sales (Confirmed Order) (THB)", "Orders (Placed Order)", "Orders (Confirmed Order)",
+        "Units Sold (Placed Order)", "Units Sold (Confirmed Order)"],
+        ["Mid-Year Heart", "Discount Promotion", "25-06-2026 10:00 - 05-07-2026 12:00", "Expired", "11,000", "10,000", "3", "2", "3", "2"],
+        ["January Longevity", "Discount Promotion", "01-01-2026 00:00 - 31-01-2026 00:00", "Expired", "99,999", "99,999", "9", "9", "9", "9"]] },
+      { values: [OPT,
+        opt("01/07/2026", "Facebook", "heart26", "10", 1, "5,000", 1),
+        opt("01/07/2026", "Website", "webpackage2026", "50", 2, "9,000", 2),
+        opt("02/07/2026", "Instagram", "heart26", "5", 1, "3,000", 1),
+        opt("01/08/2026", "Facebook", "heart26", "99", 9, "99,999", 9)] },
+      { values: [PBD,
+        pbd("01/07/2026", "Aqua Peel 5 sessions - Bangkok Hospital [E-Coupon]", 1, "10,800"),
+        pbd("02/07/2026", "Aqua Peel 5 sessions - Bangkok Hospital [E-Coupon]", 1, "10,800"),
+        pbd("02/07/2026", "Cool Sculpting 2 points - Bangkok Hospital [E-Coupon]", 1, "38,000"),
+        pbd("31/12/2025", "Cool Sculpting 2 points - Bangkok Hospital [E-Coupon]", 9, "999,999")] },
+    ] });
+  }
     /**
      * LINE OA BROADCAST SHEET (v3.295.0). MW's live export, with the four
      * things the real file actually does:

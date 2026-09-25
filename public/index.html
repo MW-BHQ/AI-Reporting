@@ -7941,7 +7941,7 @@ function renderGads() {
 function renderShopee() {
   const d = S.shopee;
   if (S.shopeeError) { const m = S.shopeeError; $('viewRoot').innerHTML = errorState(m); S.shopeeError = null; return; }
-  if (!d) { $('viewRoot').innerHTML = loadPrompt('shopee', 'Reads the Shopee storefront \u2014 orders, settlement and returns.'); return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('shopee', 'Reads the Shopee storefront \u2014 orders, settlement, returns and the Seller Centre sheet.'); return; }
   if (!d.available) { $('viewRoot').innerHTML = errorState(`Shopee unavailable \u2014 ${esc(d.reason || 'unknown error')}`); return; }
 
   const st = d.settlement || {};
@@ -8021,7 +8021,7 @@ function renderShopee() {
       <div class="sub">${num(bu.repeat)} of ${num(bu.total)} \u00b7 bought more than once in this range</div></div>
     <div class="stat card"><div class="lab">Ad spend (THB)</div>
       <div class="val">${ad.available?num(ad.spend,{money:true,bare:true}):'\u2014'}</div>
-      <div class="sub">${ad.available?`Meta: ${ad.accounts.map(esc).join(', ')||'no Shopee account'}`:'Meta unavailable this run'}</div></div>
+      <div class="sub">${ad.available?(ad.metaSales!=null&&ad.spend?`THB ${num(ad.metaSales/ad.spend,{dp:1})} Shopee-credited sales per THB`:`Meta: ${ad.accounts.map(esc).join(', ')||'no Shopee account'}`):'Meta unavailable this run'}</div></div>
     <div class="stat card"><div class="lab">Cost per order (THB)</div>
       <div class="val">${ad.available&&ad.costPerOrder!=null?num(ad.costPerOrder,{money:true,bare:true}):'\u2014'}</div>
       <div class="sub">${ad.available&&ad.costOfSale!=null?num(ad.costOfSale*100,{dp:1})+'% of sales \u00b7 spend beside orders, not attribution':'\u2014'}</div></div>
@@ -8106,33 +8106,92 @@ function renderShopee() {
   </div>` : '';
 
   const cat = d.catalogue || {};
-  const mv = d.movement || {};
   /**
-   * WHAT SOLD, RECONSTRUCTED FROM STOCK. Shopee's connector has no line items,
-   * so best-sellers are impossible from orders — but stock falls as coupons
-   * sell, and the difference between two snapshots IS units sold.
+   * SELLER CENTRE (v3.321.0) — MW's sheet of Shopee's own exports. Everything
+   * here is Shopee's measurement; the Windsor orders table above is kept for
+   * what only it has (cancellations, payment, settlement).
    *
-   * A RESTOCK RAISES STOCK, so those SKUs are excluded rather than netted off:
-   * one restock of 50 would otherwise cancel 50 real sales elsewhere. The count
-   * of excluded listings is shown, so the gap is visible rather than assumed
-   * away.
+   * VISITS, NOT VISITORS: Shopee's daily uniques summed over the range. Every
+   * rate is rebuilt from totals on the server.
    */
-  const sold = (mv.available && mv.ready) ? `<div class="card mt">
-    <div class="card-title">What sold &middot; ${num(mv.units)} units since ${esc(humanDate(mv.since))}</div>
-    <table class="roomy"><thead><tr><th>Package</th><th class="num">Units</th>
-      <th class="num">Price (THB)</th><th class="num">Value (THB)</th></tr></thead><tbody>
-      ${mv.top.map(x => `<tr><td class="trunc" style="max-width:0;" data-tip="${esc(x.name)}">${esc(x.name)}</td>
-        <td class="num">${num(x.units)}</td><td class="num">${num(x.price,{money:true,bare:true})}</td>
-        <td class="num">${num(x.value,{money:true,bare:true})}</td></tr>`).join('')}
+  const sc = d.seller || {};
+  const sf = sc.funnel || {};
+  const pc = (v, dp = 1) => v != null ? num(v * 100, { dp }) + '%' : '\u2014';
+  const mmss = (s) => s == null ? '\u2014' : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+  const stages = [['Visits', sf.visits], ['Viewed a product', sf.productVisitors], ['Added to cart', sf.cartVisitors],
+    ['Placed an order', sf.placedBuyers], ['Confirmed', sf.buyers]];
+  const top0 = Math.max(1, n0(sf.visits));
+  const funnel = !sc.available ? `<div class="card mt"><div class="card-title">Storefront funnel</div>
+    <div class="note" style="margin-top:0;">Seller Centre sheet: ${esc(sc.reason || 'unavailable')} &mdash; not measured, not zero.</div></div>`
+  : `<div class="card mt">
+    <div class="card-title">Storefront funnel &middot; Seller Centre${sc.lastDay && sc.lastDay < $('to').value ? ` <span class="pill">sheet to ${esc(humanDate(sc.lastDay))}</span>` : ''}</div>
+    <div class="grid g-4">
+      <div class="stat"><div class="lab">Confirmed sales (THB)</div><div class="val">${sf.sales!=null?num(sf.sales,{money:true,bare:true}):'\u2014'}</div>
+        <div class="sub">${sf.orders!=null?`${num(sf.orders)} orders \u00b7 ${num(sf.units)} units`:'\u2014'}</div></div>
+      <div class="stat"><div class="lab">Conversion</div><div class="val">${pc(sf.conversion, 2)}</div>
+        <div class="sub">confirmed buyers per visit</div></div>
+      <div class="stat"><div class="lab">Sales per visit (THB)</div><div class="val">${sf.salesPerVisit!=null?num(sf.salesPerVisit,{dp:0}):'\u2014'}</div>
+        <div class="sub">${num(sf.visits)} visits</div></div>
+      <div class="stat"><div class="lab">Placed \u2192 confirmed</div><div class="val">${pc(sf.confirmRate)}</div>
+        <div class="sub">${sf.placedOrders!=null?`${num(sf.placedOrders)} placed`:'\u2014'}</div></div>
+    </div>
+    <table class="roomy mt"><thead><tr><th>Stage</th><th class="num">People</th><th class="num">Of previous</th><th></th></tr></thead><tbody>
+      ${stages.map(([k, v], i) => { const prev = i ? stages[i-1][1] : null; return `<tr><td>${k}</td>
+        <td class="num">${v!=null?num(v):'\u2014'}</td>
+        <td class="num">${i && v!=null && prev ? pc(v/prev) : ''}</td>
+        <td style="width:40%;"><div style="background:var(--line);border-radius:3px;height:8px;">
+          <div style="background:#EE4D2D;height:8px;border-radius:3px;width:${v!=null?Math.max(0.5, v/top0*100).toFixed(1):0}%;"></div></div></td></tr>`; }).join('')}
     </tbody></table>
-    <div class="note">Shopee reports no line items, so this is the FALL in each listing's stock between two daily
-    snapshots &mdash; a close proxy for units sold, not a figure from the orders table.${
-      mv.restocked?` ${num(mv.restocked)} listing${mv.restocked===1?' was':'s were'} restocked in this window and cannot be read this way, so ${mv.restocked===1?'it is':'they are'} excluded rather than counted as negative sales.`:''}</div>
-  </div>` : (mv.available ? `<div class="card mt">
-    <div class="card-title">What sold</div>
-    <div class="note" style="margin-top:0;">${esc(mv.note || 'Not ready yet.')} A stock snapshot is written on every load, so
-    this fills in from tomorrow.</div>
-  </div>` : '');
+  </div>`;
+
+  const tr = sc.traffic;
+  const traffic = tr ? `<div class="grid g-4 mt">
+    <div class="stat card"><div class="lab">Shop page views</div><div class="val">${num(tr.pageViews)}</div>
+      <div class="sub">${tr.pagesPerVisitor!=null?num(tr.pagesPerVisitor,{dp:2})+' per visitor':'\u2014'}</div></div>
+    <div class="stat card"><div class="lab">Bounce rate</div><div class="val">${pc(tr.bounceRate)}</div>
+      <div class="sub">weighted by daily visitors</div></div>
+    <div class="stat card"><div class="lab">Avg. time</div><div class="val">${mmss(tr.avgTimeSec)}</div>
+      <div class="sub">per visitor</div></div>
+    <div class="stat card"><div class="lab">New followers</div><div class="val">${num(tr.newFollowers)}</div>
+      <div class="sub">${tr.visitors?pc(tr.newVisitors/tr.visitors,0)+' of visitors new':'\u2014'}</div></div>
+  </div>` : '';
+
+  /**
+   * OFF-PLATFORM is Shopee's OWN attribution — its tracking parameter on links
+   * from outside Shopee — so it is shown as credited, unlike Meta spend.
+   */
+  const op = sc.offPlatform || {};
+  const offsite = op.available ? `<div class="card mt">
+    <div class="card-title">Traffic from outside Shopee &middot; THB ${num(op.sales,{money:true,bare:true})} credited${
+      op.shareOfSales!=null?` (${pc(op.shareOfSales,0)} of confirmed)`:''}</div>
+    <table class="roomy"><thead><tr><th>Channel</th><th class="num">Visits</th><th class="num">Orders</th>
+      <th class="num">Conversion</th><th class="num">Sales (THB)</th></tr></thead><tbody>
+      ${op.channels.map(c => `<tr><td>${esc(c.channel)}</td><td class="num">${num(c.visits)}</td><td class="num">${num(c.orders)}</td>
+        <td class="num">${pc(c.conversion)}</td><td class="num">${num(c.sales,{money:true,bare:true})}</td></tr>`).join('')}
+    </tbody></table>
+    ${op.campaigns.length?`<table class="roomy mt"><thead><tr><th>Campaign</th><th>Channels</th><th class="num">Visits</th>
+      <th class="num">Orders</th><th class="num">Sales (THB)</th></tr></thead><tbody>
+      ${op.campaigns.map(c => `<tr><td>${esc(c.campaign)}</td><td class="trunc" style="max-width:0;" data-tip="${esc(c.channels.join(', '))}">${esc(c.channels.join(', '))}</td>
+        <td class="num">${num(c.visits)}</td><td class="num">${num(c.orders)}</td><td class="num">${num(c.sales,{money:true,bare:true})}</td></tr>`).join('')}
+    </tbody></table>`:''}
+  </div>` : '';
+
+  const pp = sc.products || {};
+  const sold = pp.available ? `<div class="card mt">
+    <div class="card-title">What sold from outside traffic &middot; ${num(pp.units)} units</div>
+    <table class="roomy"><thead><tr><th>Package</th><th class="num">Units</th><th class="num">Sales (THB)</th></tr></thead><tbody>
+      ${pp.top.map(x => `<tr><td class="trunc" style="max-width:0;" data-tip="${esc(x.name)}">${esc(x.name)}</td>
+        <td class="num">${num(x.units)}</td><td class="num">${num(x.sales,{money:true,bare:true})}</td></tr>`).join('')}
+    </tbody></table>
+  </div>` : '';
+
+  const promos = (sc.promotions || []).length ? `<div class="card mt">
+    <div class="card-title">Promotions running in this range &middot; whole-period figures</div>
+    <table class="roomy"><thead><tr><th>Promotion</th><th>Period</th><th class="num">Orders</th><th class="num">Sales (THB)</th></tr></thead><tbody>
+      ${sc.promotions.map(p => `<tr><td>${esc(p.name)}</td><td>${esc(humanDate(p.start))} \u2013 ${esc(humanDate(p.end))}</td>
+        <td class="num">${num(p.orders)}</td><td class="num">${num(p.sales,{money:true,bare:true})}</td></tr>`).join('')}
+    </tbody></table>
+  </div>` : '';
 
   /**
    * ZERO DISCOUNT IS THE ACTIONABLE ROW. On Shopee a listing priced at its
@@ -8207,7 +8266,7 @@ function renderShopee() {
       <div class="big">Shopee <span class="pill">BangkokHospital_Official</span></div>
       <div class="hint">One storefront. Gross is what customers paid; received is what Shopee transferred after its cut.</div>
     </div></div>
-    ${head}${commercial}${sold}${trend}${catalogue}${bands}${timing}${risk}${pay}${promo}${ret}${money}`;
+    ${head}${commercial}${funnel}${traffic}${offsite}${sold}${trend}${promos}${catalogue}${bands}${timing}${risk}${pay}${promo}${ret}${money}`;
 }
 
 function renderLine() {
@@ -11778,7 +11837,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.320.0';
+const CLIENT_BUILD = '3.321.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

@@ -1,5 +1,36 @@
 ### Recent (September 2026)
 
+**v3.321.0 — Shopee Seller Centre sheet; stock-movement units retired.** MW
+supplied a Google Sheet (`17T21LhWMSxIkg8GWZKS6tFQ6Q1x0mssDXx5pLX7r-kg`,
+`SHOPEE_SHEET_ID`) of pasted Seller Centre / Brand Portal exports. Tabs read:
+Sales, Traffic, Product Views, Campaign, Off-Platform Traffic, Off-Platform
+Products By Day. By Item is skipped — By Day carries the same rows with a date.
+
+**PASTED EXPORTS, NOT TABLES.** Sales and Traffic open with a range-summary row
+(`01-01-2025-31-01-2025`) and repeat the header above the daily block. A row
+counts only if its first cell is ONE day; columns come from the nearest header
+above, by normalised name (`Units(Confirmed Orders)` has no space). A day pasted
+twice keeps the later paste. Daily tabs use `DD-MM-YYYY`, off-platform tabs
+`DD/MM/YYYY`.
+
+**VISITORS ARE DAILY UNIQUES.** January's summary says 11,347; the days sum to
+14,514. A range can only sum, so the UI says visits. Bounce and time on page are
+weighted by that day's visitors; every conversion is divided once from totals.
+
+**OFF-PLATFORM IS SHOPEE'S OWN ATTRIBUTION** (its tracking parameter), so it is
+shown as credited. `ads.metaSales` = Facebook + Instagram channel sales, shown
+per baht of Meta Shopee-account spend.
+
+**STOCK-MOVEMENT RECONSTRUCTION REMOVED** (snapshots, GCS writes, fixture,
+tests). Units now come from Shopee. Keeping both was the `lineSameDay` mistake.
+
+**TWO SALES FIGURES, LABELLED.** Windsor gross (orders table: cancellations,
+payment, settlement) and Seller Centre confirmed sales. Not reconciled yet —
+check on deployed data before choosing a headline.
+
+**THE SHEET MUST BE SHARED** with `715584769614-compute@developer.gserviceaccount.com`.
+A 403 shows "sheet not shared with the service account", never zeros.
+
 **v3.320.0 — best-sellers, reconstructed from stock movement.** MW: "this is
 very little insight compare to what is really useful." He was right, and the
 reason was that the PRODUCTS table had never been touched.

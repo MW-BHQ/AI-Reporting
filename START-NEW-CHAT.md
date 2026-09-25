@@ -1,4 +1,4 @@
-# BHQ War Room — handover at v3.320.0
+# BHQ War Room — handover at v3.321.0
 
 Written for a fresh session. MW is bringing a NEW source of Shopee data, so the
 Shopee section matters most — read it before touching anything there.
@@ -8,7 +8,7 @@ Shopee section matters most — read it before touching anything there.
 - Repo `MW-BHQ/AI-Reporting`, branch `main`, working dir `/home/claude/bkh/`.
 - Auto-deploys to Cloud Run `ai-reporting-git`, `asia-southeast1`,
   project `ai-reporting-503911`. Live at `w.bkhos.co`.
-- Current version **3.320.0**. Bump BOTH `package.json` and `CLIENT_BUILD` in
+- Current version **3.321.0**. Bump BOTH `package.json` and `CLIENT_BUILD` in
   `public/index.html`, and add a CONTEXT.md entry.
 - MW supplies a session-scoped GitHub PAT. Ask for it; do not look for one.
 
@@ -55,8 +55,9 @@ spellings of item name/sku/quantity. **No traffic, views, cart or source/medium.
   orders, never attribution
 - Cancellation by payment method, order value bands, hour/weekday (Bangkok)
 - Catalogue: live SKUs, median discount, zero-discount listings, low stock
-- **Units sold reconstructed from stock movement** — snapshots to GCS on every
-  load, units = the FALL between snapshots
+- **Seller Centre sheet (v3.321.0)** `SHOPEE_SHEET_ID` — funnel, traffic,
+  off-platform channels/campaigns, products, promotions. Stock-movement units
+  were REMOVED in favour of it.
 
 **Traps that cost time here:**
 - Orders, settlement and returns are SEPARATE tables. Fields from two of them in
@@ -100,8 +101,8 @@ mistake on this project. MCP approval is per chat session.
 ## Open items
 
 1. Verify v3.314–v3.320 on deployed data — MW has not reviewed them yet.
-2. Shopee stock snapshots only start producing units-sold once a snapshot
-   predates the viewed window. First useful day is the day after deploy.
+2. Shopee: Windsor gross vs Seller Centre confirmed sales not reconciled on live
+   data. Check before picking a headline.
 3. Marketplace revenue is still OUTSIDE every headline revenue figure. Deliberate
    — decide explicitly before joining it.
 4. PDF: campaign sheet has a ~6% blank tail. Residual is prep-vs-print text
