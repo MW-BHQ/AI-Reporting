@@ -7944,7 +7944,7 @@ function renderShopee() {
     <div class="stat card"><div class="lab">Confirmed sales (THB)</div><div class="val">${sf.sales!=null?num(sf.sales,{money:true,bare:true}):'\u2014'}</div>
       <div class="sub">${sf.unconfirmedSales!=null?`THB ${num(sf.unconfirmedSales,{money:true,bare:true})} placed, not confirmed`:'\u2014'}</div></div>
     <div class="stat card"><div class="lab">Orders</div><div class="val">${sf.orders!=null?num(sf.orders):'\u2014'}</div>
-      <div class="sub">${sf.units!=null?`${num(sf.units)} units \u00b7 ${pc(sf.confirmRate)} of placed confirmed`:'\u2014'}</div></div>
+      <div class="sub">${sf.units!=null?`${sf.itemsPerOrder!=null?num(sf.itemsPerOrder,{dp:2}):'\u2014'} items per order \u00b7 ${pc(sf.confirmRate)} of placed confirmed`:'\u2014'}</div></div>
     <div class="stat card"><div class="lab">Average order (THB)</div><div class="val">${d.aov!=null?num(d.aov,{money:true,bare:true}):'\u2014'}</div>
       <div class="sub">confirmed orders</div></div>
     <div class="stat card"><div class="lab">Conversion</div><div class="val">${pc(sf.conversion, 2)}</div>
@@ -7984,7 +7984,27 @@ function renderShopee() {
   </div>` : `<div class="card mt"><div class="card-title">Shopee Ads</div>
     <div class="note" style="margin-top:0;">${esc(sa.reason || 'unavailable')} &mdash; not measured, not zero.</div></div>`;
 
-  const stages = [['Visits', sf.visits], ['Viewed a product', sf.productVisitors], ['Added to cart', sf.cartVisitors],
+  /**
+   * WHERE SALES CAME FROM. Two Shopee credits and a remainder. Organic is an
+   * ESTIMATE — one order can carry both credits — and is a dash, never a
+   * negative or a zero, when the credits exceed confirmed sales.
+   */
+  const so = d.sources;
+  const srcRows = so ? [['Shopee Ads', so.shopeeAds, 'credited'], ['Outside Shopee', so.offPlatform, 'credited'],
+    ['Organic \u2014 search and feed', so.organic, 'estimate']] : [];
+  const sources = so ? `<div class="card mt">
+    <div class="card-title">Where sales came from</div>
+    <table class="roomy"><thead><tr><th>Source</th><th></th><th class="num">Sales (THB)</th><th class="num">Of confirmed</th><th></th></tr></thead><tbody>
+      ${srcRows.map(([k, v, how]) => `<tr><td>${k}</td><td class="muted">${how}</td>
+        <td class="num">${v!=null?num(v,{money:true,bare:true}):'\u2014'}</td>
+        <td class="num">${v!=null&&sf.sales?pc(v/sf.sales,0):(so.overCredited&&how==='estimate'?'credits exceed sales':'\u2014')}</td>
+        <td style="width:30%;"><div style="background:var(--line);border-radius:3px;height:8px;">
+          <div style="background:#EE4D2D;height:8px;border-radius:3px;width:${v!=null&&sf.sales?Math.min(100,v/sf.sales*100).toFixed(1):0}%;"></div></div></td></tr>`).join('')}
+    </tbody></table>
+  </div>` : '';
+
+  const stages = [['Visits', sf.visits],
+    [`Viewed a product${sf.viewsPerProductVisitor!=null?` <span class="muted">\u00b7 ${num(sf.viewsPerProductVisitor,{dp:1})} views each</span>`:''}`, sf.productVisitors], ['Added to cart', sf.cartVisitors],
     ['Placed an order', sf.placedBuyers], ['Confirmed', sf.buyers]];
   const top0 = Math.max(1, n0(sf.visits));
   const funnel = `<div class="card mt">
@@ -8084,7 +8104,7 @@ function renderShopee() {
       <div class="big">Shopee <span class="pill">BangkokHospital_Official</span></div>
       <div class="hint">One storefront, from Shopee Seller Centre. Confirmed sales are orders Shopee has confirmed.</div>
     </div></div>
-    ${head}${commercial}${shopeeAds}${funnel}${traffic}${offsite}${offCampaigns}${sold}${trend}${promos}`;
+    ${head}${commercial}${shopeeAds}${sources}${funnel}${traffic}${offsite}${offCampaigns}${sold}${trend}${promos}`;
 }
 
 function renderLine() {
@@ -11655,7 +11675,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.326.0';
+const CLIENT_BUILD = '3.327.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

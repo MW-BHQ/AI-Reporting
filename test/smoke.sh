@@ -268,11 +268,18 @@ expect_field "sc pkg x channel"   "$SHOP" "(p=>p.channels.length===2&&p.channels
 # SHOPEE ADS: shop rows only (All doubles to 3,400); total row and 30/06 out;
 # 03/07 has only an All row and is kept.
 expect_field "sa spend"           "$SHOP" "d.shopeeAds.spend===1700?1700:undefined"
-expect_field "sa sales"           "$SHOP" "d.shopeeAds.sales===18000?18000:undefined"
+expect_field "sa sales"           "$SHOP" "d.shopeeAds.sales===14000?14000:undefined"
 expect_field "sa days"            "$SHOP" "d.shopeeAds.days===3?3:undefined"
 expect_field "sa ctr once"        "$SHOP" "d.shopeeAds.ctr===170/17000?'ok':undefined"
-expect_field "sa roas once"       "$SHOP" "d.shopeeAds.roas===18000/1700?'ok':undefined"
-expect_field "sa share credited"  "$SHOP" "d.shopeeAds.shareOfSales===18000/32000?'ok':undefined"
+expect_field "sa roas once"       "$SHOP" "d.shopeeAds.roas===14000/1700?'ok':undefined"
+expect_field "sa share credited"  "$SHOP" "d.shopeeAds.shareOfSales===14000/32000?'ok':undefined"
+# ORGANIC ESTIMATE: 32,000 - 14,000 - 17,000. On 01-07 alone the credits
+# exceed confirmed: null and flagged, never -2,000 and never a clamped 0.
+expect_field "so organic"         "$SHOP" "d.sources.organic===1000?1000:undefined"
+expect_field "so over-credited"   "/api/shopee?from=2026-07-01&to=2026-07-01" "d.sources.organic===null&&d.sources.overCredited===true?'ok':undefined"
+# ITEMS PER ORDER 5/4; REPEAT VIEW 1,500 views / 1,000 product visitors.
+expect_field "so items per order" "$SHOP" "d.funnel.itemsPerOrder===1.25?1.25:undefined"
+expect_field "so repeat view"     "$SHOP" "d.funnel.viewsPerProductVisitor===1.5?1.5:undefined"
 # ALL AD COST OF SALE: Meta 10 + Shopee Ads 1,700, over confirmed 32,000.
 expect_field "sa cost of sale"    "$SHOP" "d.ads.costOfSale===1710/32000?'ok':undefined"
 expect_field "sc no windsor"      "$SHOP" "d.settlement===undefined&&d.catalogue===undefined?'ok':undefined"

@@ -1,5 +1,17 @@
 ### Recent (September 2026)
 
+**v3.327.0 — Shopee: where sales came from, items per order, repeat view.**
+- SOURCES: Shopee Ads credit, outside-Shopee credit, and ORGANIC (search and
+  feed) as confirmed sales minus both. An ESTIMATE: credits are gross and
+  7-day and can overlap. Credits above confirmed sales → organic null plus
+  `overCredited`, shown as "credits exceed sales" — never negative, never a
+  clamped zero (negative-tested). MW confirmed no live, affiliate, brand ads
+  or vouchers (Voucher Performance is 0), so these three are the full set.
+- ITEMS PER ORDER = confirmed units / confirmed orders.
+- REPEAT VIEW = product page views / product visitors, on the funnel's
+  product row. Shop-wide; per-shopper repeat views and cart age are not in
+  any Shopee export.
+
 **v3.326.0 — Shopee Ads.** Tab `Shopee Ads` (`SHOPEE_ADS_TAB`): Brand Portal >
 On-platform Ads > Performance Ads > Overall Performance, "By Day" pasted as-is.
 - SEPARATE batchGet: one missing range fails a whole batch, and a missing ads

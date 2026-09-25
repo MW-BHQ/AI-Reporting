@@ -154,6 +154,12 @@ block mixes fractions (`bounceRate: 0.70`) with already-scaled values
 **v3.321.0:** Shopee funnel, traffic and off-platform attribution now read from
 MW's Seller Centre sheet. v3.322.0: Windsor Shopee removed; the sheet is the only sales source.
 
+**MW's Shopee wishlist (v3.327.0):** shop view ✅ · product view → repeat view →
+cart → checkout ✅ · discounts ✅ (promotions; vouchers unused) · items per
+order ✅ · source: Shopee Ads ✅, outside ✅, organic ✅ (estimate) · cart age
+before checkout ❌ and per-shopper repeat viewing ❌ — no Shopee export has
+per-shopper rows. No live, affiliate or brand ads to import.
+
 
 Both are already in the codebase in part, so the gap is narrower than "add
 Shopee and LINE" suggests. What is actually missing:

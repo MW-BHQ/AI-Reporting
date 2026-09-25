@@ -11081,6 +11081,11 @@ async function buildShopeeSeller(from, to) {
   f.cartRate = div(f.cartVisitors, f.productVisitors);
   f.confirmRate = div(f.orders, f.placedOrders);
   f.salesPerVisit = div(f.sales, f.visits);
+  // Items per checkout — Brand Portal calls it Items Per Order.
+  f.itemsPerOrder = div(f.units, f.orders);
+  // REPEAT VIEW: product page views per product visitor. Shop-wide only; the
+  // export has no per-shopper rows, so "viewed again after carting" is out.
+  f.viewsPerProductVisitor = div(f.productViews, f.productVisitors);
   // Placed but never confirmed — cancelled or unpaid before Shopee confirmed it.
   f.unconfirmedSales = f.placedSales != null ? Math.max(0, f.placedSales - f.sales) : null;
 
@@ -11187,9 +11192,23 @@ async function buildShopeeSeller(from, to) {
     },
     products: { available: products.length > 0, units: products.reduce((a, p) => a + p.units, 0), top: products.slice(0, 12) },
     promotions,
-    shopeeAds: await (async () => {
+    ...await (async () => {
       const a = await adsP;
-      return a.available ? { ...a, shareOfSales: div(a.sales, f.sales) } : a;
+      const shopeeAds = a.available ? { ...a, shareOfSales: div(a.sales, f.sales) } : a;
+      /**
+       * ORGANIC IS AN ESTIMATE: confirmed sales minus what Shopee credits to
+       * its ads and to outside links. Both credits are gross and 7-day, and
+       * one order can be credited to both, so the remainder is a floor-ish
+       * guess, not a measured channel. When the credits exceed confirmed
+       * sales there is no honest remainder: null, flagged, never a negative
+       * number and never a clamped zero.
+       */
+      const known = shopeeAds.available && opt.length > 0 && f.sales != null;
+      const rest = known ? f.sales - shopeeAds.sales - offTotal.sales : null;
+      return { shopeeAds, sources: known ? {
+        shopeeAds: shopeeAds.sales, offPlatform: offTotal.sales,
+        organic: rest >= 0 ? rest : null, overCredited: rest < 0,
+      } : null };
     })(),
     daily: sales.map((r) => ({ d: r._day, visits: spNum(r.visitorsvisit), orders: spNum(r.ordersconfirmedorders),
       value: spNum(r.salesconfirmedordersthb) })).sort((a, b) => a.d.localeCompare(b.d)),

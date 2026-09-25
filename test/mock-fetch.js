@@ -1085,8 +1085,10 @@ global.fetch = async (url, opts = {}) => {
      *   - A GRAND-TOTAL ROW with no date (spend 99,999).
      *   - 30/06 OUTSIDE the window.
      *   - 03/07 HAS ONLY AN `All` ROW, so it is used rather than dropped.
-     * Window totals: spend 1,500 + 200 = 1,700, sales 16,000 + 2,000 = 18,000,
+     * Window totals: spend 1,500 + 200 = 1,700, sales 12,000 + 2,000 = 14,000,
      * clicks 170, impressions 17,000, three days.
+     * ORGANIC: July 32,000 - 14,000 - 17,000 = 1,000. On 01-07 alone the
+     * credits (8,000 + 14,000) exceed confirmed 20,000 — no honest remainder.
      */
     if (/(%27|')Shopee(%20|\+| )Ads(%27|')/.test(u)) {
       if (process.env.MOCK_FAIL_CONNECTOR === "shopee-ads") return jsonRes({ error: { code: 400, message: "Unable to parse range" } }, 400);
@@ -1099,7 +1101,7 @@ global.fetch = async (url, opts = {}) => {
         AH,
         ["", "All", "All", "", "999,999", "9,999", "0.01", "999", "0", "999,999", "0", "99,999", "0", "999", "0", "0", "0", "0"],
         ar("30/06/2026", "All", "9,000", "90", 9, "90,000", "9,000"), ar("30/06/2026", "TH", "9,000", "90", 9, "90,000", "9,000"),
-        ar("01/07/2026", "All", "10,000", "100", 2, "12,000", "1,000"), ar("01/07/2026", "TH", "10,000", "100", 2, "12,000", "1,000"),
+        ar("01/07/2026", "All", "10,000", "100", 2, "8,000", "1,000"), ar("01/07/2026", "TH", "10,000", "100", 2, "8,000", "1,000"),
         ar("02/07/2026", "All", "5,000", "50", 1, "4,000", "500"), ar("02/07/2026", "TH", "5,000", "50", 1, "4,000", "500"),
         ar("03/07/2026", "All", "2,000", "20", 1, "2,000", "200"),
       ] }] });
