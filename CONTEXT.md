@@ -1,5 +1,17 @@
 ### Recent (September 2026)
 
+**v3.334.0 — Shopee: search clicks under Organic; labelled bars; add-to-cart
+columns.** MW: the search-clicks footnote was invisible; bars need data
+labels; "Cart (THB)" was unclear next to Sales.
+- Search clicks are a child row of Organic in "Where sales came from", in
+  their own unit (clicks, share of product visitors) with MoM/YoY — evidence
+  for the estimate, not a slice of its baht.
+- Sales by day and the Shopee Ads strips carry value labels; the SVGs keep
+  their aspect ratio so labels are not stretched. Narrow bars label every
+  k-th plus the tallest.
+- Channels, campaigns and placements tables: `Add to cart (items)` and
+  `Add to cart (THB)`, then orders, conversion, sales, in the same order.
+
 **v3.333.0 — Shopee tab audit: Campaign tab dropped; four analyses added.**
 MW asked for full use of every tab, since each is exported by hand.
 - CAMPAIGN (promotions) TAB REMOVED from `SHOPEE_TABS` before MW deletes it

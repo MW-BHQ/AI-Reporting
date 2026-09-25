@@ -261,6 +261,9 @@ expect_field "sc no promotions"   "$SHOP" "d.promotions===undefined?'ok':undefin
 expect_field "sc search clicks"   "$SHOP" "d.funnel.searchClicks===7&&d.funnel.searchShare===0.007?'ok':undefined"
 # PLACEMENTS: "checkup" is Facebook 5,000 + Instagram 3,000, over two channels.
 expect_field "sc placement merge" "$SHOP" "(p=>p.sales===8000&&p.channels.length===2)(d.offPlatform.placements.find(p=>p.content==='checkup'))?'ok':undefined"
+# ADD TO CART ITEMS (3 per order in the fixture): Website 6; placement
+# "checkup" = Facebook 3 + Instagram 3.
+expect_field "sc cart items"      "$SHOP" "d.offPlatform.channels.find(c=>c.channel==='Website').cartUnits===6&&d.offPlatform.placements.find(p=>p.content==='checkup').cartUnits===6?'ok':undefined"
 expect_field "sc placement top"   "$SHOP" "d.offPlatform.placements[0].content==='footer'?'ok':undefined"
 # PACKAGE x CAMPAIGN: Aqua Peel 50/50 webpackage2026 and heart26.
 expect_field "sc pkg x campaign"  "$SHOP" "(p=>p.campaigns.length===2&&p.campaigns.every(c=>c.share===0.5))(d.products.top.find(p=>/Aqua/.test(p.name)))?'ok':undefined"

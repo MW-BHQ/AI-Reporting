@@ -1145,7 +1145,7 @@ global.fetch = async (url, opts = {}) => {
       "Sales(Local currency)", "Item Conversion Rate", "Unique Visitors", "New Buyers", "Add To Cart Value(USD)",
       "Add To Cart Value(Local currency)", "Units Sold"];
     const opt = (d, ch, camp, v, o, s, un, nb = 0, cart = "0", ac = "(not set)") => [d, "TH", "BangkokHospital_Official", "250344218", "all", ch, camp,
-      "s250344218_ss_th_x_" + camp, ac, v, "0", String(o), String(o), "0", s, "0", v, String(nb), "0", cart, String(un)];
+      "s250344218_ss_th_x_" + camp, ac, v, String(o * 3), String(o), String(o), "0", s, "0", v, String(nb), "0", cart, String(un)];
     const PBD = ["Date", "Region", "Shop Name", "Shop ID", "Product Name", "Product ID", "Terminal", "Channel",
       "Campaign Description", "Campaign Info In Parameters", "Ad Content", "Gross Units Sold", "Gross Sales(USD)",
       "Gross Sales(Local currency)"];

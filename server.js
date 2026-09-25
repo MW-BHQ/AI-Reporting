@@ -11244,8 +11244,8 @@ async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
      * the visit came from. Same credited figures as channels.
      */
     const ac = String(r.adcontent || "(not set)").trim();
-    const pl = place.get(ac) || { content: ac, visits: 0, cartValue: 0, orders: 0, sales: 0, channels: new Set() };
-    pl.visits += spNum(r.visits); pl.cartValue += spNum(r.addtocartvaluelocalcurrency);
+    const pl = place.get(ac) || { content: ac, visits: 0, cartUnits: 0, cartValue: 0, orders: 0, sales: 0, channels: new Set() };
+    pl.visits += spNum(r.visits); pl.cartValue += spNum(r.addtocartvaluelocalcurrency); pl.cartUnits += spNum(r.addtocartunits);
     pl.orders += spNum(r.orders); pl.sales += spNum(r.saleslocalcurrency); pl.channels.add(c);
     place.set(ac, pl);
     const k = String(r.campaigndescription || "(not set)").trim();

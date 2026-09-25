@@ -8138,18 +8138,30 @@ function renderShopee() {
    */
   const sa = d.shopeeAds || {};
   /**
+   * LABELLED BARS (v3.334.0). MW: data labels on the bars, so no tooltip is
+   * needed. The SVG keeps its aspect ratio (no preserveAspectRatio="none")
+   * so the labels are not stretched. When bars are too narrow for a label
+   * (long ranges), every k-th bar is labelled plus the tallest, never a
+   * crowd of overlapping numbers.
+   */
+  const kfmt = (v) => v >= 1e6 ? (v/1e6).toFixed(v >= 1e7 ? 0 : 1) + 'M' : v >= 1e3 ? (v/1e3).toFixed(v >= 1e4 ? 0 : 1) + 'K' : String(Math.round(v));
+  const bars = (xs, key, colour, H) => {
+    const W3 = 720, top = 14, mx = Math.max(1, ...xs.map(x => x[key])), bw3 = W3 / Math.max(xs.length, 1);
+    const every = Math.max(1, Math.ceil(26 / bw3));
+    const peak = xs.reduce((a, x, i) => (x[key] > xs[a][key] ? i : a), 0);
+    return `<svg viewBox="0 0 ${W3} ${H + top}" width="100%" style="display:block;overflow:visible;">${xs.map((x, i) => {
+      const h = Math.max(1, x[key] / mx * (H - 2)), xx = i * bw3, w3 = Math.max(1, bw3 - 1.5);
+      const lab = (i % every === 0 || i === peak) && x[key] > 0
+        ? `<text x="${(xx + w3 / 2).toFixed(1)}" y="${(top + H - h - 3).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--muted)">${kfmt(x[key])}</text>` : '';
+      return `<rect x="${xx.toFixed(1)}" y="${(top + H - h).toFixed(1)}" width="${w3.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${colour}"></rect>${lab}`;
+    }).join('')}</svg>`;
+  };
+  /**
    * DAILY SPEND vs CREDITED SALES — two strips on one day axis, each on its
    * own scale. One chart with two y-axes would invite reading the crossing
    * point as break-even; two strips cannot be misread that way.
    */
-  const adStrip = (key, colour, label) => {
-    const xs = sa.daily || [], W2 = 720, H2 = 44, mx = Math.max(1, ...xs.map(x => x[key])), bw2 = W2 / Math.max(xs.length, 1);
-    return `<div class="lab" style="margin:10px 0 4px">${label}</div>
-      <svg viewBox="0 0 ${W2} ${H2}" width="100%" height="${H2}" preserveAspectRatio="none" style="display:block;">${xs.map((x, i) => {
-        const h = Math.max(1, x[key] / mx * (H2 - 2));
-        return `<rect x="${(i*bw2).toFixed(1)}" y="${(H2-h).toFixed(1)}" width="${Math.max(1, bw2-1.5).toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${colour}"><title>${esc(humanDate(x.d))}: THB ${num(x[key],{money:true,bare:true})}</title></rect>`;
-      }).join('')}</svg>`;
-  };
+  const adStrip = (key, colour, label) => `<div class="lab" style="margin:10px 0 4px">${label}</div>${bars(sa.daily || [], key, colour, 44)}`;
   const adTrend = sa.available && (sa.daily || []).length > 1 ? `${adStrip('spend', '#F5A28D', 'Spend by day (THB)')}${adStrip('sales', '#EE4D2D', 'Sales credited by day (THB)')}
     <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
       <span>${esc(humanDate(sa.daily[0].d))}</span><span>${esc(humanDate(sa.daily[sa.daily.length-1].d))}</span></div>` : '';
@@ -8185,11 +8197,13 @@ function renderShopee() {
         <td class="num">${v!=null&&sf.sales?pc(v/sf.sales,0):(so.overCredited&&how==='estimate'?'credits exceed sales':'\u2014')}</td>
         <td style="width:30%;"><div style="background:var(--line);border-radius:3px;height:8px;">
           <div style="background:#EE4D2D;height:8px;border-radius:3px;width:${v!=null&&sf.sales?Math.min(100,v/sf.sales*100).toFixed(1):0}%;"></div></div></td></tr>`).join('')}
+      ${sf.searchClicks!=null?`<tr><td style="padding-left:22px;">\u21b3 Shopee search</td><td class="muted">clicks</td>
+        <td class="num">${num(sf.searchClicks)} clicks</td>
+        <td class="num">${sf.searchShare!=null?pc(sf.searchShare,0)+' of product visitors':'\u2014'}</td>
+        <td><span class="cmp-row" style="display:flex;gap:10px;">
+          <span class="cmp-pair">${chip(C.mom && C.mom.searchClicks, W.prev ? `MoM \u2014 ${humanDate(W.prev.from)} to ${humanDate(W.prev.to)}` : 'MoM')} MoM</span>
+          <span class="cmp-pair">${chip(C.yoy && C.yoy.searchClicks, W.yoy ? `YoY \u2014 ${humanDate(W.yoy.from)} to ${humanDate(W.yoy.to)}` : 'YoY')} YoY</span></span></td></tr>`:''}
     </tbody></table>
-    ${sf.searchClicks!=null?`<div class="note cmp-row" style="margin-top:10px;">
-      <span>Organic evidence: ${num(sf.searchClicks)} clicks on products from Shopee search${sf.searchShare!=null?` \u00b7 ${pc(sf.searchShare,0)} of product visitors`:''}</span>
-      <span class="cmp-pair">${chip(C.mom && C.mom.searchClicks, W.prev ? `MoM \u2014 ${humanDate(W.prev.from)} to ${humanDate(W.prev.to)}` : 'MoM')} MoM</span>
-      <span class="cmp-pair">${chip(C.yoy && C.yoy.searchClicks, W.yoy ? `YoY \u2014 ${humanDate(W.yoy.from)} to ${humanDate(W.yoy.to)}` : 'YoY')} YoY</span></div>`:''}
   </div>` : '';
 
   /**
@@ -8273,22 +8287,25 @@ function renderShopee() {
       <div class="stat"><div class="lab">Left in carts (THB)</div><div class="val">${op.cartLeft!=null?num(op.cartLeft,{money:true,bare:true}):'\u2014'}</div>
         <div class="sub">cart value minus sales, whole range</div></div>
     </div>
-    <table class="roomy mt"><thead><tr><th>Channel</th><th class="num">Visits</th><th class="num">Orders</th>
-      <th class="num">Conversion</th><th class="num">New buyers</th><th class="num">Cart (THB)</th><th class="num">Sales (THB)</th></tr></thead><tbody>
-      ${op.channels.map(c => `<tr><td>${esc(c.channel)}</td><td class="num">${num(c.visits)}</td><td class="num">${num(c.orders)}</td>
-        <td class="num">${pc(c.conversion)}</td>
+    <table class="roomy mt"><thead><tr><th>Channel</th><th class="num">Visits</th>
+      <th class="num">Add to cart (items)</th><th class="num">Add to cart (THB)</th><th class="num">Orders</th>
+      <th class="num">Conversion</th><th class="num">New buyers</th><th class="num">Sales (THB)</th></tr></thead><tbody>
+      ${op.channels.map(c => `<tr><td>${esc(c.channel)}</td><td class="num">${num(c.visits)}</td>
+        <td class="num">${num(c.cartUnits)}</td><td class="num">${num(c.cartValue,{money:true,bare:true})}</td>
+        <td class="num">${num(c.orders)}</td><td class="num">${pc(c.conversion)}</td>
         <td class="num">${num(c.newBuyers)}${c.newShare!=null?` \u00b7 ${pc(c.newShare,0)}`:''}</td>
-        <td class="num">${num(c.cartValue,{money:true,bare:true})}</td>
         <td class="num">${num(c.sales,{money:true,bare:true})}</td></tr>`).join('')}
     </tbody></table>
   </div>` : '';
   const offCampaigns = (op.available && op.campaigns.length) ? `<div class="card mt">
     <div class="card-title">Campaigns from outside Shopee</div>
     <table class="roomy"><thead><tr><th>Campaign</th><th>Channels</th><th class="num">Visits</th>
-      <th class="num">Cart (THB)</th><th class="num">Orders</th><th class="num">Sales (THB)</th></tr></thead><tbody>
+      <th class="num">Add to cart (items)</th><th class="num">Add to cart (THB)</th><th class="num">Orders</th>
+      <th class="num">Conversion</th><th class="num">Sales (THB)</th></tr></thead><tbody>
       ${op.campaigns.map(c => `<tr><td>${esc(c.campaign)}</td><td class="trunc" style="max-width:0;" data-tip="${esc(c.channels.join(', '))}">${esc(c.channels.join(', '))}</td>
-        <td class="num">${num(c.visits)}</td><td class="num">${num(c.cartValue,{money:true,bare:true})}</td>
-        <td class="num">${num(c.orders)}</td><td class="num">${num(c.sales,{money:true,bare:true})}</td></tr>`).join('')}
+        <td class="num">${num(c.visits)}</td><td class="num">${num(c.cartUnits)}</td><td class="num">${num(c.cartValue,{money:true,bare:true})}</td>
+        <td class="num">${num(c.orders)}</td><td class="num">${pc(c.visits ? c.orders / c.visits : null)}</td>
+        <td class="num">${num(c.sales,{money:true,bare:true})}</td></tr>`).join('')}
     </tbody></table>
   </div>` : '';
 
@@ -8298,11 +8315,12 @@ function renderShopee() {
    */
   const placements = (op.available && (op.placements || []).length) ? `<div class="card mt">
     <div class="card-title">Placements from outside Shopee &middot; ad content</div>
-    <table class="roomy"><thead><tr><th>Placement</th><th>Channels</th><th class="num">Visits</th><th class="num">Cart (THB)</th>
+    <table class="roomy"><thead><tr><th>Placement</th><th>Channels</th><th class="num">Visits</th>
+      <th class="num">Add to cart (items)</th><th class="num">Add to cart (THB)</th>
       <th class="num">Orders</th><th class="num">Conversion</th><th class="num">Sales (THB)</th></tr></thead><tbody>
       ${op.placements.map(c => `<tr><td>${esc(c.content)}</td><td class="trunc" style="max-width:0;" data-tip="${esc(c.channels.join(', '))}">${esc(c.channels.join(', '))}</td>
-        <td class="num">${num(c.visits)}</td><td class="num">${num(c.cartValue,{money:true,bare:true})}</td><td class="num">${num(c.orders)}</td>
-        <td class="num">${pc(c.conversion)}</td><td class="num">${num(c.sales,{money:true,bare:true})}</td></tr>`).join('')}
+        <td class="num">${num(c.visits)}</td><td class="num">${num(c.cartUnits)}</td><td class="num">${num(c.cartValue,{money:true,bare:true})}</td>
+        <td class="num">${num(c.orders)}</td><td class="num">${pc(c.conversion)}</td><td class="num">${num(c.sales,{money:true,bare:true})}</td></tr>`).join('')}
     </tbody></table>
   </div>` : '';
 
@@ -8322,16 +8340,9 @@ function renderShopee() {
 
 
 
-  const CW = 720, CH = 120;
-  const bw = CW / Math.max(d.daily.length, 1);
-  const cols = d.daily.map((x, i) => {
-    const h = Math.max(1, (x.value / maxDay) * (CH - 2));
-    return `<rect x="${(i*bw).toFixed(1)}" y="${(CH-h).toFixed(1)}" width="${Math.max(1, bw-1.5).toFixed(1)}" height="${h.toFixed(1)}"
-      rx="2" fill="#EE4D2D"><title>${esc(humanDate(x.d))}: THB ${num(x.value,{money:true,bare:true})} \u00b7 ${num(x.orders)} order${x.orders===1?'':'s'}</title></rect>`;
-  }).join('');
   const trend = d.daily.length > 1 ? `<div class="card mt">
     <div class="card-title">Sales by day (THB)</div>
-    <svg viewBox="0 0 ${CW} ${CH}" width="100%" height="${CH}" preserveAspectRatio="none" style="display:block;">${cols}</svg>
+    ${bars(d.daily, 'value', '#EE4D2D', 110)}
     <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
       <span>${esc(humanDate(d.daily[0].d))}</span><span>${esc(humanDate(d.daily[d.daily.length-1].d))}</span></div>
   </div>` : '';
@@ -11912,7 +11923,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.333.0';
+const CLIENT_BUILD = '3.334.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
