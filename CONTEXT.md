@@ -1,5 +1,20 @@
 ### Recent (September 2026)
 
+**v3.326.0 — Shopee Ads.** Tab `Shopee Ads` (`SHOPEE_ADS_TAB`): Brand Portal >
+On-platform Ads > Performance Ads > Overall Performance, "By Day" pasted as-is.
+- SEPARATE batchGet: one missing range fails a whole batch, and a missing ads
+  tab must not take the funnel down (negative-tested with a 400).
+- EVERY DAY TWICE (`All` + `TH`, same figures) under a no-date grand total.
+  Shop row kept; `All` only for a day with no shop row. Summing both doubles
+  2025 to ฿1.72M spend (real: ฿861,608).
+- SHOPEE-CREDITED: 7-day last click, any shop product, gross. 2025 ROAS 41.6x;
+  Jan 2025 credits ฿1.45M of ฿2.34M confirmed (62%). Shown as credited.
+- Export days are GMT+8, one hour off Bangkok; accepted.
+- 1 Jan 2025 absent from the export; a day with no row counts as not measured
+  and the card shows "N of M days".
+- `ads.costOfSale` = (Meta Shopee accounts + Shopee Ads) / confirmed sales —
+  the one ad figure with no attribution model in it.
+
 **v3.325.0 — Shopee campaigns carry cart value; Package column widened.** MW's
 screenshot: Thai package names truncated at ~25 characters while "Sold through"
 held three short labels. Package 58%, Sold through 26%. Sheet access confirmed

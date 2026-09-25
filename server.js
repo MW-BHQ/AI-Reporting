@@ -10989,8 +10989,58 @@ function spRows(values) {
   return out;
 }
 
+/**
+ * SHOPEE ADS (v3.326.0) — Brand Portal > On-platform Ads > Performance Ads >
+ * Overall Performance, "By Day" sheet pasted into its own tab.
+ *
+ * A SEPARATE REQUEST, because one missing range fails a whole batchGet: a
+ * renamed or not-yet-created ads tab must not take the funnel down with it.
+ *
+ * EVERY DAY IS EXPORTED TWICE — an `All` row and a per-shop `TH` row with the
+ * same figures — under a grand-total row with no date. The shop row is kept;
+ * `All` is used only for a day that has no shop row. Summing both doubles
+ * the year (฿1.72M spend instead of ฿861,608 for 2025).
+ *
+ * SHOPEE-CREDITED, like off-platform: an order counts if ANY shop product was
+ * bought within 7 days of the last ad click, gross of cancellations. That is
+ * why ROAS runs near 40x, and why its share of confirmed sales is a credit,
+ * not a split. The export's days are GMT+8, one hour off Bangkok.
+ */
+const SHOPEE_ADS_TAB = process.env.SHOPEE_ADS_TAB || "Shopee Ads";
+async function readShopeeAds(from, to) {
+  let res;
+  try {
+    res = await sheetBatchGet(SHOPEE_SHEET_ID, [`'${SHOPEE_ADS_TAB}'!A1:R`]);
+  } catch (e) {
+    logJson("WARNING", "shopee_ads_tab_unavailable", { error: String(e.message || e) });
+    return { available: false, reason: `no "${SHOPEE_ADS_TAB}" tab in the sheet` };
+  }
+  const byDay = new Map();
+  for (const r of spRows(res[0] && res[0].values)) {
+    if (!r._day || r._day < from || r._day > to) continue;
+    const shop = !/^all$/i.test(String(r.region || "").trim());
+    const had = byDay.get(r._day);
+    if (!had || shop || !had.shop) byDay.set(r._day, { shop, r });
+  }
+  const rows = [...byDay.values()].map((x) => x.r);
+  if (!rows.length) return { available: false, reason: "no Shopee Ads rows in this range" };
+  const sum = (k) => rows.reduce((a, r) => a + spNum(r[k]), 0);
+  const t = {
+    available: true, days: rows.length,
+    impressions: sum("impressions"), clicks: sum("clicks"), orders: sum("orders"),
+    units: sum("unitssold"), sales: sum("grosssaleslocalcurrency"), spend: sum("adsspendlocalcurrency"),
+  };
+  // Every rate divided once from the range totals.
+  t.ctr = t.impressions ? t.clicks / t.impressions : null;
+  t.cpc = t.clicks ? t.spend / t.clicks : null;
+  t.roas = t.spend ? t.sales / t.spend : null;
+  t.costPerOrder = t.orders ? t.spend / t.orders : null;
+  return t;
+}
+
 async function buildShopeeSeller(from, to) {
   let res;
+  const adsP = readShopeeAds(from, to).catch(() => ({ available: false, reason: "unavailable" }));
   try {
     res = await sheetBatchGet(SHOPEE_SHEET_ID, SHOPEE_TABS.map((t) => `'${t}'!A1:AF`));
   } catch (e) {
@@ -11137,6 +11187,10 @@ async function buildShopeeSeller(from, to) {
     },
     products: { available: products.length > 0, units: products.reduce((a, p) => a + p.units, 0), top: products.slice(0, 12) },
     promotions,
+    shopeeAds: await (async () => {
+      const a = await adsP;
+      return a.available ? { ...a, shareOfSales: div(a.sales, f.sales) } : a;
+    })(),
     daily: sales.map((r) => ({ d: r._day, visits: spNum(r.visitorsvisit), orders: spNum(r.ordersconfirmedorders),
       value: spNum(r.salesconfirmedordersthb) })).sort((a, b) => a.d.localeCompare(b.d)),
   };
@@ -11177,6 +11231,13 @@ async function buildShopee(from, to) {
       // One division of two totals over the window.
       salesPerBaht: spend && metaSales != null ? metaSales / spend : null,
       costPerOrder: f.orders ? spend / f.orders : null,
+      /**
+       * ALL AD COST OF SALE: Meta's Shopee accounts plus Shopee Ads, over
+       * confirmed sales. The one figure that needs no attribution model —
+       * total spend against total sales in the same window.
+       */
+      totalSpend: spend + (seller.shopeeAds && seller.shopeeAds.available ? seller.shopeeAds.spend : 0),
+      costOfSale: f.sales ? (spend + (seller.shopeeAds && seller.shopeeAds.available ? seller.shopeeAds.spend : 0)) / f.sales : null,
     },
   };
 }

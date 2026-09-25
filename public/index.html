@@ -7959,9 +7959,30 @@ function renderShopee() {
       <div class="sub">credited by Shopee to Facebook and Instagram links</div></div>
     <div class="stat card"><div class="lab">Sales per THB spent</div><div class="val">${ad.salesPerBaht!=null?num(ad.salesPerBaht,{dp:1}):'\u2014'}</div>
       <div class="sub">Shopee-credited Meta sales over spend</div></div>
-    <div class="stat card"><div class="lab">Spend per order (THB)</div><div class="val">${ad.costPerOrder!=null?num(ad.costPerOrder,{money:true,bare:true}):'\u2014'}</div>
-      <div class="sub">all confirmed orders</div></div>
+    <div class="stat card"><div class="lab">All ad spend (THB)</div><div class="val">${ad.available&&ad.totalSpend!=null?num(ad.totalSpend,{money:true,bare:true}):'\u2014'}</div>
+      <div class="sub">${ad.costOfSale!=null?`${pc(ad.costOfSale)} of confirmed sales \u00b7 Meta + Shopee Ads`:'\u2014'}</div></div>
   </div>`;
+
+  /**
+   * SHOPEE ADS — Shopee's own ads, Shopee-credited: any shop product bought
+   * within 7 days of the last ad click, gross of cancellations. Hence ROAS
+   * near 40x, and a share of sales that is a credit, not a split.
+   */
+  const sa = d.shopeeAds || {};
+  const shopeeAds = sa.available ? `<div class="card mt">
+    <div class="card-title">Shopee Ads &middot; Shopee-credited${sa.days < d.days ? ` <span class="pill">${num(sa.days)} of ${num(d.days)} days</span>` : ''}</div>
+    <div class="grid g-4">
+      <div class="stat"><div class="lab">Spend (THB)</div><div class="val">${num(sa.spend,{money:true,bare:true})}</div>
+        <div class="sub">${sa.costPerOrder!=null?`THB ${num(sa.costPerOrder,{money:true,bare:true})} per order`:'\u2014'}</div></div>
+      <div class="stat"><div class="lab">Sales credited (THB)</div><div class="val">${num(sa.sales,{money:true,bare:true})}</div>
+        <div class="sub">${sa.shareOfSales!=null?`${pc(sa.shareOfSales,0)} of confirmed sales`:'\u2014'} \u00b7 ${num(sa.orders)} orders</div></div>
+      <div class="stat"><div class="lab">ROAS</div><div class="val">${sa.roas!=null?num(sa.roas,{dp:1})+'\u00d7':'\u2014'}</div>
+        <div class="sub">7-day, any shop product</div></div>
+      <div class="stat"><div class="lab">Clicks</div><div class="val">${num(sa.clicks)}</div>
+        <div class="sub">${pc(sa.ctr,2)} CTR \u00b7 THB ${sa.cpc!=null?num(sa.cpc,{dp:2}):'\u2014'} per click</div></div>
+    </div>
+  </div>` : `<div class="card mt"><div class="card-title">Shopee Ads</div>
+    <div class="note" style="margin-top:0;">${esc(sa.reason || 'unavailable')} &mdash; not measured, not zero.</div></div>`;
 
   const stages = [['Visits', sf.visits], ['Viewed a product', sf.productVisitors], ['Added to cart', sf.cartVisitors],
     ['Placed an order', sf.placedBuyers], ['Confirmed', sf.buyers]];
@@ -8063,7 +8084,7 @@ function renderShopee() {
       <div class="big">Shopee <span class="pill">BangkokHospital_Official</span></div>
       <div class="hint">One storefront, from Shopee Seller Centre. Confirmed sales are orders Shopee has confirmed.</div>
     </div></div>
-    ${head}${commercial}${funnel}${traffic}${offsite}${offCampaigns}${sold}${trend}${promos}`;
+    ${head}${commercial}${shopeeAds}${funnel}${traffic}${offsite}${offCampaigns}${sold}${trend}${promos}`;
 }
 
 function renderLine() {
@@ -11634,7 +11655,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.325.0';
+const CLIENT_BUILD = '3.326.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

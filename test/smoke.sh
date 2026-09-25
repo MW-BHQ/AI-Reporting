@@ -265,6 +265,16 @@ expect_field "sc cart paid ratio" "$SHOP" "d.offPlatform.channels.find(c=>c.chan
 expect_field "sc unconfirmed"     "$SHOP" "d.funnel.unconfirmedSales===10000?10000:undefined"
 # PACKAGE x CHANNEL: Aqua Peel sold once via Website and once via Line.
 expect_field "sc pkg x channel"   "$SHOP" "(p=>p.channels.length===2&&p.channels.every(c=>c.share===0.5))(d.products.top.find(p=>/Aqua/.test(p.name)))?'ok':undefined"
+# SHOPEE ADS: shop rows only (All doubles to 3,400); total row and 30/06 out;
+# 03/07 has only an All row and is kept.
+expect_field "sa spend"           "$SHOP" "d.shopeeAds.spend===1700?1700:undefined"
+expect_field "sa sales"           "$SHOP" "d.shopeeAds.sales===18000?18000:undefined"
+expect_field "sa days"            "$SHOP" "d.shopeeAds.days===3?3:undefined"
+expect_field "sa ctr once"        "$SHOP" "d.shopeeAds.ctr===170/17000?'ok':undefined"
+expect_field "sa roas once"       "$SHOP" "d.shopeeAds.roas===18000/1700?'ok':undefined"
+expect_field "sa share credited"  "$SHOP" "d.shopeeAds.shareOfSales===18000/32000?'ok':undefined"
+# ALL AD COST OF SALE: Meta 10 + Shopee Ads 1,700, over confirmed 32,000.
+expect_field "sa cost of sale"    "$SHOP" "d.ads.costOfSale===1710/32000?'ok':undefined"
 expect_field "sc no windsor"      "$SHOP" "d.settlement===undefined&&d.catalogue===undefined?'ok':undefined"
 expect_field "sc last day"        "$SHOP" "d.lastDay==='2026-07-02'?'ok':undefined"
 
@@ -1134,6 +1144,15 @@ SRV=$!
 sleep 2.5
 check "shopee (sheet 403)" GET "/api/shopee?from=$FROM&to=$TO"
 expect_field "sc 403 is named" "/api/shopee?from=$FROM&to=$TO" "d.available===false&&/not shared/.test(d.reason)?'ok':undefined"
+
+# SHOPEE ADS TAB MISSING (400 on its range): the funnel still loads, and the
+# ads card says why. One batchGet for all tabs would fail the whole tab here.
+kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
+WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ADMIN_EMAILS=admin@bkh.test ECOM_SHEET_ID=mock \
+MOCK_FAIL_CONNECTOR=shopee-ads PORT=$PORT node --require ./test/mock-fetch.js server.js >>/tmp/smoke.log 2>&1 &
+SRV=$!
+sleep 2.5
+expect_field "sa missing tab ok" "/api/shopee?from=$FROM&to=$TO" "d.available===true&&d.funnel.sales===32000&&d.shopeeAds.available===false&&/Shopee Ads/.test(d.shopeeAds.reason)?'ok':undefined"
 
 kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
 echo ""

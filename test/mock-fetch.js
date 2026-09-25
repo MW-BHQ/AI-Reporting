@@ -1077,6 +1077,33 @@ global.fetch = async (url, opts = {}) => {
    */
   if (u.includes("17T21LhWM")) {
     if (process.env.MOCK_FAIL_CONNECTOR === "shopee-sheet") return jsonRes({ error: { code: 403 } }, 403);
+    /**
+     * SHOPEE ADS TAB (v3.326.0): MW's paste of the Brand Portal "By Day"
+     * sheet, with the Definitions text above it and every trap the export has.
+     *   - EACH DAY TWICE, `All` and `TH`, same figures. Summing both gives
+     *     spend 3,000; the shop rows alone give 1,500.
+     *   - A GRAND-TOTAL ROW with no date (spend 99,999).
+     *   - 30/06 OUTSIDE the window.
+     *   - 03/07 HAS ONLY AN `All` ROW, so it is used rather than dropped.
+     * Window totals: spend 1,500 + 200 = 1,700, sales 16,000 + 2,000 = 18,000,
+     * clicks 170, impressions 17,000, three days.
+     */
+    if (/(%27|')Shopee(%20|\+| )Ads(%27|')/.test(u)) {
+      if (process.env.MOCK_FAIL_CONNECTOR === "shopee-ads") return jsonRes({ error: { code: 400, message: "Unable to parse range" } }, 400);
+      const AH = ["Date", "Region", "Shop Name", "Shop ID", "Impressions", "Clicks", "CTR", "Orders", "Gross Sales(USD)",
+        "Gross Sales(Local currency)", "Ads Spend(USD)", "Ads Spend(Local currency)", "ROAS", "Units Sold", "CR", "CPC", "ACOS", "AOV(USD)"];
+      const ar = (d, reg, imp, clk, o, sales, spend) => [d, reg, reg === "All" ? "All" : "BangkokHospital_Official",
+        reg === "All" ? "" : "250344218", imp, clk, "0.01", String(o), "0", sales, "0", spend, "0", String(o), "0", "0", "0", "0"];
+      return jsonRes({ spreadsheetId: "mock-shopee", valueRanges: [{ values: [
+        ["Metrics/Terms", "Explanation"], ["Impressions", "The number of times your ad is shown."],
+        AH,
+        ["", "All", "All", "", "999,999", "9,999", "0.01", "999", "0", "999,999", "0", "99,999", "0", "999", "0", "0", "0", "0"],
+        ar("30/06/2026", "All", "9,000", "90", 9, "90,000", "9,000"), ar("30/06/2026", "TH", "9,000", "90", 9, "90,000", "9,000"),
+        ar("01/07/2026", "All", "10,000", "100", 2, "12,000", "1,000"), ar("01/07/2026", "TH", "10,000", "100", 2, "12,000", "1,000"),
+        ar("02/07/2026", "All", "5,000", "50", 1, "4,000", "500"), ar("02/07/2026", "TH", "5,000", "50", 1, "4,000", "500"),
+        ar("03/07/2026", "All", "2,000", "20", 1, "2,000", "200"),
+      ] }] });
+    }
     const SH = ["Date", "Visitors (Visit)", "Buyers (Placed Orders)", "Units (Placed Orders)", "Orders (Placed Orders)",
       "Sales (Placed Orders) (THB)", "Conversion Rate (Visit to Placed)", "Buyers (Confirmed Orders)",
       "Units(Confirmed Orders)", "Orders (Confirmed Orders)", "Sales(Confirmed Orders) (THB)",
