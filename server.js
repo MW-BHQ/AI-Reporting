@@ -11031,6 +11031,8 @@ async function buildShopeeSeller(from, to) {
   f.cartRate = div(f.cartVisitors, f.productVisitors);
   f.confirmRate = div(f.orders, f.placedOrders);
   f.salesPerVisit = div(f.sales, f.visits);
+  // Placed but never confirmed — cancelled or unpaid before Shopee confirmed it.
+  f.unconfirmedSales = f.placedSales != null ? Math.max(0, f.placedSales - f.sales) : null;
 
   /**
    * TRAFFIC RATES ARE WEIGHTED BY THAT DAY'S VISITORS. A quiet holiday with a
@@ -11057,8 +11059,9 @@ async function buildShopeeSeller(from, to) {
   const chan = new Map(), camp = new Map();
   for (const r of opt) {
     const c = String(r.channelname || "Unknown").trim();
-    const e = chan.get(c) || { channel: c, visits: 0, cartUnits: 0, buyers: 0, orders: 0, units: 0, sales: 0 };
+    const e = chan.get(c) || { channel: c, visits: 0, cartUnits: 0, cartValue: 0, buyers: 0, newBuyers: 0, orders: 0, units: 0, sales: 0 };
     e.visits += spNum(r.visits); e.cartUnits += spNum(r.addtocartunits); e.buyers += spNum(r.buyers);
+    e.newBuyers += spNum(r.newbuyers); e.cartValue += spNum(r.addtocartvaluelocalcurrency);
     e.orders += spNum(r.orders); e.units += spNum(r.unitssold); e.sales += spNum(r.saleslocalcurrency);
     chan.set(c, e);
     const k = String(r.campaigndescription || "(not set)").trim();
@@ -11066,21 +11069,43 @@ async function buildShopeeSeller(from, to) {
     g.visits += spNum(r.visits); g.orders += spNum(r.orders); g.sales += spNum(r.saleslocalcurrency); g.channels.add(c);
     camp.set(k, g);
   }
-  const channels = [...chan.values()].map((e) => ({ ...e, conversion: div(e.orders, e.visits) }))
+  /**
+   * NEW BUYERS are Shopee's own first-purchase flag, per channel — which link
+   * brings people who have never bought from the shop.
+   *
+   * CART VALUE AGAINST SALES, PER CHANNEL, IS A RATIO, NOT A LOSS. A cart
+   * filled on the 30th can be paid on the 2nd, so one channel's sales can top
+   * its carts in a window. Left-in-cart is taken ONCE from the range totals,
+   * never as a sum of per-channel shortfalls clamped at zero, which would
+   * count every early payment as a cart nobody paid for.
+   */
+  const channels = [...chan.values()].map((e) => ({ ...e, conversion: div(e.orders, e.visits),
+    newShare: div(e.newBuyers, e.buyers), cartPaid: div(e.sales, e.cartValue) }))
     .sort((a, b) => b.sales - a.sales || b.visits - a.visits);
-  const offTotal = channels.reduce((a, e) => ({ visits: a.visits + e.visits, orders: a.orders + e.orders, sales: a.sales + e.sales }),
-    { visits: 0, orders: 0, sales: 0 });
+  const offTotal = channels.reduce((a, e) => ({ visits: a.visits + e.visits, orders: a.orders + e.orders, sales: a.sales + e.sales,
+    buyers: a.buyers + e.buyers, newBuyers: a.newBuyers + e.newBuyers, cartValue: a.cartValue + e.cartValue }),
+    { visits: 0, orders: 0, sales: 0, buyers: 0, newBuyers: 0, cartValue: 0 });
+  offTotal.newShare = div(offTotal.newBuyers, offTotal.buyers);
+  offTotal.cartLeft = opt.length ? Math.max(0, offTotal.cartValue - offTotal.sales) : null;
 
   /** WHAT SOLD — per product, from Shopee's own off-platform line items. */
   const prod = new Map();
   for (const r of tab["Off-Platform Products By Day"].filter(inWin)) {
     const name = String(r.productname || "").replace(/\s*-\s*Bangkok Hospital.*$/i, "").trim();
     if (!name) continue;
-    const e = prod.get(name) || { name, units: 0, sales: 0 };
-    e.units += spNum(r.grossunitssold); e.sales += spNum(r.grosssaleslocalcurrency);
+    const e = prod.get(name) || { name, units: 0, sales: 0, byChannel: new Map() };
+    const u = spNum(r.grossunitssold), v = spNum(r.grosssaleslocalcurrency);
+    e.units += u; e.sales += v;
+    /** PACKAGE × CHANNEL: which link sells which package. */
+    const c = String(r.channel || "Unknown").trim();
+    const x = e.byChannel.get(c) || { channel: c, units: 0, sales: 0 };
+    x.units += u; x.sales += v;
+    e.byChannel.set(c, x);
     prod.set(name, e);
   }
-  const products = [...prod.values()].sort((a, b) => b.sales - a.sales);
+  const products = [...prod.values()].map(({ byChannel, ...p }) => ({ ...p,
+    channels: [...byChannel.values()].map((x) => ({ ...x, share: div(x.sales, p.sales) }))
+      .sort((a, b) => b.sales - a.sales) })).sort((a, b) => b.sales - a.sales);
 
   /**
    * PROMOTIONS report their WHOLE period, not the window — Shopee gives no

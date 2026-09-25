@@ -254,6 +254,15 @@ expect_field "sc product units"   "$SHOP" "d.products.units===3?3:undefined"
 # PROMOTIONS that OVERLAP the window only; January's does not.
 expect_field "sc promo overlap"   "$SHOP" "d.promotions.length===1&&d.promotions[0].name==='Mid-Year Heart'?'ok':undefined"
 # THE STOCK HEURISTIC IS GONE — one answer for units, not two.
+# NEW BUYERS per channel: Website 1 of 2; 01/08 (9 new) is outside.
+expect_field "sc new buyers"      "$SHOP" "d.offPlatform.newBuyers===2&&d.offPlatform.channels.find(c=>c.channel==='Website').newShare===0.5?'ok':undefined"
+# LEFT IN CARTS from TOTALS: 25,000 - 17,000. Clamped per-channel sums give 9,000.
+expect_field "sc cart left"       "$SHOP" "d.offPlatform.cartLeft===8000?8000:undefined"
+expect_field "sc cart paid ratio" "$SHOP" "d.offPlatform.channels.find(c=>c.channel==='Instagram').cartPaid===1.5?'ok':undefined"
+# PLACED NOT CONFIRMED: 42,000 placed - 32,000 confirmed.
+expect_field "sc unconfirmed"     "$SHOP" "d.funnel.unconfirmedSales===10000?10000:undefined"
+# PACKAGE x CHANNEL: Aqua Peel sold once via Website and once via Line.
+expect_field "sc pkg x channel"   "$SHOP" "(p=>p.channels.length===2&&p.channels.every(c=>c.share===0.5))(d.products.top.find(p=>/Aqua/.test(p.name)))?'ok':undefined"
 expect_field "sc no windsor"      "$SHOP" "d.settlement===undefined&&d.catalogue===undefined?'ok':undefined"
 expect_field "sc last day"        "$SHOP" "d.lastDay==='2026-07-02'?'ok':undefined"
 

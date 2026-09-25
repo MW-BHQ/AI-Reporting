@@ -1,5 +1,17 @@
 ### Recent (September 2026)
 
+**v3.324.0 — Shopee: package × channel, new buyers, carts, unconfirmed.**
+- PACKAGE × CHANNEL from Products By Day's `Channel`: each package lists the
+  channels that sold it with their share of its sales.
+- NEW BUYERS per channel from Off-Platform `New Buyers` (Shopee's
+  first-purchase flag), with share of that channel's buyers.
+- LEFT IN CARTS = range cart value minus range sales, taken ONCE from totals. A
+  cart filled before the window can be paid inside it, so a channel can sell
+  more than it carted; summing per-channel shortfalls clamped at zero would
+  count every such payment as an abandoned cart (fixture: 8,000 vs 9,000).
+- PLACED, NOT CONFIRMED = placed sales minus confirmed sales, on the headline
+  card.
+
 **v3.323.0 — Shopee channels and campaigns are two cards** (MW: "channel and
 campaign should be separate to 2 blocks"). Same data, no server change.
 

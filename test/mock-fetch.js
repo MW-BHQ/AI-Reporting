@@ -1071,6 +1071,9 @@ global.fetch = async (url, opts = {}) => {
    *     plain mean of the two days is 30% and 90s.
    *   - "Units(Confirmed Orders)" has no space — matched by normalised name.
    *   - Off-platform dates are DD/MM/YYYY, the daily tabs DD-MM-YYYY.
+   *   - CART VALUE: Instagram PAID MORE than it carted (a cart from June).
+   *     Left in carts is 25,000 - 17,000 = 8,000 from totals; summing
+   *     per-channel shortfalls clamped at zero gives 9,000.
    */
   if (u.includes("17T21LhWM")) {
     if (process.env.MOCK_FAIL_CONNECTOR === "shopee-sheet") return jsonRes({ error: { code: 403 } }, 403);
@@ -1084,12 +1087,12 @@ global.fetch = async (url, opts = {}) => {
       "Campaign Info In Parameter", "Ad Content", "Visits", "Add To Cart Units", "Buyers", "Orders", "Sales(USD)",
       "Sales(Local currency)", "Item Conversion Rate", "Unique Visitors", "New Buyers", "Add To Cart Value(USD)",
       "Add To Cart Value(Local currency)", "Units Sold"];
-    const opt = (d, ch, camp, v, o, s, un) => [d, "TH", "BangkokHospital_Official", "250344218", "all", ch, camp,
-      "s250344218_ss_th_x_" + camp, "(not set)", v, "0", String(o), String(o), "0", s, "0", v, "0", "0", "0", String(un)];
+    const opt = (d, ch, camp, v, o, s, un, nb = 0, cart = "0") => [d, "TH", "BangkokHospital_Official", "250344218", "all", ch, camp,
+      "s250344218_ss_th_x_" + camp, "(not set)", v, "0", String(o), String(o), "0", s, "0", v, String(nb), "0", cart, String(un)];
     const PBD = ["Date", "Region", "Shop Name", "Shop ID", "Product Name", "Product ID", "Terminal", "Channel",
       "Campaign Description", "Campaign Info In Parameters", "Ad Content", "Gross Units Sold", "Gross Sales(USD)",
       "Gross Sales(Local currency)"];
-    const pbd = (d, name, un, s) => [d, "TH", "BangkokHospital_Official", "250344218", name, "1", "all", "Website", "x", "x", "x", String(un), "0", s];
+    const pbd = (d, name, un, s, ch = "Website") => [d, "TH", "BangkokHospital_Official", "250344218", name, "1", "all", ch, "x", "x", "x", String(un), "0", s];
     return jsonRes({ spreadsheetId: "mock-shopee", valueRanges: [
       { values: [SH.slice(0, 10),
         ["01-07-2026-31-07-2026", "99,999", "9", "9", "9", "999,999", "1%", "9", "9", "9", "999,999", "1", "1%", "1%"],
@@ -1112,13 +1115,13 @@ global.fetch = async (url, opts = {}) => {
         ["Mid-Year Heart", "Discount Promotion", "25-06-2026 10:00 - 05-07-2026 12:00", "Expired", "11,000", "10,000", "3", "2", "3", "2"],
         ["January Longevity", "Discount Promotion", "01-01-2026 00:00 - 31-01-2026 00:00", "Expired", "99,999", "99,999", "9", "9", "9", "9"]] },
       { values: [OPT,
-        opt("01/07/2026", "Facebook", "heart26", "10", 1, "5,000", 1),
-        opt("01/07/2026", "Website", "webpackage2026", "50", 2, "9,000", 2),
-        opt("02/07/2026", "Instagram", "heart26", "5", 1, "3,000", 1),
-        opt("01/08/2026", "Facebook", "heart26", "99", 9, "99,999", 9)] },
+        opt("01/07/2026", "Facebook", "heart26", "10", 1, "5,000", 1, 1, "8,000"),
+        opt("01/07/2026", "Website", "webpackage2026", "50", 2, "9,000", 2, 1, "15,000"),
+        opt("02/07/2026", "Instagram", "heart26", "5", 1, "3,000", 1, 0, "2,000"),
+        opt("01/08/2026", "Facebook", "heart26", "99", 9, "99,999", 9, 9, "99,999")] },
       { values: [PBD,
         pbd("01/07/2026", "Aqua Peel 5 sessions - Bangkok Hospital [E-Coupon]", 1, "10,800"),
-        pbd("02/07/2026", "Aqua Peel 5 sessions - Bangkok Hospital [E-Coupon]", 1, "10,800"),
+        pbd("02/07/2026", "Aqua Peel 5 sessions - Bangkok Hospital [E-Coupon]", 1, "10,800", "Line"),
         pbd("02/07/2026", "Cool Sculpting 2 points - Bangkok Hospital [E-Coupon]", 1, "38,000"),
         pbd("31/12/2025", "Cool Sculpting 2 points - Bangkok Hospital [E-Coupon]", 9, "999,999")] },
     ] });

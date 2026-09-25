@@ -7942,7 +7942,7 @@ function renderShopee() {
 
   const head = `<div class="grid g-4">
     <div class="stat card"><div class="lab">Confirmed sales (THB)</div><div class="val">${sf.sales!=null?num(sf.sales,{money:true,bare:true}):'\u2014'}</div>
-      <div class="sub">${sf.placedSales!=null?`THB ${num(sf.placedSales,{money:true,bare:true})} placed`:'\u2014'}</div></div>
+      <div class="sub">${sf.unconfirmedSales!=null?`THB ${num(sf.unconfirmedSales,{money:true,bare:true})} placed, not confirmed`:'\u2014'}</div></div>
     <div class="stat card"><div class="lab">Orders</div><div class="val">${sf.orders!=null?num(sf.orders):'\u2014'}</div>
       <div class="sub">${sf.units!=null?`${num(sf.units)} units \u00b7 ${pc(sf.confirmRate)} of placed confirmed`:'\u2014'}</div></div>
     <div class="stat card"><div class="lab">Average order (THB)</div><div class="val">${d.aov!=null?num(d.aov,{money:true,bare:true}):'\u2014'}</div>
@@ -7997,10 +7997,21 @@ function renderShopee() {
   const offsite = op.available ? `<div class="card mt">
     <div class="card-title">Channels from outside Shopee &middot; THB ${num(op.sales,{money:true,bare:true})} credited${
       op.shareOfSales!=null?` (${pc(op.shareOfSales,0)} of confirmed)`:''}</div>
-    <table class="roomy"><thead><tr><th>Channel</th><th class="num">Visits</th><th class="num">Orders</th>
-      <th class="num">Conversion</th><th class="num">Sales (THB)</th></tr></thead><tbody>
+    <div class="grid g-3">
+      <div class="stat"><div class="lab">New buyers</div><div class="val">${num(op.newBuyers)}</div>
+        <div class="sub">${op.newShare!=null?pc(op.newShare,0)+' of buyers bought here first':'\u2014'}</div></div>
+      <div class="stat"><div class="lab">Added to cart (THB)</div><div class="val">${num(op.cartValue,{money:true,bare:true})}</div>
+        <div class="sub">cart value from these visits</div></div>
+      <div class="stat"><div class="lab">Left in carts (THB)</div><div class="val">${op.cartLeft!=null?num(op.cartLeft,{money:true,bare:true}):'\u2014'}</div>
+        <div class="sub">cart value minus sales, whole range</div></div>
+    </div>
+    <table class="roomy mt"><thead><tr><th>Channel</th><th class="num">Visits</th><th class="num">Orders</th>
+      <th class="num">Conversion</th><th class="num">New buyers</th><th class="num">Cart (THB)</th><th class="num">Sales (THB)</th></tr></thead><tbody>
       ${op.channels.map(c => `<tr><td>${esc(c.channel)}</td><td class="num">${num(c.visits)}</td><td class="num">${num(c.orders)}</td>
-        <td class="num">${pc(c.conversion)}</td><td class="num">${num(c.sales,{money:true,bare:true})}</td></tr>`).join('')}
+        <td class="num">${pc(c.conversion)}</td>
+        <td class="num">${num(c.newBuyers)}${c.newShare!=null?` \u00b7 ${pc(c.newShare,0)}`:''}</td>
+        <td class="num">${num(c.cartValue,{money:true,bare:true})}</td>
+        <td class="num">${num(c.sales,{money:true,bare:true})}</td></tr>`).join('')}
     </tbody></table>
   </div>` : '';
   const offCampaigns = (op.available && op.campaigns.length) ? `<div class="card mt">
@@ -8015,9 +8026,11 @@ function renderShopee() {
   const pp = sc.products || {};
   const sold = pp.available ? `<div class="card mt">
     <div class="card-title">What sold from outside traffic &middot; ${num(pp.units)} units</div>
-    <table class="roomy"><thead><tr><th>Package</th><th class="num">Units</th><th class="num">Sales (THB)</th></tr></thead><tbody>
-      ${pp.top.map(x => `<tr><td class="trunc" style="max-width:0;" data-tip="${esc(x.name)}">${esc(x.name)}</td>
-        <td class="num">${num(x.units)}</td><td class="num">${num(x.sales,{money:true,bare:true})}</td></tr>`).join('')}
+    <table class="roomy"><thead><tr><th>Package</th><th>Sold through</th><th class="num">Units</th><th class="num">Sales (THB)</th></tr></thead><tbody>
+      ${pp.top.map(x => { const ch = (x.channels||[]).map(c => `${c.channel} ${pc(c.share,0)}`).join(' \u00b7 ');
+        return `<tr><td class="trunc" style="max-width:0;" data-tip="${esc(x.name)}">${esc(x.name)}</td>
+        <td class="trunc" style="max-width:0;" data-tip="${esc(ch)}">${esc(ch)}</td>
+        <td class="num">${num(x.units)}</td><td class="num">${num(x.sales,{money:true,bare:true})}</td></tr>`; }).join('')}
     </tbody></table>
   </div>` : '';
 
@@ -11620,7 +11633,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.323.0';
+const CLIENT_BUILD = '3.324.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

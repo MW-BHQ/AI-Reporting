@@ -169,15 +169,9 @@ revenue and ROAS on the Audiences tab. Missing:
   ad platform does not exist anywhere in the report, so marketplace ROAS is
   computed against part of its cost.
 
-**LINE.** Present as MESSAGES — `lineMessages` and `lineSameDay` pull
-per-message delivered/opens/clicks. Missing:
-- Broadcasts in the funnel's awareness stage. Flagged in `server.js` at the
-  funnel's Impressions comment: LINE broadcasts and email sends belong there and
-  have no connector.
-- Automatic discovery of message request IDs. LINE only reports per-message
-  figures when the request ID is supplied, and the API will not list them, so
-  they are read from columns N-P of the UTM Builder sheet if somebody logged
-  them by hand. Unlogged broadcasts are invisible rather than zero.
+**LINE.** ✅ Done (v3.295.0–v3.316.0). Broadcasts and friends read from a
+Google Sheet; delivered = Impressions, opens = Interactions. Windsor LINE and
+`lineSameDay` removed. The request-ID problem went away with the connector.
 
 Neither is a small job, and neither is blocking anything today. The reason to
 write them down is that both are currently *partial* in a way that is easy to
