@@ -152,7 +152,7 @@ block mixes fractions (`bounceRate: 0.70`) with already-scaled values
 ### Shopee and LINE as first-class sources (MW, "one day")
 
 **v3.321.0:** Shopee funnel, traffic and off-platform attribution now read from
-MW's Seller Centre sheet. Open: reconcile its confirmed sales with Windsor gross.
+MW's Seller Centre sheet. v3.322.0: Windsor Shopee removed; the sheet is the only sales source.
 
 
 Both are already in the codebase in part, so the gap is narrower than "add

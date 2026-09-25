@@ -1,4 +1,4 @@
-# BHQ War Room — handover at v3.321.0
+# BHQ War Room — handover at v3.322.0
 
 Written for a fresh session. MW is bringing a NEW source of Shopee data, so the
 Shopee section matters most — read it before touching anything there.
@@ -8,7 +8,7 @@ Shopee section matters most — read it before touching anything there.
 - Repo `MW-BHQ/AI-Reporting`, branch `main`, working dir `/home/claude/bkh/`.
 - Auto-deploys to Cloud Run `ai-reporting-git`, `asia-southeast1`,
   project `ai-reporting-503911`. Live at `w.bkhos.co`.
-- Current version **3.321.0**. Bump BOTH `package.json` and `CLIENT_BUILD` in
+- Current version **3.322.0**. Bump BOTH `package.json` and `CLIENT_BUILD` in
   `public/index.html`, and add a CONTEXT.md entry.
 - MW supplies a session-scoped GitHub PAT. Ask for it; do not look for one.
 
@@ -101,8 +101,8 @@ mistake on this project. MCP approval is per chat session.
 ## Open items
 
 1. Verify v3.314–v3.320 on deployed data — MW has not reviewed them yet.
-2. Shopee: Windsor gross vs Seller Centre confirmed sales not reconciled on live
-   data. Check before picking a headline.
+2. Shopee is Seller Centre sheet + Meta only since v3.322.0. Windsor Shopee is
+   GONE; the SHOPEE section below describing it is history.
 3. Marketplace revenue is still OUTSIDE every headline revenue figure. Deliberate
    — decide explicitly before joining it.
 4. PDF: campaign sheet has a ~6% blank tail. Residual is prep-vs-print text

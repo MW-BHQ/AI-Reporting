@@ -699,106 +699,14 @@ function ga4Report(body) {
 global.fetch = async (url, opts = {}) => {
   const u = String(url);
 
+  /**
+   * WINDSOR SHOPEE WAS REMOVED in v3.322.0 (MW: "looklike no use now"). Any
+   * request for it is a regression, so it fails the endpoint loudly.
+   */
   if (u.includes("connectors.windsor.ai/shopee")) {
-    if (process.env.MOCK_FAIL_CONNECTOR === "shopee") return jsonRes({ error: "simulated failure" }, 500);
-    const want = (new URL(u)).searchParams.get("fields") || "";
-    /**
-     * SHOPEE — THREE TABLES, ANSWERED SEPARATELY, because the server asks for
-     * them in three requests on purpose. Mixing fields from two tables in one
-     * Windsor call cross-joins the rows, and a stub that happily answered a
-     * mixed request would hide that.
-     *
-     * The numbers mirror the real shop: a ~5.35% commission and a ~3.21%
-     * transaction fee, so Shopee's cut lands near 8.6% and escrow is the rest.
-     * `4900 - 262 - 157 = 4481` against a reported escrow of 4480 is Shopee's
-     * own rounding, not a bug to fix.
-     */
-    if (want.includes("order_id") && !want.includes("settlement") && !want.includes("return_")) {
-      return jsonRes([
-        // Two COMPLETED, one SHIPPED — all three are live revenue.
-        { order_id: "A1", order_create_time: "2026-07-03T04:00:00+00:00", order_status: "COMPLETED",
-          order_total_amount: 4900, order_payment_method: "Credit Card/Debit Card", order_currency: "THB",
-          order_buyer_username: "repeat_buyer" },
-        { order_id: "A2", order_create_time: "2026-07-03T09:00:00+00:00", order_status: "COMPLETED",
-          order_total_amount: 35000, order_payment_method: "QR PromptPay", order_currency: "THB",
-          order_buyer_username: "one_off" },
-        { order_id: "A3", order_create_time: "2026-07-20T06:00:00+00:00", order_status: "SHIPPED",
-          order_total_amount: 5200, order_payment_method: "SPayLater", order_currency: "THB",
-          order_buyer_username: "repeat_buyer" },
-        /**
-         * CANCELLED KEEPS ITS AMOUNT. Shopee does not zero the order row, so
-         * counting every order as revenue overstates the range by exactly this
-         * 22,000 — and it settles at zero escrow, so gross and net would
-         * disagree for a reason nobody could see.
-         */
-        { order_id: "A4", order_create_time: "2026-07-21T02:00:00+00:00", order_status: "CANCELLED",
-          order_total_amount: 22000, order_payment_method: "QR PromptPay", order_currency: "THB",
-          order_buyer_username: "one_off" },
-      ]);
-    }
-    if (want.includes("settlement")) {
-      return jsonRes([
-        { settlement_order_id: "A1", settlement_escrow_amount: 4480, settlement_order_selling_price: 4900,
-          settlement_commission_fee: 262, settlement_service_fee: 0, settlement_seller_transaction_fee: 157,
-          settlement_ads_fee: 0, settlement_voucher_from_seller: 0 },
-        { settlement_order_id: "A2", settlement_escrow_amount: 32002, settlement_order_selling_price: 35000,
-          settlement_commission_fee: 1873, settlement_service_fee: 0, settlement_seller_transaction_fee: 1124,
-          settlement_ads_fee: 0, settlement_voucher_from_seller: 0 },
-        // A cancelled order settles at zero and must be skipped, not averaged
-        // in as a 100% fee order.
-        { settlement_order_id: "A4", settlement_escrow_amount: 0, settlement_order_selling_price: 0,
-          settlement_commission_fee: 0, settlement_service_fee: 0, settlement_seller_transaction_fee: 0,
-          settlement_ads_fee: 0, settlement_voucher_from_seller: 0 },
-        /**
-         * THE SHOP-LEVEL DISCOUNT LUMP, with a NULL order id — exactly how the
-         * API returns it. Skipped by the fee maths because its selling price is
-         * zero, and it is the ONLY discount figure the connector gives, so it
-         * has to be captured on the way past rather than dropped.
-         */
-        { settlement_order_id: null, settlement_escrow_amount: 0, settlement_order_selling_price: 0,
-          settlement_commission_fee: 0, settlement_service_fee: 0, settlement_seller_transaction_fee: 0,
-          settlement_ads_fee: 0, settlement_voucher_from_seller: 0,
-          settlement_seller_discount: 349082, settlement_shopee_discount: 0,
-          settlement_voucher_from_shopee: 8470, settlement_coins: 450 },
-        // A3 has shipped but NOT settled — settlement lags, and the count of
-        // settled orders must not equal the count of live ones.
-      ]);
-    }
-    if (want.includes("product_")) {
-      /**
-       * FOUR LISTINGS THAT EACH TEST A DIFFERENT RULE:
-       *   P1 deep discount and low stock — appears in both lists.
-       *   P2 ZERO discount — priced at its original, so it carries no discount
-       *      badge on a shelf where everything else does. The actionable one.
-       *   P3 normal.
-       *   P4 DELETED — must never reach the catalogue counts.
-       */
-      return jsonRes([
-        { product_id: "P1", product_name: "Deep Package - Bangkok Hospital [E-Coupon]", product_status: "NORMAL",
-          product_available_stock: 99, product_current_price: 29000, product_original_price: 99990 },
-        { product_id: "P2", product_name: "Full Price Package - Bangkok Hospital [E-Coupon]", product_status: "NORMAL",
-          product_available_stock: 300, product_current_price: 190000, product_original_price: 190000 },
-        { product_id: "P3", product_name: "Mid Package - Bangkok Hospital [E-Coupon]", product_status: "NORMAL",
-          product_available_stock: 340, product_current_price: 8500, product_original_price: 15775 },
-        { product_id: "P4", product_name: "Retired Package - Bangkok Hospital", product_status: "DELETED",
-          product_available_stock: 0, product_current_price: 1000, product_original_price: 2000 },
-        /**
-         * NO ORIGINAL PRICE. Discount must be NULL, not zero: zero reads as
-         * "priced at full list" and would put this on the no-discount table,
-         * which is a recommendation to change a price nobody set.
-         */
-        { product_id: "P5", product_name: "Unpriced Package - Bangkok Hospital [E-Coupon]", product_status: "NORMAL",
-          product_available_stock: 200, product_current_price: 7000, product_original_price: 0 },
-      ]);
-    }
-    if (want.includes("return_")) {
-      return jsonRes([
-        { return_id: "R1", return_order_id: "A1", return_create_time: "2026-07-11T00:00:00+00:00",
-          return_refund_amount: 4900, return_reason: "CHANGE_MIND", return_status: "ACCEPTED" },
-      ]);
-    }
-    return jsonRes([]);
+    return jsonRes({ error: "Windsor Shopee connector was removed in v3.322.0" }, 500);
   }
+
 
   if (u.includes("connectors.windsor.ai/google_my_business")) {
     if (process.env.MOCK_FAIL_CONNECTOR === "google_my_business") return jsonRes({ error: "simulated failure" }, 500);

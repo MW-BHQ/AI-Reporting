@@ -2382,21 +2382,6 @@ const RED = {
   // LINE open rate on the campaign tab. PROVISIONAL — MW's export averages
   // about 27% across 1,000 broadcasts, so 15% is roughly half the norm. Re-set
   // once there are enough tagged campaigns to see the spread.
-  /**
-   * Shopee's cut of the sold price. The shop runs near 8.6% — a 5.35%
-   * commission plus a 3.21% transaction fee — so 10% flags a change in the fee
-   * structure rather than today's normal.
-   */
-  shopeeTakeRate: 0.10,
-  // Cancelled orders as a share of all orders. Marketplace cancellation is
-  // normal; a fifth of them is not.
-  shopeeCancelRate: 0.20,
-  /**
-   * Repeat buyers as a share of buyers, WITHIN the range. Health packages are a
-   * considered purchase, so a low repeat rate is normal and this flags a
-   * storefront that is purely one-and-done rather than a bad month.
-   */
-  shopeeRepeatRate: 0.05,
   lineOpenRate: 0.15,
   // Share of friends who have blocked the account. MW's export sits at 38%, so
   // this flags a materially worse state rather than today's normal.
@@ -3105,7 +3090,7 @@ const TITLES = {
   audiences: ['Audiences', 'Meta audience sets ranked by cost per first-degree result'],
   bclub: ['Better Club', 'Membership revenue, and whether the members we win come back'],
   line: ['LINE OA', 'What we broadcast, who received it, and what it cost us in blocks'],
-  shopee: ['Shopee', 'What the storefront sold, and what actually reached the bank'],
+  shopee: ['Shopee', 'What the storefront sold, and where its visits came from'],
   ecom: ['E-commerce', 'Package sales across every online sales channel'],
   ecomcentre: ['E-commerce · Centers', 'Which centers sell, and through which channel'],
   ecompackages: ['E-commerce · Packages', 'Every product, grouped by name — promo re-codes count once'],
@@ -7941,201 +7926,49 @@ function renderGads() {
 function renderShopee() {
   const d = S.shopee;
   if (S.shopeeError) { const m = S.shopeeError; $('viewRoot').innerHTML = errorState(m); S.shopeeError = null; return; }
-  if (!d) { $('viewRoot').innerHTML = loadPrompt('shopee', 'Reads the Shopee storefront \u2014 orders, settlement, returns and the Seller Centre sheet.'); return; }
-  if (!d.available) { $('viewRoot').innerHTML = errorState(`Shopee unavailable \u2014 ${esc(d.reason || 'unknown error')}`); return; }
-
-  const st = d.settlement || {};
-  const rt = d.returns || {};
-  const maxDay = Math.max(1, ...d.daily.map(x => x.value));
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('shopee', 'Reads the Shopee Seller Centre sheet and Meta spend on the Shopee ad accounts.'); return; }
+  if (!d.available) { $('viewRoot').innerHTML = errorState(`Shopee Seller Centre sheet \u2014 ${esc(d.reason || 'unavailable')}`); return; }
 
   /**
-   * CANCELLATIONS ARE OUT OF GROSS, and the card says how much was lost rather
-   * than hiding it: Shopee keeps a cancelled order at its full amount, so
-   * counting every row would overstate the range by exactly that sum.
+   * ONE SOURCE, since v3.322.0: Shopee's own Seller Centre exports. Visits are
+   * daily uniques summed over the range; every rate is rebuilt from totals on
+   * the server.
    */
-  const head = `<div class="grid g-4">
-    <div class="stat card"><div class="lab">Orders</div><div class="val">${num(d.liveOrders)}</div>
-      <div class="sub">${d.cancelled?`${num(d.cancelled)} cancelled, excluded`:'none cancelled'}</div></div>
-    <div class="stat card"><div class="lab">Gross sales (THB)</div><div class="val">${num(d.gross,{money:true,bare:true})}</div>
-      <div class="sub">what customers paid</div></div>
-    <div class="stat card"><div class="lab">Average order (THB)</div><div class="val">${d.aov!=null?num(d.aov,{money:true,bare:true}):'\u2014'}</div>
-      <div class="sub">across live orders</div></div>
-    <div class="stat card"><div class="lab">Cancelled</div>
-      <div class="val" style="color:${d.cancelRate!=null&&d.cancelRate>RED.shopeeCancelRate?'var(--rose)':'var(--ink)'}">${
-        d.cancelRate!=null?num(d.cancelRate*100,{dp:1})+'%':'\u2014'}</div>
-      <div class="sub">${d.cancelledValue?`THB ${num(d.cancelledValue,{money:true,bare:true})} not sold`:'nothing lost'}</div></div>
-  </div>`;
-
-  /**
-   * THE MONEY THAT ARRIVED. `escrow` is the transfer; everything between it and
-   * the sold price is Shopee's. The take rate divides the two TOTALS once — a
-   * mean of per-order rates would weight a 990-baht order like a 97,000 one.
-   *
-   * SETTLED ORDERS ARE FEWER THAN LIVE ONES and the card says so. Settlement
-   * lags shipping by days, so a recent range is always partly unsettled; MW
-   * accepted that ("we will see only what available") and it is labelled rather
-   * than blended into the gross.
-   */
-  const money = st.available ? `<div class="card mt">
-    <div class="card-title">What reached the bank &middot; ${num(st.settled)} of ${num(d.liveOrders)} orders settled</div>
-    <div class="grid g-4">
-      <div class="stat"><div class="lab">Sold (THB)</div><div class="val">${num(st.sold,{money:true,bare:true})}</div>
-        <div class="sub">settled orders only</div></div>
-      <div class="stat"><div class="lab">Received (THB)</div><div class="val">${num(st.escrow,{money:true,bare:true})}</div>
-        <div class="sub">${st.netRate!=null?num(st.netRate*100,{dp:1})+'% of sold':'\u2014'}</div></div>
-      <div class="stat"><div class="lab">Shopee's cut (THB)</div>
-        <div class="val" style="color:${st.takeRate!=null&&st.takeRate>RED.shopeeTakeRate?'var(--rose)':'var(--ink)'}">${num(st.fees,{money:true,bare:true})}</div>
-        <div class="sub">${st.takeRate!=null?num(st.takeRate*100,{dp:2})+'% take rate':'\u2014'}</div></div>
-      <div class="stat"><div class="lab">Returns (THB)</div><div class="val">${rt.available?num(rt.value,{money:true,bare:true}):'\u2014'}</div>
-        <div class="sub">${rt.available?`${num(rt.count)} refund${rt.count===1?'':'s'}`:'not measured'}</div></div>
-    </div>
-    <table class="roomy mt"><thead><tr><th>Fee</th><th class="num">THB</th><th class="num">% of sold</th></tr></thead><tbody>
-      ${[['Commission', st.commission], ['Transaction fee', st.txn], ['Service fee', st.service],
-         ['Ads fee', st.ads], ['Seller vouchers', st.voucher]]
-        .filter(([, v]) => v > 0)
-        .map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${num(v,{money:true,bare:true})}</td>
-          <td class="num">${st.sold?num(v/st.sold*100,{dp:2})+'%':'\u2014'}</td></tr>`).join('')}
-      <tr class="tot"><td class="strong">Total taken</td><td class="num">${num(st.fees,{money:true,bare:true})}</td>
-        <td class="num">${st.takeRate!=null?num(st.takeRate*100,{dp:2})+'%':'\u2014'}</td></tr>
-    </tbody></table>
-  </div>` : '<div class="card mt"><div class="note" style="margin-top:0;">Settlement data was unavailable this run, so the amount received is not measured &mdash; not zero.</div></div>';
-
-  const bu = d.buyers || {};
-  const ad = d.ads || {};
-  /**
-   * REPEAT BUYERS AND COST PER ORDER — the two figures that say whether the
-   * storefront is worth running. Everything else on this tab describes what
-   * happened; these two say whether it should happen again.
-   *
-   * BOTH CARRY THEIR LIMIT IN THE SUB-LINE. Repeat is measured WITHIN the range,
-   * so a buyer whose first order was last month reads as new; and Shopee never
-   * says which order came from an ad, so cost per order is spend beside orders,
-   * not attribution.
-   */
-  const commercial = `<div class="grid g-4 mt">
-    <div class="stat card"><div class="lab">Buyers</div><div class="val">${num(bu.total)}</div>
-      <div class="sub">${bu.ordersPerBuyer!=null?num(bu.ordersPerBuyer,{dp:2})+' orders each':'\u2014'}</div></div>
-    <div class="stat card"><div class="lab">Repeat buyers</div>
-      <div class="val" style="color:${bu.repeatRate!=null&&bu.repeatRate<RED.shopeeRepeatRate?'var(--rose)':'var(--ink)'}">${
-        bu.repeatRate!=null?num(bu.repeatRate*100,{dp:1})+'%':'\u2014'}</div>
-      <div class="sub">${num(bu.repeat)} of ${num(bu.total)} \u00b7 bought more than once in this range</div></div>
-    <div class="stat card"><div class="lab">Ad spend (THB)</div>
-      <div class="val">${ad.available?num(ad.spend,{money:true,bare:true}):'\u2014'}</div>
-      <div class="sub">${ad.available?(ad.metaSales!=null&&ad.spend?`THB ${num(ad.metaSales/ad.spend,{dp:1})} Shopee-credited sales per THB`:`Meta: ${ad.accounts.map(esc).join(', ')||'no Shopee account'}`):'Meta unavailable this run'}</div></div>
-    <div class="stat card"><div class="lab">Cost per order (THB)</div>
-      <div class="val">${ad.available&&ad.costPerOrder!=null?num(ad.costPerOrder,{money:true,bare:true}):'\u2014'}</div>
-      <div class="sub">${ad.available&&ad.costOfSale!=null?num(ad.costOfSale*100,{dp:1})+'% of sales \u00b7 spend beside orders, not attribution':'\u2014'}</div></div>
-  </div>`;
-
-  /**
-   * A METHOD THAT TAKES THE ORDER AND THEN FAILS is a checkout problem, not a
-   * demand problem, and one blended cancellation rate cannot tell them apart.
-   */
-  const risk = `<div class="card mt">
-    <div class="card-title">Cancellation by payment method</div>
-    <table class="roomy"><thead><tr><th>Method</th><th class="num">Orders</th><th class="num">Cancelled</th>
-      <th class="num">Cancel rate</th><th class="num">Value kept (THB)</th></tr></thead><tbody>
-      ${d.paymentRisk.map(p => `<tr><td>${esc(p.method)}</td><td class="num">${num(p.orders)}</td>
-        <td class="num">${num(p.cancelled)}</td>
-        <td class="num"${p.cancelRate>RED.shopeeCancelRate?' style="color:var(--rose)"':''}>${num(p.cancelRate*100,{dp:1})}%</td>
-        <td class="num">${num(p.value,{money:true,bare:true})}</td></tr>`).join('')}
-    </tbody></table>
-  </div>`;
-
-  /**
-   * BANDS, NOT A MEAN. This catalogue is visibly bimodal — small packages and
-   * large ones — and an average sitting between the two clusters describes no
-   * order anyone ever placed.
-   */
-  const maxBand = Math.max(1, ...d.bands.map(b => b.orders));
-  const bands = `<div class="card mt">
-    <div class="card-title">What sells, by price</div>
-    <table class="roomy"><thead><tr><th>Order value (THB)</th><th class="num">Orders</th>
-      <th class="num">Value (THB)</th><th>Share of orders</th></tr></thead><tbody>
-      ${d.bands.filter(b => b.orders).map(b => `<tr>
-        <td>${b.hi==null?`${num(b.lo)}+`:`${num(b.lo)} \u2013 ${num(b.hi)}`}</td>
-        <td class="num">${num(b.orders)}</td><td class="num">${num(b.value,{money:true,bare:true})}</td>
-        <td><div style="background:var(--line);border-radius:3px;height:8px;width:100%;">
-          <div style="background:#EE4D2D;height:8px;border-radius:3px;width:${(b.orders/maxBand*100).toFixed(1)}%;"></div></div></td>
-      </tr>`).join('')}
-    </tbody></table>
-  </div>`;
-
-  const WD = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const maxH = Math.max(1, ...d.hours.map(h => h.orders));
-  const maxW = Math.max(1, ...d.weekdays.map(x => x.orders));
-  /**
-   * Bangkok time. `order_create_time` carries a `+00:00` offset, so reading the
-   * hour raw puts the evening peak in the early afternoon.
-   */
-  const timing = `<div class="grid g-2 mt">
-    <div class="card"><div class="card-title">When they order &middot; hour (Bangkok)</div>
-      <svg viewBox="0 0 480 90" width="100%" height="90" preserveAspectRatio="none" style="display:block;">
-        ${d.hours.map((h,i) => `<rect x="${(i*20).toFixed(1)}" y="${(90-Math.max(1,h.orders/maxH*88)).toFixed(1)}"
-          width="18" height="${Math.max(1,h.orders/maxH*88).toFixed(1)}" rx="2" fill="#EE4D2D"
-          ><title>${String(i).padStart(2,'0')}:00 \u2014 ${num(h.orders)} order${h.orders===1?'':'s'}</title></rect>`).join('')}
-      </svg>
-      <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
-        <span>00:00</span><span>12:00</span><span>23:00</span></div></div>
-    <div class="card"><div class="card-title">&hellip; and which day</div>
-      <table class="roomy"><tbody>
-        ${d.weekdays.map((x,i) => `<tr><td>${WD[i]}</td><td class="num">${num(x.orders)}</td>
-          <td><div style="background:var(--line);border-radius:3px;height:8px;width:100%;">
-            <div style="background:#EE4D2D;height:8px;border-radius:3px;width:${(x.orders/maxW*100).toFixed(1)}%;"></div></div></td></tr>`).join('')}
-      </tbody></table></div>
-  </div>`;
-
-  /**
-   * DISCOUNTS ARE A SHOP-LEVEL LUMP and the card says so. Every per-order
-   * voucher field is zero; the totals arrive on one row with no order id, so
-   * they can never be tied to a sale, a product or a campaign.
-   */
-  const pr = d.promo || {};
-  const promoTotal = n0(pr.sellerDiscount) + n0(pr.shopeeDiscount) + n0(pr.sellerVoucher) + n0(pr.shopeeVoucher) + n0(pr.coins);
-  const promo = promoTotal ? `<div class="card mt">
-    <div class="card-title">Discounts given</div>
-    <table class="roomy"><thead><tr><th>Type</th><th class="num">THB</th></tr></thead><tbody>
-      ${[['Seller discount', pr.sellerDiscount], ['Shopee discount', pr.shopeeDiscount],
-         ['Seller voucher', pr.sellerVoucher], ['Shopee voucher', pr.shopeeVoucher], ['Shopee coins', pr.coins]]
-        .filter(([, v]) => n0(v) > 0)
-        .map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${num(v,{money:true,bare:true})}</td></tr>`).join('')}
-      <tr class="tot"><td class="strong">Total</td><td class="num">${num(promoTotal,{money:true,bare:true})}</td></tr>
-    </tbody></table>
-    <div class="note">Shopee reports these for the shop, not per order &mdash; they cannot be tied to a sale, a product
-    or a campaign, so they sit beside the numbers above rather than inside them.</div>
-  </div>` : '';
-
-  const cat = d.catalogue || {};
-  /**
-   * SELLER CENTRE (v3.321.0) — MW's sheet of Shopee's own exports. Everything
-   * here is Shopee's measurement; the Windsor orders table above is kept for
-   * what only it has (cancellations, payment, settlement).
-   *
-   * VISITS, NOT VISITORS: Shopee's daily uniques summed over the range. Every
-   * rate is rebuilt from totals on the server.
-   */
-  const sc = d.seller || {};
-  const sf = sc.funnel || {};
+  const sc = d;
+  const sf = d.funnel || {};
   const pc = (v, dp = 1) => v != null ? num(v * 100, { dp }) + '%' : '\u2014';
   const mmss = (s) => s == null ? '\u2014' : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+  const maxDay = Math.max(1, ...d.daily.map(x => x.value));
+
+  const head = `<div class="grid g-4">
+    <div class="stat card"><div class="lab">Confirmed sales (THB)</div><div class="val">${sf.sales!=null?num(sf.sales,{money:true,bare:true}):'\u2014'}</div>
+      <div class="sub">${sf.placedSales!=null?`THB ${num(sf.placedSales,{money:true,bare:true})} placed`:'\u2014'}</div></div>
+    <div class="stat card"><div class="lab">Orders</div><div class="val">${sf.orders!=null?num(sf.orders):'\u2014'}</div>
+      <div class="sub">${sf.units!=null?`${num(sf.units)} units \u00b7 ${pc(sf.confirmRate)} of placed confirmed`:'\u2014'}</div></div>
+    <div class="stat card"><div class="lab">Average order (THB)</div><div class="val">${d.aov!=null?num(d.aov,{money:true,bare:true}):'\u2014'}</div>
+      <div class="sub">confirmed orders</div></div>
+    <div class="stat card"><div class="lab">Conversion</div><div class="val">${pc(sf.conversion, 2)}</div>
+      <div class="sub">${sf.visits!=null?`confirmed buyers per visit \u00b7 ${num(sf.visits)} visits`:'\u2014'}</div></div>
+  </div>`;
+
+  const ad = d.ads || {};
+  const commercial = `<div class="grid g-4 mt">
+    <div class="stat card"><div class="lab">Meta ad spend (THB)</div><div class="val">${ad.available?num(ad.spend,{money:true,bare:true}):'\u2014'}</div>
+      <div class="sub">${ad.available?(ad.accounts.map(esc).join(', ')||'no Shopee account'):'Meta unavailable this run'}</div></div>
+    <div class="stat card"><div class="lab">Sales from Meta (THB)</div><div class="val">${ad.available&&ad.metaSales!=null?num(ad.metaSales,{money:true,bare:true}):'\u2014'}</div>
+      <div class="sub">credited by Shopee to Facebook and Instagram links</div></div>
+    <div class="stat card"><div class="lab">Sales per THB spent</div><div class="val">${ad.salesPerBaht!=null?num(ad.salesPerBaht,{dp:1}):'\u2014'}</div>
+      <div class="sub">Shopee-credited Meta sales over spend</div></div>
+    <div class="stat card"><div class="lab">Spend per order (THB)</div><div class="val">${ad.costPerOrder!=null?num(ad.costPerOrder,{money:true,bare:true}):'\u2014'}</div>
+      <div class="sub">all confirmed orders</div></div>
+  </div>`;
+
   const stages = [['Visits', sf.visits], ['Viewed a product', sf.productVisitors], ['Added to cart', sf.cartVisitors],
     ['Placed an order', sf.placedBuyers], ['Confirmed', sf.buyers]];
   const top0 = Math.max(1, n0(sf.visits));
-  const funnel = !sc.available ? `<div class="card mt"><div class="card-title">Storefront funnel</div>
-    <div class="note" style="margin-top:0;">Seller Centre sheet: ${esc(sc.reason || 'unavailable')} &mdash; not measured, not zero.</div></div>`
-  : `<div class="card mt">
-    <div class="card-title">Storefront funnel &middot; Seller Centre${sc.lastDay && sc.lastDay < $('to').value ? ` <span class="pill">sheet to ${esc(humanDate(sc.lastDay))}</span>` : ''}</div>
-    <div class="grid g-4">
-      <div class="stat"><div class="lab">Confirmed sales (THB)</div><div class="val">${sf.sales!=null?num(sf.sales,{money:true,bare:true}):'\u2014'}</div>
-        <div class="sub">${sf.orders!=null?`${num(sf.orders)} orders \u00b7 ${num(sf.units)} units`:'\u2014'}</div></div>
-      <div class="stat"><div class="lab">Conversion</div><div class="val">${pc(sf.conversion, 2)}</div>
-        <div class="sub">confirmed buyers per visit</div></div>
-      <div class="stat"><div class="lab">Sales per visit (THB)</div><div class="val">${sf.salesPerVisit!=null?num(sf.salesPerVisit,{dp:0}):'\u2014'}</div>
-        <div class="sub">${num(sf.visits)} visits</div></div>
-      <div class="stat"><div class="lab">Placed \u2192 confirmed</div><div class="val">${pc(sf.confirmRate)}</div>
-        <div class="sub">${sf.placedOrders!=null?`${num(sf.placedOrders)} placed`:'\u2014'}</div></div>
-    </div>
-    <table class="roomy mt"><thead><tr><th>Stage</th><th class="num">People</th><th class="num">Of previous</th><th></th></tr></thead><tbody>
+  const funnel = `<div class="card mt">
+    <div class="card-title">Storefront funnel${sc.lastDay && sc.lastDay < $('to').value ? ` <span class="pill">sheet to ${esc(humanDate(sc.lastDay))}</span>` : ''}</div>
+    <table class="roomy"><thead><tr><th>Stage</th><th class="num">People</th><th class="num">Of previous</th><th></th></tr></thead><tbody>
       ${stages.map(([k, v], i) => { const prev = i ? stages[i-1][1] : null; return `<tr><td>${k}</td>
         <td class="num">${v!=null?num(v):'\u2014'}</td>
         <td class="num">${i && v!=null && prev ? pc(v/prev) : ''}</td>
@@ -8193,52 +8026,7 @@ function renderShopee() {
     </tbody></table>
   </div>` : '';
 
-  /**
-   * ZERO DISCOUNT IS THE ACTIONABLE ROW. On Shopee a listing priced at its
-   * original shows no struck-out price and no discount badge; on a shelf where
-   * the median package is nearly half off, it reads as the expensive option
-   * whatever it is worth.
-   */
-  const catalogue = cat.available ? `<div class="card mt">
-    <div class="card-title">Catalogue &middot; ${num(cat.count)} live packages</div>
-    <div class="grid g-3">
-      <div class="stat"><div class="lab">Median discount</div>
-        <div class="val">${cat.medianDiscount!=null?num(cat.medianDiscount*100,{dp:0})+'%':'\u2014'}</div>
-        <div class="sub">off the original price</div></div>
-      <div class="stat"><div class="lab">No discount shown</div>
-        <div class="val" style="color:${cat.noDiscount?'var(--rose)':'var(--ink)'}">${num(cat.noDiscount)}</div>
-        <div class="sub">no badge on a shelf where most have one</div></div>
-      <div class="stat"><div class="lab">Low stock</div><div class="val">${num(cat.lowStock.length)}</div>
-        <div class="sub">under 120 coupons left</div></div>
-    </div>
-    ${cat.noDiscountItems.length?`<table class="roomy mt"><thead><tr><th>Priced at full list</th><th class="num">Price (THB)</th></tr></thead><tbody>
-      ${cat.noDiscountItems.map(i => `<tr><td class="trunc" style="max-width:0;" data-tip="${esc(i.name)}">${esc(i.name)}</td>
-        <td class="num">${num(i.price,{money:true,bare:true})}</td></tr>`).join('')}
-    </tbody></table>`:''}
-    ${cat.lowStock.length?`<table class="roomy mt"><thead><tr><th>Running low</th><th class="num">Coupons left</th></tr></thead><tbody>
-      ${cat.lowStock.map(i => `<tr><td class="trunc" style="max-width:0;" data-tip="${esc(i.name)}">${esc(i.name)}</td>
-        <td class="num">${num(i.stock)}</td></tr>`).join('')}
-    </tbody></table>`:''}
-  </div>` : '';
 
-  const pay = `<div class="card mt">
-    <div class="card-title">How they paid</div>
-    <table class="roomy"><thead><tr><th>Method</th><th class="num">Orders</th><th class="num">Value (THB)</th><th class="num">Share</th></tr></thead><tbody>
-      ${d.payments.map(p => `<tr><td>${esc(p.method)}</td><td class="num">${num(p.orders)}</td>
-        <td class="num">${num(p.value,{money:true,bare:true})}</td>
-        <td class="num">${d.gross?num(p.value/d.gross*100,{dp:1})+'%':'\u2014'}</td></tr>`).join('')}
-    </tbody></table>
-  </div>`;
-
-  /**
-   * SVG COLUMNS, NOT `.bar`. The first cut reused `.bar`, which is the funnel's
-   * STACKED bar — its spans are `display:block;float:left` and full height, so
-   * a column chart built from it came out as two full-height blocks. `.bar` is
-   * one shape with one meaning; this is a different shape.
-   *
-   * SVG also prints. The print pipeline swaps canvases for SVG twins, and
-   * something already drawn as SVG needs no twin at all.
-   */
   const CW = 720, CH = 120;
   const bw = CW / Math.max(d.daily.length, 1);
   const cols = d.daily.map((x, i) => {
@@ -8253,20 +8041,12 @@ function renderShopee() {
       <span>${esc(humanDate(d.daily[0].d))}</span><span>${esc(humanDate(d.daily[d.daily.length-1].d))}</span></div>
   </div>` : '';
 
-  const ret = (rt.available && rt.reasons.length) ? `<div class="card mt">
-    <div class="card-title">Why they returned</div>
-    <table class="roomy"><thead><tr><th>Reason</th><th class="num">Returns</th><th class="num">Refunded (THB)</th></tr></thead><tbody>
-      ${rt.reasons.map(r => `<tr><td>${esc(r.reason)}</td><td class="num">${num(r.count)}</td>
-        <td class="num">${num(r.value,{money:true,bare:true})}</td></tr>`).join('')}
-    </tbody></table>
-  </div>` : '';
-
   $('viewRoot').innerHTML = `
     <div class="search"><div>
       <div class="big">Shopee <span class="pill">BangkokHospital_Official</span></div>
-      <div class="hint">One storefront. Gross is what customers paid; received is what Shopee transferred after its cut.</div>
+      <div class="hint">One storefront, from Shopee Seller Centre. Confirmed sales are orders Shopee has confirmed.</div>
     </div></div>
-    ${head}${commercial}${funnel}${traffic}${offsite}${sold}${trend}${promos}${catalogue}${bands}${timing}${risk}${pay}${promo}${ret}${money}`;
+    ${head}${commercial}${funnel}${traffic}${offsite}${sold}${trend}${promos}`;
 }
 
 function renderLine() {
@@ -11837,7 +11617,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.321.0';
+const CLIENT_BUILD = '3.322.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

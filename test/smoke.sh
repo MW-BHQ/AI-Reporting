@@ -217,95 +217,45 @@ expect_field "rp line targetable +" "$REPORT" "d.line.friends.targetableAdded===
 # The baseline is carried too, or the percentage has no denominator.
 expect_field "rp line targ from"   "$REPORT" "d.line.friends.targetableFrom===119913?119913:undefined"
 
-echo "--- Shopee tab (v3.317.0) ---"
+echo "--- Shopee tab (v3.322.0: Seller Centre sheet + Meta, no Windsor Shopee) ---"
 SHOP="/api/shopee?from=$FROM&to=$TO"
 check "shopee tab" GET "$SHOP"
-# Four orders: three live (4,900 + 35,000 + 5,200) and one CANCELLED at 22,000.
-# CANCELLED IS NOT A SALE — Shopee keeps the row at its full amount, so counting
-# every order reads 67,100 and overstates the range by exactly the cancellation.
-expect_field "sp live orders"      "$SHOP" "d.liveOrders===3?3:undefined"
-expect_field "sp gross excl cancel" "$SHOP" "d.gross===45100?45100:undefined"
-expect_field "sp cancelled value"  "$SHOP" "d.cancelledValue===22000?22000:undefined"
-# THE TAKE RATE IS ONE DIVISION OF TWO TOTALS, not a mean of per-order rates —
-# that would weight a 4,900 order the same as a 35,000 one. 3,416 / 39,900.
-expect_field "sp take rate"        "$SHOP" "Math.round(d.settlement.takeRate*10000)===856?856:undefined"
-expect_field "sp escrow"           "$SHOP" "d.settlement.escrow===36482?36482:undefined"
-# A CANCELLED ORDER SETTLES AT ZERO and must be skipped, not counted as an
-# order that paid 100% in fees. Two settled, not three.
-expect_field "sp settled skips 0"  "$SHOP" "d.settlement.settled===2?2:undefined"
-# SETTLEMENT LAGS: the shipped order has not settled, so settled < live. Equal
-# counts would mean the lag was being papered over.
-expect_field "sp lag is visible"   "$SHOP" "d.settlement.settled<d.liveOrders?'ok':undefined"
-# Sold is settled orders only, so it must not equal gross.
-expect_field "sp sold not gross"   "$SHOP" "d.settlement.sold===39900?39900:undefined"
-expect_field "sp returns"          "$SHOP" "d.returns.count===1&&d.returns.value===4900?'ok':undefined"
-expect_field "sp payment split"    "$SHOP" "d.payments.length===3?3:undefined"
-# REPEAT BUYERS — the honest substitute for the on-platform funnel Shopee does
-# not expose. Two buyers, one of whom ordered twice (4,900 + 5,200).
-expect_field "sp repeat buyers"    "$SHOP" "d.buyers.repeat===1&&d.buyers.total===2?'ok':undefined"
-expect_field "sp repeat value"     "$SHOP" "d.buyers.repeatValue===10100?10100:undefined"
-# THE CANCELLED ORDER'S BUYER MUST NOT COUNT AS A LIVE ONE, or a buyer who
-# bought nothing inflates the denominator and depresses the repeat rate.
-expect_field "sp buyers are live"  "$SHOP" "d.buyers.top.reduce((a,b)=>a+b.value,0)===45100?'ok':undefined"
-# OFF-SITE SPEND COMES FROM META, matched on the account NAME containing
-# "shopee" — the Shopee connector has no traffic source at all.
+# OFF-SITE SPEND FROM META, matched on an account NAME containing "shopee".
 expect_field "sp ad spend joined"  "$SHOP" "d.ads.spend===10?10:undefined"
 expect_field "sp ad account named" "$SHOP" "d.ads.accounts.join()==='BHQ Shopee x EGG'?'ok':undefined"
-# DISCOUNTS ARE A SHOP-LEVEL LUMP on a row with a NULL order id. It is skipped
-# by the fee maths (selling price zero) and must still be captured on the way
-# past — it is the only discount figure the connector gives.
-expect_field "sp promo lump kept"  "$SHOP" "d.promo.sellerDiscount===349082?349082:undefined"
-expect_field "sp promo not in fees" "$SHOP" "d.settlement.fees===3416?3416:undefined"
-# CANCELLATION BY METHOD: QR PromptPay took two orders and lost one.
-expect_field "sp pay risk split"   "$SHOP" "d.paymentRisk.find(p=>/PromptPay/.test(p.method)).cancelled===1?'ok':undefined"
-# BANDS, NOT A MEAN — this catalogue is bimodal and an average describes no real
-# order. Two small orders and one large, in different bands.
-expect_field "sp bands bimodal"    "$SHOP" "d.bands.filter(b=>b.orders).length===2?2:undefined"
-# Bangkok time: order_create_time carries +00:00, so 04:00Z is 11:00 local.
-expect_field "sp hour is bangkok"  "$SHOP" "d.hours[11].orders===1?'ok':undefined"
-# CATALOGUE. Four listings, one DELETED — a retired listing must never reach the
-# counts or every "live packages" figure drifts upward forever.
-expect_field "sp cat excludes dead" "$SHOP" "d.catalogue.count===4?4:undefined"
-# A LISTING WITH NO ORIGINAL PRICE has a NULL discount, not zero — zero reads as
-# "priced at full list" and would recommend changing a price nobody set.
-expect_field "sp cat null discount" "$SHOP" "d.catalogue.items.find(i=>i.original===0).discount===null?'ok':undefined"
-# ZERO DISCOUNT IS THE ACTIONABLE ROW: priced at its original, so it shows no
-# struck-out price on a shelf where the median package is nearly half off.
-expect_field "sp cat no-discount"  "$SHOP" "d.catalogue.noDiscountItems[0].name==='Full Price Package'?'ok':undefined"
-# Discount is NULL, not zero, when there is no original to compare against —
-# zero would read as "full price" and put the item on the list above.
-expect_field "sp cat median disc"  "$SHOP" "Math.round(d.catalogue.medianDiscount*100)===46?46:undefined"
-expect_field "sp cat low stock"    "$SHOP" "d.catalogue.lowStock[0].stock===99?99:undefined"
-echo "--- Shopee Seller Centre sheet (v3.321.0) ---"
+# SALES PER BAHT: Shopee-credited Facebook+Instagram 8,000 over 10 spent.
+expect_field "sp sales per baht"   "$SHOP" "d.ads.salesPerBaht===800?800:undefined"
+# AOV is confirmed sales over confirmed orders: 32,000 / 4.
+expect_field "sp aov"              "$SHOP" "d.aov===8000?8000:undefined"
 # VISITS: summary row out, 30-06 out, 02-07 re-paste wins. 1,000 + 600.
 # 2,100 = both pastes summed, 1,500 = first paste wins, 101,599+ = summary row in.
-expect_field "sc visits"          "$SHOP" "d.seller.funnel.visits===1600?1600:undefined"
-expect_field "sc confirmed sales" "$SHOP" "d.seller.funnel.sales===32000?32000:undefined"
+expect_field "sc visits"          "$SHOP" "d.funnel.visits===1600?1600:undefined"
+expect_field "sc confirmed sales" "$SHOP" "d.funnel.sales===32000?32000:undefined"
 # "Units(Confirmed Orders)" has no space; a literal header match reads 0.
-expect_field "sc units no-space"  "$SHOP" "d.seller.funnel.units===5?5:undefined"
-expect_field "sc conversion"      "$SHOP" "d.seller.funnel.conversion===4/1600?'ok':undefined"
-expect_field "sc placed vs conf"  "$SHOP" "d.seller.funnel.confirmRate===4/5?'ok':undefined"
+expect_field "sc units no-space"  "$SHOP" "d.funnel.units===5?5:undefined"
+expect_field "sc conversion"      "$SHOP" "d.funnel.conversion===4/1600?'ok':undefined"
+expect_field "sc placed vs conf"  "$SHOP" "d.funnel.confirmRate===4/5?'ok':undefined"
 # "1,200" product page views — a Number() on display text reads NaN -> 0.
-expect_field "sc commas parsed"   "$SHOP" "d.seller.funnel.productViews===1500?1500:undefined"
-expect_field "sc cart rate"       "$SHOP" "d.seller.funnel.cartRate===50/1000?'ok':undefined"
+expect_field "sc commas parsed"   "$SHOP" "d.funnel.productViews===1500?1500:undefined"
+expect_field "sc cart rate"       "$SHOP" "d.funnel.cartRate===50/1000?'ok':undefined"
 # RATES WEIGHTED BY VISITORS: 35% and 105s. The plain mean is 30% and 90s.
-expect_field "sc bounce weighted" "$SHOP" "Math.round(d.seller.traffic.bounceRate*100)===35?35:undefined"
-expect_field "sc time weighted"   "$SHOP" "Math.round(d.seller.traffic.avgTimeSec)===105?105:undefined"
-expect_field "sc pages/visitor"   "$SHOP" "d.seller.traffic.pagesPerVisitor===2.25?2.25:undefined"
+expect_field "sc bounce weighted" "$SHOP" "Math.round(d.traffic.bounceRate*100)===35?35:undefined"
+expect_field "sc time weighted"   "$SHOP" "Math.round(d.traffic.avgTimeSec)===105?105:undefined"
+expect_field "sc pages/visitor"   "$SHOP" "d.traffic.pagesPerVisitor===2.25?2.25:undefined"
 # OFF-PLATFORM: 01/08 is outside; DD/MM dates, not DD-MM.
-expect_field "sc offsite sales"   "$SHOP" "d.seller.offPlatform.sales===17000?17000:undefined"
-expect_field "sc offsite top"     "$SHOP" "d.seller.offPlatform.channels[0].channel==='Website'?'ok':undefined"
-expect_field "sc campaign merge"  "$SHOP" "d.seller.offPlatform.campaigns.find(c=>c.campaign==='heart26').sales===8000?'ok':undefined"
+expect_field "sc offsite sales"   "$SHOP" "d.offPlatform.sales===17000?17000:undefined"
+expect_field "sc offsite top"     "$SHOP" "d.offPlatform.channels[0].channel==='Website'?'ok':undefined"
+expect_field "sc campaign merge"  "$SHOP" "d.offPlatform.campaigns.find(c=>c.campaign==='heart26').sales===8000?'ok':undefined"
 # SHOPEE-CREDITED META SALES: Facebook + Instagram, not Website.
 expect_field "sc meta sales"      "$SHOP" "d.ads.metaSales===8000?8000:undefined"
 # PRODUCTS: suffix stripped, summed across days, 31/12/2025 out, sorted by sales.
-expect_field "sc product top"     "$SHOP" "d.seller.products.top[0].name==='Cool Sculpting 2 points'&&d.seller.products.top[0].sales===38000?'ok':undefined"
-expect_field "sc product units"   "$SHOP" "d.seller.products.units===3?3:undefined"
+expect_field "sc product top"     "$SHOP" "d.products.top[0].name==='Cool Sculpting 2 points'&&d.products.top[0].sales===38000?'ok':undefined"
+expect_field "sc product units"   "$SHOP" "d.products.units===3?3:undefined"
 # PROMOTIONS that OVERLAP the window only; January's does not.
-expect_field "sc promo overlap"   "$SHOP" "d.seller.promotions.length===1&&d.seller.promotions[0].name==='Mid-Year Heart'?'ok':undefined"
+expect_field "sc promo overlap"   "$SHOP" "d.promotions.length===1&&d.promotions[0].name==='Mid-Year Heart'?'ok':undefined"
 # THE STOCK HEURISTIC IS GONE — one answer for units, not two.
-expect_field "sc no movement"     "$SHOP" "d.movement===undefined?'ok':undefined"
-expect_field "sc last day"        "$SHOP" "d.seller.lastDay==='2026-07-02'?'ok':undefined"
+expect_field "sc no windsor"      "$SHOP" "d.settlement===undefined&&d.catalogue===undefined?'ok':undefined"
+expect_field "sc last day"        "$SHOP" "d.lastDay==='2026-07-02'?'ok':undefined"
 
 echo "--- LINE tab (v3.309.0) ---"
 LINE="/api/line?from=$FROM&to=$TO"
@@ -1165,15 +1115,14 @@ check "overview (meta down)" GET "/api/overview?from=$FROM&to=$TO"
 check "campaign (meta down)" GET "/api/campaign?code=260701-08&from=$FROM&to=$TO"
 check "audiences (meta down)" GET "/api/audiences?from=$FROM&to=$TO"
 
-# SHOPEE SHEET NOT SHARED (403): the tab still loads on Windsor, and the
-# reason names the fix rather than showing zeros.
+# SHOPEE SHEET NOT SHARED (403): the reason names the fix rather than zeros.
 kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
 WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ADMIN_EMAILS=admin@bkh.test ECOM_SHEET_ID=mock \
 MOCK_FAIL_CONNECTOR=shopee-sheet PORT=$PORT node --require ./test/mock-fetch.js server.js >>/tmp/smoke.log 2>&1 &
 SRV=$!
 sleep 2.5
 check "shopee (sheet 403)" GET "/api/shopee?from=$FROM&to=$TO"
-expect_field "sc 403 is named" "/api/shopee?from=$FROM&to=$TO" "d.seller.available===false&&/not shared/.test(d.seller.reason)&&d.liveOrders===3?'ok':undefined"
+expect_field "sc 403 is named" "/api/shopee?from=$FROM&to=$TO" "d.available===false&&/not shared/.test(d.reason)?'ok':undefined"
 
 kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
 echo ""

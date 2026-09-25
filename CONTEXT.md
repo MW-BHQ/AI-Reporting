@@ -1,5 +1,16 @@
 ### Recent (September 2026)
 
+**v3.322.0 — Windsor Shopee connector removed.** MW: "remove the shopee from
+windsor, looklike no use now". The tab is now the Seller Centre sheet plus Meta
+spend on the `*Shopee*` accounts. Gone with Windsor: cancellations and payment
+method, settlement and take rate, returns, repeat buyers, order hour/weekday,
+order value bands, shop-level discounts, catalogue. Headline sales are
+Seller Centre CONFIRMED sales — one source, so the v3.321.0 reconciliation
+question is closed. `ads.salesPerBaht` = Shopee-credited Facebook+Instagram
+sales over Meta spend. The mock fails any `connectors.windsor.ai/shopee`
+request, so a reintroduced call breaks the suite (negative-tested). The
+Windsor slot can be disconnected in the Windsor dashboard.
+
 **v3.321.0 — Shopee Seller Centre sheet; stock-movement units retired.** MW
 supplied a Google Sheet (`17T21LhWMSxIkg8GWZKS6tFQ6Q1x0mssDXx5pLX7r-kg`,
 `SHOPEE_SHEET_ID`) of pasted Seller Centre / Brand Portal exports. Tabs read:

@@ -10937,25 +10937,6 @@ app.get("/api/page", requireTab("pages"), async (req, res) => {
  * against a targetable audience that is shrinking is a story.
  */
 /**
- * SHOPEE — the marketplace storefront, one shop (`BangkokHospital_Official`).
- *
- * THREE SEPARATE CALLS, NOT ONE. Windsor exposes orders, settlement and returns
- * as different tables on the same connector; asking for fields from two of them
- * in a single request fans the rows out into a cross join, which is the same
- * trap the `facebook` connector sets with per-row counters. Each table is
- * fetched on its own and joined here on the order id.
- *
- * SOLD PRICE, NOT LIST PRICE (MW: "dont mind the list price, use the sold
- * price"). The connector also reports `settlement_order_original_price`, which
- * runs roughly double the sold price on this shop — a real number, and not the
- * one being asked for.
- *
- * SETTLEMENT LAGS AND THAT IS ACCEPTED (MW: "nevermind the settlement lag. we
- * will see only what available"). An order settles days after it ships, so the
- * net figure for a recent range is incomplete by design. It is labelled as
- * settled rather than silently blended into the gross.
- */
-/**
  * SHOPEE SELLER CENTRE — MW's Google Sheet of Seller Centre / Brand Portal
  * exports (v3.321.0). This is the source the Windsor connector could never be:
  * visits, product views, add-to-cart, placed vs confirmed, and off-platform
@@ -11135,290 +11116,42 @@ async function buildShopeeSeller(from, to) {
   };
 }
 
+/**
+ * THE SHOPEE TAB, since v3.322.0: the Seller Centre sheet plus Meta spend.
+ *
+ * WINDSOR'S SHOPEE CONNECTOR WAS REMOVED (MW: "looklike no use now"). With it
+ * went orders-table figures the sheet does not carry: cancellations by
+ * payment method, settlement and take rate, returns, repeat buyers, order
+ * timing and the catalogue. One source for sales, not two that disagree.
+ *
+ * OFF-SITE SPEND COMES FROM META accounts named `*Shopee*` (`BHQ Shopee x ADA`,
+ * `BHQ Shopee x EGG`). Set against Shopee's own credited Facebook/Instagram
+ * sales, it is a measured return, not spend beside orders.
+ */
 async function buildShopee(from, to) {
-  const call = (fields) => windsor("shopee", fields, from, to).catch((e) => {
-    logJson("WARNING", "shopee_table_unavailable", { fields: fields[0], error: String(e.message || e) });
-    return null;
-  });
-  /**
-   * OFF-SITE SHOPEE ADS COME FROM META, NOT SHOPEE. The Shopee connector has no
-   * traffic source at all, but two Meta accounts exist purely to drive this
-   * storefront — `BHQ Shopee x ADA` and `BHQ Shopee x EGG`. Spend against
-   * orders is a join across connectors, not a missing field.
-   *
-   * IT IS SPEND BESIDE ORDERS, NOT ATTRIBUTION, and the UI says so. Shopee
-   * never tells us which order came from an ad, and an ad seen today can sell
-   * next week. Cost per order here is a ratio of two totals over one window —
-   * useful as a trend, wrong as a claim about any single sale.
-   */
-  const metaShopee = windsor("facebook", ["account_name", "spend"], from, to).catch(() => null);
-
-  /**
-   * THE CATALOGUE — live listings, price and stock. Units sold used to be
-   * reconstructed from stock falls between snapshots; since v3.321.0 they come
-   * from Shopee's own Seller Centre export instead (`buildShopeeSeller`).
-   */
-  const products = windsor("shopee", ["product_id", "product_name", "product_status",
-    "product_available_stock", "product_current_price", "product_original_price"], from, to)
-    .catch(() => null);
-
-  const [orders, settle, returns, metaRows, prodRows, seller] = await Promise.all([
-    call(["order_id", "order_create_time", "order_status", "order_total_amount",
-      "order_payment_method", "order_currency", "order_buyer_username"]),
-    call(["settlement_order_id", "settlement_escrow_amount", "settlement_order_selling_price",
-      "settlement_commission_fee", "settlement_service_fee", "settlement_seller_transaction_fee",
-      "settlement_ads_fee", "settlement_voucher_from_seller"]),
-    call(["return_id", "return_order_id", "return_create_time", "return_refund_amount",
-      "return_reason", "return_status"]),
-    metaShopee,
-    products,
+  const [seller, metaRows] = await Promise.all([
     buildShopeeSeller(from, to).catch(() => ({ available: false, reason: "sheet unavailable" })),
+    windsor("facebook", ["account_name", "spend"], from, to).catch(() => null),
   ]);
-  if (orders === null) return { available: false, reason: "Shopee orders unavailable" };
-
-  const day = (v) => String(v || "").slice(0, 10);
-  /**
-   * CANCELLED IS NOT A SALE. Shopee keeps the row with its original amount, so
-   * counting every order as revenue overstates the month by whatever was
-   * cancelled — and cancellations settle at zero escrow, so gross and net
-   * would disagree for a reason nobody could see.
-   */
-  const CANCELLED = /cancel|unpaid|invalid/i;
-  const live = orders.filter((r) => !CANCELLED.test(String(r.order_status || "")));
-  const cancelled = orders.filter((r) => CANCELLED.test(String(r.order_status || "")));
-
-  const gross = live.reduce((a, r) => a + n(r.order_total_amount), 0);
-  const cancelledValue = cancelled.reduce((a, r) => a + n(r.order_total_amount), 0);
-
-  const byStatus = new Map(), byPayment = new Map(), byDay = new Map();
-  for (const r of orders) {
-    const st = String(r.order_status || "unknown");
-    byStatus.set(st, (byStatus.get(st) || 0) + 1);
-  }
-  for (const r of live) {
-    const pm = String(r.order_payment_method || "unknown");
-    const p = byPayment.get(pm) || { method: pm, orders: 0, value: 0 };
-    p.orders += 1; p.value += n(r.order_total_amount);
-    byPayment.set(pm, p);
-    const d = day(r.order_create_time);
-    if (!d) continue;
-    const e = byDay.get(d) || { d, orders: 0, value: 0 };
-    e.orders += 1; e.value += n(r.order_total_amount);
-    byDay.set(d, e);
-  }
-
-  /**
-   * FEES AND NET, from the settlement table. `escrow_amount` is what actually
-   * reaches the bank; everything between it and the sold price is Shopee's.
-   * The take rate is computed ONCE at the end from the two totals — a mean of
-   * per-order rates would weight a ฿990 order the same as a ฿97,000 one.
-   */
-  let sold = 0, escrow = 0, commission = 0, service = 0, txn = 0, ads = 0, voucher = 0, settled = 0;
-  /**
-   * DISCOUNTS ARRIVE AS A SHOP-LEVEL LUMP. Every per-order voucher field reads
-   * zero and one row with a NULL `order_id` carries the totals. It is kept here
-   * rather than dropped with the other zero-value rows, because it is the only
-   * discount figure the connector gives — and it can never be attributed to an
-   * order, which the UI states.
-   */
-  const promo = { sellerDiscount: 0, shopeeDiscount: 0, sellerVoucher: 0, shopeeVoucher: 0, coins: 0 };
-  for (const r of (settle || [])) {
-    const sp = n(r.settlement_order_selling_price);
-    if (!sp) {
-      promo.sellerDiscount += n(r.settlement_seller_discount);
-      promo.shopeeDiscount += n(r.settlement_shopee_discount);
-      promo.sellerVoucher += n(r.settlement_voucher_from_seller);
-      promo.shopeeVoucher += n(r.settlement_voucher_from_shopee);
-      promo.coins += n(r.settlement_coins);
-      continue;                              // cancelled rows settle at zero
-    }
-    settled += 1;
-    sold += sp;
-    escrow += n(r.settlement_escrow_amount);
-    commission += n(r.settlement_commission_fee);
-    service += n(r.settlement_service_fee);
-    txn += n(r.settlement_seller_transaction_fee);
-    ads += n(r.settlement_ads_fee);
-    voucher += n(r.settlement_voucher_from_seller);
-  }
-  /**
-   * Meta accounts whose NAME mentions Shopee. Matching on the name rather than
-   * a hard-coded id so a third agency account joins by being named, not by a
-   * code change — and if the naming ever drifts the figure goes to null rather
-   * than quietly counting the wrong accounts.
-   */
-  /**
-   * CATALOGUE HEALTH.
-   *
-   * ZERO DISCOUNT IS THE ACTIONABLE ONE. On Shopee a listing with no struck-out
-   * price carries no discount badge, and on a shelf where everything else shows
-   * one it reads as the expensive option. These are named rather than counted.
-   */
-  const catalogue = (() => {
-    if (prodRows === null) return { available: false };
-    const live = prodRows.filter((r) => /normal/i.test(String(r.product_status || "")));
-    const items = live.map((r) => {
-      const cur = n(r.product_current_price), orig = n(r.product_original_price);
-      return {
-        id: String(r.product_id || ""), name: String(r.product_name || "").replace(/\s*-\s*Bangkok Hospital.*$/i, "").trim(),
-        price: cur, original: orig,
-        // Discount is null, not zero, when there is no original to compare to.
-        discount: orig > 0 && cur > 0 ? (orig - cur) / orig : null,
-        stock: n(r.product_available_stock),
-      };
-    });
-    const noDiscount = items.filter((i) => i.discount !== null && i.discount <= 0.001);
-    const deep = [...items].filter((i) => i.discount !== null).sort((a, b) => b.discount - a.discount);
-    return {
-      available: true,
-      count: items.length,
-      noDiscount: noDiscount.length,
-      noDiscountItems: noDiscount.sort((a, b) => b.price - a.price).slice(0, 10),
-      medianDiscount: (() => {
-        const d = items.map((i) => i.discount).filter((v) => v !== null).sort((a, b) => a - b);
-        return d.length ? d[Math.floor(d.length / 2)] : null;
-      })(),
-      deepest: deep.slice(0, 8),
-      lowStock: items.filter((i) => i.stock > 0 && i.stock < 120).sort((a, b) => a.stock - b.stock).slice(0, 10),
-      outOfStock: items.filter((i) => i.stock === 0).map((i) => i.name).slice(0, 10),
-      items,
-    };
-  })();
-
+  if (!seller.available) return { available: false, reason: seller.reason, lastDay: seller.lastDay || null };
   const shopeeAds = (metaRows || []).filter((r) => /shopee/i.test(String(r.account_name || "")));
-  const adSpend = metaRows === null ? null : shopeeAds.reduce((a, r) => a + n(r.spend), 0);
-  const fees = commission + service + txn + ads;
-
-  /**
-   * REPEAT BUYERS — the honest substitute for the on-platform funnel Shopee
-   * does not expose (MW asked for product/repeat views; the connector has no
-   * traffic at all). `order_buyer_username` is populated, and one buyer already
-   * appears twice inside a single week.
-   *
-   * WITHIN THE WINDOW ONLY, and the UI says so. A buyer whose first order was
-   * last month reads as "new" here, so this understates repeat behaviour on a
-   * short range — a real limit, and better stated than silently wrong.
-   */
-  const byBuyer = new Map();
-  for (const r of live) {
-    const b = String(r.order_buyer_username || "").trim();
-    if (!b) continue;
-    const e = byBuyer.get(b) || { buyer: b, orders: 0, value: 0 };
-    e.orders += 1; e.value += n(r.order_total_amount);
-    byBuyer.set(b, e);
-  }
-  const buyers = [...byBuyer.values()];
-  const repeatBuyers = buyers.filter((b) => b.orders > 1);
-  const repeatValue = repeatBuyers.reduce((a, b) => a + b.value, 0);
-
-  /**
-   * CANCELLATION BY PAYMENT METHOD. A method that takes the order and then
-   * fails is a checkout problem, not a demand problem, and the two look
-   * identical in a single cancellation rate.
-   */
-  const byPay = new Map();
-  for (const r of orders) {
-    const pm = String(r.order_payment_method || "unknown");
-    const e = byPay.get(pm) || { method: pm, orders: 0, cancelled: 0, value: 0 };
-    e.orders += 1;
-    if (CANCELLED.test(String(r.order_status || ""))) e.cancelled += 1;
-    else e.value += n(r.order_total_amount);
-    byPay.set(pm, e);
-  }
-
-  /**
-   * WHEN ORDERS HAPPEN, in Bangkok time. `order_create_time` carries a `+00:00`
-   * offset, so the hour is shifted by seven — reading it raw would put the
-   * evening peak in the early afternoon and send every broadcast at the wrong
-   * time.
-   */
-  const byHour = Array.from({ length: 24 }, (_, h) => ({ hour: h, orders: 0, value: 0 }));
-  const byWeekday = Array.from({ length: 7 }, (_, d) => ({ day: d, orders: 0, value: 0 }));
-  for (const r of live) {
-    const t = Date.parse(String(r.order_create_time || ""));
-    if (!Number.isFinite(t)) continue;
-    const bkk = new Date(t + 7 * 3600 * 1000);
-    const h = bkk.getUTCHours(), wd = bkk.getUTCDay();
-    byHour[h].orders += 1; byHour[h].value += n(r.order_total_amount);
-    byWeekday[wd].orders += 1; byWeekday[wd].value += n(r.order_total_amount);
-  }
-
-  /**
-   * ORDER VALUE BANDS. A mean hides a bimodal catalogue, and this shop is
-   * visibly bimodal — a cluster of small packages and a cluster of large ones.
-   * An average sitting between them describes no order that was ever placed.
-   */
-  const BANDS = [[0, 1000], [1000, 3000], [3000, 6000], [6000, 12000],
-                 [12000, 30000], [30000, 60000], [60000, Infinity]];
-  const bands = BANDS.map(([lo, hi]) => ({ lo, hi: hi === Infinity ? null : hi, orders: 0, value: 0 }));
-  for (const r of live) {
-    const v = n(r.order_total_amount);
-    const i = BANDS.findIndex(([lo, hi]) => v >= lo && v < hi);
-    if (i >= 0) { bands[i].orders += 1; bands[i].value += v; }
-  }
-
-  const byReason = new Map();
-  for (const r of (returns || [])) {
-    const k = String(r.return_reason || "unknown");
-    const e = byReason.get(k) || { reason: k, count: 0, value: 0 };
-    e.count += 1; e.value += n(r.return_refund_amount);
-    byReason.set(k, e);
-  }
-
+  const spend = metaRows === null ? null : shopeeAds.reduce((a, r) => a + n(r.spend), 0);
+  const f = seller.funnel;
+  const op = seller.offPlatform;
+  const metaSales = op.available
+    ? op.channels.filter((c) => /facebook|instagram/i.test(c.channel)).reduce((a, c) => a + c.sales, 0) : null;
   return {
     available: true,
-    orders: orders.length,
-    liveOrders: live.length,
-    gross,
-    aov: live.length ? gross / live.length : null,
-    cancelled: cancelled.length,
-    cancelledValue,
-    cancelRate: orders.length ? cancelled.length / orders.length : null,
-    settlement: settle === null ? { available: false } : {
-      available: true, settled, sold, escrow,
-      commission, service, txn, ads, voucher, fees,
-      // One division at the end, never an average of per-order rates.
-      takeRate: sold ? fees / sold : null,
-      netRate: sold ? escrow / sold : null,
+    ...seller,
+    aov: f.orders ? f.sales / f.orders : null,
+    ads: spend === null ? { available: false } : {
+      available: true, spend,
+      accounts: [...new Set(shopeeAds.map((r) => r.account_name))],
+      metaSales,
+      // One division of two totals over the window.
+      salesPerBaht: spend && metaSales != null ? metaSales / spend : null,
+      costPerOrder: f.orders ? spend / f.orders : null,
     },
-    returns: returns === null ? { available: false } : {
-      available: true,
-      count: returns.length,
-      value: returns.reduce((a, r) => a + n(r.return_refund_amount), 0),
-      reasons: [...byReason.values()].sort((a, b) => b.count - a.count).slice(0, 10),
-    },
-    buyers: {
-      total: buyers.length,
-      repeat: repeatBuyers.length,
-      repeatRate: buyers.length ? repeatBuyers.length / buyers.length : null,
-      repeatValue,
-      repeatValueShare: gross ? repeatValue / gross : null,
-      ordersPerBuyer: buyers.length ? live.length / buyers.length : null,
-      top: buyers.sort((a, b) => b.value - a.value).slice(0, 10),
-    },
-    promo, catalogue, seller,
-    ads: adSpend === null ? { available: false } : {
-      available: true, spend: adSpend,
-      accounts: shopeeAds.map((r) => r.account_name),
-      costPerOrder: live.length ? adSpend / live.length : null,
-      // Spend as a share of what the storefront sold in the same window.
-      costOfSale: gross ? adSpend / gross : null,
-      /**
-       * NOW MEASURED, NOT BESIDE: Shopee credits orders to Facebook/Instagram
-       * links through its own tracking parameter. Sales per baht is that
-       * credited figure over Meta's Shopee-account spend — still two sources,
-       * but no longer two unrelated totals.
-       */
-      metaSales: seller && seller.offPlatform && seller.offPlatform.available
-        ? seller.offPlatform.channels.filter((c) => /facebook|instagram/i.test(c.channel)).reduce((a, c) => a + c.sales, 0) : null,
-    },
-    paymentRisk: [...byPay.values()].map((p) => ({ ...p,
-      cancelRate: p.orders ? p.cancelled / p.orders : null })).sort((a, b) => b.orders - a.orders),
-    hours: byHour, weekdays: byWeekday, bands,
-    statuses: [...byStatus.entries()].map(([status, count]) => ({ status, count }))
-      .sort((a, b) => b.count - a.count),
-    payments: [...byPayment.values()].sort((a, b) => b.value - a.value),
-    daily: [...byDay.values()].sort((a, b) => a.d.localeCompare(b.d)),
   };
 }
 
