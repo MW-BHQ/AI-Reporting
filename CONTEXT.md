@@ -1,5 +1,13 @@
 ### Recent (September 2026)
 
+**v3.340.0 — House green/red on the synthesis; sources split in two cards.**
+v3.339.0 left the verdict boxes uncoloured on a wrong premise ("colour means
+channel only"). MW: the deck HAS a green/red house rule — #2E9E6F favourable,
+#D9534F unfavourable (`td.num.good/bad`, `dlt`, `kpiChange`), green meaning
+favourable not upward. Box titles now carry it: Working/Try ads green; Cut
+or fix and both leak boxes red; neutral boxes stay ink. "Where sales came
+from" (THB) and "How shoppers arrived" (clicks/visits) are now two cards.
+
 **v3.339.0 — Shopee synthesis: what to do next.** MW: "that's what I want".
 Three reads from tabs already imported, thresholds named in `SHOPEE_SYN`:
 - WHERE TO MOVE AD MONEY: 2×2 of "sells" (the packages making the top 80% of
