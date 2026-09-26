@@ -11024,6 +11024,109 @@ function loadShopeeRaw() {
     main: settle(sheetBatchGet(SHOPEE_SHEET_ID, SHOPEE_TABS.map((t) => `'${t}'!A1:AF`))),
     ads: settle(sheetBatchGet(SHOPEE_SHEET_ID, [`'${SHOPEE_ADS_TAB}'!A1:R`])),
     buyers: settle(sheetBatchGet(SHOPEE_SHEET_ID, SHOPEE_BUYER_TABS.map((t) => `'${t}'!A1:J`))),
+    packages: settle(sheetBatchGet(SHOPEE_SHEET_ID, SHOPEE_PACKAGE_TABS.map((t) => `'${t}'!A1:AB`))),
+  };
+}
+
+/**
+ * PACKAGES (v3.336.0) — the whole shop, per package, monthly.
+ *   `Package Sales` = Brand Portal > Product Analysis > Product Performance,
+ *                     sheet "Product Performance Item Level".
+ *   `Package Ads`   = On-platform Ads > Product Ads Performance, "By Product".
+ * Neither export carries its period, so MW's team adds column A `Month`.
+ *
+ * `Month` IS TYPED BY HAND and Sheets rewrites it: `2025-01` in a date-ready
+ * cell becomes 1 Jan 2025 and displays as `2025-01-01`, `1/1/2025` or
+ * `Jan 2025` depending on locale. All of them are read as the month; a
+ * D/M-vs-M/D date is resolved by its day being the 1st.
+ *
+ * WHOLE MONTHS ONLY, and a product pasted twice for one month keeps the later
+ * paste. Months are summed; buyers are not shown because unique buyers do
+ * not add across months.
+ *
+ * PACKAGE ADS DOES NOT COVER ALL AD SPEND: Jan 2025 splits ฿24.4K of the
+ * ฿28.2K in the daily Shopee Ads tab. The gap is reported, never spread over
+ * packages.
+ */
+const SHOPEE_PACKAGE_TABS = (process.env.SHOPEE_PACKAGE_TABS || "Package Sales,Package Ads").split(",");
+const MON3 = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+function packageMonth(v) {
+  const t = String(v == null ? "" : v).trim();
+  let m = t.match(/^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?$/);
+  if (m) return `${m[1]}.${m[2].padStart(2, "0")}`;
+  m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) {
+    const a = +m[1], b = +m[2];
+    const mo = a === 1 && b !== 1 ? b : b === 1 && a !== 1 ? a : a === 1 ? 1 : null;
+    return mo && mo <= 12 ? `${m[3]}.${String(mo).padStart(2, "0")}` : null;
+  }
+  m = t.toLowerCase().match(/^([a-z]{3})[a-z]*\.?\s+(\d{4})$/);
+  if (m && MON3.includes(m[1])) return `${m[2]}.${String(MON3.indexOf(m[1]) + 1).padStart(2, "0")}`;
+  return buyerMonth(t);
+}
+async function readShopeePackages(from, to, raw) {
+  const got = await raw.packages;
+  if (got.err) return { available: false, reason: `no "${SHOPEE_PACKAGE_TABS.join('", "')}" tabs in the sheet` };
+  const months = monthsInside(from, to);
+  if (!months.length) return { available: false, reason: "monthly data — pick one or more whole months" };
+  const want = new Set(months);
+  const rowsOf = (values) => {
+    const byKey = new Map();
+    let head = null;
+    for (const r of values || []) {
+      if (/^month$/i.test(String(r[0] || "").trim())) { head = r.map(spKey); continue; }
+      if (!head) continue;
+      const o = {}; head.forEach((k, i) => { if (k) o[k] = r[i]; });
+      o._month = packageMonth(o.month);
+      const id = String(o.productid || "").replace(/\.0+$/, "").trim();
+      if (!o._month || !want.has(o._month) || !id) continue;
+      o._id = id;
+      byKey.set(`${o._month}|${id}`, o); // a later paste of the same month wins
+    }
+    return [...byKey.values()];
+  };
+  const res = got.res;
+  const sales = rowsOf(res[0] && res[0].values);
+  const ads = rowsOf(res[1] && res[1].values);
+  if (!sales.length && !ads.length) return { available: false, reason: `no package rows for ${months.join(", ")}` };
+  const clean = (nm) => String(nm || "").replace(/\s*-\s*Bangkok Hospital.*$/i, "").trim();
+  const pk = new Map();
+  const get = (id, name) => {
+    if (!pk.has(id)) pk.set(id, { id, name: clean(name), netSales: 0, netOrders: 0, netUnits: 0, grossSales: 0,
+      views: 0, clicks: 0, visitors: 0, cartUnits: 0, ads: null, hasSales: false });
+    const e = pk.get(id);
+    if (!e.name && name) e.name = clean(name);
+    return e;
+  };
+  for (const r of sales) {
+    const e = get(r._id, r.name);
+    e.hasSales = true; // an ads-only package has NO sales row: dashes, not zeros
+    e.netSales += spNum(r.netsales); e.netOrders += spNum(r.netorders); e.netUnits += spNum(r.netunitssold);
+    e.grossSales += spNum(r.grosssales); e.views += spNum(r.productviews); e.clicks += spNum(r.productclicks);
+    e.visitors += spNum(r.productvisitors); e.cartUnits += spNum(r.atcunits);
+  }
+  for (const r of ads) {
+    const e = get(r._id, r.productname);
+    const a = e.ads || (e.ads = { spend: 0, impressions: 0, clicks: 0, orders: 0, sales: 0 });
+    a.spend += spNum(r.adsspendlocalcurrency); a.impressions += spNum(r.impressions); a.clicks += spNum(r.clicks);
+    a.orders += spNum(r.orders); a.sales += spNum(r.grosssaleslocalcurrency);
+  }
+  const div = (a, b) => (b ? a / b : null);
+  const list = [...pk.values()].map((e) => ({ ...e,
+    conversion: div(e.netOrders, e.visitors), cartRate: div(e.cartUnits, e.visitors),
+    ads: e.ads ? { ...e.ads, roas: div(e.ads.sales, e.ads.spend) } : null,
+  })).sort((a, b) => b.netSales - a.netSales || ((b.ads && b.ads.spend) || 0) - ((a.ads && a.ads.spend) || 0));
+  const tot = (k) => list.reduce((x, e) => x + e[k], 0);
+  const found = [...new Set([...sales, ...ads].map((r) => r._month))].sort();
+  return {
+    available: true, months: found, missing: months.filter((m) => !found.includes(m)),
+    salesMonths: [...new Set(sales.map((r) => r._month))].sort(),
+    adsMonths: [...new Set(ads.map((r) => r._month))].sort(),
+    netSales: tot("netSales"), netOrders: tot("netOrders"), grossSales: tot("grossSales"),
+    visitors: tot("visitors"), cartUnits: tot("cartUnits"),
+    adsSpend: list.reduce((x, e) => x + (e.ads ? e.ads.spend : 0), 0),
+    count: list.length,
+    list,
   };
 }
 
@@ -11152,6 +11255,7 @@ async function readShopeeAds(from, to, raw) {
 async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
   const adsP = readShopeeAds(from, to, raw).catch(() => ({ available: false, reason: "unavailable" }));
   const buyersP = readShopeeBuyers(from, to, raw).catch(() => ({ available: false, reason: "unavailable" }));
+  const packagesP = readShopeePackages(from, to, raw).catch(() => ({ available: false, reason: "unavailable" }));
   const got = await raw.main;
   if (got.err) {
     const e = got.err;
@@ -11329,7 +11433,27 @@ async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
        */
       const known = shopeeAds.available && opt.length > 0 && f.sales != null;
       const rest = known ? f.sales - shopeeAds.sales - offTotal.sales : null;
-      return { shopeeAds, buyers: await buyersP, sources: known ? {
+      /**
+       * UNALLOCATED AD SPEND: the daily Shopee Ads total minus what Package
+       * Ads splits by package, for the same whole months. Only when Package
+       * Ads has every month in the range; otherwise no gap is claimed.
+       */
+      const packages = await packagesP;
+      if (packages.available && shopeeAds.available && packages.adsMonths.length === monthsInside(from, to).length) {
+        // The daily tab can miss a day (1 Jan 2025); the days it covers go
+        // out with the gap so the card can say "N of M days".
+        packages.adsTotal = shopeeAds.spend;
+        packages.adsTotalDays = shopeeAds.days;
+        packages.windowDays = Math.round((Date.parse(to) - Date.parse(from)) / 864e5) + 1;
+        packages.adsUnallocated = Math.max(0, shopeeAds.spend - packages.adsSpend);
+      }
+      // Share of confirmed only when the daily Sales tab covers every day of
+      // the same whole months — else a month of packages over a few days of
+      // sales reads as 190%.
+      if (packages.available && sales.length === Math.round((Date.parse(to) - Date.parse(from)) / 864e5) + 1) {
+        packages.shareOfConfirmed = div(packages.netSales, f.sales);
+      }
+      return { shopeeAds, buyers: await buyersP, packages, sources: known ? {
         shopeeAds: shopeeAds.sales, offPlatform: offTotal.sales,
         organic: rest >= 0 ? rest : null, overCredited: rest < 0,
       } : null };

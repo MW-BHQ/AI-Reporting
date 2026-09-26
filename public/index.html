@@ -196,6 +196,9 @@
    * untouched; the picker only writes them on Apply.
    */
   .dates{position:relative;}
+  .pk-more{display:none;}
+  .pk-t th{white-space:normal;line-height:1.25;vertical-align:bottom;}
+  .pk-all .pk-more{display:table-row-group;}
   .bar-wrap{position:relative;width:100%;}
   .bar-lab{position:absolute;transform:translateX(-50%);font:600 9.5px Poppins,sans-serif;color:var(--muted);white-space:nowrap;line-height:1;}
   .dp-btn{display:flex;align-items:center;gap:8px;background:var(--glass);border:1px solid var(--line);border-radius:12px;padding:7px 12px;font-family:inherit;font-size:var(--text-xs);color:var(--ink);cursor:pointer;white-space:nowrap;}
@@ -8328,6 +8331,47 @@ function renderShopee() {
     </tbody></table>
   </div>` : '';
 
+  /**
+   * PACKAGES — WHOLE SHOP (v3.336.0). Brand Portal Product Performance joined
+   * to Product Ads Performance by product ID, monthly. The first 20 by net
+   * sales show; the rest open with one button rather than a scroll trap.
+   * Ad spend Package Ads does not split by package is stated as a gap.
+   */
+  const pk = d.packages || {};
+  const pkMon = (ms) => ms.length === 1 ? bMon(ms[0]) : `${bMon(ms[0])} \u2013 ${bMon(ms[ms.length-1])}`;
+  const pkNo = '<td class="num">\u2014</td>';
+  const pkRow = (x) => `<tr><td class="trunc" data-tip="${esc(x.name)}">${esc(x.name)}</td>
+      ${x.hasSales ? `<td class="num">${num(x.visitors)}</td><td class="num">${num(x.cartUnits)}</td><td class="num">${num(x.netOrders)}</td>
+      <td class="num">${pc(x.conversion)}</td><td class="num">${num(x.netSales,{money:true,bare:true})}</td>` : pkNo.repeat(5)}
+      <td class="num">${x.ads?num(x.ads.spend,{money:true,bare:true}):'\u2014'}</td>
+      <td class="num">${x.ads?num(x.ads.sales,{money:true,bare:true}):'\u2014'}</td>
+      <td class="num">${x.ads&&x.ads.roas!=null?num(x.ads.roas,{dp:1})+'\u00d7':'\u2014'}</td></tr>`;
+  const packages = !pk.available ? `<div class="card mt"><div class="card-title">Packages &middot; whole shop</div>
+    <div class="note" style="margin-top:0;">${esc(pk.reason || 'unavailable')} &mdash; not measured, not zero.</div></div>`
+  : `<div class="card mt">
+    <div class="card-title">Packages &middot; whole shop &middot; ${esc(pkMon(pk.months))}${
+      pk.missing.length ? ` <span class="pill">${num(pk.missing.length)} month${pk.missing.length>1?'s':''} not in the sheet</span>` : ''}</div>
+    <div class="grid g-4">
+      <div class="stat"><div class="lab">Net sales (THB)</div><div class="val">${num(pk.netSales,{money:true,bare:true})}</div>
+        <div class="sub">${pk.shareOfConfirmed!=null?`${pc(pk.shareOfConfirmed,0)} of confirmed sales`:'paid, less cancels and refunds'}</div></div>
+      <div class="stat"><div class="lab">Packages sold</div><div class="val">${num(pk.list.filter(x => x.netOrders > 0).length)}</div>
+        <div class="sub">of ${num(pk.count)} listed or advertised</div></div>
+      <div class="stat"><div class="lab">Visitor \u2192 order</div><div class="val">${pc(pk.visitors ? pk.netOrders / pk.visitors : null, 2)}</div>
+        <div class="sub">${num(pk.visitors)} product visitors</div></div>
+      <div class="stat"><div class="lab">Ad spend by package (THB)</div><div class="val">${num(pk.adsSpend,{money:true,bare:true})}</div>
+        <div class="sub">${pk.adsUnallocated!=null?`THB ${num(pk.adsUnallocated,{money:true,bare:true})} of ${num(pk.adsTotal,{money:true,bare:true})} not split by package${
+          pk.adsTotalDays < pk.windowDays ? ` \u00b7 ${num(pk.adsTotalDays)} of ${num(pk.windowDays)} days` : ''}`:'Shopee Ads, per package'}</div></div>
+    </div>
+    <table class="roomy mt pk-t" style="table-layout:fixed;"><thead><tr><th style="width:30%;">Package</th><th class="num" style="width:8%;">Visitors</th>
+      <th class="num" style="width:10%;">Add to cart (items)</th><th class="num" style="width:7%;">Orders</th><th class="num" style="width:8%;">Conversion</th>
+      <th class="num" style="width:10%;">Net sales (THB)</th><th class="num" style="width:9%;">Ad spend (THB)</th>
+      <th class="num" style="width:11%;">Ad-credited sales (THB)</th><th class="num" style="width:7%;">ROAS</th></tr></thead>
+      <tbody>${pk.list.slice(0, 20).map(pkRow).join('')}</tbody>
+      ${pk.list.length > 20 ? `<tbody class="pk-more">${pk.list.slice(20).map(pkRow).join('')}</tbody>` : ''}
+    </table>
+    ${pk.list.length > 20 ? `<button type="button" class="btn btn-ghost mt" onclick="this.closest('.card').classList.toggle('pk-all');this.textContent=this.closest('.card').classList.contains('pk-all')?'Show top 20':'Show all ${pk.list.length} packages'">Show all ${pk.list.length} packages</button>` : ''}
+  </div>`;
+
   const pp = sc.products || {};
   const sold = pp.available ? `<div class="card mt">
     <div class="card-title">What sold from outside traffic &middot; ${num(pp.units)} units</div>
@@ -8356,7 +8400,7 @@ function renderShopee() {
       <div class="big">Shopee <span class="pill">BangkokHospital_Official</span></div>
       <div class="hint">One storefront, from Shopee Seller Centre. Confirmed sales are orders Shopee has confirmed.</div>
     </div></div>
-    ${head}${commercial}${shopeeAds}${sources}${funnel}${traffic}${buyers}${offsite}${offCampaigns}${placements}${sold}${trend}`;
+    ${head}${commercial}${shopeeAds}${sources}${funnel}${traffic}${buyers}${offsite}${offCampaigns}${placements}${packages}${sold}${trend}`;
 }
 
 function renderLine() {
@@ -11927,7 +11971,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.335.0';
+const CLIENT_BUILD = '3.336.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

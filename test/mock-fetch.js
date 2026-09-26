@@ -1101,6 +1101,40 @@ global.fetch = async (url, opts = {}) => {
      *     (Sheets shows 2026.10 as 2026.1), so this is "70" — invalid, skipped.
      *     A naive pad would read it as July and add 99.
      */
+    /**
+     * PACKAGE TABS (v3.336.0): monthly exports with a hand-typed `Month`.
+     *   - `Month` as Sheets rewrites it: "2026-07", "2026-07-01", "1/7/2026",
+     *     "Jul 2026" — all July.
+     *   - Package 111 pasted TWICE for July; the later paste (40,000) wins.
+     *     Summing gives 51,111; first-wins gives 11,111.
+     *   - June OUTSIDE a July window.
+     *   - Package 444 has ads but no sales row: it still appears.
+     * July: net sales 62,000; package ads spend 1,300 of the daily tab's
+     * 1,700 → 400 unallocated.
+     */
+    if (/Package(%20|\+| )Sales/.test(u)) {
+      const SH = ["Month", "No.", "Name", "URL", "Product ID", "Parent SKU", "Region", "Shop ID", "Shop name", "Brand", "Category",
+        "Product Rating", "Net Units Sold", "Net Orders", "Net Sales(\u0e3f)", "Net # of Unique Buyers", "Gross Units Sold", "Gross Orders",
+        "Gross Sales(\u0e3f)", "Gross # of Unique Buyers", "Product Views", "Product Clicks", "Product Visitors", "ATC Units"];
+      const ps = (mo, id, name, u2, o, net, gross, v, c, vis, atc) => [mo, "1", name + " - Bangkok Hospital [E-Coupon]", "x", id, "HC", "TH",
+        "250344218", "BangkokHospital_Official", "Unspecified", "x", "4.9", String(u2), String(o), net, String(o), String(u2), String(o), gross,
+        String(o), String(v), String(c), String(vis), String(atc)];
+      const AH = ["Month", "Region", "Shop Name", "Shop ID", "Product Name", "Product ID", "Impressions", "Clicks", "CTR", "Ads Spend(USD)",
+        "Ads Spend(Local currency)", "CPC", "# of active keywords", "Orders", "Gross Sales(USD)", "Gross Sales(Local currency)", "ROAS", "Units Sold", "CR"];
+      const pa = (mo, id, name, clk, spend, o, sales) => [mo, "TH", "BangkokHospital_Official", "250344218", name + " - Bangkok Hospital [E-Coupon]",
+        id, "1,000", String(clk), "0.01", "0", spend, "1", "1", String(o), "0", sales, "0", String(o), "0"];
+      return jsonRes({ spreadsheetId: "mock-shopee", valueRanges: [
+        { values: [SH,
+          ps("2026-06", "111", "Longevity Female", 9, 9, "99,999", "99,999", 9, 9, 9, 9),
+          ps("2026-07", "111", "Longevity Female", 1, 1, "11,111", "11,111", 1, 1, 1, 1),
+          ps("2026-07", "111", "Longevity Female", 2, 2, "40,000", "45,000", 200, 80, 100, 10),
+          ps("2026-07-01", "222", "Prestige Male", 1, 1, "20,000", "20,000", 100, 40, 50, 5),
+          ps("1/7/2026", "333", "Pap Smear", 1, 1, "2,000", "2,000", 40, 10, 20, 2)] },
+        { values: [AH,
+          pa("Jul 2026", "111", "Longevity Female", 50, "1,000", 1, "30,000"),
+          pa("2026-07", "444", "Stop Stroke", 20, "300", 0, "0")] },
+      ] });
+    }
     if (/Buyer(%20|\+| )Gender/.test(u)) {
       if (process.env.MOCK_FAIL_CONNECTOR === "shopee-buyers") return jsonRes({ error: { code: 400 } }, 400);
       const g = (mo, reg, gen, f, n) => [mo, reg, reg === "All" ? "All" : "Unspecified", reg === "All" ? "All" : "BangkokHospital_Official",

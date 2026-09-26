@@ -1,5 +1,19 @@
 ### Recent (September 2026)
 
+**v3.336.0 — Shopee packages, whole shop.** Tabs `Package Sales` (Brand Portal
+Product Performance, Item Level sheet) and `Package Ads` (Product Ads
+Performance, By Product sheet), monthly, with a hand-typed column A `Month`.
+SKU Level and By Campaign Type (bidding mode only) are not used.
+- `Month` read in every form Sheets turns it into (`2025-01`, `2025-01-01`,
+  `1/1/2025`, `Jan 2025`); D/M vs M/D resolved by the day being the 1st.
+- Whole months only; a product pasted twice for one month keeps the later
+  paste; ads-only products still listed. Buyers not shown (not additive).
+- Joined on Product ID: visitors, add to cart, orders, conversion, net
+  sales, ad spend, ad-credited sales, ROAS. Top 20, then "Show all".
+- Package Ads splits only part of Shopee Ads spend (Jan 2025: ฿24.4K of
+  ฿28.2K). The gap is shown against the daily tab, with its day coverage.
+- Jan 2025 net sales ฿2.32M vs ฿2.34M confirmed on the Sales tab.
+
 **v3.335.0 — Shopee bar labels at the house size, on every bar.** MW: labels
 too big, some bars unlabelled. Labels now 9.5px/600 like `ratingDotLabels`,
 as HTML over a stretched SVG so they never scale with width; every bar is

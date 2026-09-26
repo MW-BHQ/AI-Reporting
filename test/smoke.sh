@@ -318,6 +318,18 @@ expect_field "by no behaviour"    "$SHOP" "d.buyers.power===undefined&&d.buyers.
 expect_field "by age 55+"         "$SHOP" "d.buyers.age.all.rows.find(r=>r.k==='>55').share===0.5?'ok':undefined"
 # A range shorter than a month has no whole month: said, not zero.
 expect_field "by part month"      "/api/shopee?from=2026-07-01&to=2026-07-01" "d.buyers.available===false&&/whole months/.test(d.buyers.reason)?'ok':undefined"
+# PACKAGES (July): later paste wins (40,000 not 51,111 or 11,111); June out;
+# every Sheets rendering of "Month" read as July; ads-only 444 kept.
+expect_field "pk net sales"       "$SHOP" "d.packages.netSales===62000?62000:undefined"
+expect_field "pk later paste"     "$SHOP" "d.packages.list.find(p=>p.id==='111').netSales===40000?'ok':undefined"
+expect_field "pk month formats"   "$SHOP" "['111','222','333'].every(id=>d.packages.list.some(p=>p.id===id&&p.netSales>0))?'ok':undefined"
+expect_field "pk ads join"        "$SHOP" "(p=>p.ads.spend===1000&&p.ads.roas===30&&p.conversion===0.02)(d.packages.list.find(p=>p.id==='111'))?'ok':undefined"
+expect_field "pk ads-only kept"   "$SHOP" "(p=>p&&p.hasSales===false&&p.ads.spend===300)(d.packages.list.find(p=>p.id==='444'))?'ok':undefined"
+# July's Sales tab has 2 of 31 days: no share of confirmed (it read 194%).
+expect_field "pk no false share"  "$SHOP" "d.packages.shareOfConfirmed===undefined?'ok':undefined"
+# UNALLOCATED AD SPEND: daily tab 1,700 - package ads 1,300.
+expect_field "pk unallocated"     "$SHOP" "d.packages.adsUnallocated===400&&d.packages.adsTotal===1700?'ok':undefined"
+expect_field "pk part month"      "/api/shopee?from=2026-07-01&to=2026-07-01" "d.packages.available===false&&/whole months/.test(d.packages.reason)?'ok':undefined"
 expect_field "sc no windsor"      "$SHOP" "d.settlement===undefined&&d.catalogue===undefined?'ok':undefined"
 expect_field "sc last day"        "$SHOP" "d.lastDay==='2026-07-02'?'ok':undefined"
 
