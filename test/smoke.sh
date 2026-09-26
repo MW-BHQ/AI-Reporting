@@ -368,6 +368,13 @@ expect_field "cpnb part month"    "/api/shopee?from=2026-06-15&to=2026-07-31" "d
 # PRICE BANDS: 111 at 20,000/unit and 222 at 20,000 → 15K-30K (150 visitors,
 # 3 orders); 333 at 2,000 → under 5K.
 expect_field "price bands"        "$SHOP" "(b=>b[2].packages===2&&b[2].visitors===150&&b[2].conversion===3/150&&b[0].packages===1)(d.packages.priceBands)?'ok':undefined"
+# WEBSITE -> SHOPEE HANDOFF: 150 clicks on Shopee hosts (the internal
+# /shopee-promo page's 999 excluded); footer 120 clicks vs 50 Website visits.
+expect_field "ho clicks"          "$SHOP" "d.handoff.clicks===150?150:undefined"
+expect_field "ho footer arrival"  "$SHOP" "(r=>r.clicks===120&&r.visits===50&&r.arrival===50/120)(d.handoff.rows.find(r=>r.content==='footer'))?'ok':undefined"
+# Untagged link: Shopee cannot credit it, so arrivals are a dash (null), and
+# it stays out of the overall rate: 50 / 120, not 50 / 150.
+expect_field "ho untagged"        "$SHOP" "(r=>r.clicks===30&&r.visits===null&&r.arrival===null)(d.handoff.rows.find(r=>r.untagged))&&d.handoff.arrival===50/120?'ok':undefined"
 expect_field "sc no windsor"      "$SHOP" "d.settlement===undefined&&d.catalogue===undefined?'ok':undefined"
 expect_field "sc last day"        "$SHOP" "d.lastDay==='2026-07-02'?'ok':undefined"
 

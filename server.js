@@ -11512,7 +11512,7 @@ async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
    * parameter), which is what the Meta-spend card could never claim.
    */
   const opt = tab["Off-Platform Traffic"].filter(inWin);
-  const chan = new Map(), camp = new Map(), place = new Map();
+  const chan = new Map(), camp = new Map(), place = new Map(), web = new Map();
   for (const r of opt) {
     const c = String(r.channelname || "Unknown").trim();
     const e = chan.get(c) || { channel: c, visits: 0, cartUnits: 0, cartValue: 0, buyers: 0, newBuyers: 0, orders: 0, units: 0, sales: 0 };
@@ -11526,6 +11526,11 @@ async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
      * the visit came from. Same credited figures as channels.
      */
     const ac = String(r.adcontent || "(not set)").trim();
+    if (/website/i.test(c)) {
+      const w = web.get(ac) || { content: ac, visits: 0, orders: 0, sales: 0 };
+      w.visits += spNum(r.visits); w.orders += spNum(r.orders); w.sales += spNum(r.saleslocalcurrency);
+      web.set(ac, w);
+    }
     const pl = place.get(ac) || { content: ac, visits: 0, cartUnits: 0, cartValue: 0, orders: 0, sales: 0, channels: new Set() };
     pl.visits += spNum(r.visits); pl.cartValue += spNum(r.addtocartvaluelocalcurrency); pl.cartUnits += spNum(r.addtocartunits);
     pl.orders += spNum(r.orders); pl.sales += spNum(r.saleslocalcurrency); pl.channels.add(c);
@@ -11594,6 +11599,7 @@ async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
       channels,
       campaigns: [...camp.values()].map((g) => ({ ...g, channels: [...g.channels] }))
         .sort((a, b) => b.sales - a.sales || b.visits - a.visits).slice(0, 15),
+      websiteByContent: [...web.values()],
       placements: [...place.values()].map((g) => ({ ...g, channels: [...g.channels], conversion: div(g.orders, g.visits) }))
         .sort((a, b) => b.sales - a.sales || b.visits - a.visits).slice(0, 15),
     },
@@ -11698,7 +11704,7 @@ async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
 async function buildShopee(from, to) {
   const raw = loadShopeeRaw();
   const cw = comparisonWindows(from, to);
-  const [seller, metaRows, prevS, yoyS] = await Promise.all([
+  const [seller, metaRows, prevS, yoyS, ga4Shopee] = await Promise.all([
     buildShopeeSeller(from, to, raw).catch(() => ({ available: false, reason: "sheet unavailable" })),
     /**
      * CPAS (v3.337.0): Meta's own purchase attribution for Collaborative Ads
@@ -11712,6 +11718,18 @@ async function buildShopee(from, to) {
       .catch(() => null),
     buildShopeeSeller(cw.prev.from, cw.prev.to, raw).catch(() => null),
     buildShopeeSeller(cw.yoy.from, cw.yoy.to, raw).catch(() => null),
+    /**
+     * WEBSITE → SHOPEE HANDOFF (v3.342.0): GA4 click events on links to
+     * Shopee, whole property (B+) — the website is shared by every branch
+     * and the shop serves them all. Filtered server-side to URLs containing
+     * "shopee"; the host is checked again below, because an internal page
+     * like /shopee-promo contains the word too.
+     */
+    ga4RunReport({ dimensions: ["linkUrl"], metrics: ["eventCount"], from, to,
+      dimensionFilter: { andGroup: { expressions: [
+        { filter: { fieldName: "eventName", stringFilter: { matchType: "EXACT", value: "click" } } },
+        { filter: { fieldName: "linkUrl", stringFilter: { matchType: "CONTAINS", value: "shopee", caseSensitive: false } } },
+      ] } } }).catch(() => null),
   ]);
   if (!seller.available) return { available: false, reason: seller.reason, lastDay: seller.lastDay || null };
   const shopeeAds = (metaRows || []).filter((r) => /shopee/i.test(String(r.account_name || "")));
@@ -11759,9 +11777,50 @@ async function buildShopee(from, to) {
       adsRoas: adsOk ? pct(sa2.roas, ca.roas) : null, adsClicks: adsOk ? pct(sa2.clicks, ca.clicks) : null,
     };
   };
+  /**
+   * The handoff joins GA4's clicks on each Shopee link, by the link's own
+   * utm_content, to what Shopee recorded arriving from the Website channel
+   * with that ad content. Arrival = Shopee visits ÷ website clicks: under 100%
+   * is people lost between the click and the shop (app switch, login wall);
+   * over 100% means Shopee counted visits the site did not see as clicks.
+   */
+  const handoff = (() => {
+    if (ga4Shopee === null) return { available: false, reason: "GA4 unavailable this run" };
+    const isShopee = (u) => { try { return /(^|\.)(shopee\.co\.th|shopee\.com|shp\.ee)$/i.test(new URL(u).hostname); } catch { return false; } };
+    const content = (u) => { try { return new URL(u).searchParams.get("utm_content") || "(not set)"; } catch { return "(not set)"; } };
+    const clicks = new Map();
+    for (const r of ga4Shopee) {
+      const u = String(r.linkUrl || "");
+      if (!isShopee(u)) continue;
+      const k = content(u);
+      clicks.set(k, (clicks.get(k) || 0) + n(r.eventCount));
+    }
+    const webRows = (seller.offPlatform && seller.offPlatform.websiteByContent) || [];
+    const keys = new Set([...clicks.keys(), ...webRows.map((w) => w.content)]);
+    /**
+     * AN UNTAGGED LINK IS UNMEASURED ON THE SHOPEE SIDE. Without utm_content
+     * Shopee has nothing to credit, so its arrivals are unknown — a dash, not
+     * "0 arrived, 0%". Untagged clicks stay out of the overall arrival rate.
+     */
+    const rows = [...keys].map((k) => {
+      const w = webRows.find((x) => x.content === k);
+      const c = clicks.get(k) || 0;
+      const untagged = k === "(not set)" && !w;
+      const v = untagged ? null : (w ? w.visits : 0);
+      return { content: k, clicks: c, visits: v, orders: untagged ? null : (w ? w.orders : 0), sales: untagged ? null : (w ? w.sales : 0),
+        arrival: c && v != null ? v / c : null, untagged };
+    }).sort((a, b) => b.clicks - a.clicks || (b.visits || 0) - (a.visits || 0));
+    const tagged = rows.filter((r) => !r.untagged);
+    const tClicks = tagged.reduce((a, r) => a + r.clicks, 0), tVisits = tagged.reduce((a, r) => a + r.visits, 0);
+    const allClicks = rows.reduce((a, r) => a + r.clicks, 0);
+    if (!allClicks && !tVisits) return { available: false, reason: "no website clicks to Shopee in this range" };
+    return { available: true, clicks: allClicks, untaggedClicks: allClicks - tClicks, visits: tVisits,
+      arrival: tClicks ? tVisits / tClicks : null, rows };
+  })();
   return {
     available: true,
     ...seller,
+    handoff,
     compare: { windows: cw, mom: cmp(prevS), yoy: cmp(yoyS) },
     aov: f.orders ? f.sales / f.orders : null,
     ads: {

@@ -8497,6 +8497,28 @@ function renderShopee() {
     </tbody></table>
   </div>` : '';
 
+  /**
+   * WEBSITE → SHOPEE HANDOFF (v3.342.0): GA4 clicks on the website's Shopee
+   * links (whole property, B+) against the visits Shopee recorded from the
+   * Website channel, joined by the link's utm_content. Arrival under 100% is
+   * shoppers lost between the click and the shop.
+   */
+  const ho = d.handoff || {};
+  const handoff = ho.available ? `<div class="card mt">
+    <div class="card-title">Website \u2192 Shopee handoff <span class="pill">B+</span></div>
+    <div class="grid g-3">
+      <div class="stat"><div class="lab">Clicks to Shopee</div><div class="val">${num(ho.clicks)}</div><div class="sub">${ho.untaggedClicks?`${num(ho.untaggedClicks)} on links without utm_content`:'GA4, bangkokhospital.com'}</div></div>
+      <div class="stat"><div class="lab">Arrived at the shop</div><div class="val">${num(ho.visits)}</div><div class="sub">Shopee, Website channel</div></div>
+      <div class="stat"><div class="lab">Arrival rate</div><div class="val">${pc(ho.arrival,0)}</div><div class="sub">arrived \u00f7 clicked, tagged links</div></div>
+    </div>
+    <table class="roomy mt"><thead><tr><th>Placement (utm_content)</th><th class="num">Clicks</th><th class="num">Arrived</th>
+      <th class="num">Arrival</th><th class="num">Orders</th><th class="num">Sales (THB)</th></tr></thead><tbody>
+      ${ho.rows.slice(0, 15).map(r => `<tr><td>${esc(r.untagged ? 'no utm_content' : r.content)}</td><td class="num">${num(r.clicks)}</td>
+        <td class="num">${r.visits!=null?num(r.visits):'\u2014'}</td><td class="num">${pc(r.arrival,0)}</td>
+        <td class="num">${r.orders!=null?num(r.orders):'\u2014'}</td><td class="num">${r.sales!=null?num(r.sales,{money:true,bare:true}):'\u2014'}</td></tr>`).join('')}
+    </tbody></table>
+  </div>` : '';
+
   const pp = sc.products || {};
   const sold = pp.available ? `<div class="card mt">
     <div class="card-title">Packages from outside traffic &middot; ${num(pp.units)} units</div>
@@ -8528,7 +8550,7 @@ function renderShopee() {
     <div class="sec-h">Sales</div>${head}${trend}${sources}${trendMonths}
     <div class="sec-h">Advertising</div>${commercial}${shopeeAds}${keywords}
     <div class="sec-h">Storefront</div>${funnel}${traffic}
-    <div class="sec-h">From outside Shopee</div>${offsite}${offCampaigns}${placements}
+    <div class="sec-h">From outside Shopee</div>${offsite}${offCampaigns}${placements}${handoff}
     <div class="sec-h">Packages</div>${next}${packages}${bandsCard}${sold}
     <div class="sec-h">Buyers</div>${buyers}`;
 }
@@ -12101,7 +12123,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.341.0';
+const CLIENT_BUILD = '3.342.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

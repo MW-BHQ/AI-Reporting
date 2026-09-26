@@ -1,5 +1,16 @@
 ### Recent (September 2026)
 
+**v3.342.0 — Website → Shopee handoff.** The cross-channel campaign join was
+not buildable: GA4 campaigns are coded (`260701-08_bht_tra`) and Shopee's
+campaign descriptions are words (`webpackage2026`) — no shared key. What IS
+shared is the link itself: GA4 click events on Shopee links (whole property,
+B+, `linkUrl` CONTAINS shopee server-side, then the HOST re-checked — an
+internal `/shopee-promo` page contains the word) grouped by the link's own
+`utm_content`, joined to Shopee's Website-channel visits by ad content.
+Arrival = Shopee visits ÷ website clicks, per placement. Negative-tested.
+To get the campaign join later, tag Shopee links with the War Room campaign
+code as utm_campaign.
+
 **v3.341.0 — Shopee synthesis, part two.**
 - COST PER NEW BUYER: all ad spend (Meta + Shopee Ads) ÷ Shopee's new buyers.
   Only when the range is exactly whole months and the buyer tabs hold every

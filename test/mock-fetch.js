@@ -848,6 +848,19 @@ global.fetch = async (url, opts = {}) => {
     if (process.env.MOCK_FAIL_GA4 === "1") return jsonRes({ error: { message: "simulated GA4 failure" } }, 500);
     let body = {};
     try { body = JSON.parse(opts.body || "{}"); } catch { /* fall through to empty */ }
+    /**
+     * WEBSITE → SHOPEE LINK CLICKS (v3.342.0). Two links tagged footer (100 +
+     * 20), one untagged short link (30), and an INTERNAL page whose path says
+     * "shopee" (999) — counting it is the bug the host check prevents.
+     */
+    if ((body.dimensions || []).map((x) => x.name).join() === "linkUrl" && /shopee/i.test(JSON.stringify(body.dimensionFilter || {}))) {
+      const rows = [["https://shopee.co.th/bangkokhospital_official?utm_source=website&utm_content=footer", "100"],
+        ["https://shopee.co.th/product/250344218/1?utm_content=footer&x=1", "20"],
+        ["https://s.shopee.co.th/7AbCdE", "30"],
+        ["https://www.bangkokhospital.com/th/shopee-promo", "999"]];
+      return jsonRes({ dimensionHeaders: [{ name: "linkUrl" }], metricHeaders: [{ name: "eventCount" }], rowCount: rows.length,
+        rows: rows.map(([u2, v]) => ({ dimensionValues: [{ value: u2 }], metricValues: [{ value: v }] })) });
+    }
     try { return jsonRes(ga4Report(body)); }
     catch (e) {
       if (e.ga4Status === 400) return jsonRes({ error: { code: 400, message: e.message, status: "INVALID_ARGUMENT" } }, 400);
