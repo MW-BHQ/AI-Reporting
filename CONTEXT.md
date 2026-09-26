@@ -1,5 +1,19 @@
 ### Recent (September 2026)
 
+**v3.339.0 — Shopee synthesis: what to do next.** MW: "that's what I want".
+Three reads from tabs already imported, thresholds named in `SHOPEE_SYN`:
+- WHERE TO MOVE AD MONEY: 2×2 of "sells" (the packages making the top 80% of
+  net sales; the one crossing the line counts) × "advertised" (any Package Ads
+  spend): Working · Try ads · Cut or fix · Neither (count only).
+- WHERE EACH PACKAGE LEAKS, against the shop's own rates, packages with 50+
+  visitors: viewed-not-carted (cart rate under half the shop's → listing) and
+  carted-not-bought (orders per item added under half → price/checkout).
+- SEARCH DEMAND: keywords with 10+ clicks and no order (a missing or weak
+  package), with other hospitals' names (`OTHER_HOSPITALS`, Thai + English)
+  split out — someone looking for Samitivej is not a package gap.
+Card "What to do next" leads the Packages section; the keyword boxes sit in
+the keywords card. All three negative-tested.
+
 **v3.338.0 — Monthly tabs say WHY they are empty.** Live Jan 2025 check by MW:
 confirmed ฿2.34M, package net ฿2.32M, product ads ฿24.4K + shop ads ฿3.9K,
 gap ฿0.03 — but keywords said "no keyword rows for 2025.01". Monthly readers

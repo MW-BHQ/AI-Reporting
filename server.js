@@ -11063,6 +11063,28 @@ async function readShopAds(from, to, raw) {
   t.cpc = t.clicks ? t.spend / t.clicks : null;
   return t;
 }
+/**
+ * SYNTHESIS THRESHOLDS (v3.339.0), named so a reader can find and argue with
+ * them. Deliberately relative (shares of the shop's own totals and averages),
+ * so they hold at any month's scale.
+ */
+const SHOPEE_SYN = {
+  TOP_SHARE: 0.8,     // "sells": packages making the top 80% of net sales
+  MIN_VISITORS: 50,   // a package needs this many visitors to be diagnosed
+  LEAK_RATIO: 0.5,    // "leaks" = a step converting at under half the shop's rate
+  KW_MIN_CLICKS: 10,  // a keyword needs this many clicks to count as demand
+};
+/**
+ * OTHER HOSPITALS' NAMES as shoppers type them. A keyword that is one of
+ * these is someone looking for another hospital, not a missing package, so
+ * it is reported apart from the demand gaps. Thai and English spellings.
+ */
+const OTHER_HOSPITALS = [
+  ["Samitivej", /สมิติเวช|samitivej/i], ["Phyathai", /พญาไท|phyathai/i], ["Paolo", /เปาโล|paolo/i],
+  ["Vimut", /วิมุต|vimut/i], ["Vichaiyut", /วิชัยยุทธ|vichaiyut/i], ["Praram 9", /พระราม\s*9|พระรามเก้า|praram\s*9|rama\s*9/i],
+  ["Bumrungrad", /บำรุงราษฎร์|bumrungrad/i], ["BNH", /\bbnh\b|บีเอ็นเอช/i], ["Bangpakok", /บางปะกอก|bangpakok/i],
+  ["Kasemrad", /เกษมราษฎร์|kasemrad/i], ["Vejthani", /เวชธานี|vejthani/i], ["Sikarin", /ศิครินทร์|sikarin/i],
+];
 async function readShopKeywords(from, to, raw) {
   const got = await raw.keywords;
   if (got.err) return { available: false, reason: `no "${SHOPEE_KEYWORDS_TAB}" tab in the sheet` };
@@ -11093,7 +11115,12 @@ async function readShopKeywords(from, to, raw) {
   const list = [...agg.values()].map((e) => ({ ...e, ctr: e.impressions ? e.clicks / e.impressions : null }))
     .sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
   if (!list.length) return { available: false, reason: monthlyEmptyReason(SHOPEE_KEYWORDS_TAB, head, months, seen, bad) };
-  return { available: true, count: list.length, withOrders: list.filter((e) => e.orders > 0).length, list: list.slice(0, 25) };
+  const hosp = (k) => (OTHER_HOSPITALS.find(([, re]) => re.test(k)) || [])[0] || null;
+  const tagged = list.map((e) => ({ ...e, hospital: hosp(e.keyword) }));
+  return { available: true, count: list.length, withOrders: list.filter((e) => e.orders > 0).length, list: tagged.slice(0, 25),
+    /** SEARCHED, CLICKED, DID NOT BUY: demand the listings are not meeting. */
+    demandGaps: tagged.filter((e) => !e.hospital && e.orders === 0 && e.clicks >= SHOPEE_SYN.KW_MIN_CLICKS).slice(0, 12),
+    otherHospitals: tagged.filter((e) => e.hospital) };
 }
 
 /**
@@ -11208,6 +11235,51 @@ async function readShopeePackages(from, to, raw) {
     ads: e.ads ? { ...e.ads, roas: div(e.ads.sales, e.ads.spend) } : null,
   })).sort((a, b) => b.netSales - a.netSales || ((b.ads && b.ads.spend) || 0) - ((a.ads && a.ads.spend) || 0));
   const tot = (k) => list.reduce((x, e) => x + e[k], 0);
+  /**
+   * WHERE TO MOVE AD MONEY — a 2×2 of "sells" (inside the top 80% of net
+   * sales) against "advertised" (any Package Ads spend):
+   *   working  = sells, advertised      tryAds = sells, no ads
+   *   cutOrFix = does not sell, advertised   (the rest are not listed)
+   * The package that crosses the 80% line counts as selling.
+   */
+  const totalNet = tot("netSales");
+  let run = 0;
+  const sells = new Set();
+  for (const e of [...list].sort((a, b) => b.netSales - a.netSales)) {
+    if (e.netSales <= 0 || run >= SHOPEE_SYN.TOP_SHARE * totalNet) break;
+    sells.add(e.id); run += e.netSales;
+  }
+  const brief = (e) => ({ id: e.id, name: e.name, netSales: e.netSales, spend: e.ads ? e.ads.spend : 0,
+    adSales: e.ads ? e.ads.sales : 0, roas: e.ads ? e.ads.roas : null });
+  const advertised = (e) => e.ads && e.ads.spend > 0;
+  const moveAds = {
+    working: list.filter((e) => sells.has(e.id) && advertised(e)).map(brief),
+    tryAds: list.filter((e) => sells.has(e.id) && !advertised(e)).map(brief),
+    cutOrFix: list.filter((e) => !sells.has(e.id) && advertised(e)).map(brief).sort((a, b) => b.spend - a.spend),
+    rest: list.filter((e) => !sells.has(e.id) && !advertised(e)).length,
+  };
+  /**
+   * WHERE EACH PACKAGE LEAKS, against the shop's own rates:
+   *   notCarted  = visitors add to cart at under half the shop's cart rate
+   *                → the listing (photos, title, price shown)
+   *   notBought  = carts turn into orders at under half the shop's rate
+   *                → price at checkout, or the checkout itself
+   * Only packages with enough visitors to judge.
+   */
+  const withSales = list.filter((e) => e.hasSales);
+  const vis = withSales.reduce((a, e) => a + e.visitors, 0), carts = withSales.reduce((a, e) => a + e.cartUnits, 0);
+  const ords = withSales.reduce((a, e) => a + e.netOrders, 0);
+  const shopCart = vis ? carts / vis : null, shopBuy = carts ? ords / carts : null;
+  const judged = withSales.filter((e) => e.visitors >= SHOPEE_SYN.MIN_VISITORS);
+  const leaks = shopCart == null ? null : {
+    shopCartRate: shopCart, shopBuyRate: shopBuy,
+    notCarted: judged.filter((e) => e.visitors && e.cartUnits / e.visitors < SHOPEE_SYN.LEAK_RATIO * shopCart)
+      .map((e) => ({ id: e.id, name: e.name, visitors: e.visitors, cartUnits: e.cartUnits, cartRate: e.cartUnits / e.visitors }))
+      .sort((a, b) => b.visitors - a.visitors).slice(0, 8),
+    notBought: shopBuy == null ? [] : judged.filter((e) => e.cartUnits > 0 && e.netOrders / e.cartUnits < SHOPEE_SYN.LEAK_RATIO * shopBuy)
+      .map((e) => ({ id: e.id, name: e.name, cartUnits: e.cartUnits, orders: e.netOrders, buyRate: e.netOrders / e.cartUnits }))
+      .sort((a, b) => b.cartUnits - a.cartUnits).slice(0, 8),
+  };
   const found = [...new Set([...sales, ...ads].map((r) => r._month))].sort();
   return {
     available: true, months: found, missing: months.filter((m) => !found.includes(m)),
@@ -11218,6 +11290,7 @@ async function readShopeePackages(from, to, raw) {
     adsSpend: list.reduce((x, e) => x + (e.ads ? e.ads.spend : 0), 0),
     count: list.length,
     list,
+    moveAds, leaks,
   };
 }
 

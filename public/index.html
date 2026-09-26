@@ -197,6 +197,10 @@
    */
   .dates{position:relative;}
   .pk-more{display:none;}
+  .syn-box{border:1px solid var(--line);border-radius:12px;padding:12px 14px;}
+  .syn-t{font-weight:600;font-size:var(--text-sm);}
+  .syn-r{display:flex;justify-content:space-between;gap:12px;font-size:var(--text-xs);padding:4px 0;border-top:1px solid var(--line);}
+  .syn-r .trunc{min-width:0;}
   .sec-h{margin:30px 0 2px;font-size:var(--text-xs);font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
   .sec-h:first-child{margin-top:8px;}
   .pk-t th{white-space:normal;line-height:1.25;vertical-align:bottom;}
@@ -8204,6 +8208,15 @@ function renderShopee() {
    * WHAT SHOPPERS SEARCHED — Shop Ads keywords: the terms that showed the
    * shop ad. The only view of Shopee search terms in any export.
    */
+  /**
+   * One box of the synthesis cards: a title, what it means, up to six rows.
+   * No green/red edge: in this app colour means channel and only channel, so
+   * the verdict is carried by the title and its words.
+   */
+  const synBox = (title, meaning, rows, fig, tone) => `<div class="syn-box ${tone}">
+      <div class="syn-t">${title} <span class="muted">\u00b7 ${num(rows.length)}</span></div><div class="note" style="margin:2px 0 8px;">${meaning}</div>
+      ${rows.length ? rows.slice(0, 6).map(x => `<div class="syn-r"><span class="trunc" data-tip="${esc(x.name)}">${esc(x.name)}</span><span class="num">${fig(x)}</span></div>`).join('')
+        : '<div class="note">none</div>'}</div>`;
   const kw = d.keywords || {};
   const keywords = kw.available ? `<div class="card mt">
     <div class="card-title">What shoppers searched &middot; Shop Ads keywords</div>
@@ -8214,6 +8227,10 @@ function renderShopee() {
         <td class="num">${pc(k.ctr)}</td><td class="num">${num(k.spend,{money:true,bare:true})}</td><td class="num">${num(k.orders)}</td>
         <td class="num">${num(k.sales,{money:true,bare:true})}</td></tr>`).join('')}
     </tbody></table>
+    <div class="grid g-2 mt" style="gap:12px;">
+      ${synBox('Searched, clicked, no order', 'Demand the listings are not meeting \u2014 a missing or weak package', (kw.demandGaps || []).map(x => ({ ...x, name: x.keyword })), x => `${num(x.clicks)} clicks`, 'bad')}
+      ${synBox("Other hospitals' names", 'People searching for another hospital found this shop', (kw.otherHospitals || []).map(x => ({ ...x, name: `${x.keyword} (${x.hospital})` })), x => `${num(x.clicks)} clicks \u00b7 ${num(x.orders)} orders`, '')}
+    </div>
   </div>` : `<div class="card mt"><div class="card-title">What shoppers searched</div>
     <div class="note" style="margin-top:0;">${esc(kw.reason || 'unavailable')} &mdash; not measured, not zero.</div></div>`;
   const shopeeAds = sa.available ? `<div class="card mt">
@@ -8427,6 +8444,30 @@ function renderShopee() {
     ${pk.list.length > 20 ? `<button type="button" class="btn btn-ghost mt" onclick="this.closest('.card').classList.toggle('pk-all');this.textContent=this.closest('.card').classList.contains('pk-all')?'Show top 20':'Show all ${pk.list.length} packages'">Show all ${pk.list.length} packages</button>` : ''}
   </div>`;
 
+  /**
+   * WHAT TO DO NEXT (v3.339.0) — the synthesis MW asked for: where to move
+   * ad money (2×2 of sells × advertised) and where each package leaks
+   * against the shop's own rates. Thresholds live in SHOPEE_SYN on the
+   * server; the card states them in words.
+   */
+  const mv = pk.available ? pk.moveAds : null, lk = pk.available ? pk.leaks : null;
+  const next = mv ? `<div class="card mt">
+    <div class="card-title">What to do next &middot; ${esc(pkMon(pk.months))}</div>
+    <div class="lab" style="margin-bottom:8px">Where to move ad money <span class="muted">\u00b7 "sells" = the packages making 80% of net sales</span></div>
+    <div class="grid g-2" style="gap:12px;">
+      ${synBox('Working', 'Sells and is advertised \u2014 keep funding', mv.working, x => `${x.roas!=null?num(x.roas,{dp:1})+'\u00d7 \u00b7 ':''}THB ${num(x.netSales,{money:true,bare:true})}`, 'good')}
+      ${synBox('Try ads', 'Sells with no ads \u2014 test a budget', mv.tryAds, x => `THB ${num(x.netSales,{money:true,bare:true})}`, 'good')}
+      ${synBox('Cut or fix', 'Advertised but not selling \u2014 fix the listing or stop', mv.cutOrFix, x => `THB ${num(x.spend,{money:true,bare:true})} spent \u00b7 ${x.roas!=null?num(x.roas,{dp:1})+'\u00d7':'\u2014'}`, 'bad')}
+      <div class="syn-box"><div class="syn-t">Neither <span class="muted">\u00b7 ${num(mv.rest)}</span></div>
+        <div class="note" style="margin-top:2px;">Not selling, not advertised \u2014 no action from this data</div></div>
+    </div>
+    ${lk ? `<div class="lab" style="margin:18px 0 8px">Where each package leaks <span class="muted">\u00b7 packages with 50+ visitors, against the shop's own rates</span></div>
+    <div class="grid g-2" style="gap:12px;">
+      ${synBox('Viewed, not added to cart', `Fix the listing: photos, title, price shown. Shop: ${pc(lk.shopCartRate)} of visitors add to cart`, lk.notCarted, x => `${num(x.visitors)} visitors \u00b7 ${pc(x.cartRate)}`, 'bad')}
+      ${synBox('Added to cart, not bought', `Check price at checkout. Shop: ${pc(lk.shopBuyRate)} of items added become orders`, lk.notBought, x => `${num(x.cartUnits)} added \u00b7 ${num(x.orders)} orders`, 'bad')}
+    </div>` : ''}
+  </div>` : '';
+
   const pp = sc.products || {};
   const sold = pp.available ? `<div class="card mt">
     <div class="card-title">Packages from outside traffic &middot; ${num(pp.units)} units</div>
@@ -8459,7 +8500,7 @@ function renderShopee() {
     <div class="sec-h">Advertising</div>${commercial}${shopeeAds}${keywords}
     <div class="sec-h">Storefront</div>${funnel}${traffic}
     <div class="sec-h">From outside Shopee</div>${offsite}${offCampaigns}${placements}
-    <div class="sec-h">Packages</div>${packages}${sold}
+    <div class="sec-h">Packages</div>${next}${packages}${sold}
     <div class="sec-h">Buyers</div>${buyers}`;
 }
 
@@ -12031,7 +12072,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.338.0';
+const CLIENT_BUILD = '3.339.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

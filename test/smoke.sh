@@ -338,7 +338,19 @@ expect_field "sh not added"       "$SHOP" "d.ads.totalSpend===1710?1710:undefine
 # KEYWORDS: "hpv" + "HPV" = 15 clicks (months typed "Jul-26", "07/2026");
 # June out; ordered by clicks.
 expect_field "kw case merge"      "$SHOP" "d.keywords.list.find(k=>k.keyword.toLowerCase()==='hpv').clicks===15?'ok':undefined"
-expect_field "kw top"             "$SHOP" "d.keywords.list[0].keyword==='ตรวจสุขภาพ'&&d.keywords.count===2?'ok':undefined"
+expect_field "kw top"             "$SHOP" "d.keywords.list[0].keyword==='ตรวจสุขภาพ'&&d.keywords.count===3?'ok':undefined"
+# SYNTHESIS: hpv (15 clicks, 0 orders) is a demand gap; the Samitivej search
+# (12 clicks, 0 orders) is another hospital, not a gap.
+expect_field "syn demand gap"     "$SHOP" "d.keywords.demandGaps.map(k=>k.keyword.toLowerCase()).join()==='hpv'?'ok':undefined"
+expect_field "syn other hospital" "$SHOP" "d.keywords.otherHospitals.length===1&&d.keywords.otherHospitals[0].hospital==='Samitivej'?'ok':undefined"
+# 2x2: 111 sells+ads, 222 sells no ads (it crosses the 80% line), 444 ads no
+# sales; 333 and the zero-sale packages are the rest.
+expect_field "syn working"        "$SHOP" "d.packages.moveAds.working.map(x=>x.id).join()==='111'?'ok':undefined"
+expect_field "syn try ads"        "$SHOP" "d.packages.moveAds.tryAds.map(x=>x.id).join()==='222'?'ok':undefined"
+expect_field "syn cut or fix"     "$SHOP" "d.packages.moveAds.cutOrFix.map(x=>x.id).join()==='444'&&d.packages.moveAds.rest===3?'ok':undefined"
+# LEAKS against the shop's own rates.
+expect_field "syn not carted"     "$SHOP" "d.packages.leaks.notCarted.map(x=>x.id).join()==='555'?'ok':undefined"
+expect_field "syn not bought"     "$SHOP" "d.packages.leaks.notBought[0].id==='666'?'ok':undefined"
 # CPAS: Meta's value 24,000 over Meta spend 10.
 expect_field "cpas meta roas"     "$SHOP" "d.ads.cpas.value===24000&&d.ads.cpas.roas===2400?'ok':undefined"
 expect_field "all ads per baht"   "$SHOP" "d.ads.salesPerAllBaht===32000/1710?'ok':undefined"

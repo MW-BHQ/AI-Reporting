@@ -1145,7 +1145,9 @@ global.fetch = async (url, opts = {}) => {
         k("2026-06", "old", "9", 99, "9", 9, "9"),
         k("2026-07", "ตรวจสุขภาพ", "1,000", 20, "150", 1, "5,000"),
         // Month as teams type it: "Jul-26" and "07/2026" are both July.
-        k("Jul-26", "hpv", "300", 10, "40", 0, "0"), k("07/2026", "HPV", "100", 5, "20", 0, "0")] }] });
+        k("Jul-26", "hpv", "300", 10, "40", 0, "0"), k("07/2026", "HPV", "100", 5, "20", 0, "0"),
+        // Another hospital's name: reported apart, never as a demand gap.
+        k("2026-07", "ตรวจสุขภาพ สมิติเวช", "200", 12, "30", 0, "0")] }] });
     }
     if (/Package(%20|\+| )Sales/.test(u)) {
       const SH = ["Month", "No.", "Name", "URL", "Product ID", "Parent SKU", "Region", "Shop ID", "Shop name", "Brand", "Category",
@@ -1164,7 +1166,11 @@ global.fetch = async (url, opts = {}) => {
           ps("2026-07", "111", "Longevity Female", 1, 1, "11,111", "11,111", 1, 1, 1, 1),
           ps("2026-07", "111", "Longevity Female", 2, 2, "40,000", "45,000", 200, 80, 100, 10),
           ps("2026-07-01", "222", "Prestige Male", 1, 1, "20,000", "20,000", 100, 40, 50, 5),
-          ps("1/7/2026", "333", "Pap Smear", 1, 1, "2,000", "2,000", 40, 10, 20, 2)] },
+          ps("1/7/2026", "333", "Pap Smear", 1, 1, "2,000", "2,000", 40, 10, 20, 2),
+          // LEAKS (v3.339.0): 555 is visited but not carted (1 of 200);
+          // 666 is carted but not bought (20 items, 0 orders).
+          ps("2026-07", "555", "Heart Scan", 0, 0, "0", "0", 400, 250, 200, 1),
+          ps("2026-07", "666", "Gut Check", 0, 0, "0", "0", 90, 70, 60, 20)] },
         { values: [AH,
           pa("Jul 2026", "111", "Longevity Female", 50, "1,000", 1, "30,000"),
           pa("2026-07", "444", "Stop Stroke", 20, "300", 0, "0")] },
