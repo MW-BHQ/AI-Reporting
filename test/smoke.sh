@@ -327,9 +327,22 @@ expect_field "pk ads join"        "$SHOP" "(p=>p.ads.spend===1000&&p.ads.roas===
 expect_field "pk ads-only kept"   "$SHOP" "(p=>p&&p.hasSales===false&&p.ads.spend===300)(d.packages.list.find(p=>p.id==='444'))?'ok':undefined"
 # July's Sales tab has 2 of 31 days: no share of confirmed (it read 194%).
 expect_field "pk no false share"  "$SHOP" "d.packages.shareOfConfirmed===undefined?'ok':undefined"
-# UNALLOCATED AD SPEND: daily tab 1,700 - package ads 1,300.
-expect_field "pk unallocated"     "$SHOP" "d.packages.adsUnallocated===400&&d.packages.adsTotal===1700?'ok':undefined"
+# UNALLOCATED AD SPEND: daily tab 1,700 - package ads 1,300 - shop ads 300.
+expect_field "pk unallocated"     "$SHOP" "d.packages.adsUnallocated===100&&d.packages.adsTotal===1700?'ok':undefined"
 expect_field "pk part month"      "/api/shopee?from=2026-07-01&to=2026-07-01" "d.packages.available===false&&/whole months/.test(d.packages.reason)?'ok':undefined"
+# SHOP ADS: YYYYMMDD dates read, 30 June out; a SPLIT of Shopee Ads, so the
+# package gap is 1,700 - 1,300 - 300 = 100, and no spend total grows.
+expect_field "sh spend"           "$SHOP" "d.shopAds.spend===300&&d.shopAds.days===2?'ok':undefined"
+expect_field "sh gap closes"      "$SHOP" "d.packages.adsUnallocated===100&&d.packages.shopAdsSpend===300?'ok':undefined"
+expect_field "sh not added"       "$SHOP" "d.ads.totalSpend===1710?1710:undefined"
+# KEYWORDS: "hpv" + "HPV" = 15 clicks; June out; ordered by clicks.
+expect_field "kw case merge"      "$SHOP" "d.keywords.list.find(k=>k.keyword.toLowerCase()==='hpv').clicks===15?'ok':undefined"
+expect_field "kw top"             "$SHOP" "d.keywords.list[0].keyword==='ตรวจสุขภาพ'&&d.keywords.count===2?'ok':undefined"
+# CPAS: Meta's value 24,000 over Meta spend 10.
+expect_field "cpas meta roas"     "$SHOP" "d.ads.cpas.value===24000&&d.ads.cpas.roas===2400?'ok':undefined"
+expect_field "all ads per baht"   "$SHOP" "d.ads.salesPerAllBaht===32000/1710?'ok':undefined"
+# ARRIVALS in their own units: ads clicks 170, search 7, outside visits 65.
+expect_field "arrivals"           "$SHOP" "(a=>a.shopeeAdsClicks===170&&a.searchClicks===7&&a.outsideVisits===65)(d.arrivals)?'ok':undefined"
 expect_field "sc no windsor"      "$SHOP" "d.settlement===undefined&&d.catalogue===undefined?'ok':undefined"
 expect_field "sc last day"        "$SHOP" "d.lastDay==='2026-07-02'?'ok':undefined"
 

@@ -10970,7 +10970,11 @@ const SHOPEE_TABS = ["Sales", "Traffic", "Product Views",
 const spKey = (h) => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 /** `12-01-2025` or `12/01/2025` → `2025-01-12`; a range or a header → null. */
 const spDay = (v) => {
-  const m = String(v == null ? "" : v).trim().match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  const t = String(v == null ? "" : v).trim();
+  // Shop Ads exports `20250114` (YYYYMMDD) — the only tab that does.
+  const y = t.match(/^(20\d{2})(\d{2})(\d{2})$/);
+  if (y) return `${y[1]}-${y[2]}-${y[3]}`;
+  const m = t.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
   return m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : null;
 };
 /** "41,130" → 41130, "25.00%" → 0.25, "00:01:05" → 65, "-" → 0. */
@@ -11025,7 +11029,68 @@ function loadShopeeRaw() {
     ads: settle(sheetBatchGet(SHOPEE_SHEET_ID, [`'${SHOPEE_ADS_TAB}'!A1:R`])),
     buyers: settle(sheetBatchGet(SHOPEE_SHEET_ID, SHOPEE_BUYER_TABS.map((t) => `'${t}'!A1:J`))),
     packages: settle(sheetBatchGet(SHOPEE_SHEET_ID, SHOPEE_PACKAGE_TABS.map((t) => `'${t}'!A1:AB`))),
+    shopAds: settle(sheetBatchGet(SHOPEE_SHEET_ID, [`'${SHOPEE_SHOP_ADS_TAB}'!A1:R`])),
+    keywords: settle(sheetBatchGet(SHOPEE_SHEET_ID, [`'${SHOPEE_KEYWORDS_TAB}'!A1:S`])),
   };
+}
+
+/**
+ * SHOP ADS (v3.337.0) — On-platform Ads > Shop Ads Performance.
+ *   `Shop Ads`          = the "By Day" sheet (dates as 20250114).
+ *   `Shop Ads Keywords` = the "By Keyword" sheet, monthly, column A `Month`.
+ * Shop Ads is PART OF the `Shopee Ads` overall total, not on top of it:
+ * Jan 2025 product ads ฿24,380 + shop ads ฿3,850 = overall ฿28,229. It is
+ * shown as a split of Shopee Ads and never added to any spend total.
+ *
+ * KEYWORDS are the search terms that showed the shop ad — the one view of
+ * what people type into Shopee search. Monthly; whole months only.
+ */
+const SHOPEE_SHOP_ADS_TAB = process.env.SHOPEE_SHOP_ADS_TAB || "Shop Ads";
+const SHOPEE_KEYWORDS_TAB = process.env.SHOPEE_KEYWORDS_TAB || "Shop Ads Keywords";
+async function readShopAds(from, to, raw) {
+  const got = await raw.shopAds;
+  if (got.err) return { available: false, reason: `no "${SHOPEE_SHOP_ADS_TAB}" tab in the sheet` };
+  const byDay = new Map();
+  for (const r of spRows(got.res[0] && got.res[0].values)) {
+    if (r._day && r._day >= from && r._day <= to) byDay.set(r._day, r); // later paste wins
+  }
+  const rows = [...byDay.values()];
+  if (!rows.length) return { available: false, reason: "no Shop Ads rows in this range" };
+  const sum = (k) => rows.reduce((a, r) => a + spNum(r[k]), 0);
+  const t = { available: true, days: rows.length, spend: sum("adsspendlocalcurrency"), impressions: sum("impressions"),
+    clicks: sum("clicks"), orders: sum("orders"), sales: sum("grosssaleslocalcurrency") };
+  t.roas = t.spend ? t.sales / t.spend : null;
+  t.cpc = t.clicks ? t.spend / t.clicks : null;
+  return t;
+}
+async function readShopKeywords(from, to, raw) {
+  const got = await raw.keywords;
+  if (got.err) return { available: false, reason: `no "${SHOPEE_KEYWORDS_TAB}" tab in the sheet` };
+  const months = monthsInside(from, to);
+  if (!months.length) return { available: false, reason: "monthly data — pick one or more whole months" };
+  const want = new Set(months);
+  const byKey = new Map();
+  let head = null;
+  for (const r of got.res[0] && got.res[0].values || []) {
+    if (/^month$/i.test(String(r[0] || "").trim())) { head = r.map(spKey); continue; }
+    if (!head) continue;
+    const o = {}; head.forEach((k, i) => { if (k) o[k] = r[i]; });
+    const mo = packageMonth(o.month), kw = String(o.keyword || "").trim();
+    if (!mo || !want.has(mo) || !kw) continue;
+    byKey.set(`${mo}|${kw}`, { kw, o }); // a later paste of the same month and keyword wins
+  }
+  const agg = new Map();
+  for (const { kw, o } of byKey.values()) {
+    const k = kw.toLowerCase();
+    const e = agg.get(k) || { keyword: kw, impressions: 0, clicks: 0, spend: 0, orders: 0, sales: 0 };
+    e.impressions += spNum(o.impressions); e.clicks += spNum(o.clicks); e.spend += spNum(o.adsspendlocalcurrency);
+    e.orders += spNum(o.orders); e.sales += spNum(o.grosssaleslocalcurrency);
+    agg.set(k, e);
+  }
+  const list = [...agg.values()].map((e) => ({ ...e, ctr: e.impressions ? e.clicks / e.impressions : null }))
+    .sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
+  if (!list.length) return { available: false, reason: `no keyword rows for ${months.join(", ")}` };
+  return { available: true, count: list.length, withOrders: list.filter((e) => e.orders > 0).length, list: list.slice(0, 25) };
 }
 
 /**
@@ -11256,6 +11321,8 @@ async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
   const adsP = readShopeeAds(from, to, raw).catch(() => ({ available: false, reason: "unavailable" }));
   const buyersP = readShopeeBuyers(from, to, raw).catch(() => ({ available: false, reason: "unavailable" }));
   const packagesP = readShopeePackages(from, to, raw).catch(() => ({ available: false, reason: "unavailable" }));
+  const shopAdsP = readShopAds(from, to, raw).catch(() => ({ available: false, reason: "unavailable" }));
+  const keywordsP = readShopKeywords(from, to, raw).catch(() => ({ available: false, reason: "unavailable" }));
   const got = await raw.main;
   if (got.err) {
     const e = got.err;
@@ -11447,13 +11514,31 @@ async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
         packages.windowDays = Math.round((Date.parse(to) - Date.parse(from)) / 864e5) + 1;
         packages.adsUnallocated = Math.max(0, shopeeAds.spend - packages.adsSpend);
       }
+      const shopAds = await shopAdsP;
+      // Overall = product ads + shop ads. With both splits in, what is left
+      // unexplained is the overall minus both — normally a rounding baht.
+      if (packages.adsTotal != null && shopAds.available) {
+        packages.shopAdsSpend = shopAds.spend;
+        packages.adsUnallocated = Math.max(0, packages.adsTotal - packages.adsSpend - shopAds.spend);
+      }
       // Share of confirmed only when the daily Sales tab covers every day of
       // the same whole months — else a month of packages over a few days of
       // sales reads as 190%.
       if (packages.available && sales.length === Math.round((Date.parse(to) - Date.parse(from)) / 864e5) + 1) {
         packages.shareOfConfirmed = div(packages.netSales, f.sales);
       }
-      return { shopeeAds, buyers: await buyersP, packages, sources: known ? {
+      /**
+       * HOW SHOPPERS ARRIVED (v3.337.0) — traffic in its own units, kept out
+       * of the baht table. Clicks and visits counted by different systems;
+       * they overlap (a search-ad click is both an ad click and a search
+       * click) and are never summed.
+       */
+      const arrivals = {
+        shopeeAdsClicks: shopeeAds.available ? shopeeAds.clicks : null,
+        searchClicks: f.searchClicks,
+        outsideVisits: opt.length ? offTotal.visits : null,
+      };
+      return { shopeeAds, shopAds, arrivals, keywords: await keywordsP, buyers: await buyersP, packages, sources: known ? {
         shopeeAds: shopeeAds.sales, offPlatform: offTotal.sales,
         organic: rest >= 0 ? rest : null, overCredited: rest < 0,
       } : null };
@@ -11480,7 +11565,16 @@ async function buildShopee(from, to) {
   const cw = comparisonWindows(from, to);
   const [seller, metaRows, prevS, yoyS] = await Promise.all([
     buildShopeeSeller(from, to, raw).catch(() => ({ available: false, reason: "sheet unavailable" })),
-    windsor("facebook", ["account_name", "spend"], from, to).catch(() => null),
+    /**
+     * CPAS (v3.337.0): Meta's own purchase attribution for Collaborative Ads
+     * — the catalog_segment_* fields, the same ones the Audiences tab reads
+     * (verified 2026-08-14). If Meta rejects the heavier pull, retry plain:
+     * spend survives, CPAS degrades to a dash.
+     */
+    windsor("facebook", ["account_name", "spend", "catalog_segment_actions_omni_purchase",
+      "catalog_segment_value_purchase", "catalog_segment_actions_omni_add_to_cart"], from, to)
+      .catch(() => windsor("facebook", ["account_name", "spend"], from, to).then((r) => (r.cpasMissing = true, r)))
+      .catch(() => null),
     buildShopeeSeller(cw.prev.from, cw.prev.to, raw).catch(() => null),
     buildShopeeSeller(cw.yoy.from, cw.yoy.to, raw).catch(() => null),
   ]);
@@ -11547,6 +11641,20 @@ async function buildShopee(from, to) {
       spendParts: parts,
       totalSpend,
       costOfSale: totalSpend != null && f.sales ? totalSpend / f.sales : null,
+      // Confirmed sales per baht of ALL ad spend — no attribution model at all.
+      salesPerAllBaht: totalSpend && f.sales != null ? f.sales / totalSpend : null,
+      /**
+       * META'S VIEW of the same Shopee accounts: CPAS purchases and value as
+       * Meta attributes them (its own click/view windows). Shown beside
+       * Shopee's credit to Facebook/Instagram links — two referees, not one
+       * number; they will not match and the card says whose each is.
+       */
+      cpas: spend == null || (metaRows && metaRows.cpasMissing) ? null : (() => {
+        const sum = (k) => shopeeAds.reduce((a, r) => a + n(r[k]), 0);
+        const value = sum("catalog_segment_value_purchase");
+        return { purchases: sum("catalog_segment_actions_omni_purchase"), value,
+          addToCart: sum("catalog_segment_actions_omni_add_to_cart"), roas: spend ? value / spend : null };
+      })(),
     },
   };
 }

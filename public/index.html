@@ -197,6 +197,8 @@
    */
   .dates{position:relative;}
   .pk-more{display:none;}
+  .sec-h{margin:30px 0 2px;font-size:var(--text-xs);font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+  .sec-h:first-child{margin-top:8px;}
   .pk-t th{white-space:normal;line-height:1.25;vertical-align:bottom;}
   .pk-all .pk-more{display:table-row-group;}
   .bar-wrap{position:relative;width:100%;}
@@ -8125,15 +8127,23 @@ function renderShopee() {
   </div>`;
 
   const ad = d.ads || {};
+  /**
+   * META ON SHOPEE (v3.337.0). Two referees for the same Meta spend: Meta's
+   * CPAS attribution (its click/view windows) and Shopee's credit to
+   * Facebook/Instagram links. They will not agree; each card names whose
+   * figure it is. The fourth card needs no referee: confirmed sales over
+   * every baht of ad spend, Meta and Shopee Ads together.
+   */
+  const cp = ad.cpas;
   const commercial = `<div class="grid g-4 mt">
     <div class="stat card"><div class="lab">Meta ad spend (THB)</div><div class="val">${ad.spend!=null?num(ad.spend,{money:true,bare:true}):'\u2014'}</div>
       <div class="sub">${!ad.available?'Meta unavailable this run':ad.noAccount?'no Meta account named Shopee ran in this range':ad.accounts.map(esc).join(', ')}</div></div>
-    <div class="stat card"><div class="lab">Sales from Meta (THB)</div><div class="val">${ad.metaSales!=null?num(ad.metaSales,{money:true,bare:true}):'\u2014'}</div>
-      <div class="sub">credited by Shopee to Facebook and Instagram links</div></div>
-    <div class="stat card"><div class="lab">Sales per THB spent</div><div class="val">${ad.salesPerBaht!=null?num(ad.salesPerBaht,{dp:1}):'\u2014'}</div>
-      <div class="sub">Shopee-credited Meta sales over spend</div></div>
-    <div class="stat card"><div class="lab">All ad spend (THB)</div><div class="val">${ad.totalSpend!=null?num(ad.totalSpend,{money:true,bare:true}):'\u2014'}</div>
-      <div class="sub">${ad.costOfSale!=null?`${pc(ad.costOfSale)} of confirmed sales \u00b7 ${ad.spendParts.join(' + ')}`:'\u2014'}</div></div>
+    <div class="stat card"><div class="lab">CPAS sales \u00b7 Meta (THB)</div><div class="val">${cp?num(cp.value,{money:true,bare:true}):'\u2014'}</div>
+      <div class="sub">${cp?`${cp.roas!=null?num(cp.roas,{dp:1})+'\u00d7 ROAS \u00b7 ':''}${num(cp.purchases)} purchases, as Meta attributes them`:'Meta\u2019s CPAS figures unavailable'}</div></div>
+    <div class="stat card"><div class="lab">Meta sales \u00b7 Shopee (THB)</div><div class="val">${ad.metaSales!=null?num(ad.metaSales,{money:true,bare:true}):'\u2014'}</div>
+      <div class="sub">${ad.salesPerBaht!=null?num(ad.salesPerBaht,{dp:1})+'\u00d7 ROAS \u00b7 ':''}Shopee's credit to Facebook and Instagram links</div></div>
+    <div class="stat card"><div class="lab">All-ads ROAS</div><div class="val">${ad.salesPerAllBaht!=null?num(ad.salesPerAllBaht,{dp:1})+'\u00d7':'\u2014'}</div>
+      <div class="sub">${ad.totalSpend!=null?`confirmed sales over THB ${num(ad.totalSpend,{money:true,bare:true})} \u00b7 ${ad.spendParts.join(' + ')}`:'\u2014'}</div></div>
   </div>`;
 
   /**
@@ -8172,6 +8182,40 @@ function renderShopee() {
   const adTrend = sa.available && (sa.daily || []).length > 1 ? `${adStrip('spend', '#F5A28D', 'Spend by day (THB)')}${adStrip('sales', '#EE4D2D', 'Sales credited by day (THB)')}
     <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
       <span>${esc(humanDate(sa.daily[0].d))}</span><span>${esc(humanDate(sa.daily[sa.daily.length-1].d))}</span></div>` : '';
+  /**
+   * THE SPLIT OF SHOPEE ADS (v3.337.0): product ads (Package Ads, monthly)
+   * and shop ads (Shop Ads, daily) are the two parts of the overall figure.
+   * What neither explains is shown as its own row, never spread.
+   */
+  const shA = d.shopAds || {}, pkA = d.packages || {};
+  const pkAds = pkA.available ? pkA.list.reduce((a, x) => x.ads ? { spend: a.spend + x.ads.spend, clicks: a.clicks + x.ads.clicks, sales: a.sales + x.ads.sales } : a, { spend: 0, clicks: 0, sales: 0 }) : null;
+  const splitRows = [
+    pkAds && pkA.adsMonths && pkA.adsMonths.length ? ['Product ads', pkAds.spend, pkAds.clicks, pkAds.sales] : null,
+    shA.available ? ['Shop ads', shA.spend, shA.clicks, shA.sales] : null,
+    pkA.adsUnallocated != null ? ['Not split by Shopee', pkA.adsUnallocated, null, null] : null,
+  ].filter(Boolean);
+  const adSplit = sa.available && splitRows.length ? `<table class="roomy mt"><thead><tr><th>Part</th><th class="num">Spend (THB)</th>
+      <th class="num">Clicks</th><th class="num">Sales credited (THB)</th><th class="num">ROAS</th></tr></thead><tbody>
+      ${splitRows.map(([k, sp, ck, sl]) => `<tr><td>${k}</td><td class="num">${num(sp,{money:true,bare:true})}</td>
+        <td class="num">${ck!=null?num(ck):'\u2014'}</td><td class="num">${sl!=null?num(sl,{money:true,bare:true}):'\u2014'}</td>
+        <td class="num">${sl!=null&&sp?num(sl/sp,{dp:1})+'\u00d7':'\u2014'}</td></tr>`).join('')}
+    </tbody></table>` : '';
+  /**
+   * WHAT SHOPPERS SEARCHED — Shop Ads keywords: the terms that showed the
+   * shop ad. The only view of Shopee search terms in any export.
+   */
+  const kw = d.keywords || {};
+  const keywords = kw.available ? `<div class="card mt">
+    <div class="card-title">What shoppers searched &middot; Shop Ads keywords</div>
+    <div class="note" style="margin-top:0;">${num(kw.count)} keywords showed the shop ad; ${num(kw.withOrders)} led to an order. Top ${num(kw.list.length)} by clicks.</div>
+    <table class="roomy mt"><thead><tr><th>Keyword</th><th class="num">Impressions</th><th class="num">Clicks</th><th class="num">CTR</th>
+      <th class="num">Spend (THB)</th><th class="num">Orders</th><th class="num">Sales credited (THB)</th></tr></thead><tbody>
+      ${kw.list.map(k => `<tr><td>${esc(k.keyword)}</td><td class="num">${num(k.impressions)}</td><td class="num">${num(k.clicks)}</td>
+        <td class="num">${pc(k.ctr)}</td><td class="num">${num(k.spend,{money:true,bare:true})}</td><td class="num">${num(k.orders)}</td>
+        <td class="num">${num(k.sales,{money:true,bare:true})}</td></tr>`).join('')}
+    </tbody></table>
+  </div>` : `<div class="card mt"><div class="card-title">What shoppers searched</div>
+    <div class="note" style="margin-top:0;">${esc(kw.reason || 'unavailable')} &mdash; not measured, not zero.</div></div>`;
   const shopeeAds = sa.available ? `<div class="card mt">
     <div class="card-title">Shopee Ads &middot; Shopee-credited${sa.days < d.days ? ` <span class="pill">${num(sa.days)} of ${num(d.days)} days</span>` : ''}</div>
     <div class="grid g-4">
@@ -8184,6 +8228,7 @@ function renderShopee() {
       <div class="stat"><div class="lab">Clicks</div><div class="val">${num(sa.clicks)}</div>
         <div class="sub">${pc(sa.ctr,2)} CTR \u00b7 THB ${sa.cpc!=null?num(sa.cpc,{dp:2}):'\u2014'} per click</div>${cmp('adsClicks')}</div>
     </div>
+    ${adSplit}
     ${adTrend}
   </div>` : `<div class="card mt"><div class="card-title">Shopee Ads</div>
     <div class="note" style="margin-top:0;">${esc(sa.reason || 'unavailable')} &mdash; not measured, not zero.</div></div>`;
@@ -8195,22 +8240,32 @@ function renderShopee() {
    */
   const so = d.sources;
   const srcRows = so ? [['Shopee Ads', so.shopeeAds, 'credited'], ['Outside Shopee', so.offPlatform, 'credited'],
-    ['Organic \u2014 search and feed', so.organic, 'estimate']] : [];
+    ['Everything else: search, feed, shop page', so.organic, 'estimate']] : [];
+  /**
+   * ONE UNIT PER TABLE (v3.337.0). MW found the clicks sub-row under Organic
+   * needed explaining. Left: baht, adding up to confirmed sales. Right: how
+   * shoppers arrived, in clicks and visits, which overlap and never sum.
+   */
+  const ar = d.arrivals || {};
+  const arrRows = [['Shopee Ads', ar.shopeeAdsClicks, 'clicks', 'adsClicks'], ['Shopee search', ar.searchClicks, 'clicks', 'searchClicks'],
+    ['Outside Shopee', ar.outsideVisits, 'visits', null]];
   const sources = so ? `<div class="card mt">
     <div class="card-title">Where sales came from</div>
-    <table class="roomy"><thead><tr><th>Source</th><th></th><th class="num">Sales (THB)</th><th class="num">Of confirmed</th><th></th></tr></thead><tbody>
-      ${srcRows.map(([k, v, how]) => `<tr><td>${k}</td><td class="muted">${how}</td>
+    <div class="grid" style="grid-template-columns:minmax(0,3fr) minmax(0,2fr);column-gap:32px;">
+      <div><div class="lab" style="margin-bottom:6px">Sales</div>
+      <table class="roomy"><thead><tr><th>Source</th><th class="num">THB</th><th class="num">Of confirmed</th><th style="width:34%;"></th></tr></thead><tbody>
+      ${srcRows.map(([k, v, how]) => `<tr><td>${k} <span class="muted">\u00b7 ${how}</span></td>
         <td class="num">${v!=null?num(v,{money:true,bare:true}):'\u2014'}</td>
         <td class="num">${v!=null&&sf.sales?pc(v/sf.sales,0):(so.overCredited&&how==='estimate'?'credits exceed sales':'\u2014')}</td>
-        <td style="width:30%;"><div style="background:var(--line);border-radius:3px;height:8px;">
+        <td><div style="background:var(--line);border-radius:3px;height:8px;">
           <div style="background:#EE4D2D;height:8px;border-radius:3px;width:${v!=null&&sf.sales?Math.min(100,v/sf.sales*100).toFixed(1):0}%;"></div></div></td></tr>`).join('')}
-      ${sf.searchClicks!=null?`<tr><td style="padding-left:22px;">\u21b3 Shopee search</td><td class="muted">clicks</td>
-        <td class="num">${num(sf.searchClicks)} clicks</td>
-        <td class="num">${sf.searchShare!=null?pc(sf.searchShare,0)+' of product visitors':'\u2014'}</td>
-        <td><span class="cmp-row" style="display:flex;gap:10px;">
-          <span class="cmp-pair">${chip(C.mom && C.mom.searchClicks, W.prev ? `MoM \u2014 ${humanDate(W.prev.from)} to ${humanDate(W.prev.to)}` : 'MoM')} MoM</span>
-          <span class="cmp-pair">${chip(C.yoy && C.yoy.searchClicks, W.yoy ? `YoY \u2014 ${humanDate(W.yoy.from)} to ${humanDate(W.yoy.to)}` : 'YoY')} YoY</span></span></td></tr>`:''}
-    </tbody></table>
+      </tbody></table></div>
+      <div><div class="lab" style="margin-bottom:6px">How shoppers arrived <span class="muted">\u00b7 counted separately, can overlap</span></div>
+      <table class="roomy"><thead><tr><th>Way in</th><th class="num">Count</th><th class="num">MoM</th><th class="num">YoY</th></tr></thead><tbody>
+      ${arrRows.map(([k, v, unit, ck]) => `<tr><td>${k}</td><td class="num">${v!=null?`${num(v)} ${unit}`:'\u2014'}</td>
+        <td class="num">${ck?chip(C.mom && C.mom[ck], 'MoM'):''}</td><td class="num">${ck?chip(C.yoy && C.yoy[ck], 'YoY'):''}</td></tr>`).join('')}
+      </tbody></table></div>
+    </div>
   </div>` : '';
 
   /**
@@ -8374,7 +8429,7 @@ function renderShopee() {
 
   const pp = sc.products || {};
   const sold = pp.available ? `<div class="card mt">
-    <div class="card-title">What sold from outside traffic &middot; ${num(pp.units)} units</div>
+    <div class="card-title">Packages from outside traffic &middot; ${num(pp.units)} units</div>
     <table class="roomy"><thead><tr><th style="width:44%;">Package</th><th style="width:20%;">Sold through</th><th style="width:20%;">Campaigns</th><th class="num" style="width:6%;">Units</th><th class="num" style="width:10%;">Sales (THB)</th></tr></thead><tbody>
       ${pp.top.map(x => { const ch = (x.channels||[]).map(c => `${c.channel} ${pc(c.share,0)}`).join(' \u00b7 ');
         const cps = (x.campaigns||[]).map(c => `${c.campaign} ${pc(c.share,0)}`).join(' \u00b7 ');
@@ -8400,7 +8455,12 @@ function renderShopee() {
       <div class="big">Shopee <span class="pill">BangkokHospital_Official</span></div>
       <div class="hint">One storefront, from Shopee Seller Centre. Confirmed sales are orders Shopee has confirmed.</div>
     </div></div>
-    ${head}${commercial}${shopeeAds}${sources}${funnel}${traffic}${buyers}${offsite}${offCampaigns}${placements}${packages}${sold}${trend}`;
+    <div class="sec-h">Sales</div>${head}${trend}${sources}
+    <div class="sec-h">Advertising</div>${commercial}${shopeeAds}${keywords}
+    <div class="sec-h">Storefront</div>${funnel}${traffic}
+    <div class="sec-h">From outside Shopee</div>${offsite}${offCampaigns}${placements}
+    <div class="sec-h">Packages</div>${packages}${sold}
+    <div class="sec-h">Buyers</div>${buyers}`;
 }
 
 function renderLine() {
@@ -11971,7 +12031,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.336.0';
+const CLIENT_BUILD = '3.337.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

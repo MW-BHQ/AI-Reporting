@@ -1,5 +1,26 @@
 ### Recent (September 2026)
 
+**v3.337.0 — Shopee: Shop Ads, keywords, CPAS, sections, one unit per table.**
+- `Shop Ads` (Shop Ads Performance "By Day", dates `20250114`) and
+  `Shop Ads Keywords` ("By Keyword", monthly, column A `Month`). Shop Ads is a
+  PART of the `Shopee Ads` overall (Jan 2025: product ฿24,380 + shop ฿3,850 =
+  overall ฿28,229); shown as a split table inside the Shopee Ads card, never
+  added to a spend total. Package gap = overall − product − shop.
+- Keywords: the search terms that showed the shop ad — the only Shopee search
+  terms in any export. Case variants of one keyword aggregate.
+- CPAS: the Shopee Meta pull now asks for `catalog_segment_*` (as Audiences
+  does, verified 2026-08-14), with a plain retry if Meta rejects it. Two
+  referees shown side by side: Meta's CPAS value/ROAS and Shopee's credit to
+  FB/IG links. New headline: ALL-ADS ROAS = confirmed sales ÷ (Meta + Shopee
+  Ads) — no attribution model.
+- "Where sales came from": left table baht only (Shopee Ads, outside,
+  "everything else" estimate); right table "How shoppers arrived" in clicks
+  and visits, stated as overlapping. The mixed-unit sub-row is gone. Feed
+  traffic is in no export.
+- Tab regrouped under section headings: Sales · Advertising · Storefront ·
+  From outside Shopee · Packages · Buyers. "What sold from outside traffic"
+  renamed "Packages from outside traffic" and moved under Packages.
+
 **v3.336.0 — Shopee packages, whole shop.** Tabs `Package Sales` (Brand Portal
 Product Performance, Item Level sheet) and `Package Ads` (Product Ads
 Performance, By Product sheet), monthly, with a hand-typed column A `Month`.

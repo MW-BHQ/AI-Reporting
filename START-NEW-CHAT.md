@@ -1,4 +1,4 @@
-# BHQ War Room — handover at v3.336.0
+# BHQ War Room — handover at v3.337.0
 
 Written for a fresh session. MW is bringing a NEW source of Shopee data, so the
 Shopee section matters most — read it before touching anything there.
@@ -8,7 +8,7 @@ Shopee section matters most — read it before touching anything there.
 - Repo `MW-BHQ/AI-Reporting`, branch `main`, working dir `/home/claude/bkh/`.
 - Auto-deploys to Cloud Run `ai-reporting-git`, `asia-southeast1`,
   project `ai-reporting-503911`. Live at `w.bkhos.co`.
-- Current version **3.336.0**. Bump BOTH `package.json` and `CLIENT_BUILD` in
+- Current version **3.337.0**. Bump BOTH `package.json` and `CLIENT_BUILD` in
   `public/index.html`, and add a CONTEXT.md entry.
 - MW supplies a session-scoped GitHub PAT. Ask for it; do not look for one.
 
@@ -36,43 +36,43 @@ node --require ./test/mock-fetch.js server.js
 - Never show 0 for something that was not measured — dash plus a reason. The
   single most repeated correction in this project's history.
 
-## SHOPEE — read this first
+## SHOPEE — read this first (rewritten v3.337.0)
 
-**Current state (v3.317–v3.320).** Own tab, `/api/shopee`, `requireTab("shopee")`,
-nav under `Report > Channels > Shopee`. Windsor connector, account `250344218`
-(`BangkokHospital_Official`), one shop.
+**Source:** MW's Google Sheet `SHOPEE_SHEET_ID`
+(`17T21LhWMSxIkg8GWZKS6tFQ6Q1x0mssDXx5pLX7r-kg`), shared with
+`715584769614-compute@developer.gserviceaccount.com`. Pasted Seller Centre and
+Brand Portal exports. **Windsor Shopee was removed (v3.322.0)**; the mock fails
+any request to it. Meta spend comes from Windsor `facebook`, accounts named
+`*Shopee*`.
 
-**What the Windsor connector has:** orders, settlement, returns, wallet,
-products. **No line items** — confirmed by asking `get_fields` for nine
-spellings of item name/sku/quantity. **No traffic, views, cart or source/medium.**
+| Tab | Export | Grain | Notes |
+|---|---|---|---|
+| Sales | Seller Centre > Business Insights > Sales | daily | range-summary rows skipped; later paste of a day wins |
+| Traffic | Seller Centre > Traffic | daily | rates weighted by visitors |
+| Product Views | Seller Centre > Product | daily | search clicks live here |
+| Off-Platform Traffic | Brand Portal > Off-platform Traffic > Campaign Performance | daily | Shopee-credited; channel, campaign, ad content |
+| Off-Platform Products By Day | same > Product Performance | daily | package × channel × campaign |
+| Shopee Ads | On-platform Ads > Performance Ads > Overall | daily | every day twice (All + TH): keep TH |
+| Shop Ads | On-platform Ads > Shop Ads Performance, By Day | daily | `20250114` dates; PART of Shopee Ads |
+| Shop Ads Keywords | same, By Keyword | monthly, col A `Month` | |
+| Package Sales | Brand Portal > Product Analysis > Product Performance, Item Level | monthly, col A `Month` | whole shop per package |
+| Package Ads | On-platform Ads > Product Ads Performance, By Product | monthly, col A `Month` | joined on Product ID |
+| Buyer Gender / Buyer Age | Brand Portal > Consumer Insights > Buyer | monthly, `Date` col | `All` rows, not `TH` |
+| Instructions | — | — | team guide; never read |
 
-**What is built:**
-- Gross (cancelled excluded), AOV, cancellation rate
-- Settlement: sold, escrow, fee breakdown, take rate (~8.56% on this shop —
-  5.35% commission + 3.21% transaction fee)
-- Repeat buyers from `order_buyer_username`
-- Off-site ad spend joined from META accounts named `*Shopee*` — spend BESIDE
-  orders, never attribution
-- Cancellation by payment method, order value bands, hour/weekday (Bangkok)
-- Catalogue: live SKUs, median discount, zero-discount listings, low stock
-- **Seller Centre sheet (v3.321.0)** `SHOPEE_SHEET_ID` — funnel, traffic,
-  off-platform channels/campaigns, products, promotions. Stock-movement units
-  were REMOVED in favour of it.
+Each group is its own batchGet: **a tab listed in code but missing from the
+sheet fails its whole batch**, so remove it from code BEFORE MW deletes it
+(Campaign tab, v3.333.0).
 
-**Traps that cost time here:**
-- Orders, settlement and returns are SEPARATE tables. Fields from two of them in
-  one Windsor call cross-join the rows.
-- Cancelled orders keep their full amount and settle at ZERO escrow.
-- Discounts arrive as a shop-level lump on a row with a NULL `order_id`.
-- `order_create_time` is UTC — add 7h for Bangkok or the evening peak lands in
-  the afternoon.
-- A restock RAISES stock, so it cannot be read as a negative sale.
+**Rules that cost releases:** monthly tabs count only whole months inside the
+range; `Month` is read in every form Sheets rewrites it to; one digit after a
+dot is a tens month (`2025.1` = October); every Shopee-credited figure is
+labelled credited (7-day, gross, any shop product); organic is an estimate
+(null + flag when credits exceed sales, never negative); MoM/YoY only for
+fully covered windows; the Shopee Ads split never adds to spend totals.
 
-**If MW's new source has line items, order-level traffic, or Seller Centre
-funnel data**, the honest move is to REPLACE the stock-movement reconstruction
-rather than run both — a heuristic that outlives its replacement is a second
-answer waiting to disagree with the first. That exact mistake was made with LINE
-(`lineSameDay`) and cleaned up in v3.316.0.
+**Not available in any export:** recommendation-feed traffic, cart age,
+per-shopper behaviour. Stop looking.
 
 ## LINE — complete, five steps
 
@@ -101,8 +101,7 @@ mistake on this project. MCP approval is per chat session.
 ## Open items
 
 1. Verify v3.314–v3.320 on deployed data — MW has not reviewed them yet.
-2. Shopee is Seller Centre sheet + Meta only since v3.322.0. Windsor Shopee is
-   GONE; the SHOPEE section below describing it is history.
+2. Shopee: live data for v3.321–v3.337 is being checked by MW.
 3. Marketplace revenue is still OUTSIDE every headline revenue figure. Deliberate
    — decide explicitly before joining it.
 4. PDF: campaign sheet has a ~6% blank tail. Residual is prep-vs-print text

@@ -871,7 +871,11 @@ global.fetch = async (url, opts = {}) => {
         mk("BHQ x AIQ", 40), mk("BHQ Inter x ADA", 20),
         // A range where no Shopee-named account ran (from 2026-07-02): spend
         // is UNMEASURED, a dash, never 0 (v3.328.0, MW's Jan 2025 screenshot).
-        ...(/date_from=2026-07-02/.test(u) ? [] : [mk("BHQ Shopee x EGG", 10)]),
+        // CPAS (v3.337.0): Meta's catalog_segment_* figures on the Shopee
+        // account, only when the pull asks for them.
+        ...(/date_from=2026-07-02/.test(u) ? [] : [{ ...mk("BHQ Shopee x EGG", 10),
+          ...(/catalog_segment_value_purchase/.test(u) ? { catalog_segment_actions_omni_purchase: 3,
+            catalog_segment_value_purchase: 24000, catalog_segment_actions_omni_add_to_cart: 12 } : {}) }]),
         mk("Some New Account", 7),   // must land in UNMAPPED, never vanish
 
       ]});
@@ -1112,6 +1116,32 @@ global.fetch = async (url, opts = {}) => {
      * July: net sales 62,000; package ads spend 1,300 of the daily tab's
      * 1,700 → 400 unallocated.
      */
+    /**
+     * SHOP ADS (v3.337.0). By Day with `20260701`-style dates; 30 June out.
+     * July shop ads spend 300 → with package ads 1,300, the daily tab's 1,700
+     * leaves 100 unexplained (not 400 as before shop ads existed).
+     */
+    if (/'Shop(%20|\+| )Ads'!|%27Shop(%20|\+| )Ads%27!/.test(u)) {
+      const H = ["Date", "Region", "Shop Name", "Shop ID", "Ads Spend(USD)", "Ads Spend(Local currency)", "Impressions", "Clicks", "CTR",
+        "CPC", "Orders", "ROAS", "Units Sold", "Gross Sales(USD)", "Gross Sales(Local currency)", "CR", "ACOS"];
+      const r = (d, sp, imp, clk, o, sales) => [d, "TH", "BangkokHospital_Official", "250344218", "0", sp, imp, clk, "0", "0", String(o), "0", String(o), "0", sales, "0", "0"];
+      return jsonRes({ spreadsheetId: "mock-shopee", valueRanges: [{ values: [H,
+        r("20260630", "9,999", "9", "9", 9, "99,999"), r("20260701", "200", "400", "10", 1, "5,000"), r("20260702", "100", "200", "5", 0, "0")] }] });
+    }
+    /**
+     * SHOP ADS KEYWORDS (v3.337.0), monthly. "hpv" and "HPV" are two rows of
+     * one export: aggregated together (15 clicks), neither dropped.
+     */
+    if (/Shop(%20|\+| )Ads(%20|\+| )Keywords/.test(u)) {
+      const H = ["Month", "Region", "Shop Name", "Shop ID", "Keyword", "Impressions", "Clicks", "CTR", "Ads Spend(USD)",
+        "Ads Spend(Local currency)", "CPC", "Average Rank", "Orders", "Gross Sales(USD)", "Gross Sales(Local currency)", "ROAS", "Units Sold", "CR"];
+      const k = (mo, kw, imp, clk, sp, o, sales) => [mo, "TH", "BangkokHospital_Official", "250344218", kw, imp, String(clk), "0", "0", sp, "0", "1.0",
+        String(o), "0", sales, "0", String(o), "0"];
+      return jsonRes({ spreadsheetId: "mock-shopee", valueRanges: [{ values: [H,
+        k("2026-06", "old", "9", 99, "9", 9, "9"),
+        k("2026-07", "ตรวจสุขภาพ", "1,000", 20, "150", 1, "5,000"),
+        k("2026-07", "hpv", "300", 10, "40", 0, "0"), k("2026-07", "HPV", "100", 5, "20", 0, "0")] }] });
+    }
     if (/Package(%20|\+| )Sales/.test(u)) {
       const SH = ["Month", "No.", "Name", "URL", "Product ID", "Parent SKU", "Region", "Shop ID", "Shop name", "Brand", "Category",
         "Product Rating", "Net Units Sold", "Net Orders", "Net Sales(\u0e3f)", "Net # of Unique Buyers", "Gross Units Sold", "Gross Orders",
