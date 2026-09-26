@@ -1137,10 +1137,15 @@ global.fetch = async (url, opts = {}) => {
         "Ads Spend(Local currency)", "CPC", "Average Rank", "Orders", "Gross Sales(USD)", "Gross Sales(Local currency)", "ROAS", "Units Sold", "CR"];
       const k = (mo, kw, imp, clk, sp, o, sales) => [mo, "TH", "BangkokHospital_Official", "250344218", kw, imp, String(clk), "0", "0", sp, "0", "1.0",
         String(o), "0", sales, "0", String(o), "0"];
+      // Pasted without the Month column (MW's first Jan 2025 paste): the card
+      // must say so, not "no rows".
+      if (process.env.MOCK_FAIL_CONNECTOR === "shopee-ads") return jsonRes({ spreadsheetId: "mock-shopee", valueRanges: [{ values: [H.slice(1),
+        k("2026-07", "x", "1", 1, "1", 0, "0").slice(1)] }] });
       return jsonRes({ spreadsheetId: "mock-shopee", valueRanges: [{ values: [H,
         k("2026-06", "old", "9", 99, "9", 9, "9"),
         k("2026-07", "ตรวจสุขภาพ", "1,000", 20, "150", 1, "5,000"),
-        k("2026-07", "hpv", "300", 10, "40", 0, "0"), k("2026-07", "HPV", "100", 5, "20", 0, "0")] }] });
+        // Month as teams type it: "Jul-26" and "07/2026" are both July.
+        k("Jul-26", "hpv", "300", 10, "40", 0, "0"), k("07/2026", "HPV", "100", 5, "20", 0, "0")] }] });
     }
     if (/Package(%20|\+| )Sales/.test(u)) {
       const SH = ["Month", "No.", "Name", "URL", "Product ID", "Parent SKU", "Region", "Shop ID", "Shop name", "Brand", "Category",

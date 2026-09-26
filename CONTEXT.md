@@ -1,5 +1,13 @@
 ### Recent (September 2026)
 
+**v3.338.0 — Monthly tabs say WHY they are empty.** Live Jan 2025 check by MW:
+confirmed ฿2.34M, package net ฿2.32M, product ads ฿24.4K + shop ads ฿3.9K,
+gap ฿0.03 — but keywords said "no keyword rows for 2025.01". Monthly readers
+now name the cause: no `Month` header in column A, a month value they cannot
+read (quoted), or rows for other months. `Month` also accepts `Jan-25`,
+`01/2025`, `2025/01`, `2025-01-01 00:00:00`. A gap under ฿1 is export
+rounding and is shown as nothing, not "฿0.03 not split".
+
 **v3.337.0 — Shopee: Shop Ads, keywords, CPAS, sections, one unit per table.**
 - `Shop Ads` (Shop Ads Performance "By Day", dates `20250114`) and
   `Shop Ads Keywords` ("By Keyword", monthly, column A `Month`). Shop Ads is a

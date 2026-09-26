@@ -11071,11 +11071,14 @@ async function readShopKeywords(from, to, raw) {
   const want = new Set(months);
   const byKey = new Map();
   let head = null;
+  const seen = new Set(), bad = [];
   for (const r of got.res[0] && got.res[0].values || []) {
     if (/^month$/i.test(String(r[0] || "").trim())) { head = r.map(spKey); continue; }
     if (!head) continue;
     const o = {}; head.forEach((k, i) => { if (k) o[k] = r[i]; });
     const mo = packageMonth(o.month), kw = String(o.keyword || "").trim();
+    if (!mo && String(o.month || "").trim() && bad.length < 1) bad.push(String(o.month).trim());
+    if (mo) seen.add(mo);
     if (!mo || !want.has(mo) || !kw) continue;
     byKey.set(`${mo}|${kw}`, { kw, o }); // a later paste of the same month and keyword wins
   }
@@ -11089,7 +11092,7 @@ async function readShopKeywords(from, to, raw) {
   }
   const list = [...agg.values()].map((e) => ({ ...e, ctr: e.impressions ? e.clicks / e.impressions : null }))
     .sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
-  if (!list.length) return { available: false, reason: `no keyword rows for ${months.join(", ")}` };
+  if (!list.length) return { available: false, reason: monthlyEmptyReason(SHOPEE_KEYWORDS_TAB, head, months, seen, bad) };
   return { available: true, count: list.length, withOrders: list.filter((e) => e.orders > 0).length, list: list.slice(0, 25) };
 }
 
@@ -11125,9 +11128,27 @@ function packageMonth(v) {
     const mo = a === 1 && b !== 1 ? b : b === 1 && a !== 1 ? a : a === 1 ? 1 : null;
     return mo && mo <= 12 ? `${m[3]}.${String(mo).padStart(2, "0")}` : null;
   }
-  m = t.toLowerCase().match(/^([a-z]{3})[a-z]*\.?\s+(\d{4})$/);
-  if (m && MON3.includes(m[1])) return `${m[2]}.${String(MON3.indexOf(m[1]) + 1).padStart(2, "0")}`;
+  m = t.toLowerCase().match(/^([a-z]{3})[a-z]*\.?[\s\-/]+(\d{2}|\d{4})$/); // Jan 2025, January 2025, Jan-25
+  if (m && MON3.includes(m[1])) return `${m[2].length === 2 ? "20" + m[2] : m[2]}.${String(MON3.indexOf(m[1]) + 1).padStart(2, "0")}`;
+  m = t.match(/^(\d{1,2})[\/\-](\d{4})$/);                                   // 01/2025, 1-2025
+  if (m && +m[1] >= 1 && +m[1] <= 12) return `${m[2]}.${m[1].padStart(2, "0")}`;
+  m = t.match(/^(\d{4})\/(\d{1,2})$/);                                        // 2025/01
+  if (m && +m[2] >= 1 && +m[2] <= 12) return `${m[1]}.${m[2].padStart(2, "0")}`;
+  m = t.match(/^(\d{4})-(\d{2})-(\d{2})[ T]\d/);                              // 2025-01-01 00:00:00
+  if (m) return `${m[1]}.${m[2]}`;
   return buyerMonth(t);
+}
+/**
+ * WHY A MONTHLY TAB CAME BACK EMPTY, in words MW's team can act on (v3.338.0).
+ * "No rows for 2025.01" on a freshly pasted tab sent MW hunting; the reader
+ * now says which of the three things went wrong: no `Month` header in column
+ * A, month values it cannot read (quoting one), or rows for other months.
+ */
+function monthlyEmptyReason(tab, head, months, seen, bad) {
+  if (!head) return `"${tab}" has no "Month" header in column A`;
+  if (bad.length && !seen.size) return `"${tab}": Month "${bad[0]}" not recognised — type it as 2025-01`;
+  if (seen.size) return `"${tab}" has ${[...seen].sort().join(", ")}, not ${months.join(", ")}`;
+  return `"${tab}" has no rows under its header`;
 }
 async function readShopeePackages(from, to, raw) {
   const got = await raw.packages;
@@ -11135,14 +11156,19 @@ async function readShopeePackages(from, to, raw) {
   const months = monthsInside(from, to);
   if (!months.length) return { available: false, reason: "monthly data — pick one or more whole months" };
   const want = new Set(months);
-  const rowsOf = (values) => {
+  const diag = {};
+  const rowsOf = (values, tab) => {
     const byKey = new Map();
     let head = null;
+    const seen = new Set(), bad = [];
+    diag[tab] = () => monthlyEmptyReason(tab, head, months, seen, bad);
     for (const r of values || []) {
       if (/^month$/i.test(String(r[0] || "").trim())) { head = r.map(spKey); continue; }
       if (!head) continue;
       const o = {}; head.forEach((k, i) => { if (k) o[k] = r[i]; });
       o._month = packageMonth(o.month);
+      if (!o._month && String(o.month || "").trim() && bad.length < 1) bad.push(String(o.month).trim());
+      if (o._month) seen.add(o._month);
       const id = String(o.productid || "").replace(/\.0+$/, "").trim();
       if (!o._month || !want.has(o._month) || !id) continue;
       o._id = id;
@@ -11151,9 +11177,9 @@ async function readShopeePackages(from, to, raw) {
     return [...byKey.values()];
   };
   const res = got.res;
-  const sales = rowsOf(res[0] && res[0].values);
-  const ads = rowsOf(res[1] && res[1].values);
-  if (!sales.length && !ads.length) return { available: false, reason: `no package rows for ${months.join(", ")}` };
+  const sales = rowsOf(res[0] && res[0].values, SHOPEE_PACKAGE_TABS[0]);
+  const ads = rowsOf(res[1] && res[1].values, SHOPEE_PACKAGE_TABS[1]);
+  if (!sales.length && !ads.length) return { available: false, reason: diag[SHOPEE_PACKAGE_TABS[0]]() };
   const clean = (nm) => String(nm || "").replace(/\s*-\s*Bangkok Hospital.*$/i, "").trim();
   const pk = new Map();
   const get = (id, name) => {
@@ -11519,7 +11545,9 @@ async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
       // unexplained is the overall minus both — normally a rounding baht.
       if (packages.adsTotal != null && shopAds.available) {
         packages.shopAdsSpend = shopAds.spend;
-        packages.adsUnallocated = Math.max(0, packages.adsTotal - packages.adsSpend - shopAds.spend);
+        // Under a baht is the exports' own rounding (Jan 2025: ฿0.03) — zero.
+        const left = packages.adsTotal - packages.adsSpend - shopAds.spend;
+        packages.adsUnallocated = left < 1 ? 0 : left;
       }
       // Share of confirmed only when the daily Sales tab covers every day of
       // the same whole months — else a month of packages over a few days of

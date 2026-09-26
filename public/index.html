@@ -8192,7 +8192,7 @@ function renderShopee() {
   const splitRows = [
     pkAds && pkA.adsMonths && pkA.adsMonths.length ? ['Product ads', pkAds.spend, pkAds.clicks, pkAds.sales] : null,
     shA.available ? ['Shop ads', shA.spend, shA.clicks, shA.sales] : null,
-    pkA.adsUnallocated != null ? ['Not split by Shopee', pkA.adsUnallocated, null, null] : null,
+    pkA.adsUnallocated > 0 ? ['Not split by Shopee', pkA.adsUnallocated, null, null] : null,
   ].filter(Boolean);
   const adSplit = sa.available && splitRows.length ? `<table class="roomy mt"><thead><tr><th>Part</th><th class="num">Spend (THB)</th>
       <th class="num">Clicks</th><th class="num">Sales credited (THB)</th><th class="num">ROAS</th></tr></thead><tbody>
@@ -12031,7 +12031,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.337.0';
+const CLIENT_BUILD = '3.338.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

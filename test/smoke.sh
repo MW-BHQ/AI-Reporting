@@ -335,7 +335,8 @@ expect_field "pk part month"      "/api/shopee?from=2026-07-01&to=2026-07-01" "d
 expect_field "sh spend"           "$SHOP" "d.shopAds.spend===300&&d.shopAds.days===2?'ok':undefined"
 expect_field "sh gap closes"      "$SHOP" "d.packages.adsUnallocated===100&&d.packages.shopAdsSpend===300?'ok':undefined"
 expect_field "sh not added"       "$SHOP" "d.ads.totalSpend===1710?1710:undefined"
-# KEYWORDS: "hpv" + "HPV" = 15 clicks; June out; ordered by clicks.
+# KEYWORDS: "hpv" + "HPV" = 15 clicks (months typed "Jul-26", "07/2026");
+# June out; ordered by clicks.
 expect_field "kw case merge"      "$SHOP" "d.keywords.list.find(k=>k.keyword.toLowerCase()==='hpv').clicks===15?'ok':undefined"
 expect_field "kw top"             "$SHOP" "d.keywords.list[0].keyword==='ตรวจสุขภาพ'&&d.keywords.count===2?'ok':undefined"
 # CPAS: Meta's value 24,000 over Meta spend 10.
@@ -1221,6 +1222,7 @@ MOCK_FAIL_CONNECTOR=shopee-ads PORT=$PORT node --require ./test/mock-fetch.js se
 SRV=$!
 sleep 2.5
 expect_field "sa missing tab ok" "/api/shopee?from=$FROM&to=$TO" "d.available===true&&d.funnel.sales===32000&&d.shopeeAds.available===false&&/Shopee Ads/.test(d.shopeeAds.reason)?'ok':undefined"
+expect_field "kw no month header" "/api/shopee?from=$FROM&to=$TO" "d.keywords.available===false&&/no \"Month\" header/.test(d.keywords.reason)?'ok':undefined"
 
 kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
 echo ""
