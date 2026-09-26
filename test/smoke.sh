@@ -356,6 +356,18 @@ expect_field "cpas meta roas"     "$SHOP" "d.ads.cpas.value===24000&&d.ads.cpas.
 expect_field "all ads per baht"   "$SHOP" "d.ads.salesPerAllBaht===32000/1710?'ok':undefined"
 # ARRIVALS in their own units: ads clicks 170, search 7, outside visits 65.
 expect_field "arrivals"           "$SHOP" "(a=>a.shopeeAdsClicks===170&&a.searchClicks===7&&a.outsideVisits===65)(d.arrivals)?'ok':undefined"
+# ORGANIC TREND: April fully covered by Sales (30,000); ads 2,000 over 10 of
+# 30 days (flagged); July (2 of 31 Sales days) left out.
+APR="/api/shopee?from=2026-04-01&to=2026-04-30"
+expect_field "tr april"           "$APR" "(t=>t.length===1&&t[0].month==='2026.04'&&t[0].confirmed===30000&&Math.abs(t[0].organicShare-28/30)<1e-9&&t[0].adsDays===10)(d.trend)?'ok':undefined"
+expect_field "tr july excluded"   "$SHOP" "d.trend.length===0?'ok':undefined"
+# COST PER NEW BUYER: July, whole month, buyers present: 1,710 / 6 new.
+expect_field "cpnb july"          "$SHOP" "d.ads.costPerNewBuyer.value===285&&d.ads.costPerNewBuyer.newBuyers===6?'ok':undefined"
+# 15 June – 31 July holds one whole month of buyers but six weeks of spend.
+expect_field "cpnb part month"    "/api/shopee?from=2026-06-15&to=2026-07-31" "d.buyers.available&&d.ads.costPerNewBuyer===null?'ok':undefined"
+# PRICE BANDS: 111 at 20,000/unit and 222 at 20,000 → 15K-30K (150 visitors,
+# 3 orders); 333 at 2,000 → under 5K.
+expect_field "price bands"        "$SHOP" "(b=>b[2].packages===2&&b[2].visitors===150&&b[2].conversion===3/150&&b[0].packages===1)(d.packages.priceBands)?'ok':undefined"
 expect_field "sc no windsor"      "$SHOP" "d.settlement===undefined&&d.catalogue===undefined?'ok':undefined"
 expect_field "sc last day"        "$SHOP" "d.lastDay==='2026-07-02'?'ok':undefined"
 

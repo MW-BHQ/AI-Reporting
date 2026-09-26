@@ -1,5 +1,19 @@
 ### Recent (September 2026)
 
+**v3.341.0 — Shopee synthesis, part two.**
+- COST PER NEW BUYER: all ad spend (Meta + Shopee Ads) ÷ Shopee's new buyers.
+  Only when the range is exactly whole months and the buyer tabs hold every
+  one — six weeks of spend over one month of buyers would read half price
+  (fixture: 15 Jun–31 Jul → null). On the Who buys card.
+- MONTH BY MONTH sources: the sales split per month whose daily Sales rows
+  cover every day; a month with missing Shopee Ads days is kept and flagged
+  "ads N of M days". Shown from two months up.
+- PRICE AND CONVERSION: packages banded by average price per unit (under 5K,
+  5–15K, 15–30K, 30K+); band conversion = band orders ÷ band visitors.
+- Declaration-order trap hit again (`bMon` used above its `const`) — moved up.
+Still open from the synthesis list: one campaign across website and Shopee
+(needs the same UTM names on both — to be checked).
+
 **v3.340.0 — House green/red on the synthesis; sources split in two cards.**
 v3.339.0 left the verdict boxes uncoloured on a wrong premise ("colour means
 channel only"). MW: the deck HAS a green/red house rule — #2E9E6F favourable,

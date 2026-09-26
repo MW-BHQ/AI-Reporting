@@ -11280,9 +11280,21 @@ async function readShopeePackages(from, to, raw) {
       .map((e) => ({ id: e.id, name: e.name, cartUnits: e.cartUnits, orders: e.netOrders, buyRate: e.netOrders / e.cartUnits }))
       .sort((a, b) => b.cartUnits - a.cartUnits).slice(0, 8),
   };
+  /**
+   * PRICE AND CONVERSION (v3.341.0): packages grouped by average selling
+   * price (net sales ÷ net units). Conversion per band is the band's orders
+   * over its visitors — divided once, never an average of package rates.
+   */
+  const BANDS = [[0, 5000, "Under 5K"], [5000, 15000, "5K–15K"], [15000, 30000, "15K–30K"], [30000, Infinity, "30K and up"]];
+  const priceBands = BANDS.map(([lo, hi, label]) => {
+    const inBand = withSales.filter((e) => e.netUnits > 0 && e.netSales / e.netUnits >= lo && e.netSales / e.netUnits < hi);
+    const v = inBand.reduce((a, e) => a + e.visitors, 0), o = inBand.reduce((a, e) => a + e.netOrders, 0);
+    return { label, packages: inBand.length, visitors: v, orders: o, netSales: inBand.reduce((a, e) => a + e.netSales, 0),
+      conversion: v ? o / v : null };
+  });
   const found = [...new Set([...sales, ...ads].map((r) => r._month))].sort();
   return {
-    available: true, months: found, missing: months.filter((m) => !found.includes(m)),
+    available: true, months: found, priceBands, missing: months.filter((m) => !found.includes(m)),
     salesMonths: [...new Set(sales.map((r) => r._month))].sort(),
     adsMonths: [...new Set(ads.map((r) => r._month))].sort(),
     netSales: tot("netSales"), netOrders: tot("netOrders"), grossSales: tot("grossSales"),
@@ -11639,7 +11651,29 @@ async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
         searchClicks: f.searchClicks,
         outsideVisits: opt.length ? offTotal.visits : null,
       };
-      return { shopeeAds, shopAds, arrivals, keywords: await keywordsP, buyers: await buyersP, packages, sources: known ? {
+      /**
+       * ORGANIC TREND (v3.341.0): the sources split month by month, so the
+       * "everything else" share reads as a rough gauge of Shopee search
+       * strength. Only months whose daily Sales rows cover every day; a
+       * month whose Shopee Ads paste misses days is kept but flagged.
+       */
+      const trend = [];
+      if (shopeeAds.available) {
+        for (const mo of monthsInside(from, to)) {
+          const pre = mo.replace(".", "-");
+          const days = new Date(Date.UTC(+pre.slice(0, 4), +pre.slice(5, 7), 0)).getUTCDate();
+          const sm = sales.filter((r) => r._day.startsWith(pre));
+          if (sm.length !== days) continue;
+          const conf = sm.reduce((a, r) => a + spNum(r.salesconfirmedordersthb), 0);
+          const ad = shopeeAds.daily.filter((x) => x.d.startsWith(pre));
+          const adSales = ad.reduce((a, x) => a + x.sales, 0);
+          const offSales = opt.filter((r) => r._day.startsWith(pre)).reduce((a, r) => a + spNum(r.saleslocalcurrency), 0);
+          const rest = conf - adSales - offSales;
+          trend.push({ month: mo, confirmed: conf, adsShare: div(adSales, conf), offShare: div(offSales, conf),
+            organicShare: rest >= 0 ? div(rest, conf) : null, overCredited: rest < 0, adsDays: ad.length, days });
+        }
+      }
+      return { shopeeAds, shopAds, arrivals, trend, keywords: await keywordsP, buyers: await buyersP, packages, sources: known ? {
         shopeeAds: shopeeAds.sales, offPlatform: offTotal.sales,
         organic: rest >= 0 ? rest : null, overCredited: rest < 0,
       } : null };
@@ -11742,6 +11776,22 @@ async function buildShopee(from, to) {
       spendParts: parts,
       totalSpend,
       costOfSale: totalSpend != null && f.sales ? totalSpend / f.sales : null,
+      /**
+       * COST PER NEW BUYER (v3.341.0): all ad spend over Shopee's new buyers
+       * (no confirmed order in the 12 months before). Only when the range is
+       * exactly whole months and the buyer tabs have every one of them —
+       * a month of spend over half a month of buyers would halve the cost.
+       */
+      costPerNewBuyer: (() => {
+        const b = seller.buyers;
+        const ms = monthsInside(from, to);
+        const whole = ms.length && from.endsWith("-01") && ms.length === new Set(
+          Array.from({ length: Math.round((Date.parse(to) - Date.parse(from)) / 864e5) + 1 }, (_, i) =>
+            new Date(Date.parse(from) + i * 864e5).toISOString().slice(0, 7))).size;
+        if (!whole || !b || !b.available || b.missing.length || totalSpend == null) return null;
+        const nb = b.gender.new.total;
+        return nb ? { value: totalSpend / nb, newBuyers: nb } : null;
+      })(),
       // Confirmed sales per baht of ALL ad spend — no attribution model at all.
       salesPerAllBaht: totalSpend && f.sales != null ? f.sales / totalSpend : null,
       /**
