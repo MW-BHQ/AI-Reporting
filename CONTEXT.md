@@ -1,5 +1,11 @@
 ### Recent (September 2026)
 
+**v3.350.0 — Lazada is pink (#E4127A).** MW: the blue (#1A73E8) vanished next
+to Organic Search / Google Search. Changed at the one channel map
+(`channelColour`), the Overview funnel's source colours, and the Lazada tab's
+bars. Aug 2026 Overview showing no Lazada is correct: the Lazada sheet holds
+Aug 2025 only so far; a shop with no rows drops out, never a zero.
+
 **v3.349.0 — Shopee and Lazada in the Reporting Overview funnel.** MW's map:
 TOFU Shopee Ads impressions (search/shop ads inside it; Lazada has none —
 unmeasured); Interactions = search-term clicks (Shopee search clicks, Lazada

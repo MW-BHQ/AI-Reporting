@@ -3003,8 +3003,8 @@ const SOURCE_BRAND = {
   // Marketplaces (v3.349.0): the channel colours the E-commerce tabs use.
   "Shopee Ads": "#EE4D2D", "Shopee search clicks": "#EE4D2D", "Shopee shop views": "#EE4D2D",
   "Shopee product views": "#EE4D2D", "Shopee add to cart": "#EE4D2D", "Shopee checkouts": "#EE4D2D",
-  "Lazada search visits": "#1A73E8", "Lazada shop views": "#1A73E8", "Lazada product views": "#1A73E8",
-  "Lazada add to cart": "#1A73E8", "Lazada checkouts": "#1A73E8",
+  "Lazada search visits": "#E4127A", "Lazada shop views": "#E4127A", "Lazada product views": "#E4127A",
+  "Lazada add to cart": "#E4127A", "Lazada checkouts": "#E4127A",
   "Search clicks": "#4285F4",
   "Facebook post engagements": "#7FA8F5",
   "TikTok engagements": "#25F4EE",
@@ -7440,7 +7440,9 @@ const typeColour = (t) => TYPE_COLORS[t] || '#A9B4CE';
  */
 const CHANNEL_CI = {
   'Shopee': '#EE4D2D',
-  'Lazada': '#1A73E8',
+  // Lazada pink, from the Laz app mark (MW v3.350.0). It was Google-ish blue
+  // #1A73E8, which disappeared next to Organic Search and Google Search.
+  'Lazada': '#E4127A',
   'Bangkok Hospital Website': '#1F3864',
   'Line Shopping': '#0B8A4B',
   'Line Chatbot': '#06C755',
@@ -8720,7 +8722,7 @@ function renderLazada() {
         <div class="sub">buyers per visitor \u00b7 ${nn(sl.visitors)} visitors</div>${cmp('conversion')}</div>
     </div>
     ${sl.daily && sl.daily.length > 1 ? `<div class="card mt"><div class="card-title">Revenue by day (THB)${cover}</div>
-      ${labelledBars(sl.daily, 'value', '#1A73E8', 110)}
+      ${labelledBars(sl.daily, 'value', '#E4127A', 110)}
       <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
         <span>${esc(humanDate(sl.daily[0].d))}</span><span>${esc(humanDate(sl.daily[sl.daily.length-1].d))}</span></div></div>` : ''}`;
 
@@ -8751,7 +8753,7 @@ function renderLazada() {
     const row = (x, bar) => `<tr><td>${esc(x.name)}${bar ? ` <span class="muted">\u00b7 ${/lazada/i.test(x.group)?'Lazada':'you'}</span>` : ''}</td>
       <td class="num">${nn(x.visitors)}</td><td class="num">${nn(x.cartUsers)}</td><td class="num">${nn(x.buyers)}</td>
       <td class="num">${pc(x.conversion, 2)}</td><td class="num">${nn(x.revenue, true)}</td>
-      ${bar ? `<td style="width:22%;"><div style="background:var(--line);border-radius:3px;height:8px;"><div style="background:#1A73E8;height:8px;border-radius:3px;width:${Math.max(0.5,(x.visitors||0)/top*100).toFixed(1)}%;"></div></div></td>` : ''}</tr>`;
+      ${bar ? `<td style="width:22%;"><div style="background:var(--line);border-radius:3px;height:8px;"><div style="background:#E4127A;height:8px;border-radius:3px;width:${Math.max(0.5,(x.visitors||0)/top*100).toFixed(1)}%;"></div></div></td>` : ''}</tr>`;
     const head6 = (first, bar) => `<thead><tr><th>${first}</th><th class="num">Visitors</th><th class="num">Added to cart</th><th class="num">Buyers</th>
       <th class="num">Conversion</th><th class="num">Revenue (THB)</th>${bar?'<th></th>':''}</tr></thead>`;
     traffic = `<div class="grid g-4">
@@ -12473,7 +12475,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.349.0';
+const CLIENT_BUILD = '3.350.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
