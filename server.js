@@ -954,6 +954,7 @@ const TABS = [
   { id: "bclub",     label: "Better Club" },
   { id: "line",      label: "LINE OA" },
   { id: "shopee",    label: "Shopee" },
+  { id: "lazada",    label: "Lazada" },
   { id: "ecom",      label: "E-commerce" },
   { id: "ecomcentre",label: "E-commerce · Centres" },
   { id: "ecompackages", label: "E-commerce · Packages" },
@@ -11073,6 +11074,7 @@ const SHOPEE_SYN = {
   MIN_VISITORS: 50,   // a package needs this many visitors to be diagnosed
   LEAK_RATIO: 0.5,    // "leaks" = a step converting at under half the shop's rate
   KW_MIN_CLICKS: 10,  // a keyword needs this many clicks to count as demand
+  LZ_MIN_VISITORS: 5, // Lazada search terms are counted in visitors, and are thinner
 };
 /**
  * OTHER HOSPITALS' NAMES as shoppers type them. A keyword that is one of
@@ -11987,6 +11989,111 @@ app.get("/api/shopee", requireTab("shopee"), async (req, res) => {
   } catch (err) {
     logJson("ERROR", "shopee_failed", { error: String(err.message || err) });
     res.status(err.status || 500).json({ error: err.message || "Shopee report failed" });
+  }
+});
+
+/**
+ * LAZADA (v3.343.0) — MW's Lazada sheet (`LAZADA_SHEET_ID`), shared with the
+ * compute service account. First tab: `Traffic Source` = Seller Center >
+ * Business Advisor > Traffic > Traffic Source > Traffic Source Breakdown >
+ * Export, monthly, with column A `Month` typed by the team (the export's
+ * "Date Range" line is deleted on paste, by MW's rule: normalised rows only).
+ *
+ * THREE LEVELS IN ONE TABLE. Level 1 = Lazada Guided / Seller Guided; level 2
+ * = the source (Search, Cart, Campaign Landing Page, On/Off Platform Seller
+ * Guided...); level 3 = a search TERM under Search, or Sponsored Discovery /
+ * Sponsored Max under On Platform Seller Guided. Each level repeats the one
+ * above it, so only one level is ever summed at a time.
+ *
+ * "-" IS NOT ZERO. Seller Guided rows carry no buyers, orders or revenue;
+ * they stay null (a dash), never 0.
+ *
+ * CONVERSION IS "EVERY TOUCH" (the export's own attribution note): a buyer
+ * who came through Search and Cart counts in both, so source revenues
+ * OVERLAP and are never added up. Traffic is last touch; visitors add.
+ *
+ * Several months are summed as visitor-months (unique per month).
+ */
+const LAZADA_SHEET_ID = process.env.LAZADA_SHEET_ID || "1_WnGf7NOIDOL9xrF5_JTpIBSobgv7SY-CR-wXjCRL8I";
+const LAZADA_TRAFFIC_TAB = process.env.LAZADA_TRAFFIC_TAB || "Traffic Source";
+const lzNum = (v) => { const t = String(v == null ? "" : v).trim(); return t === "" || t === "-" ? null : spNum(t); };
+async function buildLazada(from, to) {
+  const months = monthsInside(from, to);
+  if (!months.length) return { available: false, reason: "monthly data — pick one or more whole months" };
+  let res;
+  try {
+    res = await sheetBatchGet(LAZADA_SHEET_ID, [`'${LAZADA_TRAFFIC_TAB}'!A1:AJ`]);
+  } catch (e) {
+    logJson("WARNING", "lazada_sheet_unavailable", { error: String(e.message || e) });
+    return { available: false, reason: /40[34]/.test(String(e.message)) ? "sheet not shared with the service account"
+      : `no "${LAZADA_TRAFFIC_TAB}" tab in the sheet` };
+  }
+  const want = new Set(months);
+  const byKey = new Map();
+  let head = null;
+  const seen = new Set(), bad = [];
+  for (const r of (res[0] && res[0].values) || []) {
+    if (/^month$/i.test(String(r[0] || "").trim())) { head = r.map(spKey); continue; }
+    if (!head) continue;
+    const o = {}; head.forEach((k, i) => { if (k && !(k in o)) o[k] = r[i]; });
+    const mo = packageMonth(o.month);
+    if (!mo && String(o.month || "").trim() && bad.length < 1) bad.push(String(o.month).trim());
+    if (mo) seen.add(mo);
+    if (!mo || !want.has(mo)) continue;
+    const lv = (k) => { const t = String(o[k] == null ? "" : o[k]).replace(/\u00a0/g, " ").trim(); return t && t !== "-" ? t : null; };
+    const l1 = lv("level1trafficsource"), l2 = lv("level2trafficsource"), l3 = lv("level3trafficsource");
+    if (!l1) continue;
+    byKey.set(`${mo}|${l1}|${l2}|${l3}`, { mo, l1, l2, l3, o }); // a later paste of the same month wins
+  }
+  const rows = [...byKey.values()];
+  if (!rows.length) return { available: false, reason: monthlyEmptyReason(LAZADA_TRAFFIC_TAB, head, months, seen, bad) };
+  const found = [...new Set(rows.map((r) => r.mo))].sort();
+  const METRICS = { visitors: "visitors", pageviews: "pageviews", productVisitors: "productvisitors", cartUnits: "addtocartunits",
+    cartUsers: "addtocartusers", buyers: "buyers", orders: "order", revenue: "revenue" };
+  /** Sum one level's rows by a key; a metric null in every row stays null. */
+  const roll = (list, keyOf) => {
+    const m = new Map();
+    for (const r of list) {
+      const k = keyOf(r);
+      const e = m.get(k) || { name: k, group: r.l1, ...Object.fromEntries(Object.keys(METRICS).map((x) => [x, null])) };
+      for (const [x, col] of Object.entries(METRICS)) {
+        const v = lzNum(r.o[col]);
+        if (v != null) e[x] = (e[x] || 0) + v;
+      }
+      m.set(k, e);
+    }
+    return [...m.values()].map((e) => ({ ...e,
+      conversion: e.buyers != null && e.visitors ? e.buyers / e.visitors : null,
+      cartRate: e.cartUsers != null && e.visitors ? e.cartUsers / e.visitors : null,
+    })).sort((a, b) => (b.visitors || 0) - (a.visitors || 0));
+  };
+  const groups = roll(rows.filter((r) => !r.l2 && !r.l3), (r) => r.l1);
+  const sources = roll(rows.filter((r) => r.l2 && !r.l3), (r) => r.l2);
+  const ads = roll(rows.filter((r) => r.l3 && /on platform/i.test(r.l2 || "")), (r) => r.l3);
+  const allKw = roll(rows.filter((r) => r.l3 && /^search$/i.test(r.l2 || "") && !/^others$/i.test(r.l3)), (r) => r.l3.toLowerCase());
+  const hosp = (k) => (OTHER_HOSPITALS.find(([, re]) => re.test(k)) || [])[0] || null;
+  const kws = allKw.map((k) => ({ ...k, hospital: hosp(k.name) }));
+  const visitors = groups.reduce((a, g) => a + (g.visitors || 0), 0);
+  const lg = groups.find((g) => /lazada guided/i.test(g.name)) || null;
+  return {
+    available: true, months: found, missing: months.filter((m) => !found.includes(m)),
+    visitors, lazadaGuidedShare: lg && visitors ? lg.visitors / visitors : null,
+    groups, sources, ads,
+    keywords: { count: kws.length, withBuyers: kws.filter((k) => k.buyers > 0).length, list: kws.slice(0, 25),
+      demandGaps: kws.filter((k) => !k.hospital && !k.buyers && (k.visitors || 0) >= SHOPEE_SYN.LZ_MIN_VISITORS).slice(0, 12),
+      otherHospitals: kws.filter((k) => k.hospital) },
+  };
+}
+
+app.get("/api/lazada", requireTab("lazada"), async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  try {
+    const out = await withCache(`lazada:${from}:${to}`, req.query.refresh === "1", () => buildLazada(from, to));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "lazada_failed", { error: String(err.message || err) });
+    res.status(err.status || 500).json({ error: err.message || "Lazada report failed" });
   }
 });
 

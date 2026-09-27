@@ -1,5 +1,23 @@
 ### Recent (September 2026)
 
+**v3.343.0 — Lazada tab, first source.** Nav `Report > Channels > Lazada`,
+`/api/lazada`, `requireTab("lazada")`. MW's Lazada sheet
+(`LAZADA_SHEET_ID` = `1_WnGf7NOIDOL9xrF5_JTpIBSobgv7SY-CR-wXjCRL8I`, shared
+with the compute SA). Tab `Traffic Source` = Business Advisor > Traffic >
+Traffic Source > Traffic Source Breakdown > Export (visible only to the
+account with Business Advisor export rights), monthly, column A `Month`
+typed by the team; the export's Date Range line is deleted on paste (MW:
+normalised rows over a self-describing file).
+- Three levels in one table (group / source / search term or Sponsored
+  product); one level summed at a time.
+- "-" = null (Seller Guided has no conversion).
+- Conversion is every-touch: source revenues overlap and are never summed;
+  visitors (last touch) add.
+- Search terms are for the WHOLE shop (Shopee only gives Shop Ads terms);
+  demand gaps (5+ visitors, no buyer) and other hospitals split out, reusing
+  `OTHER_HOSPITALS`.
+Windsor's Lazada connector (catalogue only) stays unused.
+
 **v3.342.0 — Website → Shopee handoff.** The cross-channel campaign join was
 not buildable: GA4 campaigns are coded (`260701-08_bht_tra`) and Shopee's
 campaign descriptions are words (`webpackage2026`) — no shared key. What IS

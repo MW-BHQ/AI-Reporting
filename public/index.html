@@ -2301,6 +2301,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h16l-1.2 11.2a2 2 0 0 1-2 1.8H7.2a2 2 0 0 1-2-1.8L4 8z"/><path d="M8.5 8V6.2a3.5 3.5 0 1 1 7 0V8"/></svg>
         Shopee
       </div>
+      <div class="nav-item sub" data-view="lazada">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></svg>
+        Lazada
+      </div>
       <div class="nav-item sub" data-view="ecomcentre">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V9l5-4 5 4v11"/><path d="M14 20V12h6v8"/><path d="M2 20h20"/></svg>
         Centers
@@ -2515,6 +2519,7 @@ const S = {
   bclub: null, bclubKey: null, bclubLoading: false, bclubError: null,
   line: null, lineKey: null, lineLoading: false, lineError: null,
   shopee: null, shopeeKey: null, shopeeLoading: false, shopeeError: null,
+  lazada: null, lazadaKey: null, lazadaLoading: false, lazadaError: null,
   page: null, pageKey: null, pageLoading: false, pageError: null, pageUrl: '',
   audiencesLoading: false, audiencesError: null,
   me: null, users: null, usersLoading: false, usersError: null,
@@ -3258,6 +3263,7 @@ const TITLES = {
   bclub: ['Better Club', 'Membership revenue, and whether the members we win come back'],
   line: ['LINE OA', 'What we broadcast, who received it, and what it cost us in blocks'],
   shopee: ['Shopee', 'What the storefront sold, and where its visits came from'],
+  lazada: ['Lazada', 'Where the storefront\u2019s visitors came from, inside Lazada and out'],
   ecom: ['E-commerce', 'Package sales across every online sales channel'],
   ecomcentre: ['E-commerce · Centers', 'Which centers sell, and through which channel'],
   ecompackages: ['E-commerce · Packages', 'Every product, grouped by name — promo re-codes count once'],
@@ -3349,6 +3355,17 @@ async function loadBclub(refresh = false) {
   S.bclub = await res.json(); S.bclubKey = key;
   setStatus('ok', S.bclub.cached ? `cached ${S.bclub.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
   return S.bclub;
+}
+
+async function loadLazada(refresh = false) {
+  const key = `${$('from').value}|${$('to').value}`;
+  if (!refresh && S.lazadaKey === key && S.lazada) return S.lazada;
+  setStatus('busy', 'reading Lazada\u2026');
+  const res = await fetch(`/api/lazada?from=${$('from').value}&to=${$('to').value}${refresh?'&refresh=1':''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,220)}`);
+  S.lazada = await res.json(); S.lazadaKey = key;
+  setStatus('ok', S.lazada.cached ? `cached ${S.lazada.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.lazada;
 }
 
 async function loadShopee(refresh = false) {
@@ -3603,6 +3620,7 @@ $('loadBtn').addEventListener('click', async () => {
     else if (S.view === 'bclub') { S.bclubError = null; await loadBclub(true); }
     else if (S.view === 'line') { S.lineError = null; await loadLine(true); }
     else if (S.view === 'shopee') { S.shopeeError = null; await loadShopee(true); }
+    else if (S.view === 'lazada') { S.lazadaError = null; await loadLazada(true); }
     else if (S.view === 'pages') { S.pageError = null; await loadPage(true); }
     else if (S.view === 'users') { S.users = null; await loadUsers(); }
     else if (S.view === 'topics' && S.topicTerm) { await loadTopic(S.topicTerm); }
@@ -3692,6 +3710,7 @@ function render() {
   else if (S.view === 'bclub') renderBclub();
   else if (S.view === 'line') renderLine();
   else if (S.view === 'shopee') renderShopee();
+  else if (S.view === 'lazada') renderLazada();
   else if (S.view === 'report') renderReport();
   else if (S.view === 'pages') renderPages();
   else if (S.view === 'users') renderUsers();
@@ -7426,6 +7445,7 @@ const VIEW_LOADERS = {
   bclub:         { load: () => loadBclub(),         err: 'bclubError',     busy: 'bclubLoading',     what: 'the Better Club sheet' },
   line:          { load: () => loadLine(),          err: 'lineError',      busy: 'lineLoading',      what: 'the LINE sheets' },
   shopee:        { load: () => loadShopee(),        err: 'shopeeError',    busy: 'shopeeLoading',    what: 'the Shopee storefront' },
+  lazada:        { load: () => loadLazada(),        err: 'lazadaError',    busy: 'lazadaLoading',    what: 'the Lazada storefront' },
   ecomroas:      { load: () => loadEcomRoas(),      err: 'ecomroasError',  busy: 'ecomroasLoading',  what: 'marketplace ad performance' },
   users:         { load: () => loadUsers(),         err: 'usersError',     busy: 'usersLoading',     what: 'the access list' },
 };
@@ -8553,6 +8573,65 @@ function renderShopee() {
     <div class="sec-h">From outside Shopee</div>${offsite}${offCampaigns}${placements}${handoff}
     <div class="sec-h">Packages</div>${next}${packages}${bandsCard}${sold}
     <div class="sec-h">Buyers</div>${buyers}`;
+}
+
+/**
+ * LAZADA (v3.343.0) — Business Advisor Traffic Source, monthly. Lazada's own
+ * split of where visitors came from, which Shopee never exports. Source
+ * revenues are every-touch and overlap, so none are added; Seller Guided rows
+ * carry no conversion, so they show dashes.
+ */
+function renderLazada() {
+  const d = S.lazada;
+  if (S.lazadaError) { const m = S.lazadaError; $('viewRoot').innerHTML = errorState(m); S.lazadaError = null; return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('lazada', 'Reads the Lazada Business Advisor sheet.'); return; }
+  if (!d.available) { $('viewRoot').innerHTML = errorState(`Lazada sheet \u2014 ${esc(d.reason || 'unavailable')}`); return; }
+  const pc = (v, dp = 1) => v != null ? num(v * 100, { dp }) + '%' : '\u2014';
+  const nn = (v, money) => v == null ? '\u2014' : money ? num(v, { money: true, bare: true }) : num(v);
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const lMon = (m) => { const [y, mo] = String(m).split('.'); return `${MON[+mo - 1]} ${y}`; };
+  const span = d.months.length === 1 ? lMon(d.months[0]) : `${lMon(d.months[0])} \u2013 ${lMon(d.months[d.months.length-1])}`;
+  const miss = d.missing.length ? ` <span class="pill">${num(d.missing.length)} month${d.missing.length>1?'s':''} not in the sheet</span>` : '';
+  const lg = d.groups.find(g => /lazada/i.test(g.name)) || {}, sg = d.groups.find(g => /seller/i.test(g.name)) || {};
+  const top = Math.max(1, ...d.sources.map(x => x.visitors || 0));
+  const row = (x, bar) => `<tr><td>${esc(x.name)}${bar ? ` <span class="muted">\u00b7 ${/lazada/i.test(x.group)?'Lazada':'you'}</span>` : ''}</td>
+    <td class="num">${nn(x.visitors)}</td><td class="num">${nn(x.cartUsers)}</td><td class="num">${nn(x.buyers)}</td>
+    <td class="num">${pc(x.conversion, 2)}</td><td class="num">${nn(x.revenue, true)}</td>
+    ${bar ? `<td style="width:22%;"><div style="background:var(--line);border-radius:3px;height:8px;"><div style="background:#1A73E8;height:8px;border-radius:3px;width:${Math.max(0.5,(x.visitors||0)/top*100).toFixed(1)}%;"></div></div></td>` : ''}</tr>`;
+  const head6 = (first, bar) => `<thead><tr><th>${first}</th><th class="num">Visitors</th><th class="num">Added to cart</th><th class="num">Buyers</th>
+    <th class="num">Conversion</th><th class="num">Revenue (THB)</th>${bar?'<th></th>':''}</tr></thead>`;
+  const kw = d.keywords;
+  const box = (title, meaning, rows, fig, tone) => `<div class="syn-box"><div class="syn-t ${tone}">${title} <span class="muted">\u00b7 ${num(rows.length)}</span></div>
+    <div class="note" style="margin:2px 0 8px;">${meaning}</div>${rows.length ? rows.slice(0, 8).map(x => `<div class="syn-r"><span class="trunc" data-tip="${esc(x.name)}">${esc(x.name)}</span><span class="num">${fig(x)}</span></div>`).join('') : '<div class="note">none</div>'}</div>`;
+  $('viewRoot').innerHTML = `
+    <div class="search"><div>
+      <div class="big">Lazada <span class="pill">BangkokHospital</span></div>
+      <div class="hint">One storefront, from Lazada Business Advisor. ${esc(span)}.${miss}</div>
+    </div></div>
+    <div class="sec-h">Traffic</div>
+    <div class="grid g-4">
+      <div class="stat card"><div class="lab">Visitors</div><div class="val">${num(d.visitors)}</div>
+        <div class="sub">${d.months.length>1?'unique per month, months summed':'unique visitors in the month'}</div></div>
+      <div class="stat card"><div class="lab">Found by Lazada</div><div class="val">${pc(d.lazadaGuidedShare,0)}</div>
+        <div class="sub">${nn(lg.visitors)} visitors \u2014 search, banners, cart, campaigns</div></div>
+      <div class="stat card"><div class="lab">Brought by you</div><div class="val">${pc(d.visitors ? (sg.visitors||0)/d.visitors : null,0)}</div>
+        <div class="sub">${nn(sg.visitors)} visitors \u2014 your ads, store, outside links</div></div>
+      <div class="stat card"><div class="lab">Revenue \u00b7 Lazada-found</div><div class="val">${nn(lg.revenue, true)}</div>
+        <div class="sub">${nn(lg.buyers)} buyers \u00b7 ${pc(lg.conversion,2)} conversion</div></div>
+    </div>
+    <div class="card mt"><div class="card-title">Where visitors came from <span class="muted">\u00b7 revenue overlaps across sources</span></div>
+      <table class="roomy">${head6('Source', true)}<tbody>${d.sources.map(x => row(x, true)).join('')}</tbody></table></div>
+    ${d.ads.length ? `<div class="sec-h">Your ads on Lazada</div>
+    <div class="card"><div class="card-title">Sponsored Solutions traffic</div>
+      <table class="roomy">${head6('Product', false)}<tbody>${d.ads.map(x => row(x, false)).join('')}</tbody></table></div>` : ''}
+    <div class="sec-h">Search</div>
+    <div class="card"><div class="card-title">What shoppers searched &middot; whole shop</div>
+      <div class="note" style="margin-top:0;">${num(kw.count)} search terms brought a visitor; ${num(kw.withBuyers)} brought a buyer. Top ${num(kw.list.length)} by visitors.</div>
+      <table class="roomy mt">${head6('Search term', false)}<tbody>${kw.list.map(x => row({ ...x, group: 'Lazada' }, false)).join('')}</tbody></table>
+      <div class="grid g-2 mt" style="gap:12px;">
+        ${box('Searched, visited, no buyer', 'Demand the listings are not meeting \u2014 a missing or weak package', kw.demandGaps, x => `${num(x.visitors)} visitors`, 'bad')}
+        ${box("Other hospitals' names", 'People searching for another hospital found this shop', kw.otherHospitals.map(x => ({ ...x, name: `${x.name} (${x.hospital})` })), x => `${num(x.visitors)} visitors \u00b7 ${nn(x.buyers)} buyers`, '')}
+      </div></div>`;
 }
 
 function renderLine() {
@@ -12123,7 +12202,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.342.0';
+const CLIENT_BUILD = '3.343.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

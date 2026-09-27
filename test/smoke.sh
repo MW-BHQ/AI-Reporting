@@ -378,6 +378,23 @@ expect_field "ho untagged"        "$SHOP" "(r=>r.clicks===30&&r.visits===null&&r
 expect_field "sc no windsor"      "$SHOP" "d.settlement===undefined&&d.catalogue===undefined?'ok':undefined"
 expect_field "sc last day"        "$SHOP" "d.lastDay==='2026-07-02'?'ok':undefined"
 
+echo "--- Lazada tab (v3.343.0) ---"
+LZ="/api/lazada?from=$FROM&to=$TO"
+check "lazada tab" GET "$LZ"
+# ONE LEVEL AT A TIME: level-1 visitors 700 + 500. Summing every row: 3,000+.
+expect_field "lz visitors"        "$LZ" "d.visitors===1200?1200:undefined"
+expect_field "lz guided share"    "$LZ" "d.lazadaGuidedShare===700/1200?'ok':undefined"
+# "-" IS NOT ZERO: Seller Guided buyers and revenue stay null.
+expect_field "lz dash not zero"   "$LZ" "(g=>g.buyers===null&&g.revenue===null&&g.visitors===500)(d.groups.find(g=>/Seller/.test(g.name)))?'ok':undefined"
+# LATER PASTE WINS: Search 300, not 999 or 1,299.
+expect_field "lz later paste"     "$LZ" "d.sources.find(x=>x.name==='Search').visitors===300?'ok':undefined"
+expect_field "lz nbsp source"     "$LZ" "d.sources.some(x=>x.name==='Add more page')?'ok':undefined"
+# EVERY-TOUCH: sources carry their own revenue; nothing sums them.
+expect_field "lz revenue kept"    "$LZ" "d.sources.find(x=>x.name==='Search').revenue===60000&&d.groups.find(g=>/Lazada/.test(g.name)).revenue===100000?'ok':undefined"
+expect_field "lz ads level 3"     "$LZ" "d.ads.map(a=>a.name).join()==='Sponsored Discovery,Sponsored Max'?'ok':undefined"
+expect_field "lz keywords"        "$LZ" "d.keywords.list.every(k=>k.name!=='others')&&d.keywords.demandGaps.map(k=>k.name).join()==='hpv'&&d.keywords.otherHospitals[0].hospital==='BNH'?'ok':undefined"
+expect_field "lz part month"      "/api/lazada?from=2026-07-01&to=2026-07-15" "d.available===false&&/whole months/.test(d.reason)?'ok':undefined"
+
 echo "--- LINE tab (v3.309.0) ---"
 LINE="/api/line?from=$FROM&to=$TO"
 check "line tab" GET "$LINE"

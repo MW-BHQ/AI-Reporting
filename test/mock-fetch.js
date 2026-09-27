@@ -1094,6 +1094,47 @@ global.fetch = async (url, opts = {}) => {
    *     Left in carts is 25,000 - 17,000 = 8,000 from totals; summing
    *     per-channel shortfalls clamped at zero gives 9,000.
    */
+  /**
+   * LAZADA SHEET (v3.343.0): `Traffic Source`, the Business Advisor export
+   * with a hand-typed Month. Traps:
+   *   - three levels in one table; only one level is summed at a time
+   *     (summing every row triples the visitors);
+   *   - Seller Guided buyers/revenue are "-" — null, never 0;
+   *   - Search 60,000 + Cart 50,000 > Lazada Guided 100,000: every-touch
+   *     attribution, so source revenues are never added;
+   *   - July Search pasted twice; the later paste (300 visitors) wins;
+   *   - June outside a July window; "OTHERS" is not a search term;
+   *   - "Add\u00a0more\u00a0page" with non-breaking spaces, as exported.
+   */
+  if (u.includes("1_WnGf7NOID")) {
+    if (process.env.MOCK_FAIL_CONNECTOR === "lazada-sheet") return jsonRes({ error: { code: 403 } }, 403);
+    const H = ["Month", "Level 1 - Traffic Source", "Level 2 - Traffic Source", "Level 3 - Traffic Source", "Visitors",
+      "Visitors Change vs  2025-07-01~2025-07-31", "Pageviews", "Pageviews Change vs  2025-07-01~2025-07-31", "Pageview Share",
+      "Pageview Share Change vs  2025-07-01~2025-07-31", "Product Visitors", "Product Visitors Change vs 2025-07-01~2025-07-31",
+      "Product Pageviews", "Product Pageviews Change vs 2025-07-01~2025-07-31", "Add to Cart Units", "Add to Cart Units Change vs  2025-07-01~2025-07-31",
+      "Add to Cart Users", "Add to Cart Users Change vs  2025-07-01~2025-07-31", "Add To Cart Conversion Rate", "x", "Wishlists", "x",
+      "Wishlist Users", "x", "Buyers", "Buyer Change vs  2025-07-01~2025-07-31", "Conversion Rate", "x", "Order", "x", "Revenue", "x",
+      "Revenue Per Buyer", "x", "Visitor Value", "x"];
+    const r = (mo, l1, l2, l3, v, cartU, buyers, orders, rev) => [mo, l1, l2, l3, String(v), "1%", String(v * 2), "1%", "1%", "1%",
+      String(v), "1%", String(v), "1%", String(cartU), "1%", String(cartU), "1%", "1%", "1%", "0", "1%", "0", "1%",
+      buyers, "1%", "1%", "1%", orders, "1%", rev, "1%", "1", "1%", "1", "1%"];
+    const LG = "Lazada Guided Traffic", SG = "Seller Guided Traffic";
+    return jsonRes({ spreadsheetId: "mock-lazada", valueRanges: [{ values: [H,
+      r("2026-06", LG, "-", "-", 9999, 9, "9", "9", "999,999"),
+      r("2026-07", LG, "Search", "-", 999, 9, "9", "9", "9"),
+      r("2026-07", LG, "-", "-", 700, 30, "7", "8", "100,000"),
+      r("2026-07", LG, "Search", "-", 300, 20, "5", "5", "60,000"),
+      r("2026-07", LG, "Cart", "-", 100, 10, "3", "3", "50,000"),
+      r("2026-07", LG, "Add\u00a0more\u00a0page", "-", 10, 0, "0", "0", "0.00"),
+      r("2026-07", SG, "-", "-", 500, 15, "-", "-", "-"),
+      r("2026-07", SG, "On Platform Seller Guided", "-", 400, 10, "-", "-", "-"),
+      r("2026-07", SG, "On Platform Seller Guided", "Sponsored Discovery", 300, 8, "-", "-", "-"),
+      r("2026-07", SG, "On Platform Seller Guided", "Sponsored Max", 100, 2, "-", "-", "-"),
+      r("2026-07", LG, "Search", "bangkok hospital", 20, 4, "2", "2", "30,000"),
+      r("2026-07", LG, "Search", "hpv", 8, 0, "0", "0", "0.00"),
+      r("2026-07", LG, "Search", "bnh hospital", 6, 0, "0", "0", "0.00"),
+      r("2026-07", LG, "Search", "OTHERS", 50, 0, "0", "0", "0.00")] }] });
+  }
   if (u.includes("17T21LhWM")) {
     if (process.env.MOCK_FAIL_CONNECTOR === "shopee-sheet") return jsonRes({ error: { code: 403 } }, 403);
     /**
