@@ -8661,6 +8661,53 @@ async function buildPackages(from, to, scope) {
   };
 }
 
+/**
+ * MARKETPLACES SIDE BY SIDE (v3.347.0) — the E-commerce Overview's view of
+ * the two storefronts, each from its OWN reports (Shopee Seller Centre /
+ * Brand Portal sheet, Lazada Business Advisor sheet), reusing the tabs'
+ * cached builds. Every figure is its platform's own definition; a row is
+ * shown side by side, never summed across platforms. The Orders sheet's
+ * channel revenue is set against each so the gap is visible, not argued.
+ */
+/** ONE cache entry per storefront build, shared by its tab and the Overview. */
+const cachedShopee = (from, to, refresh) => withCache(`shopee:${from}:${to}`, refresh, () => buildShopee(from, to));
+const cachedLazada = (from, to, refresh) => withCache(`lazada:${from}:${to}`, refresh, () => buildLazada(from, to));
+function marketplaceSummary(name, x) {
+  if (!x || !x.available) return { available: false, reason: (x && x.reason) || "unavailable" };
+  if (name === "Shopee") {
+    const f = x.funnel || {}, a = x.ads || {}, sa = x.shopeeAds || {}, op = x.offPlatform || {};
+    const mom = x.compare && x.compare.mom, yoy = x.compare && x.compare.yoy;
+    return { available: true, revenue: f.sales, orders: f.orders, aov: x.aov, conversion: f.conversion, visitors: f.visits,
+      newShare: x.buyers && x.buyers.available ? x.buyers.newShare : null,
+      metaSpend: a.spend, platformSpend: sa.available ? sa.spend : null,
+      adsRoas: a.salesPerAllBaht, adsRoasParts: a.spendParts || [],
+      outsideShare: op.available && f.sales ? op.sales / f.sales : null,
+      revenueMom: mom ? mom.sales : null, revenueYoy: yoy ? yoy.sales : null, lastDay: x.lastDay || null };
+  }
+  const sl = x.sales || {}, mt = x.meta || {}, ex = x.external || {}, tr = x.traffic || {};
+  const mom = x.compare && x.compare.mom, yoy = x.compare && x.compare.yoy;
+  return { available: !!sl.available, reason: sl.available ? null : sl.reason, revenue: sl.revenue, orders: sl.orders, aov: sl.aov,
+    conversion: sl.conversion, visitors: sl.visitors, newShare: sl.newShare != null ? sl.newShare : null,
+    metaSpend: mt.spend, platformSpend: null,
+    // Lazada platform ad spend is unmeasured (Sponsored Media empty), so
+    // this is Meta only and says so.
+    adsRoas: mt.revenuePerBaht, adsRoasParts: mt.spend != null ? ["Meta"] : [],
+    outsideShare: ex.available && ex.revenue != null && sl.revenue ? ex.revenue / sl.revenue : null,
+    foundByPlatform: tr.available ? tr.lazadaGuidedShare : null,
+    revenueMom: mom ? mom.revenue : null, revenueYoy: yoy ? yoy.revenue : null,
+    coverage: sl.available ? { days: sl.days, windowDays: sl.windowDays } : null };
+}
+app.get("/api/ecommerce/marketplaces", requireTab("ecom"), async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  const refresh = req.query.refresh === "1";
+  const [sh, lz] = await Promise.all([
+    cachedShopee(from, to, refresh).then((o) => o.value).catch((e) => ({ available: false, reason: String(e.message || e) })),
+    cachedLazada(from, to, refresh).then((o) => o.value).catch((e) => ({ available: false, reason: String(e.message || e) })),
+  ]);
+  res.json({ shopee: marketplaceSummary("Shopee", sh), lazada: marketplaceSummary("Lazada", lz) });
+});
+
 app.get("/api/ecommerce/packages", requireTab("ecompackages"), async (req, res) => {
   const { from, to } = req.query;
   if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
@@ -11986,7 +12033,7 @@ app.get("/api/shopee", requireTab("shopee"), async (req, res) => {
   const { from, to } = req.query;
   if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
   try {
-    const out = await withCache(`shopee:${from}:${to}`, req.query.refresh === "1", () => buildShopee(from, to));
+    const out = await cachedShopee(from, to, req.query.refresh === "1");
     res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
   } catch (err) {
     logJson("ERROR", "shopee_failed", { error: String(err.message || err) });
@@ -12369,7 +12416,7 @@ app.get("/api/lazada", requireTab("lazada"), async (req, res) => {
   const { from, to } = req.query;
   if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
   try {
-    const out = await withCache(`lazada:${from}:${to}`, req.query.refresh === "1", () => buildLazada(from, to));
+    const out = await cachedLazada(from, to, req.query.refresh === "1");
     res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
   } catch (err) {
     logJson("ERROR", "lazada_failed", { error: String(err.message || err) });

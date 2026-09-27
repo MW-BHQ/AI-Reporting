@@ -149,6 +149,12 @@ sign rather than a judgement. `thresholds:units` checks the scale, because the
 block mixes fractions (`bounceRate: 0.70`) with already-scaled values
 (`spendUnmatched: 10`) and writing one as the other turns every row red at once.
 
+### Campaigns across marketplaces (MW, next)
+
+New tab: one row per campaign code, aggregating every source that carries it
+(Shopee off-platform, Lazada External Traffic, GA4 once Shopee/Lazada links
+carry the War Room code). Replaces the Lazada tab's "both marketplaces" card.
+
 ### Shopee and LINE as first-class sources (MW, "one day")
 
 **v3.321.0:** Shopee funnel, traffic and off-platform attribution now read from

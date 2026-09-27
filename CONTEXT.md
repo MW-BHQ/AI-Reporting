@@ -1,5 +1,20 @@
 ### Recent (September 2026)
 
+**v3.347.0 — E-commerce Overview: marketplaces side by side.** New card at
+the top of the Overview, from `/api/ecommerce/marketplaces` (reuses the
+Shopee and Lazada tabs' cached builds; fetched after the Orders sheet and
+never fatal). One column per storefront, each figure its platform's own:
+revenue with MoM/YoY, orders, AOV, conversion, visitors, new buyers, share
+credited to outside links, Meta and platform ad spend (Lazada platform
+spend "not measured"), revenue per ad baht with its parts named, and the
+Orders sheet's revenue for that channel with the gap % vs the storefront
+report. Nothing is summed across platforms.
+Instructions: `Lazada_Instructions.csv` / `Shopee_Instructions.csv` handed
+to MW for the sheets' Instructions tabs (export path, sheet, grain, paste
+rule, Month column).
+NEXT (MW): a "Campaigns across marketplaces" tab joining every source by
+campaign code — replaces the card on the Lazada tab.
+
 **v3.346.0 — Lazada External Traffic; one campaign, both marketplaces.**
 Sponsored Solutions > Report > Data Insights > External Traffic > Export:
 three daily sheets as tabs `External Daily` (visits), `External Links`

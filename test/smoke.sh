@@ -418,6 +418,14 @@ expect_field "lzp revenue"        "$LZ" "d.products.revenue===250000&&d.products
 expect_field "lzp share"          "$LZ" "d.products.shareOfRevenue===250000/320000?'ok':undefined"
 expect_field "lzp leaks"          "$LZ" "d.products.leaks.notCarted.map(x=>x.id).join()==='555'&&d.products.leaks.notBought[0].id==='666'?'ok':undefined"
 
+echo "--- E-commerce marketplaces (v3.347.0) ---"
+MK="/api/ecommerce/marketplaces?from=$FROM&to=$TO"
+check "ecom marketplaces" GET "$MK"
+expect_field "mk shopee"          "$MK" "d.shopee.revenue===32000&&d.shopee.platformSpend===1700&&d.shopee.metaSpend===10?'ok':undefined"
+# Lazada platform ad spend is unmeasured: null, never 0; its ROAS says Meta only.
+expect_field "mk lazada"          "$MK" "d.lazada.revenue===320000&&d.lazada.platformSpend===null&&d.lazada.adsRoasParts.join()==='Meta'?'ok':undefined"
+expect_field "mk lazada outside"  "$MK" "d.lazada.outsideShare===5000/320000?'ok':undefined"
+
 echo "--- LINE tab (v3.309.0) ---"
 LINE="/api/line?from=$FROM&to=$TO"
 check "line tab" GET "$LINE"

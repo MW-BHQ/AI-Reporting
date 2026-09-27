@@ -3472,6 +3472,14 @@ async function loadEcom(refresh = false) {
   } finally { clearTimeout(timer); }
   if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,220)}`);
   S.ecom = await res.json(); S.ecomKey = key;
+  /**
+   * MARKETPLACES (v3.347.0): the two storefronts' own reports, fetched after
+   * the Orders sheet and never fatal — the Overview renders without them.
+   */
+  try {
+    const mr = await fetch(`/api/ecommerce/marketplaces?from=${$('from').value}&to=${$('to').value}${refresh?'&refresh=1':''}`);
+    S.ecom.marketplaces = mr.ok ? await mr.json() : null;
+  } catch { S.ecom.marketplaces = null; }
   setStatus('ok', S.ecom.cached ? `cached ${S.ecom.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
   return S.ecom;
 }
@@ -10447,6 +10455,46 @@ function renderEcomCentres() {
 
 }
 
+/**
+ * MARKETPLACES SIDE BY SIDE (v3.347.0). One column per storefront, each
+ * figure from that platform's own reports and definitions. Nothing is added
+ * across the two. The last row sets each against what the Orders sheet
+ * records for that channel, so the two revenue answers are shown with the
+ * gap between them rather than left to disagree in different rooms.
+ */
+function ecomMarketplaces(d) {
+  const M = d.marketplaces;
+  if (!M) return '';
+  const pc = (v, dp = 1) => v != null ? num(v * 100, { dp }) + '%' : '\u2014';
+  // Money cells sit in rows whose labels say (THB).
+  const nn = (v, money) => v == null ? '\u2014' : money ? num(v, { money: true, bare: true }) : num(v);
+  const sides = [['Shopee', M.shopee], ['Lazada', M.lazada]];
+  const chip = (v) => v == null ? '<span class="dlt none">\u2014</span>'
+    : `<span class="dlt ${v>0.005?'up':(v<-0.005?'down':'flat')}">${changeText(v, Math.abs(v)>=1?0:1)}</span>`;
+  const ordersRev = (nm) => { const c = (d.channels || []).find(x => new RegExp(nm, 'i').test(x.channel)); return c ? c.revenue : null; };
+  const cell = (x, f) => x && x.available ? f(x) : `<span class="muted" data-tip="${esc((x && x.reason) || 'unavailable')}">\u2014</span>`;
+  const rows = [
+    ['Revenue (THB) \u00b7 storefront report', x => `<b>${nn(x.revenue, true)}</b> ${chip(x.revenueMom)} <span class="muted">MoM</span> ${chip(x.revenueYoy)} <span class="muted">YoY</span>`],
+    ['Orders', x => nn(x.orders)],
+    ['Average order (THB)', x => nn(x.aov, true)],
+    ['Conversion', x => pc(x.conversion, 2)],
+    ['Visitors', x => nn(x.visitors)],
+    ['New buyers', x => pc(x.newShare, 0)],
+    ['Credited to outside links', x => pc(x.outsideShare, 0)],
+    ['Meta ad spend (THB)', x => nn(x.metaSpend, true)],
+    ['Platform ad spend (THB)', x => x.platformSpend != null ? nn(x.platformSpend, true) : '<span class="muted">\u2014 not measured</span>'],
+    ['Revenue per ad baht', x => x.adsRoas != null ? `${num(x.adsRoas, { dp: 1 })}\u00d7 <span class="muted">${esc(x.adsRoasParts.join(' + '))}</span>` : '\u2014'],
+    ['Orders sheet revenue (THB)', (x, nm) => { const o = ordersRev(nm); return o == null ? '\u2014'
+      : `${nn(o, true)}${x.revenue ? ` <span class="muted">\u00b7 ${pc(o / x.revenue - 1, 0)} vs storefront</span>` : ''}`; }],
+  ];
+  return `<div class="card" style="margin-bottom:14px;">
+    <div class="card-title">Marketplaces side by side <span class="muted">\u00b7 each platform's own reports</span></div>
+    <table class="roomy"><thead><tr><th style="width:32%;"></th>${sides.map(([nm]) => `<th class="num"><i class="swatch" style="background:${channelColour(nm)}"></i>${nm}</th>`).join('')}</tr></thead><tbody>
+      ${rows.map(([lab, f]) => `<tr><td>${lab}</td>${sides.map(([nm, x]) => `<td class="num">${cell(x, y => f(y, nm))}</td>`).join('')}</tr>`).join('')}
+    </tbody></table>
+  </div>`;
+}
+
 function renderEcom() {
   const d = S.ecom;
   if (S.ecomError) { const m = S.ecomError; $('viewRoot').innerHTML = errorState(m); S.ecomError = null; return; }
@@ -10493,6 +10541,8 @@ function renderEcom() {
       <div class="stat"><div class="lab">Average order</div><div class="val">฿${num(Math.round(t.aov))}</div>
         <div class="sub2">${t.couponsPerOrder.toFixed(2)} coupons per order</div></div>
     </div>
+
+    ${ecomMarketplaces(d)}
 
     <div class="card">
       <div class="card-title">Daily revenue by channel</div>
@@ -12343,7 +12393,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.346.0';
+const CLIENT_BUILD = '3.347.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
