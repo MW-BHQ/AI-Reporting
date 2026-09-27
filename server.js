@@ -956,6 +956,7 @@ const TABS = [
   { id: "shopee",    label: "Shopee" },
   { id: "lazada",    label: "Lazada" },
   { id: "ecom",      label: "E-commerce" },
+  { id: "ecomcampaigns", label: "E-commerce campaigns" },
   { id: "ecomcentre",label: "E-commerce · Centres" },
   { id: "ecompackages", label: "E-commerce · Packages" },
   { id: "ecomchannels", label: "E-commerce · Channels" },
@@ -8708,6 +8709,113 @@ app.get("/api/ecommerce/marketplaces", requireTab("ecom"), async (req, res) => {
   res.json({ shopee: marketplaceSummary("Shopee", sh), lazada: marketplaceSummary("Lazada", lz) });
 });
 
+/**
+ * CAMPAIGNS ACROSS MARKETPLACES (v3.348.0) — one row per campaign CODE,
+ * gathering every source that carries it. MW's team tags a campaign with the
+ * same code on Shopee and Lazada links (`webpackage2025`, `getscreened25`).
+ *
+ *   Shopee    off-platform traffic credit (visits, add to cart, orders, sales)
+ *   Lazada    External Traffic credit (product views, orders, revenue)
+ *   Website   GA4 clicks on bangkokhospital.com links to either shop whose
+ *             URL carries utm_campaign = the code (B+, host re-checked)
+ *   Meta      spend on Shopee/Lazada-named ad accounts in campaigns whose NAME
+ *             contains the code (the longest matching code wins)
+ *
+ * CREDITED SALES ARE ADDED ACROSS THE TWO SHOPS — they are different orders
+ * on different platforms, so the sum double-counts nothing — and labelled as
+ * credited. Meta spend is shown beside it, never allocated.
+ */
+async function buildMarketplaceCampaigns(from, to, refresh) {
+  const [sh, lz, metaRows, clicks] = await Promise.all([
+    cachedShopee(from, to, refresh).then((o) => o.value).catch(() => null),
+    cachedLazada(from, to, refresh).then((o) => o.value).catch(() => null),
+    windsor("facebook", ["account_name", "campaign", "spend", "catalog_segment_value_purchase"], from, to).catch(() => null),
+    ga4RunReport({ dimensions: ["linkUrl"], metrics: ["eventCount"], from, to,
+      dimensionFilter: { andGroup: { expressions: [
+        { filter: { fieldName: "eventName", stringFilter: { matchType: "EXACT", value: "click" } } },
+        { orGroup: { expressions: [
+          { filter: { fieldName: "linkUrl", stringFilter: { matchType: "CONTAINS", value: "shopee", caseSensitive: false } } },
+          { filter: { fieldName: "linkUrl", stringFilter: { matchType: "CONTAINS", value: "lazada", caseSensitive: false } } },
+        ] } },
+      ] } } }).catch(() => null),
+  ]);
+  const key = (x) => String(x || "").replace(/\s+/g, " ").trim().toLowerCase();
+  const rows = new Map();
+  const get = (code, label) => {
+    const k = key(code);
+    if (!k || k === "(not set)") return null;
+    if (!rows.has(k)) rows.set(k, { code: String(label || code).trim(), shopee: null, lazada: null, web: null, meta: null, packages: new Map() });
+    return rows.get(k);
+  };
+  const shOp = sh && sh.available && sh.offPlatform && sh.offPlatform.available ? sh.offPlatform : null;
+  for (const c of (shOp ? shOp.allCampaigns : [])) {
+    const r = get(c.campaign); if (!r) continue;
+    r.shopee = { visits: c.visits, cartValue: c.cartValue, orders: c.orders, sales: c.sales, channels: c.channels };
+  }
+  const lzEx = lz && lz.available && lz.external && lz.external.available ? lz.external : null;
+  for (const c of (lzEx ? lzEx.campaigns : [])) {
+    const r = get(c.campaign); if (!r) continue;
+    r.lazada = { views: c.views, orders: c.orders, revenue: c.revenue, channels: c.channels };
+  }
+  // Packages each campaign sold, both shops, from their package × campaign shares.
+  const addPk = (list, platform, salesKey) => { for (const p of list || []) for (const c of p.campaigns || []) {
+    const r = rows.get(key(c.campaign)); if (!r || c.share == null) continue;
+    const v = c.share * (p[salesKey] || 0);
+    const e = r.packages.get(p.name) || { name: p.name, shopee: 0, lazada: 0 };
+    e[platform] += v; r.packages.set(p.name, e);
+  } };
+  addPk(sh && sh.products && sh.products.available ? sh.products.top : [], "shopee", "sales");
+  addPk(lzEx ? lzEx.packages : [], "lazada", "revenue");
+  // Website clicks, by the link's own utm_campaign.
+  const hostOf = (u) => { try { const h = new URL(u).hostname; return /(^|\.)(shopee\.co\.th|shopee\.com|shp\.ee)$/i.test(h) ? "shopee"
+    : /(^|\.)lazada\.co\.th$|(^|\.)s\.lazada\.co\.th$/i.test(h) ? "lazada" : null; } catch { return null; } };
+  for (const c of clicks || []) {
+    const u = String(c.linkUrl || ""), host = hostOf(u); if (!host) continue;
+    let camp = null; try { camp = new URL(u).searchParams.get("utm_campaign"); } catch {}
+    const r = camp ? rows.get(key(camp)) : null; if (!r) continue;
+    r.web = r.web || { shopee: 0, lazada: 0 };
+    r.web[host] += n(c.eventCount);
+  }
+  // Meta: marketplace-named accounts, campaign names containing a code.
+  const codes = [...rows.keys()].sort((a, b) => b.length - a.length);
+  const mk = (metaRows || []).filter((m) => /shopee|lazada/i.test(String(m.account_name || "")));
+  for (const m of mk) {
+    const nm = key(m.campaign); const code = codes.find((c) => nm.includes(c)); if (!code) continue;
+    const r = rows.get(code);
+    r.meta = r.meta || { spend: 0, cpasValue: 0, campaigns: new Set() };
+    r.meta.spend += n(m.spend); r.meta.cpasValue += n(m.catalog_segment_value_purchase); r.meta.campaigns.add(m.campaign);
+  }
+  const list = [...rows.values()].map((r) => {
+    const credited = (r.shopee ? r.shopee.sales : 0) + (r.lazada ? r.lazada.revenue : 0);
+    const orders = (r.shopee ? r.shopee.orders : 0) + (r.lazada ? r.lazada.orders : 0);
+    return { code: r.code, shopee: r.shopee, lazada: r.lazada, web: r.web,
+      meta: r.meta ? { spend: r.meta.spend, cpasValue: r.meta.cpasValue, campaigns: r.meta.campaigns.size } : null,
+      credited, orders, onBoth: !!(r.shopee && r.lazada),
+      perMetaBaht: r.meta && r.meta.spend ? credited / r.meta.spend : null,
+      packages: [...r.packages.values()].map((p) => ({ ...p, total: p.shopee + p.lazada })).sort((a, b) => b.total - a.total).slice(0, 3) };
+  }).sort((a, b) => b.credited - a.credited || (b.shopee ? b.shopee.visits : 0) - (a.shopee ? a.shopee.visits : 0));
+  return {
+    available: list.length > 0,
+    reason: list.length ? null : "no campaign codes in either shop's outside-traffic data for this range",
+    sources: { shopee: !!shOp, lazada: !!lzEx, website: clicks !== null, meta: metaRows !== null },
+    totals: { campaigns: list.length, onBoth: list.filter((r) => r.onBoth).length,
+      credited: list.reduce((a, r) => a + r.credited, 0), metaSpend: list.reduce((a, r) => a + (r.meta ? r.meta.spend : 0), 0) },
+    list,
+  };
+}
+app.get("/api/ecommerce/campaigns", requireTab("ecomcampaigns"), async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  try {
+    const refresh = req.query.refresh === "1";
+    const out = await withCache(`ecomcampaigns:${from}:${to}`, refresh, () => buildMarketplaceCampaigns(from, to, refresh));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "ecom_campaigns_failed", { error: String(err.message || err) });
+    res.status(500).json({ error: err.message || "Campaigns failed" });
+  }
+});
+
 app.get("/api/ecommerce/packages", requireTab("ecompackages"), async (req, res) => {
   const { from, to } = req.query;
   if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
@@ -11649,7 +11757,8 @@ async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
       campaigns: [...camp.values()].map((g) => ({ ...g, channels: [...g.channels] }))
         .sort((a, b) => b.sales - a.sales || b.visits - a.visits).slice(0, 15),
       // Every campaign, for the Lazada tab's cross-marketplace join.
-      allCampaigns: [...camp.values()].map((g) => ({ campaign: g.campaign, visits: g.visits, orders: g.orders, sales: g.sales })),
+      allCampaigns: [...camp.values()].map((g) => ({ campaign: g.campaign, visits: g.visits, orders: g.orders, sales: g.sales,
+        cartValue: g.cartValue, channels: [...g.channels] })),
       websiteByContent: [...web.values()],
       placements: [...place.values()].map((g) => ({ ...g, channels: [...g.channels], conversion: div(g.orders, g.visits) }))
         .sort((a, b) => b.sales - a.sales || b.visits - a.visits).slice(0, 15),

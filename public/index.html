@@ -2289,6 +2289,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h2l2.2 10.2a2 2 0 002 1.6h7.1a2 2 0 002-1.55L21 8H7"/><circle cx="10.5" cy="20" r="1.2"/><circle cx="18" cy="20" r="1.2"/></svg>
         Overview
       </div>
+      <div class="nav-item sub" data-view="ecomcampaigns">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12h4l3-7 4 14 3-7h2"/></svg>
+        Campaigns across shops
+      </div>
       <div class="nav-item sub" data-view="ecommonthly">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
         Report
@@ -2520,6 +2524,7 @@ const S = {
   line: null, lineKey: null, lineLoading: false, lineError: null,
   shopee: null, shopeeKey: null, shopeeLoading: false, shopeeError: null,
   lazada: null, lazadaKey: null, lazadaLoading: false, lazadaError: null,
+  ecomcampaigns: null, ecomcampaignsKey: null, ecomcampaignsLoading: false, ecomcampaignsError: null,
   page: null, pageKey: null, pageLoading: false, pageError: null, pageUrl: '',
   audiencesLoading: false, audiencesError: null,
   me: null, users: null, usersLoading: false, usersError: null,
@@ -3264,6 +3269,7 @@ const TITLES = {
   line: ['LINE OA', 'What we broadcast, who received it, and what it cost us in blocks'],
   shopee: ['Shopee', 'What the storefront sold, and where its visits came from'],
   lazada: ['Lazada', 'Where the storefront\u2019s visitors came from, inside Lazada and out'],
+  ecomcampaigns: ['Campaigns across shops', 'One campaign code, every source that carries it \u2014 Shopee, Lazada, website, Meta'],
   ecom: ['E-commerce', 'Package sales across every online sales channel'],
   ecomcentre: ['E-commerce · Centers', 'Which centers sell, and through which channel'],
   ecompackages: ['E-commerce · Packages', 'Every product, grouped by name — promo re-codes count once'],
@@ -3355,6 +3361,17 @@ async function loadBclub(refresh = false) {
   S.bclub = await res.json(); S.bclubKey = key;
   setStatus('ok', S.bclub.cached ? `cached ${S.bclub.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
   return S.bclub;
+}
+
+async function loadEcomCampaigns(refresh = false) {
+  const key = `${$('from').value}|${$('to').value}`;
+  if (!refresh && S.ecomcampaignsKey === key && S.ecomcampaigns) return S.ecomcampaigns;
+  setStatus('busy', 'joining campaign codes\u2026');
+  const res = await fetch(`/api/ecommerce/campaigns?from=${$('from').value}&to=${$('to').value}${refresh?'&refresh=1':''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,220)}`);
+  S.ecomcampaigns = await res.json(); S.ecomcampaignsKey = key;
+  setStatus('ok', S.ecomcampaigns.cached ? `cached ${S.ecomcampaigns.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.ecomcampaigns;
 }
 
 async function loadLazada(refresh = false) {
@@ -3629,6 +3646,7 @@ $('loadBtn').addEventListener('click', async () => {
     else if (S.view === 'line') { S.lineError = null; await loadLine(true); }
     else if (S.view === 'shopee') { S.shopeeError = null; await loadShopee(true); }
     else if (S.view === 'lazada') { S.lazadaError = null; await loadLazada(true); }
+    else if (S.view === 'ecomcampaigns') { S.ecomcampaignsError = null; await loadEcomCampaigns(true); }
     else if (S.view === 'pages') { S.pageError = null; await loadPage(true); }
     else if (S.view === 'users') { S.users = null; await loadUsers(); }
     else if (S.view === 'topics' && S.topicTerm) { await loadTopic(S.topicTerm); }
@@ -3719,6 +3737,7 @@ function render() {
   else if (S.view === 'line') renderLine();
   else if (S.view === 'shopee') renderShopee();
   else if (S.view === 'lazada') renderLazada();
+  else if (S.view === 'ecomcampaigns') renderEcomCampaigns();
   else if (S.view === 'report') renderReport();
   else if (S.view === 'pages') renderPages();
   else if (S.view === 'users') renderUsers();
@@ -7454,6 +7473,7 @@ const VIEW_LOADERS = {
   line:          { load: () => loadLine(),          err: 'lineError',      busy: 'lineLoading',      what: 'the LINE sheets' },
   shopee:        { load: () => loadShopee(),        err: 'shopeeError',    busy: 'shopeeLoading',    what: 'the Shopee storefront' },
   lazada:        { load: () => loadLazada(),        err: 'lazadaError',    busy: 'lazadaLoading',    what: 'the Lazada storefront' },
+  ecomcampaigns: { load: () => loadEcomCampaigns(), err: 'ecomcampaignsError', busy: 'ecomcampaignsLoading', what: 'campaigns across shops' },
   ecomroas:      { load: () => loadEcomRoas(),      err: 'ecomroasError',  busy: 'ecomroasLoading',  what: 'marketplace ad performance' },
   users:         { load: () => loadUsers(),         err: 'usersError',     busy: 'usersLoading',     what: 'the access list' },
 };
@@ -8591,6 +8611,51 @@ function labelledBars(xs, key, colour, H) {
     return `<div class="bar-wrap" style="height:${H + 16}px;"><svg viewBox="0 0 ${W3} ${H}" width="100%" height="${H}" preserveAspectRatio="none"
       style="position:absolute;left:0;bottom:0;display:block;">${rects}</svg>${labels}</div>`;
   }
+
+/**
+ * CAMPAIGNS ACROSS SHOPS (v3.348.0) — one row per campaign code: each
+ * shop's own credit, website clicks to each shop, Meta spend on marketplace
+ * accounts whose campaign name holds the code, and what it sold. Credited
+ * sales add across the two shops (different orders); Meta spend is shown
+ * beside them, never allocated.
+ */
+function renderEcomCampaigns() {
+  const d = S.ecomcampaigns;
+  if (S.ecomcampaignsError) { const m = S.ecomcampaignsError; $('viewRoot').innerHTML = errorState(m); S.ecomcampaignsError = null; return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecomcampaigns', 'Joins Shopee, Lazada, website and Meta by campaign code.'); return; }
+  if (!d.available) { $('viewRoot').innerHTML = errorState(esc(d.reason || 'unavailable')); return; }
+  const nn = (v, money) => v == null ? '\u2014' : money ? num(v, { money: true, bare: true }) : num(v);
+  const src = d.sources, t = d.totals;
+  const missing = Object.entries({ Shopee: src.shopee, Lazada: src.lazada, Website: src.website, Meta: src.meta }).filter(([, v]) => !v).map(([k]) => k);
+  // Money cells sit under "(THB)" headers.
+  const row = (r) => {
+    const pk = r.packages.map(p => p.name).join(' \u00b7 ');
+    return `<tr><td class="strong">${esc(r.code)}${r.onBoth ? ' <span class="pill">both shops</span>' : ''}</td>
+      <td class="num">${r.shopee ? nn(r.shopee.visits) : '\u2014'}</td><td class="num">${r.shopee ? nn(r.shopee.sales, true) : '\u2014'}</td>
+      <td class="num">${r.lazada ? nn(r.lazada.views) : '\u2014'}</td><td class="num">${r.lazada ? nn(r.lazada.revenue, true) : '\u2014'}</td>
+      <td class="num"><b>${nn(r.credited, true)}</b></td>
+      <td class="num">${r.web ? `${nn(r.web.shopee)} / ${nn(r.web.lazada)}` : '\u2014'}</td>
+      <td class="num">${r.meta ? nn(r.meta.spend, true) : '\u2014'}</td>
+      <td class="num">${r.perMetaBaht != null ? num(r.perMetaBaht, { dp: 1 }) + '\u00d7' : '\u2014'}</td>
+      <td class="trunc" style="max-width:0;" data-tip="${esc(pk)}">${esc(pk)}</td></tr>`;
+  };
+  $('viewRoot').innerHTML = `
+    ${missing.length ? `<div class="note" style="margin:0 0 10px;">Not read this run: ${esc(missing.join(', '))} \u2014 those columns show dashes.</div>` : ''}
+    <div class="grid g-4">
+      <div class="stat card"><div class="lab">Campaign codes</div><div class="val">${num(t.campaigns)}</div><div class="sub">${num(t.onBoth)} ran on both shops</div></div>
+      <div class="stat card"><div class="lab">Credited sales (THB)</div><div class="val">${nn(t.credited, true)}</div><div class="sub">Shopee + Lazada, each shop's own credit</div></div>
+      <div class="stat card"><div class="lab">Meta spend matched (THB)</div><div class="val">${nn(t.metaSpend, true)}</div><div class="sub">marketplace accounts, campaign name holds the code</div></div>
+      <div class="stat card"><div class="lab">Credited per Meta baht</div><div class="val">${t.metaSpend ? num(t.credited / t.metaSpend, { dp: 1 }) + '\u00d7' : '\u2014'}</div><div class="sub">matched codes only</div></div>
+    </div>
+    <div class="card mt">
+      <div class="card-title">Every campaign code</div>
+      <table class="roomy pk-t" style="table-layout:fixed;"><thead><tr><th style="width:15%;">Campaign</th>
+        <th class="num">Shopee visits</th><th class="num">Shopee sales (THB)</th><th class="num">Lazada views</th><th class="num">Lazada revenue (THB)</th>
+        <th class="num">Credited, both (THB)</th><th class="num">Website clicks Shopee / Lazada</th><th class="num">Meta spend (THB)</th>
+        <th class="num">Per Meta baht</th><th style="width:18%;">Top packages</th></tr></thead>
+        <tbody>${d.list.map(row).join('')}</tbody></table>
+    </div>`;
+}
 
 function renderLazada() {
   const D = S.lazada;
@@ -12393,7 +12458,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.347.0';
+const CLIENT_BUILD = '3.348.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

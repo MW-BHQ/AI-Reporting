@@ -426,6 +426,17 @@ expect_field "mk shopee"          "$MK" "d.shopee.revenue===32000&&d.shopee.plat
 expect_field "mk lazada"          "$MK" "d.lazada.revenue===320000&&d.lazada.platformSpend===null&&d.lazada.adsRoasParts.join()==='Meta'?'ok':undefined"
 expect_field "mk lazada outside"  "$MK" "d.lazada.outsideShare===5000/320000?'ok':undefined"
 
+echo "--- Campaigns across marketplaces (v3.348.0) ---"
+CP="/api/ecommerce/campaigns?from=$FROM&to=$TO"
+check "ecom campaigns" GET "$CP"
+# webpackage2026: Shopee 9,000 + Lazada 5,000 credited (different orders, so added).
+expect_field "cp both shops"      "$CP" "(r=>r.onBoth&&r.credited===14000&&r.shopee.sales===9000&&r.lazada.revenue===5000)(d.list.find(r=>r.code.toLowerCase()==='webpackage2026'))?'ok':undefined"
+# WEBSITE clicks by utm_campaign, case-insensitive; internal page and untagged link out.
+expect_field "cp web clicks"      "$CP" "(r=>r.web.shopee===40&&r.web.lazada===25)(d.list.find(r=>r.code.toLowerCase()==='webpackage2026'))&&d.list.find(r=>r.code==='getscreened25').web.lazada===5?'ok':undefined"
+# META: marketplace accounts only (BGH's 100 excluded); name CONTAINS the code.
+expect_field "cp meta"            "$CP" "(r=>r.meta.spend===7&&r.perMetaBaht===2000)(d.list.find(r=>r.code.toLowerCase()==='webpackage2026'))&&d.list.find(r=>r.code==='getscreened25').meta.spend===3?'ok':undefined"
+expect_field "cp packages"        "$CP" "(r=>r.packages.length>0)(d.list.find(r=>r.code.toLowerCase()==='webpackage2026'))?'ok':undefined"
+
 echo "--- LINE tab (v3.309.0) ---"
 LINE="/api/line?from=$FROM&to=$TO"
 check "line tab" GET "$LINE"

@@ -1,5 +1,17 @@
 ### Recent (September 2026)
 
+**v3.348.0 — Campaigns across shops tab.** `E-commerce > Campaigns across
+shops`, `/api/ecommerce/campaigns`, `requireTab("ecomcampaigns")`. One row per
+campaign code (case-insensitive), gathering: Shopee off-platform credit,
+Lazada External Traffic credit, GA4 website clicks to either shop by the
+link's `utm_campaign` (host re-checked; internal pages and untagged links
+excluded), Meta spend on Shopee/Lazada-named accounts whose campaign NAME
+contains the code (longest code wins; other accounts excluded even if named
+alike), and each code's top packages from both shops' package × campaign
+shares. Credited sales ADD across the two shops (different orders); Meta
+spend is shown beside, never allocated. Reuses the tabs' cached builds.
+The Lazada tab's "both marketplaces" card stays until MW retires it.
+
 **v3.347.0 — E-commerce Overview: marketplaces side by side.** New card at
 the top of the Overview, from `/api/ecommerce/marketplaces` (reuses the
 Shopee and Lazada tabs' cached builds; fetched after the Orders sheet and

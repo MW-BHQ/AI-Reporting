@@ -853,6 +853,20 @@ global.fetch = async (url, opts = {}) => {
      * 20), one untagged short link (30), and an INTERNAL page whose path says
      * "shopee" (999) — counting it is the bug the host check prevents.
      */
+    /**
+     * MARKETPLACE CAMPAIGN CLICKS (v3.348.0): links to Shopee AND Lazada by
+     * utm_campaign. An internal page with "lazada" in its path (99) and a
+     * Lazada link with no utm_campaign (11) must not land on any code.
+     */
+    if ((body.dimensions || []).map((x) => x.name).join() === "linkUrl" && /lazada/i.test(JSON.stringify(body.dimensionFilter || {}))) {
+      const rows = [["https://shopee.co.th/bangkokhospital_official?utm_campaign=webpackage2026&utm_content=footer", "40"],
+        ["https://www.lazada.co.th/shop/bangkok-hospital?utm_campaign=WebPackage2026", "25"],
+        ["https://s.lazada.co.th/s.abc?utm_campaign=getscreened25", "5"],
+        ["https://www.lazada.co.th/shop/bangkok-hospital", "11"],
+        ["https://www.bangkokhospital.com/th/lazada-promo?utm_campaign=webpackage2026", "99"]];
+      return jsonRes({ dimensionHeaders: [{ name: "linkUrl" }], metricHeaders: [{ name: "eventCount" }], rowCount: rows.length,
+        rows: rows.map(([u2, v]) => ({ dimensionValues: [{ value: u2 }], metricValues: [{ value: v }] })) });
+    }
     if ((body.dimensions || []).map((x) => x.name).join() === "linkUrl" && /shopee/i.test(JSON.stringify(body.dimensionFilter || {}))) {
       const rows = [["https://shopee.co.th/bangkokhospital_official?utm_source=website&utm_content=footer", "100"],
         ["https://shopee.co.th/product/250344218/1?utm_content=footer&x=1", "20"],
@@ -868,6 +882,21 @@ global.fetch = async (url, opts = {}) => {
     }
   }
 
+  /**
+   * MARKETPLACE CAMPAIGNS' META PULL (v3.348.0) — only this exact field list
+   * gets these rows, so no other tab's campaign parsing moves.
+   *   - a Shopee-account campaign whose NAME contains webpackage2026 (7);
+   *   - a Lazada-account campaign containing getscreened25 (3);
+   *   - a BGH account campaign named webpackage2026 (100): not a
+   *     marketplace account, so it must NOT land on the code.
+   */
+  if (/connectors\.windsor\.ai\/facebook/.test(u) && /fields=account_name%2Ccampaign%2Cspend%2Ccatalog_segment_value_purchase(&|$)/.test(u)) {
+    return jsonRes({ data: [
+      { account_name: "BHQ Shopee x EGG", campaign: "0701_WebPackage2026_conv", spend: 7, catalog_segment_value_purchase: 700 },
+      { account_name: "BHQ Lazada x EGG", campaign: "getscreened25 | cpas", spend: 3, catalog_segment_value_purchase: 0 },
+      { account_name: "BGH x ADA", campaign: "webpackage2026", spend: 100, catalog_segment_value_purchase: 0 },
+    ] });
+  }
   if (u.includes("connectors.windsor.ai/facebook?") || /connectors\.windsor\.ai\/facebook[?&]/.test(u)) {
     if (process.env.MOCK_FAIL_CONNECTOR === "facebook") return jsonRes({ error: "simulated failure" }, 500);
     const want = (new URL(u)).searchParams.get("fields") || "";
