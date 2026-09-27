@@ -11601,6 +11601,8 @@ async function buildShopeeSeller(from, to, raw = loadShopeeRaw()) {
       channels,
       campaigns: [...camp.values()].map((g) => ({ ...g, channels: [...g.channels] }))
         .sort((a, b) => b.sales - a.sales || b.visits - a.visits).slice(0, 15),
+      // Every campaign, for the Lazada tab's cross-marketplace join.
+      allCampaigns: [...camp.values()].map((g) => ({ campaign: g.campaign, visits: g.visits, orders: g.orders, sales: g.sales })),
       websiteByContent: [...web.values()],
       placements: [...place.values()].map((g) => ({ ...g, channels: [...g.channels], conversion: div(g.orders, g.visits) }))
         .sort((a, b) => b.sales - a.sales || b.visits - a.visits).slice(0, 15),
@@ -12027,6 +12029,21 @@ const LAZADA_PRODUCT_TAB = process.env.LAZADA_PRODUCT_TAB || "Product";
  * who buys on two days counts twice — the card says "buyer-days" wording
  * only where it matters (the share is unaffected in practice).
  */
+/**
+ * EXTERNAL TRAFFIC (v3.346.0) — Sponsored Solutions > Report > Data Insights
+ * > External Traffic > Export Reports: Lazada's own tracking of visits from
+ * outside Lazada, DAILY (dates as 20250831), three sheets pasted as-is:
+ *   `External Daily` (Overview: visits — the only sheet that has them),
+ *   `External Links` (per campaign × channel × ad name: product views,
+ *                     orders, revenue), `External Sold` (package × campaign).
+ * Lazada-credited, like Shopee's off-platform figures. Campaign names can
+ * carry a stray tab (`TuningExpo24\t`) — trimmed.
+ *
+ * SPONSORED MEDIA IS EMPTY for this shop (MW, Aug 2025): Lazada ad spend is
+ * unmeasured and shown as a dash, though Traffic Source shows Sponsored
+ * Discovery/Max visitors — likely Lazada-funded or credits (open question).
+ */
+const LAZADA_EXT_TABS = { daily: "External Daily", links: "External Links", sold: "External Sold" };
 const LAZADA_CUSTOMER_TABS = (process.env.LAZADA_CUSTOMER_TAB || "Customer Insight,Customer").split(",");
 
 /**
@@ -12198,6 +12215,49 @@ function lazadaProducts(values, from, to) {
   };
 }
 
+function lazadaExternal(exD, exL, exS, from, to) {
+  if (exD.err && exL.err && exS.err) return { available: false, reason: `no "${LAZADA_EXT_TABS.links}" tab in the sheet` };
+  const rowsOf = (x) => x.err ? [] : spRows(x.values).filter((r) => r._day && r._day >= from && r._day <= to);
+  /** Daily visits: one row per day, later paste wins. */
+  const days = [...new Map(rowsOf(exD).map((r) => [r._day, r])).values()];
+  const dsum = (k) => days.reduce((a, r) => a + spNum(r[k]), 0);
+  /** Link rows keyed by every identifying column, later paste wins. */
+  const links = [...new Map(rowsOf(exL).map((r) => [[r._day, r.campaignid, r.channel, r.adname, r.originallinkid].join("|"), r])).values()];
+  const sold = [...new Map(rowsOf(exS).map((r) => [[r._day, String(r.productid).replace(/\.0+$/, ""), r.campaignid, r.revenue].join("|"), r])).values()];
+  if (!days.length && !links.length && !sold.length) return { available: false, reason: "no External Traffic rows in this range" };
+  const by = (list, keyOf) => {
+    const m = new Map();
+    for (const r of list) {
+      const k = keyOf(r);
+      const e = m.get(k) || { name: k, views: 0, orders: 0, items: 0, revenue: 0, channels: new Set() };
+      e.views += spNum(r.pdppv); e.orders += spNum(r.totalorders); e.items += spNum(r.itemsold); e.revenue += spNum(r.revenue);
+      if (r.channel) e.channels.add(String(r.channel).trim());
+      m.set(k, e);
+    }
+    return [...m.values()].map((e) => ({ ...e, channels: [...e.channels] })).sort((a, b) => b.revenue - a.revenue || b.views - a.views);
+  };
+  const clean = (x) => String(x || "(not set)").replace(/\s+/g, " ").trim() || "(not set)";
+  const pk = new Map();
+  for (const r of sold) {
+    const name = String(r.productname || "").replace(/\s*-\s*Bangkok Hospital.*$/i, "").trim();
+    const e = pk.get(name) || { name, orders: 0, revenue: 0, campaigns: new Map() };
+    e.orders += spNum(r.totalorders); e.revenue += spNum(r.revenue);
+    const c = clean(r.campaignname);
+    e.campaigns.set(c, (e.campaigns.get(c) || 0) + spNum(r.revenue));
+    pk.set(name, e);
+  }
+  return {
+    available: true, days: days.length,
+    visits: days.length ? dsum("visits") : null, orders: days.length ? dsum("totalorders") : null, revenue: days.length ? dsum("revenue") : null,
+    channels: by(links, (r) => clean(r.channel)),
+    campaigns: by(links, (r) => clean(r.campaignname)).map((c) => ({ ...c, campaign: c.name })),
+    placements: by(links, (r) => clean(r.adname)),
+    packages: [...pk.values()].map((e) => ({ name: e.name, orders: e.orders, revenue: e.revenue,
+      campaigns: [...e.campaigns].map(([campaign, revenue]) => ({ campaign, share: e.revenue ? revenue / e.revenue : null }))
+        .sort((a, b) => (b.share || 0) - (a.share || 0)) })).sort((a, b) => b.revenue - a.revenue).slice(0, 20),
+  };
+}
+
 /**
  * THE LAZADA TAB. Three reads, EACH ITS OWN batchGet — a missing tab must not
  * blank the others. Key Metrics is daily and works for any range; Traffic
@@ -12211,8 +12271,11 @@ async function buildLazada(from, to) {
     for (const t of LAZADA_CUSTOMER_TABS) { const r = await get(t.trim(), "A1:I"); if (!r.err) return r; }
     return { err: new Error("missing") };
   };
-  const [tr, km, pr, cu, metaRows] = await Promise.all([get(LAZADA_TRAFFIC_TAB, "A1:AJ"), get(LAZADA_KEYMETRICS_TAB, "A1:R"),
+  const [tr, km, pr, cu, exD, exL, exS, shopeeSide, metaRows] = await Promise.all([get(LAZADA_TRAFFIC_TAB, "A1:AJ"), get(LAZADA_KEYMETRICS_TAB, "A1:R"),
     get(LAZADA_PRODUCT_TAB, "A1:U"), getCustomer(),
+    get(LAZADA_EXT_TABS.daily, "A1:I"), get(LAZADA_EXT_TABS.links, "A1:Q"), get(LAZADA_EXT_TABS.sold, "A1:R"),
+    // The Shopee side of "one campaign, both marketplaces": same window.
+    buildShopeeSeller(from, to).catch(() => null),
     /**
      * META ON LAZADA: Windsor `facebook`, accounts named `*Lazada*`, with
      * Meta's CPAS fields as on Shopee (v3.337.0). No account → a dash.
@@ -12256,6 +12319,34 @@ async function buildLazada(from, to) {
       sales.newShare = nb + eb ? nb / (nb + eb) : null;
     }
   }
+  const external = lazadaExternal(exD, exL, exS, from, to);
+  /**
+   * ONE CAMPAIGN, BOTH MARKETPLACES (v3.346.0). MW's team gives a campaign
+   * the SAME name on Shopee and Lazada (`webpackage2025`, `getscreened25`),
+   * so the two platforms' own off-platform credits join on the name,
+   * case-insensitive. Each side is its platform's own credit — side by
+   * side, never added into one total.
+   */
+  let bothMarkets = null;
+  if (external.available || (shopeeSide && shopeeSide.available)) {
+    const m = new Map();
+    const key = (x) => String(x || "").trim().toLowerCase();
+    const sp = (shopeeSide && shopeeSide.available && shopeeSide.offPlatform && shopeeSide.offPlatform.available) ? shopeeSide.offPlatform : null;
+    for (const c of (sp ? sp.allCampaigns || sp.campaigns : [])) {
+      const k = key(c.campaign); if (!k || k === "(not set)") continue;
+      m.set(k, { campaign: c.campaign, shopee: { visits: c.visits, orders: c.orders, sales: c.sales }, lazada: null });
+    }
+    for (const c of (external.available ? external.campaigns : [])) {
+      const k = key(c.campaign); if (!k) continue;
+      const e = m.get(k) || { campaign: c.campaign, shopee: null, lazada: null };
+      e.lazada = { views: c.views, orders: c.orders, revenue: c.revenue };
+      m.set(k, e);
+    }
+    const rows = [...m.values()].sort((a, b) => ((b.shopee ? b.shopee.sales : 0) + (b.lazada ? b.lazada.revenue : 0))
+      - ((a.shopee ? a.shopee.sales : 0) + (a.lazada ? a.lazada.revenue : 0)));
+    bothMarkets = { shopeeAvailable: !!sp, lazadaAvailable: external.available, rows,
+      shared: rows.filter((r) => r.shopee && r.lazada).length };
+  }
   const lzAds = (metaRows || []).filter((r) => /lazada/i.test(String(r.account_name || "")));
   const metaSpend = metaRows === null || !lzAds.length ? null : lzAds.reduce((a, r) => a + n(r.spend), 0);
   const meta = {
@@ -12271,7 +12362,7 @@ async function buildLazada(from, to) {
   };
   const any = traffic.available || sales.available || products.available;
   return { available: any, reason: any ? null : [traffic.reason, sales.reason, products.reason].filter(Boolean).join("; "),
-    sales, compare, traffic, products, meta };
+    sales, compare, traffic, products, meta, external, bothMarkets };
 }
 
 app.get("/api/lazada", requireTab("lazada"), async (req, res) => {

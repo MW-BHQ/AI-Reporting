@@ -406,6 +406,13 @@ expect_field "lzk part range"     "/api/lazada?from=2026-07-01&to=2026-07-10" "d
 # CUSTOMER INSIGHT: 20 new of 31 buyers; META ON LAZADA 20 spent, CPAS 6,000.
 expect_field "lzc new share"      "$LZ" "d.sales.newBuyers===20&&d.sales.newShare===20/31?'ok':undefined"
 expect_field "lzm meta"           "$LZ" "d.meta.spend===20&&d.meta.cpas.roas===300&&d.meta.revenuePerBaht===16000&&d.meta.costPerNewBuyer===1?'ok':undefined"
+# EXTERNAL TRAFFIC: 30 June out; the re-pasted link row keeps 5,000; stray
+# tab trimmed; daily visits 30.
+expect_field "lze totals"         "$LZ" "d.external.visits===30&&d.external.revenue===5000?'ok':undefined"
+expect_field "lze campaign"       "$LZ" "(c=>c.revenue===5000&&c.views===8)(d.external.campaigns.find(c=>c.campaign==='webpackage2026'))&&d.external.campaigns.some(c=>c.campaign==='TuningExpo24')?'ok':undefined"
+# ONE CAMPAIGN, BOTH MARKETPLACES: webpackage2026 on Shopee (9,000) and
+# Lazada (5,000); heart26 Shopee only; getscreened25 Lazada only.
+expect_field "both markets"       "$LZ" "(r=>r.shopee.sales===9000&&r.lazada.revenue===5000)(d.bothMarkets.rows.find(r=>r.campaign.toLowerCase()==='webpackage2026'))&&d.bothMarkets.shared===1&&d.bothMarkets.rows.find(r=>r.campaign==='heart26').lazada===null?'ok':undefined"
 # PRODUCT: SKU rows skipped (250,000 not 500,000); June out; leaks.
 expect_field "lzp revenue"        "$LZ" "d.products.revenue===250000&&d.products.count===3?'ok':undefined"
 expect_field "lzp share"          "$LZ" "d.products.shareOfRevenue===250000/320000?'ok':undefined"

@@ -1124,6 +1124,36 @@ global.fetch = async (url, opts = {}) => {
      * CUSTOMER INSIGHT (v3.345.0), daily: July with 1 new buyer on days 1–20
      * and 1 existing buyer on days 21–31 → 20 new of 31.
      */
+    /**
+     * EXTERNAL TRAFFIC (v3.346.0), daily, dates as 20260701.
+     *   - webpackage2026 is also a SHOPEE campaign (Website, 9,000): the
+     *     join puts both platforms on one row.
+     *   - "TuningExpo24\t" carries the export's stray tab.
+     *   - One link row pasted twice (later wins) and one from 30 June (out).
+     */
+    if (/External(%20|\+| )Daily/.test(u)) {
+      const H = ["Date", "Visits", "Unique Visitors", "PDP PV", "A2C PV", "Item Sold", "Total Orders", "Revenue", "CR%"];
+      return jsonRes({ spreadsheetId: "mock-lazada", valueRanges: [{ values: [H,
+        ["20260630", "999", "999", "9", "0", "9", "9", "99999", "0%"],
+        ["20260701", "20", "18", "12", "1", "1", "1", "5000", "5%"], ["20260702", "10", "10", "6", "0", "0", "0", "0", "0%"]] }] });
+    }
+    if (/External(%20|\+| )Links/.test(u)) {
+      const H = ["Date", "Campaign ID", "Campaign Name", "Campaign Type", "Original Link Type", "Original Link ID", "Original Link Name",
+        "Channel", "Ad Name", "PDP PV", "Item Sold", "Revenue", "Total Orders", "CR%"];
+      const l = (d, id, name, ch, ad, pv, o, rev, lid = "1") => [d, id, name, "Customized", "Product", lid, "x", ch, ad, String(pv), String(o), rev, String(o), "0%"];
+      return jsonRes({ spreadsheetId: "mock-lazada", valueRanges: [{ values: [H,
+        l("20260630", "9", "webpackage2026", "Brands' Websites", "website", 99, 9, "99999.0000"),
+        l("20260701", "1", "webpackage2026", "Brands' Websites", "website", 1, 0, "0.0000"),
+        l("20260701", "1", "webpackage2026", "Brands' Websites", "website", 8, 1, "5000.0000"),
+        l("20260702", "2", "getscreened25", "Facebook-CPAS", "main1-1cap", 3, 0, "0.0000"),
+        l("20260702", "3", "TuningExpo24\t", "Line", "13aug", 1, 0, "0.0000")] }] });
+    }
+    if (/External(%20|\+| )Sold/.test(u)) {
+      const H = ["Date", "Product ID", "Product Name", "Product Seller ID", "Product Seller Name", "Product Brand ID", "Product Brand Name",
+        "Item Sold", "Total Orders", "Revenue", "Avg value per item sold", "Campaign ID", "Campaign Name", "Campaign Type"];
+      return jsonRes({ spreadsheetId: "mock-lazada", valueRanges: [{ values: [H,
+        ["20260701", "5714450506", "Rabies Vaccine - Bangkok Hospital [E-Coupon]", "1", "BH", "1", "BH", "1", "1", "5000.00", "5000", "1", "webpackage2026", "Customized"]] }] });
+    }
     if (/Customer(%20|\+| )Insight/.test(u)) {
       const CH = ["Date", "New buyers", "Conversion Rate", "Orders", "Buyers", "Revenue", "Existing buyers", "Average order value", "Average basket size"];
       const rows = [CH];

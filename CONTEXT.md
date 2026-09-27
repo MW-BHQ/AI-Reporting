@@ -1,5 +1,19 @@
 ### Recent (September 2026)
 
+**v3.346.0 — Lazada External Traffic; one campaign, both marketplaces.**
+Sponsored Solutions > Report > Data Insights > External Traffic > Export:
+three daily sheets as tabs `External Daily` (visits), `External Links`
+(campaign × channel × ad name), `External Sold` (package × campaign). Dates
+`20250831`, no Month column. Link rows de-duplicated on every identifying
+column (later paste wins). Campaign names trimmed (the export leaves a tab
+character in `TuningExpo24`).
+ONE CAMPAIGN, BOTH MARKETPLACES: MW's team uses the same campaign names on
+Shopee and Lazada, so each platform's own off-platform credit joins on the
+name (case-insensitive), side by side, never summed. The Lazada endpoint
+reads the Shopee sheet for the same window.
+Sponsored Media is empty for this shop: Lazada ad spend stays a dash
+(ROADMAP open question: who pays for the Sponsored Discovery/Max visitors).
+
 **v3.345.0 — Lazada: new vs existing buyers; Meta on Lazada.**
 - Customer Insight tab (Business Advisor > Customer > Customer Insight),
   daily; read under "Customer Insight" or "Customer". Only its new/existing

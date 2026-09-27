@@ -8680,6 +8680,47 @@ function renderLazada() {
         </div></div>`;
   }
 
+  /**
+   * FROM OUTSIDE LAZADA (v3.346.0) — Lazada's External Traffic reports,
+   * daily, Lazada-credited. Then ONE CAMPAIGN, BOTH MARKETPLACES: the same
+   * campaign name's own credit on Shopee and on Lazada, side by side.
+   */
+  const ex = D.external || {};
+  const exTable = (title, rows, first) => rows.length ? `<div class="card mt"><div class="card-title">${title}</div>
+    <table class="roomy"><thead><tr><th>${first}</th><th>Channels</th><th class="num">Product views</th><th class="num">Orders</th>
+      <th class="num">Revenue (THB)</th></tr></thead><tbody>
+      ${rows.slice(0, 15).map(x => `<tr><td>${esc(x.name)}</td><td class="trunc" style="max-width:0;" data-tip="${esc(x.channels.join(', '))}">${esc(x.channels.join(', '))}</td>
+        <td class="num">${num(x.views)}</td><td class="num">${num(x.orders)}</td><td class="num">${num(x.revenue,{money:true,bare:true})}</td></tr>`).join('')}
+    </tbody></table></div>` : '';
+  const outside = !ex.available ? na('From outside Lazada', ex) : `<div class="grid g-3">
+      <div class="stat card"><div class="lab">Visits from outside</div><div class="val">${nn(ex.visits)}</div>
+        <div class="sub">${ex.days < (sl.windowDays || ex.days) ? `${num(ex.days)} of ${num(sl.windowDays)} days` : 'Lazada External Traffic'}</div></div>
+      <div class="stat card"><div class="lab">Orders credited</div><div class="val">${nn(ex.orders)}</div><div class="sub">Lazada's own credit</div></div>
+      <div class="stat card"><div class="lab">Revenue credited (THB)</div><div class="val">${nn(ex.revenue, true)}</div>
+        <div class="sub">${sl.available && sl.revenue && ex.revenue != null ? pc(ex.revenue / sl.revenue, 0) + ' of shop revenue' : '\u2014'}</div></div>
+    </div>
+    ${exTable('Channels from outside Lazada', ex.channels, 'Channel')}
+    ${exTable('Campaigns from outside Lazada', ex.campaigns, 'Campaign')}
+    ${exTable('Placements from outside Lazada &middot; ad name', ex.placements, 'Placement')}
+    ${ex.packages.length ? `<div class="card mt"><div class="card-title">Packages from outside traffic</div>
+      <table class="roomy pk-t" style="table-layout:fixed;"><thead><tr><th style="width:46%;">Package</th><th style="width:30%;">Campaigns</th>
+        <th class="num">Orders</th><th class="num">Revenue (THB)</th></tr></thead><tbody>
+        ${ex.packages.map(x => { const c = x.campaigns.map(y => `${y.campaign} ${pc(y.share,0)}`).join(' \u00b7 ');
+          return `<tr><td class="trunc" data-tip="${esc(x.name)}">${esc(x.name)}</td><td class="trunc" data-tip="${esc(c)}">${esc(c)}</td>
+          <td class="num">${num(x.orders)}</td><td class="num">${num(x.revenue,{money:true,bare:true})}</td></tr>`; }).join('')}
+      </tbody></table></div>` : ''}`;
+  const bm = D.bothMarkets;
+  const both = bm && bm.rows.length ? `<div class="card mt">
+    <div class="card-title">One campaign, both marketplaces &middot; ${num(bm.shared)} on both</div>
+    <table class="roomy"><thead><tr><th>Campaign</th><th class="num">Shopee visits</th><th class="num">Shopee orders</th><th class="num">Shopee sales (THB)</th>
+      <th class="num">Lazada views</th><th class="num">Lazada orders</th><th class="num">Lazada revenue (THB)</th></tr></thead><tbody>
+      ${bm.rows.slice(0, 20).map(r => `<tr><td>${esc(r.campaign)}</td>
+        <td class="num">${r.shopee?num(r.shopee.visits):'\u2014'}</td><td class="num">${r.shopee?num(r.shopee.orders):'\u2014'}</td>
+        <td class="num">${r.shopee?num(r.shopee.sales,{money:true,bare:true}):'\u2014'}</td>
+        <td class="num">${r.lazada?num(r.lazada.views):'\u2014'}</td><td class="num">${r.lazada?num(r.lazada.orders):'\u2014'}</td>
+        <td class="num">${r.lazada?num(r.lazada.revenue,{money:true,bare:true}):'\u2014'}</td></tr>`).join('')}
+    </tbody></table></div>` : '';
+
   /** PACKAGES — Product Performance, monthly; SKU rows skipped server-side. */
   const p = D.products || {};
   let packages = '';
@@ -8729,6 +8770,7 @@ function renderLazada() {
     <div class="sec-h">Advertising</div>${advertising}
     <div class="sec-h">Traffic</div>${traffic}
     ${adsSec}
+    <div class="sec-h">From outside Lazada</div>${outside}${both}
     <div class="sec-h">Packages</div>${packages}
     ${search}`;
 }
@@ -12301,7 +12343,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.345.0';
+const CLIENT_BUILD = '3.346.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
