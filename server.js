@@ -12017,17 +12017,16 @@ app.get("/api/shopee", requireTab("shopee"), async (req, res) => {
 const LAZADA_SHEET_ID = process.env.LAZADA_SHEET_ID || "1_WnGf7NOIDOL9xrF5_JTpIBSobgv7SY-CR-wXjCRL8I";
 const LAZADA_TRAFFIC_TAB = process.env.LAZADA_TRAFFIC_TAB || "Traffic Source";
 const lzNum = (v) => { const t = String(v == null ? "" : v).trim(); return t === "" || t === "-" ? null : spNum(t); };
-async function buildLazada(from, to) {
+const LAZADA_KEYMETRICS_TAB = process.env.LAZADA_KEYMETRICS_TAB || "Key Metrics";
+const LAZADA_PRODUCT_TAB = process.env.LAZADA_PRODUCT_TAB || "Product";
+
+/**
+ * TRAFFIC SOURCE — monthly, whole months only (see the block comment above).
+ */
+function lazadaTraffic(values, from, to) {
   const months = monthsInside(from, to);
   if (!months.length) return { available: false, reason: "monthly data — pick one or more whole months" };
-  let res;
-  try {
-    res = await sheetBatchGet(LAZADA_SHEET_ID, [`'${LAZADA_TRAFFIC_TAB}'!A1:AJ`]);
-  } catch (e) {
-    logJson("WARNING", "lazada_sheet_unavailable", { error: String(e.message || e) });
-    return { available: false, reason: /40[34]/.test(String(e.message)) ? "sheet not shared with the service account"
-      : `no "${LAZADA_TRAFFIC_TAB}" tab in the sheet` };
-  }
+  const res = [{ values }];
   const want = new Set(months);
   const byKey = new Map();
   let head = null;
@@ -12083,6 +12082,151 @@ async function buildLazada(from, to) {
       demandGaps: kws.filter((k) => !k.hospital && !k.buyers && (k.visitors || 0) >= SHOPEE_SYN.LZ_MIN_VISITORS).slice(0, 12),
       otherHospitals: kws.filter((k) => k.hospital) },
   };
+}
+
+/**
+ * KEY METRICS (v3.344.0) — Business Advisor > Dashboard > Key Metrics, DAILY,
+ * header + day rows only (MW's team deletes the month-total and note rows;
+ * any left behind are skipped because their Date is not one day). Lazada
+ * keeps daily rows for six months only. "-" (no orders that day) is null.
+ * Every rate is divided once from the range totals.
+ */
+function lazadaDays(values, from, to) {
+  const byDay = new Map();
+  let head = null;
+  for (const r of values || []) {
+    if (/^date$/i.test(String(r[0] || "").trim())) { head = r.map(spKey); continue; }
+    if (!head) continue;
+    const t = String(r[0] || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) continue;
+    const o = {}; head.forEach((k, i) => { if (k && !(k in o)) o[k] = r[i]; });
+    byDay.set(t, o); // a later paste of the same day wins
+  }
+  return byDay;
+}
+const LZ_DAY = { revenue: "revenue", visitors: "visitors", buyers: "buyers", orders: "orders", pageviews: "pageviews",
+  units: "unitssold", cartUsers: "addtocartusers", cartUnits: "addtocartunits",
+  cancelled: "cancelledamount", returned: "returnrefundamount" };
+function lazadaSales(byDay, from, to) {
+  const days = [...byDay.entries()].filter(([d]) => d >= from && d <= to).sort(([a], [b]) => a.localeCompare(b));
+  const windowDays = Math.round((Date.parse(to) - Date.parse(from)) / 864e5) + 1;
+  if (!days.length) return { available: false, reason: "no Key Metrics days in this range", windowDays };
+  const t = { available: true, days: days.length, windowDays };
+  for (const [k, col] of Object.entries(LZ_DAY)) {
+    const vals = days.map(([, o]) => lzNum(o[col])).filter((v) => v != null);
+    t[k] = vals.length ? vals.reduce((a, b) => a + b, 0) : null;
+  }
+  const div = (a, b) => (a != null && b ? a / b : null);
+  t.conversion = div(t.buyers, t.visitors);
+  t.aov = div(t.revenue, t.orders);
+  t.itemsPerOrder = div(t.units, t.orders);
+  t.cartRate = div(t.cartUsers, t.visitors);
+  t.daily = days.map(([d, o]) => ({ d, value: lzNum(o.revenue) || 0, orders: lzNum(o.orders) || 0 }));
+  return t;
+}
+
+/**
+ * PRODUCT PERFORMANCE (v3.344.0) — Business Advisor > Product > Performance,
+ * monthly, column A `Month`. The export lists each product AND its SKUs
+ * beneath it with the same figures; SKU rows (a real SKU ID) are skipped, so
+ * the team does not have to delete them. Leaks are judged against the shop's
+ * own rates with the Shopee thresholds (`SHOPEE_SYN`).
+ */
+function lazadaProducts(values, from, to) {
+  const months = monthsInside(from, to);
+  if (!months.length) return { available: false, reason: "monthly data — pick one or more whole months" };
+  const want = new Set(months);
+  const byKey = new Map();
+  let head = null;
+  const seen = new Set(), bad = [];
+  for (const r of values || []) {
+    if (/^month$/i.test(String(r[0] || "").trim())) { head = r.map(spKey); continue; }
+    if (!head) continue;
+    const o = {}; head.forEach((k, i) => { if (k && !(k in o)) o[k] = r[i]; });
+    const mo = packageMonth(o.month);
+    if (!mo && String(o.month || "").trim() && bad.length < 1) bad.push(String(o.month).trim());
+    if (mo) seen.add(mo);
+    const sku = String(o.skuid == null ? "" : o.skuid).trim();
+    const id = String(o.productid || "").replace(/\.0+$/, "").trim();
+    if (!mo || !want.has(mo) || !id || (sku && sku !== "-")) continue;
+    byKey.set(`${mo}|${id}`, { mo, id, o });
+  }
+  const rows = [...byKey.values()];
+  if (!rows.length) return { available: false, reason: monthlyEmptyReason(LAZADA_PRODUCT_TAB, head, months, seen, bad) };
+  const COLS = { visitors: "productvisitors", pageviews: "productpageviews", cartUsers: "addtocartusers",
+    cartUnits: "addtocartunits", buyers: "buyers", orders: "orders", units: "unitssold", revenue: "revenue" };
+  const pk = new Map();
+  for (const { id, o } of rows) {
+    const e = pk.get(id) || { id, name: String(o.productname || "").replace(/\s*-\s*Bangkok Hospital.*$/i, "").trim(),
+      ...Object.fromEntries(Object.keys(COLS).map((k) => [k, 0])) };
+    for (const [k, col] of Object.entries(COLS)) e[k] += lzNum(o[col]) || 0;
+    pk.set(id, e);
+  }
+  const div = (a, b) => (b ? a / b : null);
+  const list = [...pk.values()].map((e) => ({ ...e, conversion: div(e.orders, e.visitors), cartRate: div(e.cartUsers, e.visitors) }))
+    .sort((a, b) => b.revenue - a.revenue || b.visitors - a.visitors);
+  const sum = (k) => list.reduce((a, e) => a + e[k], 0);
+  const shopCart = div(sum("cartUsers"), sum("visitors")), shopBuy = div(sum("orders"), sum("cartUsers"));
+  const judged = list.filter((e) => e.visitors >= SHOPEE_SYN.MIN_VISITORS);
+  const BANDS = [[0, 5000, "Under 5K"], [5000, 15000, "5K–15K"], [15000, 30000, "15K–30K"], [30000, Infinity, "30K and up"]];
+  const found = [...new Set(rows.map((r) => r.mo))].sort();
+  return {
+    available: true, months: found, missing: months.filter((m) => !found.includes(m)),
+    revenue: sum("revenue"), orders: sum("orders"), visitors: sum("visitors"), count: list.length,
+    sold: list.filter((e) => e.orders > 0).length, list,
+    leaks: shopCart == null ? null : {
+      shopCartRate: shopCart, shopBuyRate: shopBuy,
+      notCarted: judged.filter((e) => e.cartUsers / e.visitors < SHOPEE_SYN.LEAK_RATIO * shopCart)
+        .sort((a, b) => b.visitors - a.visitors).slice(0, 8),
+      notBought: shopBuy == null ? [] : judged.filter((e) => e.cartUsers > 0 && e.orders / e.cartUsers < SHOPEE_SYN.LEAK_RATIO * shopBuy)
+        .sort((a, b) => b.cartUsers - a.cartUsers).slice(0, 8),
+    },
+    priceBands: BANDS.map(([lo, hi, label]) => {
+      const b = list.filter((e) => e.units > 0 && e.revenue / e.units >= lo && e.revenue / e.units < hi);
+      const v = b.reduce((a, e) => a + e.visitors, 0), o = b.reduce((a, e) => a + e.orders, 0);
+      return { label, packages: b.length, visitors: v, orders: o, revenue: b.reduce((a, e) => a + e.revenue, 0), conversion: v ? o / v : null };
+    }),
+  };
+}
+
+/**
+ * THE LAZADA TAB. Three reads, EACH ITS OWN batchGet — a missing tab must not
+ * blank the others. Key Metrics is daily and works for any range; Traffic
+ * Source and Product are monthly and need whole months.
+ */
+async function buildLazada(from, to) {
+  const get = (tab, range) => sheetBatchGet(LAZADA_SHEET_ID, [`'${tab}'!${range}`])
+    .then((r) => ({ values: r[0] && r[0].values }), (e) => ({ err: e }));
+  const [tr, km, pr] = await Promise.all([get(LAZADA_TRAFFIC_TAB, "A1:AJ"), get(LAZADA_KEYMETRICS_TAB, "A1:R"), get(LAZADA_PRODUCT_TAB, "A1:U")]);
+  const missing = (x, tab) => ({ available: false, reason: /40[34]/.test(String(x.err && x.err.message))
+    ? "sheet not shared with the service account" : `no "${tab}" tab in the sheet` });
+  const traffic = tr.err ? missing(tr, LAZADA_TRAFFIC_TAB) : lazadaTraffic(tr.values, from, to);
+  const byDay = km.err ? null : lazadaDays(km.values);
+  const sales = km.err ? missing(km, LAZADA_KEYMETRICS_TAB) : lazadaSales(byDay, from, to);
+  const products = pr.err ? missing(pr, LAZADA_PRODUCT_TAB) : lazadaProducts(pr.values, from, to);
+  /**
+   * MoM / YoY from the same daily rows, only when BOTH windows are fully
+   * covered — Lazada keeps six months of days, so a year-ago window is often
+   * missing and must read as a dash, not a collapse.
+   */
+  let compare = null;
+  if (sales.available && sales.days === sales.windowDays) {
+    const cw = comparisonWindows(from, to);
+    const pick = (w) => { const o = lazadaSales(byDay, w.from, w.to); return o.available && o.days === o.windowDays ? o : null; };
+    const pct = (a, b) => (a != null && b ? a / b - 1 : null);
+    const cmp = (o) => o && Object.fromEntries(["revenue", "orders", "visitors", "buyers", "aov", "conversion"].map((k) => [k, pct(sales[k], o[k])]));
+    compare = { windows: cw, mom: cmp(pick(cw.prev)), yoy: cmp(pick(cw.yoy)) };
+  }
+  if (products.available && sales.available && sales.days === sales.windowDays && products.missing.length === 0) {
+    products.shareOfRevenue = sales.revenue ? products.revenue / sales.revenue : null;
+  }
+  if (traffic.available && sales.available && sales.days === sales.windowDays) {
+    const lg = traffic.groups.find((g) => /lazada guided/i.test(g.name));
+    if (lg && lg.revenue != null && sales.revenue) traffic.lazadaGuidedRevenueShare = lg.revenue / sales.revenue;
+  }
+  const any = traffic.available || sales.available || products.available;
+  return { available: any, reason: any ? null : [traffic.reason, sales.reason, products.reason].filter(Boolean).join("; "),
+    sales, compare, traffic, products };
 }
 
 app.get("/api/lazada", requireTab("lazada"), async (req, res) => {

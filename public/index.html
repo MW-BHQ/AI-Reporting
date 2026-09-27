@@ -8187,19 +8187,7 @@ function renderShopee() {
    * Only past 45 bars (a quarter-plus range) is every other bar labelled —
    * the tallest always is.
    */
-  const kfmt = (v) => v >= 1e6 ? (v/1e6).toFixed(v >= 1e7 ? 0 : 1) + 'M' : v >= 1e3 ? (v/1e3).toFixed(v >= 1e4 ? 0 : 1) + 'K' : String(Math.round(v));
-  const bars = (xs, key, colour, H) => {
-    const n = Math.max(xs.length, 1), mx = Math.max(1, ...xs.map(x => x[key]));
-    const every = xs.length > 45 ? 2 : 1;
-    const peak = xs.reduce((a, x, i) => (x[key] > xs[a][key] ? i : a), 0);
-    const W3 = 1000, bw3 = W3 / n;
-    const rects = xs.map((x, i) => { const h = Math.max(1, x[key] / mx * H);
-      return `<rect x="${(i*bw3).toFixed(1)}" y="${(H-h).toFixed(1)}" width="${Math.max(1, bw3*0.86).toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${colour}"></rect>`; }).join('');
-    const labels = xs.map((x, i) => (i % every && i !== peak) ? '' :
-      `<span class="bar-lab" style="left:${((i + 0.43) / n * 100).toFixed(3)}%;bottom:${(Math.max(1, x[key] / mx * H) + 2).toFixed(1)}px;">${kfmt(x[key])}</span>`).join('');
-    return `<div class="bar-wrap" style="height:${H + 16}px;"><svg viewBox="0 0 ${W3} ${H}" width="100%" height="${H}" preserveAspectRatio="none"
-      style="position:absolute;left:0;bottom:0;display:block;">${rects}</svg>${labels}</div>`;
-  };
+  const kfmt = labelKfmt, bars = labelledBars;
   /**
    * DAILY SPEND vs CREDITED SALES — two strips on one day axis, each on its
    * own scale. One chart with two y-axes would invite reading the crossing
@@ -8581,57 +8569,150 @@ function renderShopee() {
  * revenues are every-touch and overlap, so none are added; Seller Guided rows
  * carry no conversion, so they show dashes.
  */
+/** Labelled bar strip (Shopee and Lazada): 9.5px house labels over a stretched SVG. */
+const labelKfmt = (v) => v >= 1e6 ? (v/1e6).toFixed(v >= 1e7 ? 0 : 1) + 'M' : v >= 1e3 ? (v/1e3).toFixed(v >= 1e4 ? 0 : 1) + 'K' : String(Math.round(v));
+function labelledBars(xs, key, colour, H) {
+    const n = Math.max(xs.length, 1), mx = Math.max(1, ...xs.map(x => x[key]));
+    const every = xs.length > 45 ? 2 : 1;
+    const peak = xs.reduce((a, x, i) => (x[key] > xs[a][key] ? i : a), 0);
+    const W3 = 1000, bw3 = W3 / n;
+    const rects = xs.map((x, i) => { const h = Math.max(1, x[key] / mx * H);
+      return `<rect x="${(i*bw3).toFixed(1)}" y="${(H-h).toFixed(1)}" width="${Math.max(1, bw3*0.86).toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${colour}"></rect>`; }).join('');
+    const labels = xs.map((x, i) => (i % every && i !== peak) ? '' :
+      `<span class="bar-lab" style="left:${((i + 0.43) / n * 100).toFixed(3)}%;bottom:${(Math.max(1, x[key] / mx * H) + 2).toFixed(1)}px;">${labelKfmt(x[key])}</span>`).join('');
+    return `<div class="bar-wrap" style="height:${H + 16}px;"><svg viewBox="0 0 ${W3} ${H}" width="100%" height="${H}" preserveAspectRatio="none"
+      style="position:absolute;left:0;bottom:0;display:block;">${rects}</svg>${labels}</div>`;
+  }
+
 function renderLazada() {
-  const d = S.lazada;
+  const D = S.lazada;
   if (S.lazadaError) { const m = S.lazadaError; $('viewRoot').innerHTML = errorState(m); S.lazadaError = null; return; }
-  if (!d) { $('viewRoot').innerHTML = loadPrompt('lazada', 'Reads the Lazada Business Advisor sheet.'); return; }
-  if (!d.available) { $('viewRoot').innerHTML = errorState(`Lazada sheet \u2014 ${esc(d.reason || 'unavailable')}`); return; }
+  if (!D) { $('viewRoot').innerHTML = loadPrompt('lazada', 'Reads the Lazada Business Advisor sheet.'); return; }
+  if (!D.available) { $('viewRoot').innerHTML = errorState(`Lazada sheet \u2014 ${esc(D.reason || 'unavailable')}`); return; }
   const pc = (v, dp = 1) => v != null ? num(v * 100, { dp }) + '%' : '\u2014';
   const nn = (v, money) => v == null ? '\u2014' : money ? num(v, { money: true, bare: true }) : num(v);
   const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const lMon = (m) => { const [y, mo] = String(m).split('.'); return `${MON[+mo - 1]} ${y}`; };
-  const span = d.months.length === 1 ? lMon(d.months[0]) : `${lMon(d.months[0])} \u2013 ${lMon(d.months[d.months.length-1])}`;
-  const miss = d.missing.length ? ` <span class="pill">${num(d.missing.length)} month${d.missing.length>1?'s':''} not in the sheet</span>` : '';
-  const lg = d.groups.find(g => /lazada/i.test(g.name)) || {}, sg = d.groups.find(g => /seller/i.test(g.name)) || {};
-  const top = Math.max(1, ...d.sources.map(x => x.visitors || 0));
-  const row = (x, bar) => `<tr><td>${esc(x.name)}${bar ? ` <span class="muted">\u00b7 ${/lazada/i.test(x.group)?'Lazada':'you'}</span>` : ''}</td>
-    <td class="num">${nn(x.visitors)}</td><td class="num">${nn(x.cartUsers)}</td><td class="num">${nn(x.buyers)}</td>
-    <td class="num">${pc(x.conversion, 2)}</td><td class="num">${nn(x.revenue, true)}</td>
-    ${bar ? `<td style="width:22%;"><div style="background:var(--line);border-radius:3px;height:8px;"><div style="background:#1A73E8;height:8px;border-radius:3px;width:${Math.max(0.5,(x.visitors||0)/top*100).toFixed(1)}%;"></div></div></td>` : ''}</tr>`;
-  const head6 = (first, bar) => `<thead><tr><th>${first}</th><th class="num">Visitors</th><th class="num">Added to cart</th><th class="num">Buyers</th>
-    <th class="num">Conversion</th><th class="num">Revenue (THB)</th>${bar?'<th></th>':''}</tr></thead>`;
-  const kw = d.keywords;
+  const span = (ms) => ms.length === 1 ? lMon(ms[0]) : `${lMon(ms[0])} \u2013 ${lMon(ms[ms.length-1])}`;
+  const missPill = (x) => x.missing && x.missing.length ? ` <span class="pill">${num(x.missing.length)} month${x.missing.length>1?'s':''} not in the sheet</span>` : '';
+  const na = (title, x) => `<div class="card mt"><div class="card-title">${title}</div>
+    <div class="note" style="margin-top:0;">${esc(x.reason || 'unavailable')} &mdash; not measured, not zero.</div></div>`;
   const box = (title, meaning, rows, fig, tone) => `<div class="syn-box"><div class="syn-t ${tone}">${title} <span class="muted">\u00b7 ${num(rows.length)}</span></div>
     <div class="note" style="margin:2px 0 8px;">${meaning}</div>${rows.length ? rows.slice(0, 8).map(x => `<div class="syn-r"><span class="trunc" data-tip="${esc(x.name)}">${esc(x.name)}</span><span class="num">${fig(x)}</span></div>`).join('') : '<div class="note">none</div>'}</div>`;
+
+  /** SALES — Key Metrics, daily, with MoM/YoY from fully covered windows. */
+  const sl = D.sales || {}, C = D.compare || {}, W = C.windows || {};
+  const chip = (v, tip) => v == null
+    ? `<span class="dlt none" data-tip="${esc(tip + ' \u2014 that window is not fully in the sheet')}">\u2014</span>`
+    : `<span class="dlt ${v>0.005?'up':(v<-0.005?'down':'flat')}" data-tip="${esc(tip)}">${changeText(v, Math.abs(v)>=1?0:1)}</span>`;
+  const cmp = (k) => `<div class="note cmp-row" style="margin-top:6px">
+    <span class="cmp-pair">${chip(C.mom && C.mom[k], W.prev ? `MoM \u2014 ${humanDate(W.prev.from)} to ${humanDate(W.prev.to)}` : 'MoM')} MoM</span>
+    <span class="cmp-pair">${chip(C.yoy && C.yoy[k], W.yoy ? `YoY \u2014 ${humanDate(W.yoy.from)} to ${humanDate(W.yoy.to)}` : 'YoY')} YoY</span></div>`;
+  const cover = sl.available && sl.days < sl.windowDays ? ` <span class="pill">${num(sl.days)} of ${num(sl.windowDays)} days</span>` : '';
+  const sales = !sl.available ? na('Sales', sl) : `<div class="grid g-4">
+      <div class="stat card"><div class="lab">Revenue (THB)</div><div class="val">${nn(sl.revenue, true)}</div>
+        <div class="sub">${sl.cancelled!=null||sl.returned!=null?`THB ${nn(sl.cancelled,true)} cancelled \u00b7 ${nn(sl.returned,true)} returned`:'paid, incl. platform subsidies'}</div>${cmp('revenue')}</div>
+      <div class="stat card"><div class="lab">Orders</div><div class="val">${nn(sl.orders)}</div>
+        <div class="sub">${sl.itemsPerOrder!=null?num(sl.itemsPerOrder,{dp:2})+' items per order':'\u2014'} \u00b7 ${nn(sl.buyers)} buyers</div>${cmp('orders')}</div>
+      <div class="stat card"><div class="lab">Average order (THB)</div><div class="val">${nn(sl.aov, true)}</div>
+        <div class="sub">revenue \u00f7 orders</div>${cmp('aov')}</div>
+      <div class="stat card"><div class="lab">Conversion</div><div class="val">${pc(sl.conversion, 2)}</div>
+        <div class="sub">buyers per visitor \u00b7 ${nn(sl.visitors)} visitors</div>${cmp('conversion')}</div>
+    </div>
+    ${sl.daily && sl.daily.length > 1 ? `<div class="card mt"><div class="card-title">Revenue by day (THB)${cover}</div>
+      ${labelledBars(sl.daily, 'value', '#1A73E8', 110)}
+      <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
+        <span>${esc(humanDate(sl.daily[0].d))}</span><span>${esc(humanDate(sl.daily[sl.daily.length-1].d))}</span></div></div>` : ''}`;
+
+  /** TRAFFIC — Traffic Source, monthly. */
+  const d = D.traffic || {};
+  let traffic = '', adsSec = '', search = '';
+  if (!d.available) traffic = na('Where visitors came from', d);
+  else {
+    const lg = d.groups.find(g => /lazada/i.test(g.name)) || {}, sg = d.groups.find(g => /seller/i.test(g.name)) || {};
+    const top = Math.max(1, ...d.sources.map(x => x.visitors || 0));
+    const row = (x, bar) => `<tr><td>${esc(x.name)}${bar ? ` <span class="muted">\u00b7 ${/lazada/i.test(x.group)?'Lazada':'you'}</span>` : ''}</td>
+      <td class="num">${nn(x.visitors)}</td><td class="num">${nn(x.cartUsers)}</td><td class="num">${nn(x.buyers)}</td>
+      <td class="num">${pc(x.conversion, 2)}</td><td class="num">${nn(x.revenue, true)}</td>
+      ${bar ? `<td style="width:22%;"><div style="background:var(--line);border-radius:3px;height:8px;"><div style="background:#1A73E8;height:8px;border-radius:3px;width:${Math.max(0.5,(x.visitors||0)/top*100).toFixed(1)}%;"></div></div></td>` : ''}</tr>`;
+    const head6 = (first, bar) => `<thead><tr><th>${first}</th><th class="num">Visitors</th><th class="num">Added to cart</th><th class="num">Buyers</th>
+      <th class="num">Conversion</th><th class="num">Revenue (THB)</th>${bar?'<th></th>':''}</tr></thead>`;
+    traffic = `<div class="grid g-4">
+        <div class="stat card"><div class="lab">Visitors \u00b7 ${esc(span(d.months))}</div><div class="val">${num(d.visitors)}</div>
+          <div class="sub">${d.months.length>1?'unique per month, months summed':'unique visitors in the month'}${missPill(d)}</div></div>
+        <div class="stat card"><div class="lab">Found by Lazada</div><div class="val">${pc(d.lazadaGuidedShare,0)}</div>
+          <div class="sub">${nn(lg.visitors)} visitors \u2014 search, banners, cart, campaigns</div></div>
+        <div class="stat card"><div class="lab">Brought by you</div><div class="val">${pc(d.visitors ? (sg.visitors||0)/d.visitors : null,0)}</div>
+          <div class="sub">${nn(sg.visitors)} visitors \u2014 your ads, store, outside links</div></div>
+        <div class="stat card"><div class="lab">Revenue \u00b7 Lazada-found</div><div class="val">${nn(lg.revenue, true)}</div>
+          <div class="sub">${d.lazadaGuidedRevenueShare!=null?pc(d.lazadaGuidedRevenueShare,0)+' of revenue \u00b7 every-touch':`${nn(lg.buyers)} buyers`}</div></div>
+      </div>
+      <div class="card mt"><div class="card-title">Where visitors came from <span class="muted">\u00b7 revenue overlaps across sources</span></div>
+        <table class="roomy">${head6('Source', true)}<tbody>${d.sources.map(x => row(x, true)).join('')}</tbody></table></div>`;
+    adsSec = d.ads.length ? `<div class="sec-h">Your ads on Lazada</div>
+      <div class="card"><div class="card-title">Sponsored Solutions traffic</div>
+        <table class="roomy">${head6('Product', false)}<tbody>${d.ads.map(x => row(x, false)).join('')}</tbody></table></div>` : '';
+    const kw = d.keywords;
+    search = `<div class="sec-h">Search</div>
+      <div class="card"><div class="card-title">What shoppers searched &middot; whole shop</div>
+        <div class="note" style="margin-top:0;">${num(kw.count)} search terms brought a visitor; ${num(kw.withBuyers)} brought a buyer. Top ${num(kw.list.length)} by visitors.</div>
+        <table class="roomy mt">${head6('Search term', false)}<tbody>${kw.list.map(x => row(x, false)).join('')}</tbody></table>
+        <div class="grid g-2 mt" style="gap:12px;">
+          ${box('Searched, visited, no buyer', 'Demand the listings are not meeting \u2014 a missing or weak package', kw.demandGaps, x => `${num(x.visitors)} visitors`, 'bad')}
+          ${box("Other hospitals' names", 'People searching for another hospital found this shop', kw.otherHospitals.map(x => ({ ...x, name: `${x.name} (${x.hospital})` })), x => `${num(x.visitors)} visitors \u00b7 ${nn(x.buyers)} buyers`, '')}
+        </div></div>`;
+  }
+
+  /** PACKAGES — Product Performance, monthly; SKU rows skipped server-side. */
+  const p = D.products || {};
+  let packages = '';
+  if (!p.available) packages = na('Packages', p);
+  else {
+    // One package row; its money cell sits under the "Revenue (THB)" header.
+    const prow = (x) => `<tr><td class="trunc" data-tip="${esc(x.name)}">${esc(x.name)}</td><td class="num">${num(x.visitors)}</td>
+      <td class="num">${num(x.cartUsers)}</td><td class="num">${num(x.orders)}</td><td class="num">${pc(x.conversion)}</td>
+      <td class="num">${num(x.revenue,{money:true,bare:true})}</td></tr>`;
+    const lk = p.leaks;
+    packages = `<div class="card">
+      <div class="card-title">Packages &middot; ${esc(span(p.months))}${missPill(p)}</div>
+      <div class="grid g-4">
+        <div class="stat"><div class="lab">Revenue (THB)</div><div class="val">${num(p.revenue,{money:true,bare:true})}</div>
+          <div class="sub">${p.shareOfRevenue!=null?pc(p.shareOfRevenue,0)+' of shop revenue':'from product rows'}</div></div>
+        <div class="stat"><div class="lab">Packages sold</div><div class="val">${num(p.sold)}</div><div class="sub">of ${num(p.count)} with traffic</div></div>
+        <div class="stat"><div class="lab">Visitor \u2192 order</div><div class="val">${pc(p.visitors ? p.orders / p.visitors : null, 2)}</div>
+          <div class="sub">${num(p.visitors)} product visitors</div></div>
+        <div class="stat"><div class="lab">Orders</div><div class="val">${num(p.orders)}</div><div class="sub">across all packages</div></div>
+      </div>
+      <table class="roomy mt pk-t" style="table-layout:fixed;"><thead><tr><th style="width:40%;">Package</th><th class="num">Visitors</th>
+        <th class="num">Added to cart</th><th class="num">Orders</th><th class="num">Conversion</th><th class="num">Revenue (THB)</th></tr></thead>
+        <tbody>${p.list.slice(0, 20).map(prow).join('')}</tbody>
+        ${p.list.length > 20 ? `<tbody class="pk-more">${p.list.slice(20).map(prow).join('')}</tbody>` : ''}</table>
+      ${p.list.length > 20 ? `<button type="button" class="btn btn-ghost mt" onclick="this.closest('.card').classList.toggle('pk-all');this.textContent=this.closest('.card').classList.contains('pk-all')?'Show top 20':'Show all ${p.list.length} packages'">Show all ${p.list.length} packages</button>` : ''}
+    </div>
+    ${lk ? `<div class="card mt"><div class="card-title">Where each package leaks <span class="muted">\u00b7 50+ visitors, against the shop's own rates</span></div>
+      <div class="grid g-2" style="gap:12px;">
+        ${box('Viewed, not added to cart', `Fix the listing: photos, title, price shown. Shop: ${pc(lk.shopCartRate)} of visitors add to cart`, lk.notCarted, x => `${num(x.visitors)} visitors \u00b7 ${pc(x.cartRate)}`, 'bad')}
+        ${box('Added to cart, not bought', `Check price at checkout. Shop: ${pc(lk.shopBuyRate)} of carts become orders`, lk.notBought, x => `${num(x.cartUsers)} carted \u00b7 ${num(x.orders)} orders`, 'bad')}
+      </div></div>` : ''}
+    <div class="card mt"><div class="card-title">Price and conversion &middot; average price per unit</div>
+      <table class="roomy"><thead><tr><th>Price band (THB)</th><th class="num">Packages</th><th class="num">Visitors</th><th class="num">Orders</th>
+        <th class="num">Conversion</th><th class="num">Revenue (THB)</th></tr></thead><tbody>
+        ${p.priceBands.map(b => `<tr><td>${esc(b.label)}</td><td class="num">${num(b.packages)}</td><td class="num">${b.packages?num(b.visitors):'\u2014'}</td>
+          <td class="num">${b.packages?num(b.orders):'\u2014'}</td><td class="num">${pc(b.conversion,2)}</td>
+          <td class="num">${b.packages?num(b.revenue,{money:true,bare:true}):'\u2014'}</td></tr>`).join('')}
+      </tbody></table></div>`;
+  }
+
   $('viewRoot').innerHTML = `
     <div class="search"><div>
       <div class="big">Lazada <span class="pill">BangkokHospital</span></div>
-      <div class="hint">One storefront, from Lazada Business Advisor. ${esc(span)}.${miss}</div>
+      <div class="hint">One storefront, from Lazada Business Advisor.</div>
     </div></div>
-    <div class="sec-h">Traffic</div>
-    <div class="grid g-4">
-      <div class="stat card"><div class="lab">Visitors</div><div class="val">${num(d.visitors)}</div>
-        <div class="sub">${d.months.length>1?'unique per month, months summed':'unique visitors in the month'}</div></div>
-      <div class="stat card"><div class="lab">Found by Lazada</div><div class="val">${pc(d.lazadaGuidedShare,0)}</div>
-        <div class="sub">${nn(lg.visitors)} visitors \u2014 search, banners, cart, campaigns</div></div>
-      <div class="stat card"><div class="lab">Brought by you</div><div class="val">${pc(d.visitors ? (sg.visitors||0)/d.visitors : null,0)}</div>
-        <div class="sub">${nn(sg.visitors)} visitors \u2014 your ads, store, outside links</div></div>
-      <div class="stat card"><div class="lab">Revenue \u00b7 Lazada-found</div><div class="val">${nn(lg.revenue, true)}</div>
-        <div class="sub">${nn(lg.buyers)} buyers \u00b7 ${pc(lg.conversion,2)} conversion</div></div>
-    </div>
-    <div class="card mt"><div class="card-title">Where visitors came from <span class="muted">\u00b7 revenue overlaps across sources</span></div>
-      <table class="roomy">${head6('Source', true)}<tbody>${d.sources.map(x => row(x, true)).join('')}</tbody></table></div>
-    ${d.ads.length ? `<div class="sec-h">Your ads on Lazada</div>
-    <div class="card"><div class="card-title">Sponsored Solutions traffic</div>
-      <table class="roomy">${head6('Product', false)}<tbody>${d.ads.map(x => row(x, false)).join('')}</tbody></table></div>` : ''}
-    <div class="sec-h">Search</div>
-    <div class="card"><div class="card-title">What shoppers searched &middot; whole shop</div>
-      <div class="note" style="margin-top:0;">${num(kw.count)} search terms brought a visitor; ${num(kw.withBuyers)} brought a buyer. Top ${num(kw.list.length)} by visitors.</div>
-      <table class="roomy mt">${head6('Search term', false)}<tbody>${kw.list.map(x => row({ ...x, group: 'Lazada' }, false)).join('')}</tbody></table>
-      <div class="grid g-2 mt" style="gap:12px;">
-        ${box('Searched, visited, no buyer', 'Demand the listings are not meeting \u2014 a missing or weak package', kw.demandGaps, x => `${num(x.visitors)} visitors`, 'bad')}
-        ${box("Other hospitals' names", 'People searching for another hospital found this shop', kw.otherHospitals.map(x => ({ ...x, name: `${x.name} (${x.hospital})` })), x => `${num(x.visitors)} visitors \u00b7 ${nn(x.buyers)} buyers`, '')}
-      </div></div>`;
+    <div class="sec-h">Sales</div>${sales}
+    <div class="sec-h">Traffic</div>${traffic}
+    ${adsSec}
+    <div class="sec-h">Packages</div>${packages}
+    ${search}`;
 }
 
 function renderLine() {
@@ -12202,7 +12283,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.343.0';
+const CLIENT_BUILD = '3.344.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

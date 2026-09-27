@@ -1108,6 +1108,50 @@ global.fetch = async (url, opts = {}) => {
    */
   if (u.includes("1_WnGf7NOID")) {
     if (process.env.MOCK_FAIL_CONNECTOR === "lazada-sheet") return jsonRes({ error: { code: 403 } }, 403);
+    /**
+     * KEY METRICS (v3.344.0), daily. July 2026 has all 31 days at 10,000 a
+     * day, one day pasted twice (the later 20,000 wins), a leftover month-
+     * total row and note row (skipped: not one day), and "-" for AOV on a
+     * no-order day. 31 May – 30 June is complete too (5,000 a day), so MoM exists;
+     * July 2025 is absent, so YoY is a dash.
+     */
+    if (/Key(%20|\+| )Metrics/.test(u)) {
+      if (process.env.MOCK_FAIL_CONNECTOR === "lazada-keymetrics") return jsonRes({ error: { code: 400 } }, 400);
+      const KH = ["Date", "Revenue", "Visitors", "Buyers", "Orders", "Pageviews", "Units Sold", "Conversion Rate", "Revenue per Buyer",
+        "Visitor Value", "Add to Cart Users", "Add to Cart Units", "Wishlists", "Wishlist Users", "Average Order Value", "Average Basket Size",
+        "Cancelled Amount", "Return/Refund Amount"];
+      const day = (d, rev, v, b, o) => [d, rev, String(v), String(b), String(o), String(v * 2), String(o), "1%", "-", "1", "4", "5", "0", "0", o ? "1" : "-", "1", "-", "-"];
+      const rows = [KH, ["2026-07-01~2026-07-31", "999,999", "9", "9", "9", "9", "9", "1%", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"],
+        ["Daily data is only available for the past 6 months", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]];
+      // 31 May too: July's comparison span is the 31 days before it.
+      rows.push(day("2026-05-31", "5,000.00", 100, 1, 1));
+      for (let i = 1; i <= 30; i++) rows.push(day(`2026-06-${String(i).padStart(2, "0")}`, "5,000.00", 100, 1, 1));
+      for (let i = 1; i <= 31; i++) rows.push(day(`2026-07-${String(i).padStart(2, "0")}`, "10,000.00", 200, 1, 1));
+      rows.push(day("2026-07-15", "20,000.00", 200, 1, 1));
+      return jsonRes({ spreadsheetId: "mock-lazada", valueRanges: [{ values: rows }] });
+    }
+    /**
+     * PRODUCT (v3.344.0), monthly with `month`. Each product row is followed
+     * by its SKU row with the SAME figures — counting both doubles revenue.
+     * 111 sells; 555 is visited but barely carted; 666 carted, not bought.
+     */
+    if (/'Product'!|%27Product%27!/.test(u)) {
+      const PH = ["month", "Product ID", "Product Name", "URL", "Seller SKU", "SKU ID", "Product Visitors", "Product Pageviews", "Visitor Value",
+        "Add to Cart Users", "Add to Cart Units", "Add to Cart Conversion Rate", "Wishlist Users", "Wishlists", "Buyers", "Orders", "Units Sold",
+        "Revenue", "Conversion Rate", "Revenue per Buyer", "Revenue share"];
+      const pr = (mo, id, name, sku, v, cu, o, rev) => [mo, id, name + " - Bangkok Hospital [E-Coupon]", "x", sku ? "HC-1" : "-", sku ? "1995" + id : "-",
+        String(v), String(v), "1", String(cu), String(cu), "1%", "0", "0", String(o), String(o), String(o), rev, "1%", "1", "1%"];
+      const both = (...a) => [pr(...a.slice(0, 3), false, ...a.slice(3)), pr(...a.slice(0, 3), true, ...a.slice(3))];
+      return jsonRes({ spreadsheetId: "mock-lazada", valueRanges: [{ values: [PH,
+        // 111 has TWO SKUs splitting its figures: keeping a SKU row (or
+        // letting the last one win) reads 125,000 instead of 250,000.
+        pr("2026-07", "111", "Longevity Female", false, 300, 30, 10, "250,000.00"),
+        pr("2026-07", "111", "Longevity Female", true, 150, 15, 5, "125,000.00"),
+        pr("2026-07", "111", "Longevity Female", true, 150, 15, 5, "125,000.00"),
+        ...both("2026-07", "555", "Heart Scan", 200, 1, 0, "0.00"),
+        ...both("2026-07", "666", "Gut Check", 60, 20, 0, "0.00"),
+        ...both("2026-06", "111", "Longevity Female", 999, 99, 99, "999,999")] }] });
+    }
     const H = ["Month", "Level 1 - Traffic Source", "Level 2 - Traffic Source", "Level 3 - Traffic Source", "Visitors",
       "Visitors Change vs  2025-07-01~2025-07-31", "Pageviews", "Pageviews Change vs  2025-07-01~2025-07-31", "Pageview Share",
       "Pageview Share Change vs  2025-07-01~2025-07-31", "Product Visitors", "Product Visitors Change vs 2025-07-01~2025-07-31",

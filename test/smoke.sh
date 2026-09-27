@@ -382,18 +382,31 @@ echo "--- Lazada tab (v3.343.0) ---"
 LZ="/api/lazada?from=$FROM&to=$TO"
 check "lazada tab" GET "$LZ"
 # ONE LEVEL AT A TIME: level-1 visitors 700 + 500. Summing every row: 3,000+.
-expect_field "lz visitors"        "$LZ" "d.visitors===1200?1200:undefined"
-expect_field "lz guided share"    "$LZ" "d.lazadaGuidedShare===700/1200?'ok':undefined"
+expect_field "lz visitors"        "$LZ" "d.traffic.visitors===1200?1200:undefined"
+expect_field "lz guided share"    "$LZ" "d.traffic.lazadaGuidedShare===700/1200?'ok':undefined"
 # "-" IS NOT ZERO: Seller Guided buyers and revenue stay null.
-expect_field "lz dash not zero"   "$LZ" "(g=>g.buyers===null&&g.revenue===null&&g.visitors===500)(d.groups.find(g=>/Seller/.test(g.name)))?'ok':undefined"
+expect_field "lz dash not zero"   "$LZ" "(g=>g.buyers===null&&g.revenue===null&&g.visitors===500)(d.traffic.groups.find(g=>/Seller/.test(g.name)))?'ok':undefined"
 # LATER PASTE WINS: Search 300, not 999 or 1,299.
-expect_field "lz later paste"     "$LZ" "d.sources.find(x=>x.name==='Search').visitors===300?'ok':undefined"
-expect_field "lz nbsp source"     "$LZ" "d.sources.some(x=>x.name==='Add more page')?'ok':undefined"
+expect_field "lz later paste"     "$LZ" "d.traffic.sources.find(x=>x.name==='Search').visitors===300?'ok':undefined"
+expect_field "lz nbsp source"     "$LZ" "d.traffic.sources.some(x=>x.name==='Add more page')?'ok':undefined"
 # EVERY-TOUCH: sources carry their own revenue; nothing sums them.
-expect_field "lz revenue kept"    "$LZ" "d.sources.find(x=>x.name==='Search').revenue===60000&&d.groups.find(g=>/Lazada/.test(g.name)).revenue===100000?'ok':undefined"
-expect_field "lz ads level 3"     "$LZ" "d.ads.map(a=>a.name).join()==='Sponsored Discovery,Sponsored Max'?'ok':undefined"
-expect_field "lz keywords"        "$LZ" "d.keywords.list.every(k=>k.name!=='others')&&d.keywords.demandGaps.map(k=>k.name).join()==='hpv'&&d.keywords.otherHospitals[0].hospital==='BNH'?'ok':undefined"
-expect_field "lz part month"      "/api/lazada?from=2026-07-01&to=2026-07-15" "d.available===false&&/whole months/.test(d.reason)?'ok':undefined"
+expect_field "lz revenue kept"    "$LZ" "d.traffic.sources.find(x=>x.name==='Search').revenue===60000&&d.traffic.groups.find(g=>/Lazada/.test(g.name)).revenue===100000?'ok':undefined"
+expect_field "lz ads level 3"     "$LZ" "d.traffic.ads.map(a=>a.name).join()==='Sponsored Discovery,Sponsored Max'?'ok':undefined"
+expect_field "lz keywords"        "$LZ" "d.traffic.keywords.list.every(k=>k.name!=='others')&&d.traffic.keywords.demandGaps.map(k=>k.name).join()==='hpv'&&d.traffic.keywords.otherHospitals[0].hospital==='BNH'?'ok':undefined"
+expect_field "lz part month"      "/api/lazada?from=2026-07-01&to=2026-07-15" "d.traffic.available===false&&/whole months/.test(d.traffic.reason)&&d.sales.available===true?'ok':undefined"
+
+# KEY METRICS: 31 July days, 15 July re-pasted (20,000 wins) = 320,000; the
+# month-total (999,999) and note rows skipped.
+expect_field "lzk revenue"        "$LZ" "d.sales.revenue===320000&&d.sales.days===31?'ok':undefined"
+expect_field "lzk rates once"     "$LZ" "d.sales.aov===320000/31&&d.sales.conversion===31/6200?'ok':undefined"
+# MoM vs the complete 31 days before (155,000); no July 2025 → YoY dash.
+expect_field "lzk mom"            "$LZ" "Math.abs(d.compare.mom.revenue-(320000/155000-1))<1e-9&&d.compare.yoy===null?'ok':undefined"
+# A part-month range still shows sales (daily), not the monthly cards.
+expect_field "lzk part range"     "/api/lazada?from=2026-07-01&to=2026-07-10" "d.sales.days===10&&d.products.available===false?'ok':undefined"
+# PRODUCT: SKU rows skipped (250,000 not 500,000); June out; leaks.
+expect_field "lzp revenue"        "$LZ" "d.products.revenue===250000&&d.products.count===3?'ok':undefined"
+expect_field "lzp share"          "$LZ" "d.products.shareOfRevenue===250000/320000?'ok':undefined"
+expect_field "lzp leaks"          "$LZ" "d.products.leaks.notCarted.map(x=>x.id).join()==='555'&&d.products.leaks.notBought[0].id==='666'?'ok':undefined"
 
 echo "--- LINE tab (v3.309.0) ---"
 LINE="/api/line?from=$FROM&to=$TO"

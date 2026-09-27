@@ -1,5 +1,22 @@
 ### Recent (September 2026)
 
+**v3.344.0 — Lazada: Key Metrics and Product.** Two more tabs in the Lazada
+sheet, each read by its OWN batchGet so one missing tab cannot blank the rest.
+- `Key Metrics` (Dashboard > Key Metrics), DAILY: header + day rows; any
+  leftover month-total / note row is skipped (Date is not one day); a day
+  pasted twice keeps the later paste. Revenue, orders, AOV, conversion,
+  items/order, cancelled/returned, revenue by day; MoM/YoY only when both
+  windows are fully covered (Lazada keeps six months of daily data).
+- `Product` (Product > Performance), monthly with `month`: the export lists
+  each product AND its SKUs beneath it; SKU rows are skipped (fixture: a
+  two-SKU product reads 125,000 if the last SKU row wins). Package table,
+  leaks and price bands as on Shopee.
+- Payload regrouped: `sales`, `compare`, `traffic`, `products`. Key Metrics
+  works for any range; the monthly two need whole months.
+- `labelledBars` lifted to module scope and shared by Shopee and Lazada.
+Keyword Performance export NOT imported: it is the same top-50 terms as
+Traffic Source's level-3 Search rows.
+
 **v3.343.0 — Lazada tab, first source.** Nav `Report > Channels > Lazada`,
 `/api/lazada`, `requireTab("lazada")`. MW's Lazada sheet
 (`LAZADA_SHEET_ID` = `1_WnGf7NOIDOL9xrF5_JTpIBSobgv7SY-CR-wXjCRL8I`, shared
