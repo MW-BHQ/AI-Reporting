@@ -1888,9 +1888,38 @@ async function buildOverview(from, to) {
     search.ctr = (search.clicks / search.impressions) * 100;
   }
 
+  /**
+   * MARKETPLACES IN THE FUNNEL (v3.349.0, MW): both shops contribute to the
+   * Overview's stages, as MW mapped them —
+   *   TOFU  Shopee Ads impressions (search and shop ads are inside it;
+   *         Lazada exports no impressions, so its share is unmeasured)
+   *   Interactions  search-term clicks: Shopee search clicks, Lazada Search
+   *         visitors (Traffic Source, whole months only)
+   *   MOFU  shop views: Shopee visits, Lazada visitors
+   *   Engagement  product views: Shopee product visitors, Lazada product
+   *         visitors (Product tab, whole months only)
+   *   BOFU  add to cart and checkouts (placed orders / orders)
+   * Kept in `totalsAll`, NOT `totals`: every web-only consumer (Monthly
+   * Report, forecast, key-event breakdown) keeps its own arithmetic, and only
+   * the funnel card draws the combined stages. Both shops serve all four
+   * hospitals, so their segments are group-level, like LINE and YouTube.
+   */
+  const marketplace = await overviewMarketplace(from, to);
+  const mpSum = (k) => {
+    const v = [marketplace.shopee && marketplace.shopee[k], marketplace.lazada && marketplace.lazada[k]].filter((x) => x != null);
+    return v.length ? v.reduce((a, b) => a + b, 0) : null;
+  };
+  const plus = (base, add) => (base == null && add == null ? null : n(base) + n(add));
+  const totalsAll = {
+    impressions: plus(totals.impressions, mpSum("impressions")),
+    clicks: plus(totals.clicks, mpSum("searchClicks")),
+    visits: plus(totals.visits, mpSum("shopViews")),
+    engagement: plus(totals.engagement, mpSum("productViews")),
+    keyEvents: plus(totals.keyEvents, plus(mpSum("addToCart"), mpSum("checkouts"))),
+  };
   return {
     range: { from, to },
-    totals, funnel, reachOnly, keyEventBreakdown, offsiteActions,
+    totals, totalsAll, marketplace, funnel, reachOnly, keyEventBreakdown, offsiteActions,
     // Per-source figures for the non-GA4 segments of the stage bars.
     impressionsBySource: {
       meta: impressions.meta, gads: impressions.gads, gsc: impressions.gsc,
@@ -8670,6 +8699,32 @@ async function buildPackages(from, to, scope) {
  * shown side by side, never summed across platforms. The Orders sheet's
  * channel revenue is set against each so the gap is visible, not argued.
  */
+/**
+ * The two shops' contributions to the Reporting Overview funnel — each from
+ * its own cached tab build. A missing shop is null (its segments vanish and
+ * the stage totals exclude it), never zeros.
+ */
+async function overviewMarketplace(from, to) {
+  const [sh, lz] = await Promise.all([
+    cachedShopee(from, to, false).then((o) => o.value).catch(() => null),
+    cachedLazada(from, to, false).then((o) => o.value).catch(() => null),
+  ]);
+  const shopee = sh && sh.available ? {
+    impressions: sh.shopeeAds && sh.shopeeAds.available ? sh.shopeeAds.impressions : null,
+    searchClicks: sh.funnel.searchClicks, shopViews: sh.funnel.visits, productViews: sh.funnel.productVisitors,
+    addToCart: sh.funnel.cartVisitors, checkouts: sh.funnel.placedOrders,
+  } : null;
+  const tr = lz && lz.traffic && lz.traffic.available ? lz.traffic : null;
+  const sl = lz && lz.sales && lz.sales.available ? lz.sales : null;
+  const lazada = lz && lz.available ? {
+    impressions: null,
+    searchClicks: tr ? ((tr.sources.find((x) => /^search$/i.test(x.name)) || {}).visitors ?? null) : null,
+    shopViews: sl ? sl.visitors : null,
+    productViews: lz.products && lz.products.available ? lz.products.visitors : null,
+    addToCart: sl ? sl.cartUsers : null, checkouts: sl ? sl.orders : null,
+  } : null;
+  return { shopee, lazada };
+}
 /** ONE cache entry per storefront build, shared by its tab and the Overview. */
 const cachedShopee = (from, to, refresh) => withCache(`shopee:${from}:${to}`, refresh, () => buildShopee(from, to));
 const cachedLazada = (from, to, refresh) => withCache(`lazada:${from}:${to}`, refresh, () => buildLazada(from, to));
@@ -12427,11 +12482,9 @@ async function buildLazada(from, to) {
     for (const t of LAZADA_CUSTOMER_TABS) { const r = await get(t.trim(), "A1:I"); if (!r.err) return r; }
     return { err: new Error("missing") };
   };
-  const [tr, km, pr, cu, exD, exL, exS, shopeeSide, metaRows] = await Promise.all([get(LAZADA_TRAFFIC_TAB, "A1:AJ"), get(LAZADA_KEYMETRICS_TAB, "A1:R"),
+  const [tr, km, pr, cu, exD, exL, exS, metaRows] = await Promise.all([get(LAZADA_TRAFFIC_TAB, "A1:AJ"), get(LAZADA_KEYMETRICS_TAB, "A1:R"),
     get(LAZADA_PRODUCT_TAB, "A1:U"), getCustomer(),
     get(LAZADA_EXT_TABS.daily, "A1:I"), get(LAZADA_EXT_TABS.links, "A1:Q"), get(LAZADA_EXT_TABS.sold, "A1:R"),
-    // The Shopee side of "one campaign, both marketplaces": same window.
-    buildShopeeSeller(from, to).catch(() => null),
     /**
      * META ON LAZADA: Windsor `facebook`, accounts named `*Lazada*`, with
      * Meta's CPAS fields as on Shopee (v3.337.0). No account → a dash.
@@ -12476,33 +12529,6 @@ async function buildLazada(from, to) {
     }
   }
   const external = lazadaExternal(exD, exL, exS, from, to);
-  /**
-   * ONE CAMPAIGN, BOTH MARKETPLACES (v3.346.0). MW's team gives a campaign
-   * the SAME name on Shopee and Lazada (`webpackage2025`, `getscreened25`),
-   * so the two platforms' own off-platform credits join on the name,
-   * case-insensitive. Each side is its platform's own credit — side by
-   * side, never added into one total.
-   */
-  let bothMarkets = null;
-  if (external.available || (shopeeSide && shopeeSide.available)) {
-    const m = new Map();
-    const key = (x) => String(x || "").trim().toLowerCase();
-    const sp = (shopeeSide && shopeeSide.available && shopeeSide.offPlatform && shopeeSide.offPlatform.available) ? shopeeSide.offPlatform : null;
-    for (const c of (sp ? sp.allCampaigns || sp.campaigns : [])) {
-      const k = key(c.campaign); if (!k || k === "(not set)") continue;
-      m.set(k, { campaign: c.campaign, shopee: { visits: c.visits, orders: c.orders, sales: c.sales }, lazada: null });
-    }
-    for (const c of (external.available ? external.campaigns : [])) {
-      const k = key(c.campaign); if (!k) continue;
-      const e = m.get(k) || { campaign: c.campaign, shopee: null, lazada: null };
-      e.lazada = { views: c.views, orders: c.orders, revenue: c.revenue };
-      m.set(k, e);
-    }
-    const rows = [...m.values()].sort((a, b) => ((b.shopee ? b.shopee.sales : 0) + (b.lazada ? b.lazada.revenue : 0))
-      - ((a.shopee ? a.shopee.sales : 0) + (a.lazada ? a.lazada.revenue : 0)));
-    bothMarkets = { shopeeAvailable: !!sp, lazadaAvailable: external.available, rows,
-      shared: rows.filter((r) => r.shopee && r.lazada).length };
-  }
   const lzAds = (metaRows || []).filter((r) => /lazada/i.test(String(r.account_name || "")));
   const metaSpend = metaRows === null || !lzAds.length ? null : lzAds.reduce((a, r) => a + n(r.spend), 0);
   const meta = {
@@ -12518,7 +12544,7 @@ async function buildLazada(from, to) {
   };
   const any = traffic.available || sales.available || products.available;
   return { available: any, reason: any ? null : [traffic.reason, sales.reason, products.reason].filter(Boolean).join("; "),
-    sales, compare, traffic, products, meta, external, bothMarkets };
+    sales, compare, traffic, products, meta, external };
 }
 
 app.get("/api/lazada", requireTab("lazada"), async (req, res) => {

@@ -3000,6 +3000,11 @@ const SOURCE_BRAND = {
   "TikTok views": "#25F4EE",             // TikTok cyan
   "YouTube views": "#FF0000",            // YouTube red
   "LINE broadcasts": "#06C755",          // LINE green
+  // Marketplaces (v3.349.0): the channel colours the E-commerce tabs use.
+  "Shopee Ads": "#EE4D2D", "Shopee search clicks": "#EE4D2D", "Shopee shop views": "#EE4D2D",
+  "Shopee product views": "#EE4D2D", "Shopee add to cart": "#EE4D2D", "Shopee checkouts": "#EE4D2D",
+  "Lazada search visits": "#1A73E8", "Lazada shop views": "#1A73E8", "Lazada product views": "#1A73E8",
+  "Lazada add to cart": "#1A73E8", "Lazada checkouts": "#1A73E8",
   "Search clicks": "#4285F4",
   "Facebook post engagements": "#7FA8F5",
   "TikTok engagements": "#25F4EE",
@@ -5873,9 +5878,25 @@ function renderOverview() {
   }
 
   const f = d.funnel || [];
-  const totalVisits = f.reduce((a,c)=>a+c.visits,0) || 1;
+  /**
+   * STAGE TOTALS INCLUDE THE MARKETPLACES (v3.349.0): `totalsAll` is web +
+   * Shopee + Lazada; bars are drawn as shares of it, so the GA4 channel
+   * segments narrow to make room for the shops' segments and the whole bar
+   * still sums to the headline. `totals` (web only) stays for everything else.
+   */
+  const TA = d.totalsAll || d.totals;
+  const MP = d.marketplace || {};
+  const mpRows = (key, label) => [['Shopee', MP.shopee], ['Lazada', MP.lazada]]
+    .filter(([, x]) => x && x[key] != null).map(([nm, x]) => ({ n: `${nm} ${label}`, v: x[key] }));
+  const totalVisits = TA.visits || f.reduce((a,c)=>a+c.visits,0) || 1;
   const totalKE = f.reduce((a,c)=>a+c.keyEvents,0) || 1;
-  const totalEng = f.reduce((a,c)=>a+c.engagement,0) || 1;
+  const totalEng = TA.engagement || f.reduce((a,c)=>a+c.engagement,0) || 1;
+  /** Marketplace segments, in the shops' channel colours (they are channels). */
+  const mpSeg = (rows, total) => rows.filter(r => r.v > 0).map(r => {
+    const pct = (r.v/total)*100;
+    const label = pct >= 9 ? `<b class="seg-val">${num(r.v)}</b>` : '';
+    return `<span style="width:${pct}%;background:${SOURCE_BRAND[r.n] || '#5C6478'}" data-tip="${esc(r.n)} (all branches): ${num(r.v)}">${label}</span>`;
+  }).join('');
 
   const seg = (chans, total, key) => chans.map((c,i) => {
     const v = c[key];
@@ -6014,6 +6035,8 @@ function renderOverview() {
     // One OA for all four hospitals, so group-level like YouTube — the
     // awareness table below carries the scope.
     { n:'LINE broadcasts', v: n0(io.line) },
+    // Both shops serve all four hospitals: group-level, like LINE.
+    ...(MP.shopee && MP.shopee.impressions != null ? [{ n:'Shopee Ads', v: MP.shopee.impressions }] : []),
   ].sort((a,b)=>b.v-a.v);
   const clickSources = [
     { n:'Ad clicks', v: n0(io.adClicks) },
@@ -6024,6 +6047,8 @@ function renderOverview() {
     // A LINE open is acting on what was seen without necessarily arriving —
     // this stage. The click is not taken: its session is counted at Visits.
     { n:'LINE opens', v: n0(io.lineOpens) },
+    // Search-term clicks inside each shop (MW's MOFU "click search terms").
+    ...mpRows('searchClicks', 'search clicks').map(r => r.n.startsWith('Lazada') ? { ...r, n: 'Lazada search visits' } : r),
   ].sort((a,b)=>b.v-a.v);
   const impDrawn = drawn(impSources), clickDrawn = drawn(clickSources);
   const keExtra = [
@@ -6032,6 +6057,7 @@ function renderOverview() {
     { n:'Meta conversations', v: n0(oa.metaMessages) },
     { n:'Calls from Google Ads', v: n0(oa.gadsCalls) },
   ];
+  const keShops = [...mpRows('addToCart', 'add to cart'), ...mpRows('checkouts', 'checkouts')];
 
   const unavail = (d.unavailable||[]).length
     ? `<div class="warnbox"><b>Unavailable this run:</b> ${d.unavailable.map(esc).join(', ')}. These show as “—”, not zero — the numbers below exclude them.</div>` : '';
@@ -6049,28 +6075,28 @@ function renderOverview() {
       <h2>Funnel</h2>
       <div class="stage">
         <div class="stage-head"><span class="stage-name">TOFU: Impressions</span>
-          <span class="stage-val ${isNA(d.totals.impressions)?'na':''}">${num(d.totals.impressions)}</span></div>
-        <div class="bar">${srcSeg(impSources, d.totals.impressions||1)}</div>
+          <span class="stage-val ${isNA(TA.impressions)?'na':''}">${num(TA.impressions)}</span></div>
+        <div class="bar">${srcSeg(impSources, TA.impressions||1)}</div>
       </div>
       <div class="stage minor">
         <div class="stage-head"><span class="stage-name">Interactions</span>
-          <span class="stage-val ${isNA(d.totals.clicks)?'na':''}">${num(d.totals.clicks)}</span></div>
-        <div class="bar">${srcSeg(clickSources, d.totals.clicks||1, impDrawn.length)}</div>
+          <span class="stage-val ${isNA(TA.clicks)?'na':''}">${num(TA.clicks)}</span></div>
+        <div class="bar">${srcSeg(clickSources, TA.clicks||1, impDrawn.length)}</div>
       </div>
       <div class="stage">
         <div class="stage-head"><span class="stage-name">MOFU: Visits</span>
-          <span class="stage-val ${isNA(d.totals.visits)?'na':''}">${num(d.totals.visits)}</span></div>
-        <div class="bar">${seg(f, totalVisits, 'visits')}</div>
+          <span class="stage-val ${isNA(TA.visits)?'na':''}">${num(TA.visits)}</span></div>
+        <div class="bar">${seg(f, totalVisits, 'visits')}${mpSeg(mpRows('shopViews', 'shop views'), totalVisits)}</div>
       </div>
       <div class="stage minor">
         <div class="stage-head"><span class="stage-name">Engagement</span>
-          <span class="stage-val ${isNA(d.totals.engagement)?'na':''}">${num(d.totals.engagement)}${d.totals.visits&&d.totals.engagement?` <span style="font-weight:400;">&middot; ${num((d.totals.engagement/d.totals.visits)*100,{pct:true})} of visits</span>`:''}</span></div>
-        <div class="bar">${seg(f, totalEng, 'engagement')}</div>
+          <span class="stage-val ${isNA(TA.engagement)?'na':''}">${num(TA.engagement)}${TA.visits&&TA.engagement?` <span style="font-weight:400;">&middot; ${num((TA.engagement/TA.visits)*100,{pct:true})} of visits</span>`:''}</span></div>
+        <div class="bar">${seg(f, totalEng, 'engagement')}${mpSeg(mpRows('productViews', 'product views'), totalEng)}</div>
       </div>
       <div class="stage">
         <div class="stage-head"><span class="stage-name">BOFU: Value actions</span>
-          <span class="stage-val ${isNA(d.totals.keyEvents)?'na':''}">${num(d.totals.keyEvents)}</span></div>
-        <div class="bar">${seg(f, d.totals.keyEvents||1, 'keyEvents')}${extraSeg(keExtra, d.totals.keyEvents||1)}</div>
+          <span class="stage-val ${isNA(TA.keyEvents)?'na':''}">${num(TA.keyEvents)}</span></div>
+        <div class="bar">${seg(f, TA.keyEvents||1, 'keyEvents')}${extraSeg(keExtra, TA.keyEvents||1)}${mpSeg(keShops, TA.keyEvents||1)}</div>
       </div>
       <!-- COLOUR MEANS CHANNEL, AND ONLY CHANNEL (MW: "just use them for
            channels, not actions (view, clicks), too much headache"). The source
@@ -6078,7 +6104,8 @@ function renderOverview() {
            colour never has two meanings in the same card and the legend stays
            short enough to read. What each source is lives in CONTEXT.md, not on
            the slide. -->
-      <div class="legend">${f.map((c,i)=>`<div><span class="chip" style="background:${colorFor(i, c.channel)}"></span>${esc(c.channel)}</div>`).join('')}</div>
+      <div class="legend">${f.map((c,i)=>`<div><span class="chip" style="background:${colorFor(i, c.channel)}"></span>${esc(c.channel)}</div>`).join('')}${
+        [['Shopee', MP.shopee], ['Lazada', MP.lazada]].filter(([, x]) => x).map(([nm]) => `<div><span class="chip" style="background:${channelColour(nm)}"></span>${nm} (all branches)</div>`).join('')}</div>
     </div>
 
     <!-- channel table + reach-only -->
@@ -8755,8 +8782,8 @@ function renderLazada() {
 
   /**
    * FROM OUTSIDE LAZADA (v3.346.0) — Lazada's External Traffic reports,
-   * daily, Lazada-credited. Then ONE CAMPAIGN, BOTH MARKETPLACES: the same
-   * campaign name's own credit on Shopee and on Lazada, side by side.
+   * daily, Lazada-credited. The cross-shop campaign view moved to its own tab
+   * (E-commerce > Campaigns across shops, v3.348.0).
    */
   const ex = D.external || {};
   const exTable = (title, rows, first) => rows.length ? `<div class="card mt"><div class="card-title">${title}</div>
@@ -8782,18 +8809,6 @@ function renderLazada() {
           return `<tr><td class="trunc" data-tip="${esc(x.name)}">${esc(x.name)}</td><td class="trunc" data-tip="${esc(c)}">${esc(c)}</td>
           <td class="num">${num(x.orders)}</td><td class="num">${num(x.revenue,{money:true,bare:true})}</td></tr>`; }).join('')}
       </tbody></table></div>` : ''}`;
-  const bm = D.bothMarkets;
-  const both = bm && bm.rows.length ? `<div class="card mt">
-    <div class="card-title">One campaign, both marketplaces &middot; ${num(bm.shared)} on both</div>
-    <table class="roomy"><thead><tr><th>Campaign</th><th class="num">Shopee visits</th><th class="num">Shopee orders</th><th class="num">Shopee sales (THB)</th>
-      <th class="num">Lazada views</th><th class="num">Lazada orders</th><th class="num">Lazada revenue (THB)</th></tr></thead><tbody>
-      ${bm.rows.slice(0, 20).map(r => `<tr><td>${esc(r.campaign)}</td>
-        <td class="num">${r.shopee?num(r.shopee.visits):'\u2014'}</td><td class="num">${r.shopee?num(r.shopee.orders):'\u2014'}</td>
-        <td class="num">${r.shopee?num(r.shopee.sales,{money:true,bare:true}):'\u2014'}</td>
-        <td class="num">${r.lazada?num(r.lazada.views):'\u2014'}</td><td class="num">${r.lazada?num(r.lazada.orders):'\u2014'}</td>
-        <td class="num">${r.lazada?num(r.lazada.revenue,{money:true,bare:true}):'\u2014'}</td></tr>`).join('')}
-    </tbody></table></div>` : '';
-
   /** PACKAGES — Product Performance, monthly; SKU rows skipped server-side. */
   const p = D.products || {};
   let packages = '';
@@ -8843,7 +8858,7 @@ function renderLazada() {
     <div class="sec-h">Advertising</div>${advertising}
     <div class="sec-h">Traffic</div>${traffic}
     ${adsSec}
-    <div class="sec-h">From outside Lazada</div>${outside}${both}
+    <div class="sec-h">From outside Lazada</div>${outside}
     <div class="sec-h">Packages</div>${packages}
     ${search}`;
 }
@@ -12458,7 +12473,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.348.0';
+const CLIENT_BUILD = '3.349.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

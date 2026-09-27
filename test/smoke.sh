@@ -410,9 +410,9 @@ expect_field "lzm meta"           "$LZ" "d.meta.spend===20&&d.meta.cpas.roas===3
 # tab trimmed; daily visits 30.
 expect_field "lze totals"         "$LZ" "d.external.visits===30&&d.external.revenue===5000?'ok':undefined"
 expect_field "lze campaign"       "$LZ" "(c=>c.revenue===5000&&c.views===8)(d.external.campaigns.find(c=>c.campaign==='webpackage2026'))&&d.external.campaigns.some(c=>c.campaign==='TuningExpo24')?'ok':undefined"
-# ONE CAMPAIGN, BOTH MARKETPLACES: webpackage2026 on Shopee (9,000) and
-# Lazada (5,000); heart26 Shopee only; getscreened25 Lazada only.
-expect_field "both markets"       "$LZ" "(r=>r.shopee.sales===9000&&r.lazada.revenue===5000)(d.bothMarkets.rows.find(r=>r.campaign.toLowerCase()==='webpackage2026'))&&d.bothMarkets.shared===1&&d.bothMarkets.rows.find(r=>r.campaign==='heart26').lazada===null?'ok':undefined"
+# The "both marketplaces" card moved to its own tab (v3.348.0) and left the
+# Lazada payload in v3.349.0.
+expect_field "lz no both card"    "$LZ" "d.bothMarkets===undefined?'ok':undefined"
 # PRODUCT: SKU rows skipped (250,000 not 500,000); June out; leaks.
 expect_field "lzp revenue"        "$LZ" "d.products.revenue===250000&&d.products.count===3?'ok':undefined"
 expect_field "lzp share"          "$LZ" "d.products.shareOfRevenue===250000/320000?'ok':undefined"
@@ -436,6 +436,14 @@ expect_field "cp web clicks"      "$CP" "(r=>r.web.shopee===40&&r.web.lazada===2
 # META: marketplace accounts only (BGH's 100 excluded); name CONTAINS the code.
 expect_field "cp meta"            "$CP" "(r=>r.meta.spend===7&&r.perMetaBaht===2000)(d.list.find(r=>r.code.toLowerCase()==='webpackage2026'))&&d.list.find(r=>r.code==='getscreened25').meta.spend===3?'ok':undefined"
 expect_field "cp packages"        "$CP" "(r=>r.packages.length>0)(d.list.find(r=>r.code.toLowerCase()==='webpackage2026'))?'ok':undefined"
+
+echo "--- Overview funnel with marketplaces (v3.349.0) ---"
+OV="/api/overview?from=$FROM&to=$TO"
+# Stage totals = web + both shops; web-only totals untouched.
+expect_field "ov mp visits"       "$OV" "d.totalsAll.visits===d.totals.visits+d.marketplace.shopee.shopViews+d.marketplace.lazada.shopViews?'ok':undefined"
+expect_field "ov mp imps"         "$OV" "d.totalsAll.impressions===d.totals.impressions+d.marketplace.shopee.impressions&&d.marketplace.lazada.impressions===null?'ok':undefined"
+expect_field "ov mp bofu"         "$OV" "(m=>d.totalsAll.keyEvents===d.totals.keyEvents+m.shopee.addToCart+m.shopee.checkouts+m.lazada.addToCart+m.lazada.checkouts)(d.marketplace)?'ok':undefined"
+expect_field "ov mp values"       "$OV" "(m=>m.shopee.shopViews===1600&&m.shopee.searchClicks===7&&m.shopee.checkouts===5&&m.lazada.checkouts===31&&m.lazada.searchClicks===300)(d.marketplace)?'ok':undefined"
 
 echo "--- LINE tab (v3.309.0) ---"
 LINE="/api/line?from=$FROM&to=$TO"

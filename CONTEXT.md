@@ -1,5 +1,17 @@
 ### Recent (September 2026)
 
+**v3.349.0 — Shopee and Lazada in the Reporting Overview funnel.** MW's map:
+TOFU Shopee Ads impressions (search/shop ads inside it; Lazada has none —
+unmeasured); Interactions = search-term clicks (Shopee search clicks, Lazada
+Search visitors); MOFU = shop views (Shopee visits, Lazada visitors);
+Engagement = product views; BOFU = add to cart + checkouts. Kept in
+`totalsAll` + `marketplace`; `totals` stays web-only so the Monthly Report,
+forecast and key-event breakdown keep their arithmetic. The funnel card draws
+stages from `totalsAll`; shop segments use the channel colours and say "all
+branches" on hover (both shops serve the four hospitals, like LINE). Lazada
+tab's "both marketplaces" card removed (the Campaigns across shops tab
+replaces it) and its extra Shopee read with it.
+
 **v3.348.0 — Campaigns across shops tab.** `E-commerce > Campaigns across
 shops`, `/api/ecommerce/campaigns`, `requireTab("ecomcampaigns")`. One row per
 campaign code (case-insensitive), gathering: Shopee off-platform credit,
