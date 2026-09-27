@@ -890,6 +890,11 @@ global.fetch = async (url, opts = {}) => {
           ...(/catalog_segment_value_purchase/.test(u) ? { catalog_segment_actions_omni_purchase: 3,
             catalog_segment_value_purchase: 24000, catalog_segment_actions_omni_add_to_cart: 12 } : {}) }]),
         mk("Some New Account", 7),   // must land in UNMAPPED, never vanish
+        // META ON LAZADA (v3.345.0): only the Lazada tab's pull (CPAS value
+        // WITHOUT add_to_cart) sees this account, so no other tab's account
+        // mapping or spend total moves.
+        ...(/catalog_segment_value_purchase/.test(u) && !/add_to_cart/.test(u)
+          ? [{ ...mk("BHQ Lazada x EGG", 20), catalog_segment_actions_omni_purchase: 3, catalog_segment_value_purchase: 6000 }] : []),
 
       ]});
     }
@@ -1115,6 +1120,16 @@ global.fetch = async (url, opts = {}) => {
      * no-order day. 31 May – 30 June is complete too (5,000 a day), so MoM exists;
      * July 2025 is absent, so YoY is a dash.
      */
+    /**
+     * CUSTOMER INSIGHT (v3.345.0), daily: July with 1 new buyer on days 1–20
+     * and 1 existing buyer on days 21–31 → 20 new of 31.
+     */
+    if (/Customer(%20|\+| )Insight/.test(u)) {
+      const CH = ["Date", "New buyers", "Conversion Rate", "Orders", "Buyers", "Revenue", "Existing buyers", "Average order value", "Average basket size"];
+      const rows = [CH];
+      for (let i = 1; i <= 31; i++) rows.push([`2026-07-${String(i).padStart(2, "0")}`, i <= 20 ? "1" : "0", "1%", "1", "1", "10,000.00", i <= 20 ? "0" : "1", "10000", "1"]);
+      return jsonRes({ spreadsheetId: "mock-lazada", valueRanges: [{ values: rows }] });
+    }
     if (/Key(%20|\+| )Metrics/.test(u)) {
       if (process.env.MOCK_FAIL_CONNECTOR === "lazada-keymetrics") return jsonRes({ error: { code: 400 } }, 400);
       const KH = ["Date", "Revenue", "Visitors", "Buyers", "Orders", "Pageviews", "Units Sold", "Conversion Rate", "Revenue per Buyer",

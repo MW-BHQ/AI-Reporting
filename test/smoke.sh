@@ -403,6 +403,9 @@ expect_field "lzk rates once"     "$LZ" "d.sales.aov===320000/31&&d.sales.conver
 expect_field "lzk mom"            "$LZ" "Math.abs(d.compare.mom.revenue-(320000/155000-1))<1e-9&&d.compare.yoy===null?'ok':undefined"
 # A part-month range still shows sales (daily), not the monthly cards.
 expect_field "lzk part range"     "/api/lazada?from=2026-07-01&to=2026-07-10" "d.sales.days===10&&d.products.available===false?'ok':undefined"
+# CUSTOMER INSIGHT: 20 new of 31 buyers; META ON LAZADA 20 spent, CPAS 6,000.
+expect_field "lzc new share"      "$LZ" "d.sales.newBuyers===20&&d.sales.newShare===20/31?'ok':undefined"
+expect_field "lzm meta"           "$LZ" "d.meta.spend===20&&d.meta.cpas.roas===300&&d.meta.revenuePerBaht===16000&&d.meta.costPerNewBuyer===1?'ok':undefined"
 # PRODUCT: SKU rows skipped (250,000 not 500,000); June out; leaks.
 expect_field "lzp revenue"        "$LZ" "d.products.revenue===250000&&d.products.count===3?'ok':undefined"
 expect_field "lzp share"          "$LZ" "d.products.shareOfRevenue===250000/320000?'ok':undefined"

@@ -12019,6 +12019,15 @@ const LAZADA_TRAFFIC_TAB = process.env.LAZADA_TRAFFIC_TAB || "Traffic Source";
 const lzNum = (v) => { const t = String(v == null ? "" : v).trim(); return t === "" || t === "-" ? null : spNum(t); };
 const LAZADA_KEYMETRICS_TAB = process.env.LAZADA_KEYMETRICS_TAB || "Key Metrics";
 const LAZADA_PRODUCT_TAB = process.env.LAZADA_PRODUCT_TAB || "Product";
+/**
+ * CUSTOMER INSIGHT (v3.345.0) — Business Advisor > Customer > Customer
+ * Insight, daily, same shape as Key Metrics. Only its NEW vs EXISTING split
+ * is read (Lazada's own 365-day rule); revenue and orders come from Key
+ * Metrics, so there is one answer for each. Days are summed, so a buyer
+ * who buys on two days counts twice — the card says "buyer-days" wording
+ * only where it matters (the share is unaffected in practice).
+ */
+const LAZADA_CUSTOMER_TABS = (process.env.LAZADA_CUSTOMER_TAB || "Customer Insight,Customer").split(",");
 
 /**
  * TRAFFIC SOURCE — monthly, whole months only (see the block comment above).
@@ -12197,7 +12206,20 @@ function lazadaProducts(values, from, to) {
 async function buildLazada(from, to) {
   const get = (tab, range) => sheetBatchGet(LAZADA_SHEET_ID, [`'${tab}'!${range}`])
     .then((r) => ({ values: r[0] && r[0].values }), (e) => ({ err: e }));
-  const [tr, km, pr] = await Promise.all([get(LAZADA_TRAFFIC_TAB, "A1:AJ"), get(LAZADA_KEYMETRICS_TAB, "A1:R"), get(LAZADA_PRODUCT_TAB, "A1:U")]);
+  /** The customer tab is tried under both names MW's team might give it. */
+  const getCustomer = async () => {
+    for (const t of LAZADA_CUSTOMER_TABS) { const r = await get(t.trim(), "A1:I"); if (!r.err) return r; }
+    return { err: new Error("missing") };
+  };
+  const [tr, km, pr, cu, metaRows] = await Promise.all([get(LAZADA_TRAFFIC_TAB, "A1:AJ"), get(LAZADA_KEYMETRICS_TAB, "A1:R"),
+    get(LAZADA_PRODUCT_TAB, "A1:U"), getCustomer(),
+    /**
+     * META ON LAZADA: Windsor `facebook`, accounts named `*Lazada*`, with
+     * Meta's CPAS fields as on Shopee (v3.337.0). No account → a dash.
+     */
+    windsor("facebook", ["account_name", "spend", "catalog_segment_actions_omni_purchase", "catalog_segment_value_purchase"], from, to)
+      .catch(() => windsor("facebook", ["account_name", "spend"], from, to).then((r) => (r.cpasMissing = true, r)))
+      .catch(() => null)]);
   const missing = (x, tab) => ({ available: false, reason: /40[34]/.test(String(x.err && x.err.message))
     ? "sheet not shared with the service account" : `no "${tab}" tab in the sheet` });
   const traffic = tr.err ? missing(tr, LAZADA_TRAFFIC_TAB) : lazadaTraffic(tr.values, from, to);
@@ -12224,9 +12246,32 @@ async function buildLazada(from, to) {
     const lg = traffic.groups.find((g) => /lazada guided/i.test(g.name));
     if (lg && lg.revenue != null && sales.revenue) traffic.lazadaGuidedRevenueShare = lg.revenue / sales.revenue;
   }
+  if (sales.available && !cu.err) {
+    const cd = lazadaDays(cu.values);
+    const inWin = [...cd.entries()].filter(([d2]) => d2 >= from && d2 <= to);
+    if (inWin.length) {
+      const nb = inWin.reduce((a, [, o]) => a + (lzNum(o.newbuyers) || 0), 0);
+      const eb = inWin.reduce((a, [, o]) => a + (lzNum(o.existingbuyers) || 0), 0);
+      sales.newBuyers = nb; sales.existingBuyers = eb; sales.customerDays = inWin.length;
+      sales.newShare = nb + eb ? nb / (nb + eb) : null;
+    }
+  }
+  const lzAds = (metaRows || []).filter((r) => /lazada/i.test(String(r.account_name || "")));
+  const metaSpend = metaRows === null || !lzAds.length ? null : lzAds.reduce((a, r) => a + n(r.spend), 0);
+  const meta = {
+    available: metaRows !== null, noAccount: metaRows !== null && !lzAds.length,
+    accounts: [...new Set(lzAds.map((r) => r.account_name))], spend: metaSpend,
+    cpas: metaSpend == null || (metaRows && metaRows.cpasMissing) ? null : (() => {
+      const value = lzAds.reduce((a, r) => a + n(r.catalog_segment_value_purchase), 0);
+      return { value, purchases: lzAds.reduce((a, r) => a + n(r.catalog_segment_actions_omni_purchase), 0), roas: metaSpend ? value / metaSpend : null };
+    })(),
+    // Revenue per baht of Meta spend, no attribution — only with every day covered.
+    revenuePerBaht: metaSpend && sales.available && sales.days === sales.windowDays ? sales.revenue / metaSpend : null,
+    costPerNewBuyer: metaSpend && sales.newBuyers && sales.customerDays === sales.windowDays ? metaSpend / sales.newBuyers : null,
+  };
   const any = traffic.available || sales.available || products.available;
   return { available: any, reason: any ? null : [traffic.reason, sales.reason, products.reason].filter(Boolean).join("; "),
-    sales, compare, traffic, products };
+    sales, compare, traffic, products, meta };
 }
 
 app.get("/api/lazada", requireTab("lazada"), async (req, res) => {

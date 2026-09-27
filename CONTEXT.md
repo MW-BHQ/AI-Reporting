@@ -1,5 +1,16 @@
 ### Recent (September 2026)
 
+**v3.345.0 — Lazada: new vs existing buyers; Meta on Lazada.**
+- Customer Insight tab (Business Advisor > Customer > Customer Insight),
+  daily; read under "Customer Insight" or "Customer". Only its new/existing
+  split is used (Lazada's 365-day rule); revenue and orders stay with Key
+  Metrics so each has one source.
+- Meta accounts named `*Lazada*`: spend, Meta's CPAS value/ROAS, revenue per
+  baht of Meta spend and Meta spend per new buyer (both need full coverage).
+  The mock shows the Lazada account only to the Lazada pull, so no other tab's
+  account mapping moves.
+Next Lazada source: Sponsored Solutions reports (Lazada's own ad spend).
+
 **v3.344.0 — Lazada: Key Metrics and Product.** Two more tabs in the Lazada
 sheet, each read by its OWN batchGet so one missing tab cannot blank the rest.
 - `Key Metrics` (Dashboard > Key Metrics), DAILY: header + day rows; any

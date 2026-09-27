@@ -8613,7 +8613,7 @@ function renderLazada() {
       <div class="stat card"><div class="lab">Revenue (THB)</div><div class="val">${nn(sl.revenue, true)}</div>
         <div class="sub">${sl.cancelled!=null||sl.returned!=null?`THB ${nn(sl.cancelled,true)} cancelled \u00b7 ${nn(sl.returned,true)} returned`:'paid, incl. platform subsidies'}</div>${cmp('revenue')}</div>
       <div class="stat card"><div class="lab">Orders</div><div class="val">${nn(sl.orders)}</div>
-        <div class="sub">${sl.itemsPerOrder!=null?num(sl.itemsPerOrder,{dp:2})+' items per order':'\u2014'} \u00b7 ${nn(sl.buyers)} buyers</div>${cmp('orders')}</div>
+        <div class="sub">${sl.itemsPerOrder!=null?num(sl.itemsPerOrder,{dp:2})+' items per order':'\u2014'} \u00b7 ${sl.newShare!=null?`${pc(sl.newShare,0)} of buyers new`:`${nn(sl.buyers)} buyers`}</div>${cmp('orders')}</div>
       <div class="stat card"><div class="lab">Average order (THB)</div><div class="val">${nn(sl.aov, true)}</div>
         <div class="sub">revenue \u00f7 orders</div>${cmp('aov')}</div>
       <div class="stat card"><div class="lab">Conversion</div><div class="val">${pc(sl.conversion, 2)}</div>
@@ -8623,6 +8623,23 @@ function renderLazada() {
       ${labelledBars(sl.daily, 'value', '#1A73E8', 110)}
       <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
         <span>${esc(humanDate(sl.daily[0].d))}</span><span>${esc(humanDate(sl.daily[sl.daily.length-1].d))}</span></div></div>` : ''}`;
+
+  /**
+   * META ON LAZADA (v3.345.0): spend on Meta accounts named Lazada, Meta's
+   * own CPAS credit, and two figures with no attribution in them — revenue
+   * per baht and spend per new buyer, over fully covered ranges only.
+   */
+  const mt = D.meta || {};
+  const advertising = `<div class="grid g-4">
+      <div class="stat card"><div class="lab">Meta ad spend (THB)</div><div class="val">${nn(mt.spend, true)}</div>
+        <div class="sub">${!mt.available?'Meta unavailable this run':mt.noAccount?'no Meta account named Lazada ran in this range':mt.accounts.map(esc).join(', ')}</div></div>
+      <div class="stat card"><div class="lab">CPAS sales \u00b7 Meta (THB)</div><div class="val">${mt.cpas?nn(mt.cpas.value, true):'\u2014'}</div>
+        <div class="sub">${mt.cpas?`${mt.cpas.roas!=null?num(mt.cpas.roas,{dp:1})+'\u00d7 ROAS \u00b7 ':''}${num(mt.cpas.purchases)} purchases, as Meta attributes them`:'\u2014'}</div></div>
+      <div class="stat card"><div class="lab">Revenue per THB of Meta</div><div class="val">${mt.revenuePerBaht!=null?num(mt.revenuePerBaht,{dp:1})+'\u00d7':'\u2014'}</div>
+        <div class="sub">shop revenue \u00f7 Meta spend</div></div>
+      <div class="stat card"><div class="lab">Meta spend per new buyer (THB)</div><div class="val">${nn(mt.costPerNewBuyer, true)}</div>
+        <div class="sub">${sl.newBuyers!=null?`${num(sl.newBuyers)} new buyers`:'needs the Customer Insight tab'}</div></div>
+    </div>`;
 
   /** TRAFFIC — Traffic Source, monthly. */
   const d = D.traffic || {};
@@ -8709,6 +8726,7 @@ function renderLazada() {
       <div class="hint">One storefront, from Lazada Business Advisor.</div>
     </div></div>
     <div class="sec-h">Sales</div>${sales}
+    <div class="sec-h">Advertising</div>${advertising}
     <div class="sec-h">Traffic</div>${traffic}
     ${adsSec}
     <div class="sec-h">Packages</div>${packages}
@@ -12283,7 +12301,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.344.0';
+const CLIENT_BUILD = '3.345.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
