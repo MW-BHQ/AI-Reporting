@@ -1635,7 +1635,8 @@ async function buildOverview(from, to) {
      * group-level number inside a BHQ-scoped view — exactly the conflation this
      * project refuses to make anywhere else.
      */
-    { channel: "YouTube", impressions: impressions.youtube,
+    // groupLevel: shown as a scope pill now that the notes are gone (v3.352.0).
+    { channel: "YouTube", impressions: impressions.youtube, groupLevel: true,
       note: "video views — one corporate channel, so NOT branch-scoped like the rest of this view",
       sub: ytTotals && ytTotals.days
         ? `${ytTotals.days} days in the export${ytTotals.hoursWatched ? ` · ${Math.round(ytTotals.hoursWatched).toLocaleString()} hours watched` : ""}`
@@ -1651,7 +1652,7 @@ async function buildOverview(from, to) {
      * nothing without the size of the audience it went to.
      */
     ...(impressions.line !== null ? [{
-      channel: "LINE", impressions: impressions.line,
+      channel: "LINE", impressions: impressions.line, groupLevel: true,
       /**
        * FOLLOWERS ARE NOT SHOWN HERE (MW, 17 Sep 2026: "no need to put it in
        * the Overview. i just show you that we can have it"). The friends tab
@@ -8713,6 +8714,9 @@ async function overviewMarketplace(from, to) {
     impressions: sh.shopeeAds && sh.shopeeAds.available ? sh.shopeeAds.impressions : null,
     searchClicks: sh.funnel.searchClicks, shopViews: sh.funnel.visits, productViews: sh.funnel.productVisitors,
     addToCart: sh.funnel.cartVisitors, checkouts: sh.funnel.placedOrders,
+    // For the Overview's E-commerce block (v3.352.0): the shop's own counts.
+    productPageViews: sh.funnel.productViews, cartUnits: sh.funnel.cartUnits,
+    orders: sh.funnel.orders, revenue: sh.funnel.sales,
   } : null;
   const tr = lz && lz.traffic && lz.traffic.available ? lz.traffic : null;
   const sl = lz && lz.sales && lz.sales.available ? lz.sales : null;
@@ -8722,6 +8726,8 @@ async function overviewMarketplace(from, to) {
     shopViews: sl ? sl.visitors : null,
     productViews: lz.products && lz.products.available ? lz.products.visitors : null,
     addToCart: sl ? sl.cartUsers : null, checkouts: sl ? sl.orders : null,
+    productPageViews: lz.products && lz.products.available ? lz.products.pageviews : null,
+    cartUnits: sl ? sl.cartUnits : null, orders: sl ? sl.orders : null, revenue: sl ? sl.revenue : null,
   } : null;
   return { shopee, lazada };
 }
@@ -12409,7 +12415,7 @@ function lazadaProducts(values, from, to) {
   const found = [...new Set(rows.map((r) => r.mo))].sort();
   return {
     available: true, months: found, missing: months.filter((m) => !found.includes(m)),
-    revenue: sum("revenue"), orders: sum("orders"), visitors: sum("visitors"), count: list.length,
+    revenue: sum("revenue"), orders: sum("orders"), visitors: sum("visitors"), pageviews: sum("pageviews"), count: list.length,
     sold: list.filter((e) => e.orders > 0).length, list,
     leaks: shopCart == null ? null : {
       shopCartRate: shopCart, shopBuyRate: shopBuy,

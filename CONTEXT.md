@@ -1,5 +1,22 @@
 ### Recent (September 2026)
 
+**v3.352.0 — Overview tidy for the marketplaces.**
+- Sidebar: E-commerce > Report now sits above E-commerce Campaigns (Users
+  groups follow).
+- "(all branches)" dropped from the funnel legend and hovers (MW).
+- Off-site reach & action: Shopee and Lazada storefront visitors join the
+  reach list; Shopee/Lazada orders join "Action without site visits". Every
+  sub-line and the long note removed (MW: nobody reads them).
+- E-commerce block: was GA4 web only. Now one column per shop — Website
+  (view_item/add_to_cart/purchase), Shopee, Lazada — plus a Total of what was
+  measured, with a pill naming any shop not in the range. Month-end forecast
+  row stays website-only. Footnote removed. Lazada product page views added
+  to the payload (Product tab, whole months).
+- "Top packages viewed" → "Top packages viewed (Website)", note removed.
+- The YouTube/LINE scope caveat (BHQ vs group) survives as the house scope
+  PILL `B+` on those reach rows; boot.js now asserts the pill (negative-tested)
+  instead of the removed prose.
+
 **v3.351.0 — Users page grouped as the sidebar; "E-commerce Campaigns".**
 Permission cards now group tabs exactly as the left panel does, in its
 order: Reporting (Overview, Monthly Reports, Google Profile, Campaigns,

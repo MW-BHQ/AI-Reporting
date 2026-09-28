@@ -94,7 +94,7 @@ function overviewFixture() {
       { channel: "Facebook Page", note: "organic reach", sub: "27 branches", impressions: 168000 },
       { channel: "TikTok",        note: "video views", impressions: 431000 },
       // Carries the scope caveat: Overview is branch-scoped, this channel is not.
-      { channel: "YouTube", note: "video views — one corporate channel, so NOT branch-scoped like the rest of this view",
+      { channel: "YouTube", groupLevel: true, note: "video views — one corporate channel, so NOT branch-scoped like the rest of this view",
         sub: "31 days in the export · 15,304 hours watched", impressions: 1104891 },
     ],
     ecommerce: { productViews: 88120, addToCarts: 4410, purchases: 512,
@@ -786,8 +786,10 @@ setTimeout(() => {
        * corporate channel that cannot be split by branch. A group-level number
        * sitting unlabelled inside a BHQ-scoped view is the conflation this
        * project refuses to make anywhere else, so the label is asserted.
+       * Since v3.352.0 MW removed the prose notes; the caveat is the house
+       * scope PILL on the row instead, and that is what is asserted.
        */
-      ["YouTube scope caveat", "NOT branch-scoped"],
+      ["YouTube scope pill", "YouTube <span class=\"pill\" data-tip=\"One account for every branch", "html"],
     ];
     for (const [what, needle, where] of needs) {
       const hay = where === "html" ? html : text;

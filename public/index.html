@@ -2289,13 +2289,13 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h2l2.2 10.2a2 2 0 002 1.6h7.1a2 2 0 002-1.55L21 8H7"/><circle cx="10.5" cy="20" r="1.2"/><circle cx="18" cy="20" r="1.2"/></svg>
         Overview
       </div>
-      <div class="nav-item sub" data-view="ecomcampaigns">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12h4l3-7 4 14 3-7h2"/></svg>
-        E-commerce Campaigns
-      </div>
       <div class="nav-item sub" data-view="ecommonthly">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
         Report
+      </div>
+      <div class="nav-item sub" data-view="ecomcampaigns">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12h4l3-7 4 14 3-7h2"/></svg>
+        E-commerce Campaigns
       </div>
       <div class="nav-item sub" data-view="ecomchannels">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17l5-6 4 3 5-7 4 4"/><circle cx="8" cy="11" r="1"/><circle cx="12" cy="14" r="1"/></svg>
@@ -5895,7 +5895,7 @@ function renderOverview() {
   const mpSeg = (rows, total) => rows.filter(r => r.v > 0).map(r => {
     const pct = (r.v/total)*100;
     const label = pct >= 9 ? `<b class="seg-val">${num(r.v)}</b>` : '';
-    return `<span style="width:${pct}%;background:${SOURCE_BRAND[r.n] || '#5C6478'}" data-tip="${esc(r.n)} (all branches): ${num(r.v)}">${label}</span>`;
+    return `<span style="width:${pct}%;background:${SOURCE_BRAND[r.n] || '#5C6478'}" data-tip="${esc(r.n)}: ${num(r.v)}">${label}</span>`;
   }).join('');
 
   const seg = (chans, total, key) => chans.map((c,i) => {
@@ -6105,7 +6105,7 @@ function renderOverview() {
            short enough to read. What each source is lives in CONTEXT.md, not on
            the slide. -->
       <div class="legend">${f.map((c,i)=>`<div><span class="chip" style="background:${colorFor(i, c.channel)}"></span>${esc(c.channel)}</div>`).join('')}${
-        [['Shopee', MP.shopee], ['Lazada', MP.lazada]].filter(([, x]) => x).map(([nm]) => `<div><span class="chip" style="background:${channelColour(nm)}"></span>${nm} (all branches)</div>`).join('')}</div>
+        [['Shopee', MP.shopee], ['Lazada', MP.lazada]].filter(([, x]) => x).map(([nm]) => `<div><span class="chip" style="background:${channelColour(nm)}"></span>${nm}</div>`).join('')}</div>
     </div>
 
     <!-- channel table + reach-only -->
@@ -6127,12 +6127,16 @@ function renderOverview() {
       <div class="card">
         <h2>Off-site reach &amp; action</h2>
         <table><tbody>
-        ${[...(d.reachOnly||[])].sort((a,b)=>(isNA(b.impressions)?-1:n0(b.impressions))-(isNA(a.impressions)?-1:n0(a.impressions))).map(r=>`<tr><td class="strong">${esc(r.channel)}<div style="font-size:var(--text-3xs);color:var(--faint)">${esc(r.note)}${r.sub?' · '+esc(r.sub):''}</div></td>
+        ${[...(d.reachOnly||[]),
+          // The two shops' own storefront visitors (v3.352.0, MW).
+          ...(MP.shopee && MP.shopee.shopViews != null ? [{ channel: 'Shopee', impressions: MP.shopee.shopViews }] : []),
+          ...(MP.lazada && MP.lazada.shopViews != null ? [{ channel: 'Lazada', impressions: MP.lazada.shopViews }] : []),
+        ].sort((a,b)=>(isNA(b.impressions)?-1:n0(b.impressions))-(isNA(a.impressions)?-1:n0(a.impressions))).map(r=>`<tr><td class="strong">${esc(r.channel)}${r.groupLevel ? ' <span class="pill" data-tip="One account for every branch \u2014 not filtered to the four hospitals">B+</span>' : ''}</td>
           <td class="num" style="font-size:var(--text-sm);font-weight:600;color:${isNA(r.impressions)?'var(--faint)':'var(--ink)'}">${num(r.impressions)}</td></tr>`).join('')}
         </tbody></table>
         ${(() => {
           const o = d.offsiteActions; if (!o || o.total === null) return '';
-          const row = (lab, v, sub) => v === null ? '' : `<tr><td class="strong">${lab}${sub?`<div style="font-size:var(--text-3xs);color:var(--faint)">${sub}</div>`:''}</td><td class="num" style="font-size:var(--text-sm);font-weight:600">${num(v)}</td></tr>`;
+          const row = (lab, v) => v == null ? '' : `<tr><td class="strong">${lab}</td><td class="num" style="font-size:var(--text-sm);font-weight:600">${num(v)}</td></tr>`;
           /**
            * SORTED BY VOLUME (MW). Both this list and the reach list above were
            * in the order they happened to be written, so the biggest number
@@ -6145,17 +6149,18 @@ function renderOverview() {
           const acts = [
             ['Calls from profile', o.gbpCalls, null],
             ['Direction requests', o.gbpDirections, null],
-            ...(o.gbpBookings ? [['Bookings from profile', o.gbpBookings, 'via Reserve with Google']] : []),
-            ['New Meta conversations', o.metaMessages, 'ad-attributed only'],
+            ...(o.gbpBookings ? [['Bookings from profile', o.gbpBookings]] : []),
+            ['New Meta conversations', o.metaMessages],
+            ['Shopee orders', MP.shopee ? MP.shopee.orders : null],
+            ['Lazada orders', MP.lazada ? MP.lazada.orders : null],
           ].sort((a,b)=>(isNA(b[1])?-1:n0(b[1]))-(isNA(a[1])?-1:n0(a[1])));
           return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
             <div class="card-title" style="margin-bottom:6px">Action without site visits</div>
             <table><tbody>
-              ${acts.map(([lab,v,sub])=>row(lab,v,sub)).join('')}
+              ${acts.map(([lab,v])=>row(lab,v)).join('')}
             </tbody></table>
           </div>`;
         })()}
-        <div class="note">These platforms drive awareness and offline action GA4 can't attribute as sessions, so they sit outside the funnel. The actions are outcomes, not reach — a call from Maps is worth at least a form fill. Two limits worth knowing: Meta conversations count <b>ad-attributed</b> messages only, since organic Messenger and Instagram DMs have no metric on any connected source; and booking-button taps arrive as <b>website clicks</b>, because Google records a booking only when it is made through a Reserve with Google partner — it never learns what happens after someone reaches your site.${(d.reachOnly||[]).some(r=>r.channel==='LINE')?' LINE counts <b>messages sent</b>, which exceeds follower count because each follower receives several messages in a period &mdash; it is not unique people reached.':''}</div>
       </div>
     </div>
 
@@ -6182,26 +6187,35 @@ function renderOverview() {
     </div>
 
     <!-- ecommerce -->
-    <div class="card mt">
-      <h2>E-commerce</h2>
-      <div class="grid g-5">
-        <div class="stat"><div class="lab"><span class="chip" style="background:var(--blue)"></span>Product views</div>
-          <div class="val ${isNA(ec&&ec.productViews)?'na':''}">${num(ec&&ec.productViews)}</div></div>
-        <div class="stat"><div class="lab"><span class="chip" style="background:var(--teal)"></span>Add to cart</div>
-          <div class="val ${isNA(ec&&ec.addToCarts)?'na':''}">${num(ec&&ec.addToCarts)}</div>
-          <div class="sub">${ec&&ec.cartRate!=null?num(ec.cartRate,{pct:true})+' of views':''}</div></div>
-        <div class="stat"><div class="lab"><span class="chip" style="background:var(--green)"></span>Purchases</div>
-          <div class="val ${isNA(ec&&ec.purchases)?'na':''}">${num(ec&&ec.purchases)}</div>
-          <div class="sub">${ec&&ec.purchaseRate!=null?num(ec.purchaseRate,{pct:true})+' of views':''}</div></div>
-        <div class="stat"><div class="lab"><span class="chip" style="background:var(--amber)"></span>Revenue</div>
-          <div class="val ${isNA(ec&&ec.revenue)?'na':''}">${num(ec&&ec.revenue,{money:true})}</div>
-          <div class="sub">${ec&&ec.aov!=null?'AOV '+num(ec.aov,{money:true}):''}</div></div>
-        <div class="stat"><div class="lab"><span class="chip" style="background:var(--violet)"></span>Month-end forecast</div>
-          <div class="val ${isNA(fc&&fc.projectedMonthEnd)?'na':''}">${num(fc&&fc.projectedMonthEnd,{money:true})}</div>
-          <div class="sub">${fc?`${num(fc.monthToDate,{money:true})} MTD · day ${fc.daysElapsed}/${fc.daysInMonth}`:''}</div></div>
-      </div>
-      <div class="note">Forecast is a straight run-rate (MTD daily average × days in month) — it assumes the rest of the month behaves like the days so far, so it will mislead around campaign bursts or paydays. Revenue is GA4 web only; Shopee and Lazada sales are not included.</div>
-    </div>
+    ${(() => {
+      /**
+       * E-COMMERCE, EVERY SHOP (v3.352.0, MW: "recheck if E-commerce block is
+       * correct"). It was GA4 web only while the page's funnel now carries the
+       * two marketplaces. One column per shop, each its own count — website
+       * view_item / add_to_cart / purchase events, Shopee Seller Centre,
+       * Lazada Business Advisor — and a total that adds only what was
+       * measured, naming any shop missing from the range. The run-rate
+       * forecast stays website-only, as its label says.
+       */
+      const shops = [['Website', ec ? { productPageViews: ec.productViews, cartUnits: ec.addToCarts, orders: ec.purchases, revenue: ec.revenue } : null],
+        ['Shopee', MP.shopee], ['Lazada', MP.lazada]];
+      const miss = shops.filter(([, x]) => !x).map(([nm]) => nm);
+      const tot = (k) => { const v = shops.map(([, x]) => x && x[k]).filter(v => v != null); return v.length ? v.reduce((a, b) => a + b, 0) : null; };
+      const fmtC = (v, money) => v == null ? '\u2014' : money ? num(v, { money: true }) : num(v);
+      const aov = (x) => x && x.orders ? x.revenue / x.orders : null;
+      const rows = [['Product views', 'productPageViews'], ['Add to cart', 'cartUnits'], ['Purchases', 'orders'], ['Revenue', 'revenue', true]];
+      return `<div class="card mt">
+      <h2>E-commerce${miss.length ? ` <span class="pill">${esc(miss.join(', '))} not in range</span>` : ''}</h2>
+      <table><thead><tr><th></th><th class="num"><span class="chip" style="background:var(--blue);margin-right:6px;"></span>Website</th>
+        <th class="num"><span class="chip" style="background:${channelColour('Shopee')};margin-right:6px;"></span>Shopee</th>
+        <th class="num"><span class="chip" style="background:${channelColour('Lazada')};margin-right:6px;"></span>Lazada</th><th class="num">Total</th></tr></thead><tbody>
+        ${[...rows.map(([lab, k, money]) => [lab, ...shops.map(([, x]) => x ? x[k] : null), tot(k), money]),
+          ['Average order', ...shops.map(([, x]) => aov(x)), tot('orders') ? tot('revenue') / tot('orders') : null, true],
+          ['Month-end forecast (website)', fc ? fc.projectedMonthEnd : null, null, null, null, true],
+        ].map(([lab, w, sh, lz, t, money]) => `<tr><td class="strong">${lab}</td><td class="num">${fmtC(w, money)}</td><td class="num">${fmtC(sh, money)}</td><td class="num">${fmtC(lz, money)}</td><td class="num">${fmtC(t, money)}</td></tr>`).join('')}
+      </tbody></table>
+    </div>`;
+    })()}
 
     <!-- trend + key events -->
     <div class="grid g-2-1 mt">
@@ -6220,13 +6234,10 @@ function renderOverview() {
         </tbody></table>
       </div>
       <div class="card">
-        <h2>Top packages viewed</h2>
+        <h2>Top packages viewed (Website)</h2>
         <table><thead><tr><th>Page</th><th class="num">Views</th></tr></thead><tbody>
         ${(d.topProducts||[]).slice(0,8).map(p=>`<tr><td class="strong i18n">${esc(p.name)}</td><td class="num">${num(p.views)}</td></tr>`).join('')||'<tr><td colspan="2" class="num">no data</td></tr>'}
         </tbody></table>
-        <div class="note"><b>view_item</b> events by page, scoped to the four hospitals like everything else.
-        Counted page-side rather than item-side: GA4's item metrics cannot be combined with any page or
-        session dimension, so an item-name table can never be branch-filtered and covered all 27 branches.</div>
       </div>
     </div>
   `;
@@ -7094,7 +7105,7 @@ function renderUsers() {
     { name: 'Google Ads', ids: ['gads'] },
     { name: 'Better Club', ids: ['bclub'] },
     { name: 'LINE OA', ids: ['line'] },
-    { name: 'E-commerce', ids: ['ecom','ecomcampaigns','ecommonthly','ecomchannels','shopee','lazada',
+    { name: 'E-commerce', ids: ['ecom','ecommonthly','ecomcampaigns','ecomchannels','shopee','lazada',
       'ecomcentre','ecompackages','ecomroas','ecomchurn','ecommigration'] },
     { name: 'Tools', ids: ['topics'] },
   ];
@@ -12485,7 +12496,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.351.0';
+const CLIENT_BUILD = '3.352.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
