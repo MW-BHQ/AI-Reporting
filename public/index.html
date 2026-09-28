@@ -6062,7 +6062,7 @@ function renderOverview() {
   const unavail = (d.unavailable||[]).length
     ? `<div class="warnbox"><b>Unavailable this run:</b> ${d.unavailable.map(esc).join(', ')}. These show as “—”, not zero — the numbers below exclude them.</div>` : '';
 
-  const ec = d.ecommerce, fc = d.forecast;
+  const ec = d.ecommerce;
 
   $('viewRoot').innerHTML = `
     ${unavail}
@@ -6194,8 +6194,9 @@ function renderOverview() {
        * two marketplaces. One column per shop, each its own count — website
        * view_item / add_to_cart / purchase events, Shopee Seller Centre,
        * Lazada Business Advisor — and a total that adds only what was
-       * measured, naming any shop missing from the range. The run-rate
-       * forecast stays website-only, as its label says.
+       * measured, naming any shop missing from the range. No month-end
+       * forecast (removed v3.355.0, MW): the shop sheets arrive after the
+       * month closes, so a run-rate could never include them.
        */
       const shops = [['Website', ec ? { productPageViews: ec.productViews, cartUnits: ec.addToCarts, orders: ec.purchases, revenue: ec.revenue } : null],
         ['Shopee', MP.shopee], ['Lazada', MP.lazada]];
@@ -6212,13 +6213,6 @@ function renderOverview() {
         <th class="num"><span class="chip" style="background:${channelColour('Lazada')};margin-right:6px;"></span>Lazada</th><th class="num">Total</th></tr></thead><tbody>
         ${[...rows.map(([lab, k, money]) => [lab, ...shops.map(([, x]) => x ? x[k] : null), tot(k), money]),
           ['Average order', ...shops.map(([, x]) => aov(x)), tot('orders') ? tot('revenue') / tot('orders') : null, true],
-          // Current month only — a month that has ended has no forecast (MW).
-          ...(fc || (MP.shopee && MP.shopee.forecast) || (MP.lazada && MP.lazada.forecast) ? [(() => {
-            const w = fc ? fc.projectedMonthEnd : null, sh = MP.shopee && MP.shopee.forecast ? MP.shopee.forecast.projectedMonthEnd : null,
-              lz = MP.lazada && MP.lazada.forecast ? MP.lazada.forecast.projectedMonthEnd : null;
-            const parts = [w, sh, lz].filter(v => v != null);
-            return ['Month-end forecast', w, sh, lz, parts.length ? parts.reduce((a, b) => a + b, 0) : null, true];
-          })()] : []),
         ].map(([lab, w, sh, lz, t, money]) => `<tr><td class="strong">${lab}</td><td class="num">${fmtC(w, money)}</td><td class="num">${fmtC(sh, money)}</td><td class="num">${fmtC(lz, money)}</td><td class="num">${fmtC(t, money)}</td></tr>`).join('')}
       </tbody></table>
     </div>`;
@@ -12503,7 +12497,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.354.0';
+const CLIENT_BUILD = '3.355.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

@@ -1,5 +1,11 @@
 ### Recent (September 2026)
 
+**v3.355.0 — Month-end forecast removed from the Overview** (MW): the Shopee
+and Lazada sheets are pasted after the month closes, so a running-month
+forecast could never include them. Row, shop run-rates and their tests
+gone. The server's web `forecast` (current month only, v3.353.0) stays in
+the payload for any other reader; nothing on the Overview shows it.
+
 **v3.354.0 — B+ pills removed** (MW): from LINE and YouTube in Off-site reach
 and from the Website → Shopee handoff title. The boot check that asserted
 YouTube's scope label is dropped with them — MW's explicit call; the

@@ -1912,24 +1912,6 @@ async function buildOverview(from, to) {
    * hospitals, so their segments are group-level, like LINE and YouTube.
    */
   const marketplace = await overviewMarketplace(from, to);
-  /**
-   * SHOP FORECASTS, same run-rate, same rule (current month only). The sheets
-   * are pasted by hand and lag, so a shop's run-rate uses the days its daily
-   * rows actually cover this month — not today's date — and a shop with no
-   * rows for this month has no forecast.
-   */
-  const shopForecast = (daily) => {
-    if (!(to >= monthFrom) || !daily || !daily.length) return null;
-    const inMonth = daily.filter((x) => x.d >= monthFrom && x.d <= to);
-    if (!inMonth.length) return null;
-    const lastDay = inMonth.map((x) => x.d).sort().pop();
-    const covered = Number(lastDay.slice(8, 10));
-    const mtd = inMonth.reduce((a, x) => a + n(x.value), 0);
-    return { monthToDate: mtd, projectedMonthEnd: covered ? (mtd / covered) * daysInMonth : null, daysCovered: covered, daysInMonth };
-  };
-  if (marketplace.shopee) marketplace.shopee.forecast = shopForecast(marketplace.shopee.daily);
-  if (marketplace.lazada) marketplace.lazada.forecast = shopForecast(marketplace.lazada.daily);
-  for (const k of ["shopee", "lazada"]) if (marketplace[k]) delete marketplace[k].daily;
   const mpSum = (k) => {
     const v = [marketplace.shopee && marketplace.shopee[k], marketplace.lazada && marketplace.lazada[k]].filter((x) => x != null);
     return v.length ? v.reduce((a, b) => a + b, 0) : null;
@@ -8740,7 +8722,7 @@ async function overviewMarketplace(from, to) {
     addToCart: sh.funnel.cartVisitors, checkouts: sh.funnel.placedOrders,
     // For the Overview's E-commerce block (v3.352.0): the shop's own counts.
     productPageViews: sh.funnel.productViews, cartUnits: sh.funnel.cartUnits,
-    orders: sh.funnel.orders, revenue: sh.funnel.sales, daily: sh.daily,
+    orders: sh.funnel.orders, revenue: sh.funnel.sales,
   } : null;
   const tr = lz && lz.traffic && lz.traffic.available ? lz.traffic : null;
   const sl = lz && lz.sales && lz.sales.available ? lz.sales : null;
@@ -8752,7 +8734,6 @@ async function overviewMarketplace(from, to) {
     addToCart: sl ? sl.cartUsers : null, checkouts: sl ? sl.orders : null,
     productPageViews: lz.products && lz.products.available ? lz.products.pageviews : null,
     cartUnits: sl ? sl.cartUnits : null, orders: sl ? sl.orders : null, revenue: sl ? sl.revenue : null,
-    daily: sl ? sl.daily : null,
   } : null;
   return { shopee, lazada };
 }
