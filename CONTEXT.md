@@ -1,5 +1,15 @@
 ### Recent (September 2026)
 
+**v3.351.0 — Users page grouped as the sidebar; "E-commerce Campaigns".**
+Permission cards now group tabs exactly as the left panel does, in its
+order: Reporting (Overview, Monthly Reports, Google Profile, Campaigns,
+Pages) · Meta Ads · Google Ads · Better Club · LINE OA · E-commerce (Overview,
+Campaigns, Report, Channels, Shopee, Lazada, Centres, Packages, Ad
+Performance, Churn, Migration) · Tools (Topic Explorer). A smoke check fails
+if any grantable tab is missing from the groups (negative-tested). Nav item
+"Campaigns across shops" renamed "E-commerce Campaigns"; its TABS label is
+"E-commerce · Campaigns" so the chip reads "Campaigns" under E-commerce.
+
 **v3.350.0 — Lazada is pink (#E4127A).** MW: the blue (#1A73E8) vanished next
 to Organic Search / Google Search. Changed at the one channel map
 (`channelColour`), the Overview funnel's source colours, and the Lazada tab's

@@ -2291,7 +2291,7 @@
       </div>
       <div class="nav-item sub" data-view="ecomcampaigns">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12h4l3-7 4 14 3-7h2"/></svg>
-        Campaigns across shops
+        E-commerce Campaigns
       </div>
       <div class="nav-item sub" data-view="ecommonthly">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
@@ -3274,7 +3274,7 @@ const TITLES = {
   line: ['LINE OA', 'What we broadcast, who received it, and what it cost us in blocks'],
   shopee: ['Shopee', 'What the storefront sold, and where its visits came from'],
   lazada: ['Lazada', 'Where the storefront\u2019s visitors came from, inside Lazada and out'],
-  ecomcampaigns: ['Campaigns across shops', 'One campaign code, every source that carries it \u2014 Shopee, Lazada, website, Meta'],
+  ecomcampaigns: ['E-commerce Campaigns', 'One campaign code, every source that carries it \u2014 Shopee, Lazada, website, Meta'],
   ecom: ['E-commerce', 'Package sales across every online sales channel'],
   ecomcentre: ['E-commerce · Centers', 'Which centers sell, and through which channel'],
   ecompackages: ['E-commerce · Packages', 'Every product, grouped by name — promo re-codes count once'],
@@ -7083,17 +7083,27 @@ function renderUsers() {
    * sideways; grouping the toggles the way the sidebar groups them means a
    * permission set can be scanned instead of counted.
    */
+  /**
+   * GROUPED AS THE SIDEBAR IS (MW v3.351.0), in the sidebar's own order, so a
+   * permission card reads like the menu the colleague will see. A tab missing
+   * from this list still appears, under "Other" — never silently ungrantable.
+   */
   const GROUPS = [
-    { name: 'Reporting', ids: ['overview','campaigns','gbp','topics'] },
+    { name: 'Reporting', ids: ['overview','report','gbp','campaigns','pages'] },
     { name: 'Meta Ads', ids: ['benchmark','audiences','audit'] },
+    { name: 'Google Ads', ids: ['gads'] },
     { name: 'Better Club', ids: ['bclub'] },
-    { name: 'E-commerce', ids: ['ecom','ecomcentre','ecompackages','ecomchannels','ecomroas','ecommonthly','ecomchurn','ecommigration'] },
+    { name: 'LINE OA', ids: ['line'] },
+    { name: 'E-commerce', ids: ['ecom','ecomcampaigns','ecommonthly','ecomchannels','shopee','lazada',
+      'ecomcentre','ecompackages','ecomroas','ecomchurn','ecommigration'] },
+    { name: 'Tools', ids: ['topics'] },
   ];
   const grouped = GROUPS.map(g => ({ ...g, items: g.ids.map(id => tabs.find(t => t.id === id)).filter(Boolean) }));
   const ungrouped = tabs.filter(t => !GROUPS.some(g => g.ids.includes(t.id)));
   if (ungrouped.length) grouped.push({ name: 'Other', items: ungrouped });
 
-  const shortLabel = (t) => String(t.label).replace(/^E-commerce\s*·\s*/, '');
+  // The E-commerce overview is "Overview" in the sidebar, so it is here too.
+  const shortLabel = (t) => t.id === 'ecom' ? 'Overview' : String(t.label).replace(/^E-commerce\s*·\s*/, '');
 
   const chips = (u) => grouped.map(g => `<div class="u-group">
       <div class="u-gname">${esc(g.name)}
@@ -12475,7 +12485,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.350.0';
+const CLIENT_BUILD = '3.351.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

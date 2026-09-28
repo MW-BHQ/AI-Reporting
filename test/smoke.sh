@@ -445,6 +445,16 @@ expect_field "ov mp imps"         "$OV" "d.totalsAll.impressions===d.totals.impr
 expect_field "ov mp bofu"         "$OV" "(m=>d.totalsAll.keyEvents===d.totals.keyEvents+m.shopee.addToCart+m.shopee.checkouts+m.lazada.addToCart+m.lazada.checkouts)(d.marketplace)?'ok':undefined"
 expect_field "ov mp values"       "$OV" "(m=>m.shopee.shopViews===1600&&m.shopee.searchClicks===7&&m.shopee.checkouts===5&&m.lazada.checkouts===31&&m.lazada.searchClicks===300)(d.marketplace)?'ok':undefined"
 
+echo "--- Users: permission groups follow the sidebar (v3.351.0) ---"
+# Every grantable tab sits in a named group, so nothing falls to "Other".
+GROUPS_OK=$(node -e '
+const fs=require("fs");const srv=fs.readFileSync("server.js","utf8");const cli=fs.readFileSync("public/index.html","utf8");
+const tabs=[...srv.slice(srv.indexOf("const TABS = ["),srv.indexOf("const TAB_IDS")).matchAll(/id: "([a-z]+)",\s+label: "[^"]+"( \},|\s*\})/g)].map(m=>m[1]).filter(t=>t!=="users");
+const g=cli.slice(cli.indexOf("const GROUPS = ["),cli.indexOf("const grouped = GROUPS"));
+const miss=tabs.filter(t=>!g.includes("\x27"+t+"\x27"));
+console.log(miss.length?"MISSING "+miss.join(","):"ok");')
+if [ "$GROUPS_OK" = "ok" ]; then echo "  ok   users groups cover tabs"; else echo "  FAIL users groups cover tabs  $GROUPS_OK"; FAIL=$((FAIL+1)); fi
+
 echo "--- LINE tab (v3.309.0) ---"
 LINE="/api/line?from=$FROM&to=$TO"
 check "line tab" GET "$LINE"

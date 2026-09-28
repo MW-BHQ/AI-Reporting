@@ -956,7 +956,7 @@ const TABS = [
   { id: "shopee",    label: "Shopee" },
   { id: "lazada",    label: "Lazada" },
   { id: "ecom",      label: "E-commerce" },
-  { id: "ecomcampaigns", label: "E-commerce campaigns" },
+  { id: "ecomcampaigns", label: "E-commerce · Campaigns" },
   { id: "ecomcentre",label: "E-commerce · Centres" },
   { id: "ecompackages", label: "E-commerce · Packages" },
   { id: "ecomchannels", label: "E-commerce · Channels" },
