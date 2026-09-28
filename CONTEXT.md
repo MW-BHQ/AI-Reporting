@@ -1,5 +1,19 @@
 ### Recent (September 2026)
 
+**v3.353.0 — One heading rule; LM on every tab; forecast only while the
+month runs.**
+- `.card h2` now renders exactly like `.card-title` (bold ink, sentence
+  case). The Overview's small grey capitals were a second card-heading rule.
+  Uppercase grey stays for `.sec-h`, a section label outside cards. Print
+  sizes for h2 unchanged (they hold the one-slide campaign PDF).
+- Every tab opens on Last month (MW). Google Profile's one-year default and
+  the carry-over of a range picked on another tab are gone. Churn and
+  Migration keep their long run-up.
+- Month-end forecast: only when the range reaches into the current month;
+  an ended month shows no forecast row. Shopee and Lazada get the same
+  run-rate from their own daily rows, using the days their sheets cover this
+  month (the pastes lag), plus a total. Negative-tested.
+
 **v3.352.0 — Overview tidy for the marketplaces.**
 - Sidebar: E-commerce > Report now sits above E-commerce Campaigns (Users
   groups follow).

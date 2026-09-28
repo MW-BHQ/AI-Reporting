@@ -261,7 +261,13 @@
     box-shadow:var(--shadow);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
     padding:18px 20px;
   }
-  .card h2{font-size:var(--text-xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 14px;}
+  /**
+   * ONE CARD-HEADING STYLE (MW v3.353.0): a card's heading reads like
+   * .card-title everywhere — bold ink, sentence case. The Overview's <h2>s
+   * were small grey capitals, a second rule nobody chose. Uppercase grey is
+   * kept for .sec-h only: a section label OUTSIDE cards, not a card heading.
+   */
+  .card h2{font-size:var(--text-lg);font-weight:700;letter-spacing:0;text-transform:none;color:var(--ink);margin:0 0 14px;}
   .grid{display:grid;gap:14px;}
   .g-4{grid-template-columns:repeat(4,1fr);}
   .g-5{grid-template-columns:repeat(5,1fr);}
@@ -3182,14 +3188,6 @@ document.querySelectorAll('.nav-item').forEach(item => {
       S.reportLang = null;
     }
     goTo(item.dataset.view);
-    if (S.view === 'gbp' && !S.gbpInit) {
-      // Reviews accumulate slowly, so a year is the useful default window.
-      const y = new Date(); y.setDate(y.getDate() - 1);
-      const start = new Date(y); start.setFullYear(start.getFullYear() - 1); start.setDate(start.getDate() + 1);
-      $('from').value = fmtISO(start); $('to').value = fmtISO(y);
-      [...$('presets').children].forEach(b => b.classList.remove('active'));
-      S.gbpInit = true;
-    }
     // Migration needs a long run-up: a customer has to buy, leave, and come
     // back before anything appears, so a one-month default shows almost nothing.
     // Migration and Churn both need a long run-up — a customer has to buy,
@@ -3205,15 +3203,17 @@ document.querySelectorAll('.nav-item').forEach(item => {
       $('to').value = fmtISO(new Date());
       [...$('presets').children].forEach(b => b.classList.remove('active'));
       S.longRangeOn = true;
-    } else if (!wantsLongRange && S.longRangeOn) {
-      const untouched = $('from').value === LONG_FROM;
+    } else if (!wantsLongRange) {
+      /**
+       * EVERY TAB OPENS ON LAST MONTH (MW v3.353.0: "prompt at LM as before -
+       * every tabs"). Google Profile's one-year default is gone with it, and
+       * a range picked on one tab no longer follows the reader to the next.
+       * Churn and Migration keep their long run-up above — their data is
+       * empty on a single month.
+       */
       S.longRangeOn = false;
-      if (untouched) {
-        setLastMonth();
-        [...$('presets').children].forEach(b =>
-          b.classList.toggle('active', b.dataset.lastmonth === '1'));
-        ['ecom','ecomc','ecomch'].forEach(k => { S[k] = null; S[k + 'Key'] = null; });
-      }
+      setLastMonth();
+      [...$('presets').children].forEach(b => b.classList.toggle('active', b.dataset.p === 'lm'));
     }
     render();
   });
@@ -6199,7 +6199,8 @@ function renderOverview() {
        */
       const shops = [['Website', ec ? { productPageViews: ec.productViews, cartUnits: ec.addToCarts, orders: ec.purchases, revenue: ec.revenue } : null],
         ['Shopee', MP.shopee], ['Lazada', MP.lazada]];
-      const miss = shops.filter(([, x]) => !x).map(([nm]) => nm);
+      // A shop with an object but no sales rows in range is as missing as no object.
+      const miss = shops.filter(([, x]) => !x || x.revenue == null).map(([nm]) => nm);
       const tot = (k) => { const v = shops.map(([, x]) => x && x[k]).filter(v => v != null); return v.length ? v.reduce((a, b) => a + b, 0) : null; };
       const fmtC = (v, money) => v == null ? '\u2014' : money ? num(v, { money: true }) : num(v);
       const aov = (x) => x && x.orders ? x.revenue / x.orders : null;
@@ -6211,7 +6212,13 @@ function renderOverview() {
         <th class="num"><span class="chip" style="background:${channelColour('Lazada')};margin-right:6px;"></span>Lazada</th><th class="num">Total</th></tr></thead><tbody>
         ${[...rows.map(([lab, k, money]) => [lab, ...shops.map(([, x]) => x ? x[k] : null), tot(k), money]),
           ['Average order', ...shops.map(([, x]) => aov(x)), tot('orders') ? tot('revenue') / tot('orders') : null, true],
-          ['Month-end forecast (website)', fc ? fc.projectedMonthEnd : null, null, null, null, true],
+          // Current month only — a month that has ended has no forecast (MW).
+          ...(fc || (MP.shopee && MP.shopee.forecast) || (MP.lazada && MP.lazada.forecast) ? [(() => {
+            const w = fc ? fc.projectedMonthEnd : null, sh = MP.shopee && MP.shopee.forecast ? MP.shopee.forecast.projectedMonthEnd : null,
+              lz = MP.lazada && MP.lazada.forecast ? MP.lazada.forecast.projectedMonthEnd : null;
+            const parts = [w, sh, lz].filter(v => v != null);
+            return ['Month-end forecast', w, sh, lz, parts.length ? parts.reduce((a, b) => a + b, 0) : null, true];
+          })()] : []),
         ].map(([lab, w, sh, lz, t, money]) => `<tr><td class="strong">${lab}</td><td class="num">${fmtC(w, money)}</td><td class="num">${fmtC(sh, money)}</td><td class="num">${fmtC(lz, money)}</td><td class="num">${fmtC(t, money)}</td></tr>`).join('')}
       </tbody></table>
     </div>`;
@@ -12496,7 +12503,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.352.0';
+const CLIENT_BUILD = '3.353.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

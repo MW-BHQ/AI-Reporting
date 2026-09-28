@@ -1202,6 +1202,9 @@ global.fetch = async (url, opts = {}) => {
       for (let i = 1; i <= 30; i++) rows.push(day(`2026-06-${String(i).padStart(2, "0")}`, "5,000.00", 100, 1, 1));
       for (let i = 1; i <= 31; i++) rows.push(day(`2026-07-${String(i).padStart(2, "0")}`, "10,000.00", 200, 1, 1));
       rows.push(day("2026-07-15", "20,000.00", 200, 1, 1));
+      // The 1st of the CURRENT month (real clock, as the server's forecast
+      // uses): 1,000 → Lazada run-rate 1,000 × days in month (v3.353.0).
+      { const t = new Date(); rows.push(day(`${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-01`, "1,000.00", 10, 1, 1)); }
       return jsonRes({ spreadsheetId: "mock-lazada", valueRanges: [{ values: rows }] });
     }
     /**

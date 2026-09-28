@@ -455,6 +455,11 @@ const miss=tabs.filter(t=>!g.includes("\x27"+t+"\x27"));
 console.log(miss.length?"MISSING "+miss.join(","):"ok");')
 if [ "$GROUPS_OK" = "ok" ]; then echo "  ok   users groups cover tabs"; else echo "  FAIL users groups cover tabs  $GROUPS_OK"; FAIL=$((FAIL+1)); fi
 
+echo "--- Forecast only for the running month (v3.353.0) ---"
+MF=$(date +%Y-%m-01); TD=$(date +%Y-%m-%d); DIM=$(date -d "$(date +%Y-%m-01) +1 month -1 day" +%d)
+expect_field "fc ended month"     "/api/overview?from=$FROM&to=$TO" "d.forecast===null&&(!d.marketplace.lazada||d.marketplace.lazada.forecast===null)?'ok':undefined"
+expect_field "fc running month"   "/api/overview?from=$MF&to=$TD" "d.forecast!==null&&d.marketplace.lazada.forecast.projectedMonthEnd===1000*$DIM?'ok':undefined"
+
 echo "--- LINE tab (v3.309.0) ---"
 LINE="/api/line?from=$FROM&to=$TO"
 check "line tab" GET "$LINE"
