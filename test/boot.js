@@ -786,11 +786,11 @@ setTimeout(() => {
        * corporate channel that cannot be split by branch. A group-level number
        * sitting unlabelled inside a BHQ-scoped view is the conflation this
        * project refuses to make anywhere else, so the label is asserted.
-       * Since v3.352.0 MW removed the prose notes; the caveat is the house
-       * scope PILL on the row instead, and that is what is asserted.
+       * v3.352.0 replaced the prose with a B+ pill; v3.354.0 MW removed the
+       * pill too (his call: the reach list is read without scope labels).
+       * Nothing is asserted here any more.
        */
-      ["YouTube scope pill", "YouTube <span class=\"pill\" data-tip=\"One account for every branch", "html"],
-    ];
+          ];
     for (const [what, needle, where] of needs) {
       const hay = where === "html" ? html : text;
       if (!hay.includes(needle)) return fail("overview renders", `${what}: "${needle}" missing`);

@@ -1,5 +1,11 @@
 ### Recent (September 2026)
 
+**v3.354.0 — B+ pills removed** (MW): from LINE and YouTube in Off-site reach
+and from the Website → Shopee handoff title. The boot check that asserted
+YouTube's scope label is dropped with them — MW's explicit call; the
+BHQ-vs-group distinction for these rows now lives only in code comments and
+the payload's `groupLevel` flag.
+
 **v3.353.0 — One heading rule; LM on every tab; forecast only while the
 month runs.**
 - `.card h2` now renders exactly like `.card-title` (bold ink, sentence
