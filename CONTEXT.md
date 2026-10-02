@@ -1,5 +1,14 @@
 ### Recent (September 2026)
 
+**v3.356.0 — Sheets API retries Google's 5xx.** MW saw "Internal sheets
+unavailable: UTM Builder: Sheets API 502: <!DOCTYPE html>…" on Campaigns: a
+transient Google server error. `sheetBatchGet` now retries 429/5xx twice
+(0.6s, 1.8s); 4xx fail at once (retrying cannot fix sharing, IDs or ranges).
+An HTML error body is never echoed — "Google server error, try Refresh".
+`withCache` keeps a result carrying `sheetErrors` for one minute only, so a
+recovered Google is picked up without a manual refresh. Fixture: every sheet's
+first request is a 502 (MOCK_FLAKY_SHEETS=1); negative-tested.
+
 **v3.355.0 — Month-end forecast removed from the Overview** (MW): the Shopee
 and Lazada sheets are pasted after the month closes, so a running-month
 forecast could never include them. Row, shop run-rates and their tests

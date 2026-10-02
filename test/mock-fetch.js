@@ -1111,6 +1111,20 @@ global.fetch = async (url, opts = {}) => {
    * unhandled-URL branch and fails loudly, which is the correct outcome.
    */
   if (u.includes("sheets.googleapis.com")) {
+    /**
+     * FLAKY GOOGLE (v3.356.0): with MOCK_FLAKY_SHEETS=1 the FIRST request to
+     * each spreadsheet is a 502 HTML page, as Google sent MW. The retry must
+     * hide it; without the retry every sheet reads as failed.
+     */
+    if (process.env.MOCK_FLAKY_SHEETS === "1") {
+      const id = (u.match(/spreadsheets\/([^/]+)/) || [])[1];
+      globalThis.__flaky = globalThis.__flaky || new Set();
+      if (id && !globalThis.__flaky.has(id)) {
+        globalThis.__flaky.add(id);
+        const html = "<!DOCTYPE html><html lang=en><title>Error 502 (Server Error)!!1</title></html>";
+        return { ok: false, status: 502, json: async () => { throw new Error("not json"); }, text: async () => html };
+      }
+    }
   /**
    * SHOPEE SELLER CENTRE SHEET (v3.321.0). Pasted exports, with every trap the
    * real file sets. Window 2026-07-01..2026-07-31.

@@ -1332,6 +1332,15 @@ sleep 2.5
 expect_field "sa missing tab ok" "/api/shopee?from=$FROM&to=$TO" "d.available===true&&d.funnel.sales===32000&&d.shopeeAds.available===false&&/Shopee Ads/.test(d.shopeeAds.reason)?'ok':undefined"
 expect_field "kw no month header" "/api/shopee?from=$FROM&to=$TO" "d.keywords.available===false&&/no \"Month\" header/.test(d.keywords.reason)?'ok':undefined"
 
+# GOOGLE 502 ON FIRST TOUCH (v3.356.0): retried, so the sheets read fine.
+kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
+WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ADMIN_EMAILS=admin@bkh.test ECOM_SHEET_ID=mock \
+MOCK_FLAKY_SHEETS=1 PORT=$PORT node --require ./test/mock-fetch.js server.js >>/tmp/smoke.log 2>&1 &
+SRV=$!
+sleep 2.5
+expect_field "sheets 502 retried" "/api/sheets-check" "d.steps.filter(s=>/^read/.test(s.step)).every(s=>s.ok)?'ok':undefined"
+expect_field "shopee 502 retried" "/api/shopee?from=$FROM&to=$TO" "d.available===true&&d.funnel.sales===32000?'ok':undefined"
+
 kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
 echo ""
 if [ "$FAIL" -gt 0 ]; then

@@ -120,10 +120,24 @@ async function sheetBatchGet(spreadsheetId, ranges, opts = {}) {
   const qs = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join("&");
   const render = opts.unformatted ? "&valueRenderOption=UNFORMATTED_VALUE" : "";
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchGet?${qs}&majorDimension=ROWS${render}`;
-  const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+  /**
+   * RETRY GOOGLE'S OWN HICCUPS (v3.356.0). MW saw "UTM Builder: Sheets API
+   * 502: <!DOCTYPE html>…" on the Campaigns tab — a transient Google server
+   * error, not a sharing or ID problem. 429 and 5xx are retried twice with
+   * backoff; 4xx (403 not shared, 404 bad ID, 400 bad range) fail at once,
+   * because retrying cannot fix them. An HTML error page is never quoted
+   * back to the reader.
+   */
+  let res;
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+    if (res.ok || !(res.status === 429 || res.status >= 500) || attempt >= 2) break;
+    await new Promise((r) => setTimeout(r, 600 * (attempt * 2 + 1)));
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Sheets API ${res.status}: ${body.slice(0, 300)}`);
+    const text = /^\s*</.test(body) ? (res.status >= 500 ? "Google server error, try Refresh" : "error page") : body.slice(0, 300);
+    throw new Error(`Sheets API ${res.status}: ${text}`);
   }
   const json = await res.json();
   return json.valueRanges || [];
@@ -1137,7 +1151,13 @@ async function withCache(key, refresh, producer, ttlMs) {
     if (hit) return { value: hit.value, cached: true, ageSec: Math.round((Date.now() - hit.storedAt) / 1000) };
   }
   const value = await producer();
-  cacheSet(key, value, ttlMs);
+  /**
+   * A DEGRADED RESULT IS NOT KEPT FOR LONG. A build that had to run without
+   * one of its sheets (`sheetErrors`) would otherwise serve that warning for
+   * the whole cache life after Google recovered; one minute, then rebuild.
+   */
+  const degraded = value && Array.isArray(value.sheetErrors) && value.sheetErrors.length > 0;
+  cacheSet(key, value, degraded ? 60 * 1000 : ttlMs);
   return { value, cached: false, ageSec: 0 };
 }
 
