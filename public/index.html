@@ -4023,8 +4023,8 @@ function renderReport() {
    * which refuses a change whose sources do not match across the windows; the
    * reason is printed beside the dash, since a tooltip does not print.
    */
-  // Staged rollout (MW: "try on BGH first"). Add a key to switch a hospital on.
-  const OVERVIEW_PAGE_BRANDS = ['BGH'];
+  // Staged rollout (MW: "try on BGH first"), all four on since v3.359.0.
+  const OVERVIEW_PAGE_BRANDS = ['BGH', 'BIH', 'BHT', 'WSH'];
   const overviewBody = (() => {
     const OP = d.overviewPage;
     if (!OP || !OVERVIEW_PAGE_BRANDS.includes(sel)) return '';
@@ -12558,7 +12558,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.358.0';
+const CLIENT_BUILD = '3.359.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

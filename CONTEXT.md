@@ -1,5 +1,10 @@
 ### Recent (September 2026)
 
+**v3.359.0 — Overview page on all four Monthly Reports** (MW, after BGH
+sign-off): `OVERVIEW_PAGE_BRANDS` = BGH, BIH, BHT, WSH. Same BHQ page and
+covers on every hospital; the cover keeps its "Digital Marketing" subtitle
+(MW). A print-overflow pass on each hospital is part of this release.
+
 **v3.358.0 — Covers around the Overview page** (MW): the deck opens on a
 "Digital Marketing Performance" cover, then the Overview page, then the
 "Website Performance" cover before Sessions overview. Hospitals not yet in
