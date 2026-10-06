@@ -5624,9 +5624,13 @@ function renderReport() {
    */
   $('viewRoot').innerHTML = `
     <!-- ================= MW's sequence ================= -->
-    ${usersBody ? coverSlide('Website Performance') : ''}
+    <!-- MW (v3.358.0): the deck opens on "Digital Marketing Performance" and
+         the Overview page; "Website Performance" then opens the website
+         section. Hospitals without the Overview page keep the old opening. -->
+    ${overviewBody ? coverSlide('Digital Marketing Performance') : ''}
     ${slide('Overview', overviewBody, true, 'BHQ')}
-    ${slide('Sessions overview', usersBody, !overviewBody, 'BHQ', null, true)}
+    ${usersBody ? coverSlide('Website Performance') : ''}
+    ${slide('Sessions overview', usersBody, true, 'BHQ', null, true)}
     ${slide('Who reaches us from outside Thailand', countryBody, false, true, null, true)}
     <!-- NOT a slide-fill any more (MW: "this page content doesn't vertically
          align"). Fill exists to hand slack to a chart, and this section has no
@@ -12554,7 +12558,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.357.0';
+const CLIENT_BUILD = '3.358.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

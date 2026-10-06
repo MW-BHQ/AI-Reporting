@@ -1,5 +1,10 @@
 ### Recent (September 2026)
 
+**v3.358.0 — Covers around the Overview page** (MW): the deck opens on a
+"Digital Marketing Performance" cover, then the Overview page, then the
+"Website Performance" cover before Sessions overview. Hospitals not yet in
+`OVERVIEW_PAGE_BRANDS` keep the old opening (Website Performance first).
+
 **v3.357.0 — Monthly Report: Overview page after the opening cover (BGH
 first).** MW: the Overview tab's funnel card + four scorecards (Total
 Visibility, Total Visits, Total Contact Us, Total Direction requests), each
