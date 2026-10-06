@@ -98,14 +98,53 @@ it; nothing is built.
 **ALWAYS call `get_fields` before writing any Windsor pull.** Most repeated
 mistake on this project. MCP approval is per chat session.
 
+## Session v3.321 → v3.356 in one screen (read before touching e-commerce)
+
+**Shopee** (own tab): Seller Centre + Brand Portal sheet, 12 tabs (table above).
+Windsor Shopee REMOVED. Funnel, traffic, Shopee Ads (+ Shop Ads split, keywords),
+CPAS (Meta vs Shopee referees), all-ads ROAS, where-sales-came-from (THB) + how
+shoppers arrived (clicks), outside channels/campaigns/placements, website →
+Shopee handoff (GA4 link clicks by utm_content), packages whole shop, "What to do
+next" synthesis (`SHOPEE_SYN`: 2×2 ad money, leaks, search demand gaps, other
+hospitals' names), price bands, buyer gender/age, MoM/YoY (fully covered windows
+only), labelled bars (`labelledBars`, 9.5px).
+
+**Lazada** (own tab): sheet `LAZADA_SHEET_ID` = `1_WnGf7NOIDOL9xrF5_JTpIBSobgv7SY-CR-wXjCRL8I`.
+Tabs: Traffic Source, Key Metrics (daily), Product (monthly, SKU rows skipped),
+Customer Insight (new/existing), External Daily / Links / Sold (daily). Meta on
+Lazada from Windsor `*Lazada*` accounts. Colour PINK `#E4127A` everywhere.
+Lazada platform ad spend = UNMEASURED (Sponsored Media empty) — dash, open question.
+
+**Cross-shop:** E-commerce > E-commerce Campaigns (`/api/ecommerce/campaigns`):
+one row per campaign code joining Shopee, Lazada, website clicks, Meta spend.
+E-commerce > Overview: "Marketplaces side by side" card.
+Reporting > Overview: both shops in every funnel stage via `totalsAll` +
+`marketplace` (`totals` stays web-only for Monthly Report); in Off-site reach &
+action; E-commerce block = Website | Shopee | Lazada | Total. No month-end
+forecast (removed: shop sheets land after month close). No B+ pills, no
+"(all branches)", no footnotes — MW's calls.
+
+**House rules settled this session:** one card-heading style (`.card h2` =
+`.card-title`; `.sec-h` only for section labels between cards); house green
+#2E9E6F / red #D9534F for verdicts; every tab opens on LM (Churn/Migration keep
+long range); date picker is custom (no library), pending until Apply.
+
+**Infra:** `sheetBatchGet` retries 429/5xx twice; results with `sheetErrors`
+cached 1 minute. Each sheet group is its own batchGet — remove a tab from code
+BEFORE MW deletes it.
+
+**Apps Script (NOT in this repo):** "e-commerce normalised data" sheet,
+normaliser v2.11.0 — step 3 `reapplyMapping` rewritten (9 columns, 10k-row
+blocks, writes only changed blocks, resumes by timer at 4½ min). MW holds the
+full .gs; ask him for it before editing.
+
 ## Open items
 
-1. Verify v3.314–v3.320 on deployed data — MW has not reviewed them yet.
-2. Shopee: live data for v3.321–v3.337 is being checked by MW.
-3. Marketplace revenue is still OUTSIDE every headline revenue figure. Deliberate
-   — decide explicitly before joining it.
-4. PDF: campaign sheet has a ~6% blank tail. Residual is prep-vs-print text
-   wrapping; closing it risks a second page. Left alone on purpose.
+1. MW's team is back-filling the Shopee and Lazada sheets to the present; then
+   check Overview, Shopee, Lazada and E-commerce Campaigns on a month both cover.
+2. Lazada: who funds the Sponsored Discovery/Max visitors (ask Lazada AM).
+3. PDF: campaign sheet ~6% blank tail, left alone on purpose.
+4. Older wishlist: PDF date stamp, better month-end forecast, topic ideas.
 
 ## Traps that have each cost a release
 
