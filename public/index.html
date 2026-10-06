@@ -790,6 +790,10 @@
   td.barcell{position:relative;}
   td.barcell b{position:relative;}
   .stat .sub2{font-size:var(--text-xs);color:var(--faint);margin-top:2px;}
+  /* Monthly Report overview scorecards: MoM / YoY lines (v3.357.0). */
+  .ov-chg{font-size:var(--text-xs);color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .ov-chg b{font-weight:600;}
+  .ov-why{color:var(--faint);}
   /**
    * MoM / YoY ON ONE SCORECARD (MW: "unnecessary spacing which ruined the
    * layout").
@@ -1521,6 +1525,13 @@
     .slide:has(#repYtViews) > .grid > .stat .lab{font-size:11px!important;}
     .slide:has(#repYtViews) > .grid > .stat .sub2,
     .slide:has(#repYtViews) > .grid > .stat .note{font-size:11px!important;}
+    /* OVERVIEW PAGE (v3.357.0): four headline numbers are the point of the
+       page, so they keep scorecard size like YouTube's. Fits with the funnel
+       legend wrapped to two rows (measured with fifteen channels). */
+    .ov-cards > .stat{padding:10px 16px!important;}
+    .ov-cards > .stat .val{font-size:26px!important;}
+    .ov-cards > .stat .lab{font-size:10px!important;}
+    .ov-cards .ov-chg{font-size:11px!important;}
   }
   @media print{
     /* 13.333in x 7.5in is the standard 16:9 slide canvas. */
@@ -4005,6 +4016,40 @@ function renderReport() {
       <div class="val" style="color:${tone}">${txt}</div>${sub?`<div class="sub2">${sub}</div>`:''}</div>`;
   };
   /**
+   * OVERVIEW PAGE (v3.357.0, MW) — the Overview tab's funnel card plus four
+   * scorecards, right after the opening cover. BHQ on every hospital's report:
+   * the funnel is the group's, so all four reports carry the same page.
+   * Value and the two changes come from the server (`overviewScorecards`),
+   * which refuses a change whose sources do not match across the windows; the
+   * reason is printed beside the dash, since a tooltip does not print.
+   */
+  // Staged rollout (MW: "try on BGH first"). Add a key to switch a hospital on.
+  const OVERVIEW_PAGE_BRANDS = ['BGH'];
+  const overviewBody = (() => {
+    const OP = d.overviewPage;
+    if (!OP || !OVERVIEW_PAGE_BRANDS.includes(sel)) return '';
+    if (!OP.available) return `<div class="card"><div class="state bad">Overview unavailable this run: ${esc(OP.reason || 'unknown')}</div></div>`;
+    const chg = (lab, v, why, detail) => {
+      if (v === null || v === undefined) return `<div class="ov-chg"${detail ? ` data-tip="${esc(detail)}"` : ''}><span>${lab}</span> <b style="color:var(--muted)">\u2014</b>${why ? ` <span class="ov-why">${esc(why)}</span>` : ''}</div>`;
+      const tone = v > 0.005 ? '#2E9E6F' : (v < -0.005 ? '#D9534F' : 'var(--muted)');
+      return `<div class="ov-chg"><span>${lab}</span> <b style="color:${tone}">${changeText(v, 1)}</b></div>`;
+    };
+    const card = (lab, c) => {
+      const tip = c && c.parts.length > 1 ? c.parts.map(p => `${p.name}: ${num(p.value)}`).join(' \u00b7 ') : '';
+      return `<div class="stat"${tip ? ` data-tip="${esc(tip)}"` : ''}><div class="lab">${lab}</div>
+        <div class="val ${!c || isNA(c.value) ? 'na' : ''}">${num(c ? c.value : null)}</div>
+        ${chg('MoM', c && c.mom, c && c.momReason, c && c.momDetail)}${chg('YoY', c && c.yoy, c && c.yoyReason, c && c.yoyDetail)}</div>`;
+    };
+    const K = OP.cards || {};
+    return `${funnelCard(OP)}
+      <div class="grid g-4 mt ov-cards">
+        ${card('Total Visibility', K.visibility)}
+        ${card('Total Visits', K.visits)}
+        ${card('Total Contact Us', K.contact)}
+        ${card('Total Direction requests', K.directions)}
+      </div>`;
+  })();
+  /**
    * Mini scorecard for the dense 2x5 grids. Takes a key-event id so the icon
    * comes from the SHARED set rather than a one-off glyph, which is what keeps
    * the icons consistent between the cards and the table beneath them.
@@ -5580,7 +5625,8 @@ function renderReport() {
   $('viewRoot').innerHTML = `
     <!-- ================= MW's sequence ================= -->
     ${usersBody ? coverSlide('Website Performance') : ''}
-    ${slide('Sessions overview', usersBody, true, 'BHQ', null, true)}
+    ${slide('Overview', overviewBody, true, 'BHQ')}
+    ${slide('Sessions overview', usersBody, !overviewBody, 'BHQ', null, true)}
     ${slide('Who reaches us from outside Thailand', countryBody, false, true, null, true)}
     <!-- NOT a slide-fill any more (MW: "this page content doesn't vertically
          align"). Fill exists to hand slack to a chart, and this section has no
@@ -5801,82 +5847,12 @@ function renderReport() {
  * here deliberately rather than changed as a drive-by, but it should get this
  * treatment. Recorded in CONTEXT.
  */
-function renderOverview() {
-  const d = S.overview;
-  if (!d) {
-    if (S.overviewError) {
-      $('viewRoot').innerHTML = errorState(S.overviewError) +
-        `<div class="card"><div class="state">
-           <div style="max-width:460px;font-size:var(--text-xs);color:var(--muted);">Overview pulls GA4,
-           Meta Ads, Search Console, Google Business Profile and FB &amp; TikTok organic in one
-           request, so a single slow source can fail the whole pull. Retrying often succeeds.</div>
-           <button class="btn btn-primary" data-load="overview" style="margin-top:4px;">Retry</button>
-         </div></div>`;
-      return;
-    }
-    if (!S.overviewLoading) {
-      S.overviewLoading = true;
-      loadOverview()
-        .catch((err) => { S.overviewError = err.message || String(err); })
-        .finally(() => {
-          S.overviewLoading = false;
-          /**
-           * A THROW INSIDE THE RENDERER MUST NOT ESCAPE AS AN UNHANDLED
-           * REJECTION.
-           *
-           * `.catch()` above covers the FETCH failing. It does not cover
-           * `render()` itself throwing, and that is the failure that actually
-           * happened: an out-of-scope `n0` threw here, the rejection went
-           * unhandled, and the tab was left blank with nothing but a console
-           * error — no error state, no status, no retry. Indistinguishable from
-           * "the dashboard didn't load".
-           *
-           * Caught and turned into the error state, which renderOverview reaches
-           * without re-entering the code that threw.
-           */
-          try {
-            render();
-          } catch (err) {
-            S.overviewError = `The overview failed while drawing: ${err.message || err}`;
-            try { render(); } catch (_) {
-              $('viewRoot').innerHTML = errorState(S.overviewError);
-            }
-          }
-        });
-    }
-    $('viewRoot').innerHTML = loadingState('Pulling GA4, Meta, Search Console, GMB\u2026');
-    return;
-  }
-
-  /**
-   * THE PAYLOAD SHAPE IS CHECKED BEFORE IT IS READ.
-   *
-   * `runJobs` uses `Promise.allSettled` and nulls a source that fails, so a
-   * degraded pull returns 200 with sections missing. This function then read
-   * `d.totals.impressions` directly and threw
-   * `TypeError: Cannot read properties of undefined` — a WHITE SCREEN on a
-   * response the server considered a success. That is a strong candidate for the
-   * intermittent "overview failed to load" MW reported, and it is a failure that
-   * looks like nothing at all: no error state, no status, just an empty tab.
-   *
-   * Named sections rather than optional-chaining everywhere: if the funnel or the
-   * totals are gone there is no overview to show, and saying so beats a page of
-   * em dashes that reads as a genuinely quiet month.
-   */
-  const missing = [];
-  if (!d.totals) missing.push('totals');
-  if (!Array.isArray(d.funnel)) missing.push('the channel funnel');
-  if (missing.length) {
-    $('viewRoot').innerHTML = `<div class="card"><div class="state bad">
-      <div class="big">This pull came back incomplete</div>
-      <div style="max-width:480px;font-size:var(--text-xs);">The server answered but
-      ${esc(missing.join(' and '))} ${missing.length > 1 ? 'are' : 'is'} missing, so the
-      overview cannot be drawn. This usually means a source timed out mid-pull.</div>
-      <button class="btn btn-primary" data-load="overview" style="margin-top:4px;">Retry</button>
-    </div></div>`;
-    return;
-  }
-
+/**
+ * THE FUNNEL CARD, shared by Overview and the Monthly Report cover page
+ * (v3.357.0). One function, so the two can never drift: the report page is
+ * the Overview card, BHQ-scoped, same segments, same legend.
+ */
+function funnelCard(d) {
   const f = d.funnel || [];
   /**
    * STAGE TOTALS INCLUDE THE MARKETPLACES (v3.349.0): `totalsAll` is web +
@@ -6058,17 +6034,7 @@ function renderOverview() {
     { n:'Calls from Google Ads', v: n0(oa.gadsCalls) },
   ];
   const keShops = [...mpRows('addToCart', 'add to cart'), ...mpRows('checkouts', 'checkouts')];
-
-  const unavail = (d.unavailable||[]).length
-    ? `<div class="warnbox"><b>Unavailable this run:</b> ${d.unavailable.map(esc).join(', ')}. These show as “—”, not zero — the numbers below exclude them.</div>` : '';
-
-  const ec = d.ecommerce;
-
-  $('viewRoot').innerHTML = `
-    ${unavail}
-
-    <!-- funnel -->
-    <div class="card">
+  return `<div class="card">
       <!-- Two cuts, not one: the top two bars stack by SOURCE (one brand tone,
            named on hover), the lower three by GA4 CHANNEL (the key below). The
            old title said "stacked by channel" and described half the card. -->
@@ -6106,7 +6072,98 @@ function renderOverview() {
            the slide. -->
       <div class="legend">${f.map((c,i)=>`<div><span class="chip" style="background:${colorFor(i, c.channel)}"></span>${esc(c.channel)}</div>`).join('')}${
         [['Shopee', MP.shopee], ['Lazada', MP.lazada]].filter(([, x]) => x).map(([nm]) => `<div><span class="chip" style="background:${channelColour(nm)}"></span>${nm}</div>`).join('')}</div>
-    </div>
+    </div>`;
+}
+
+function renderOverview() {
+  const d = S.overview;
+  if (!d) {
+    if (S.overviewError) {
+      $('viewRoot').innerHTML = errorState(S.overviewError) +
+        `<div class="card"><div class="state">
+           <div style="max-width:460px;font-size:var(--text-xs);color:var(--muted);">Overview pulls GA4,
+           Meta Ads, Search Console, Google Business Profile and FB &amp; TikTok organic in one
+           request, so a single slow source can fail the whole pull. Retrying often succeeds.</div>
+           <button class="btn btn-primary" data-load="overview" style="margin-top:4px;">Retry</button>
+         </div></div>`;
+      return;
+    }
+    if (!S.overviewLoading) {
+      S.overviewLoading = true;
+      loadOverview()
+        .catch((err) => { S.overviewError = err.message || String(err); })
+        .finally(() => {
+          S.overviewLoading = false;
+          /**
+           * A THROW INSIDE THE RENDERER MUST NOT ESCAPE AS AN UNHANDLED
+           * REJECTION.
+           *
+           * `.catch()` above covers the FETCH failing. It does not cover
+           * `render()` itself throwing, and that is the failure that actually
+           * happened: an out-of-scope `n0` threw here, the rejection went
+           * unhandled, and the tab was left blank with nothing but a console
+           * error — no error state, no status, no retry. Indistinguishable from
+           * "the dashboard didn't load".
+           *
+           * Caught and turned into the error state, which renderOverview reaches
+           * without re-entering the code that threw.
+           */
+          try {
+            render();
+          } catch (err) {
+            S.overviewError = `The overview failed while drawing: ${err.message || err}`;
+            try { render(); } catch (_) {
+              $('viewRoot').innerHTML = errorState(S.overviewError);
+            }
+          }
+        });
+    }
+    $('viewRoot').innerHTML = loadingState('Pulling GA4, Meta, Search Console, GMB\u2026');
+    return;
+  }
+
+  /**
+   * THE PAYLOAD SHAPE IS CHECKED BEFORE IT IS READ.
+   *
+   * `runJobs` uses `Promise.allSettled` and nulls a source that fails, so a
+   * degraded pull returns 200 with sections missing. This function then read
+   * `d.totals.impressions` directly and threw
+   * `TypeError: Cannot read properties of undefined` — a WHITE SCREEN on a
+   * response the server considered a success. That is a strong candidate for the
+   * intermittent "overview failed to load" MW reported, and it is a failure that
+   * looks like nothing at all: no error state, no status, just an empty tab.
+   *
+   * Named sections rather than optional-chaining everywhere: if the funnel or the
+   * totals are gone there is no overview to show, and saying so beats a page of
+   * em dashes that reads as a genuinely quiet month.
+   */
+  const missing = [];
+  if (!d.totals) missing.push('totals');
+  if (!Array.isArray(d.funnel)) missing.push('the channel funnel');
+  if (missing.length) {
+    $('viewRoot').innerHTML = `<div class="card"><div class="state bad">
+      <div class="big">This pull came back incomplete</div>
+      <div style="max-width:480px;font-size:var(--text-xs);">The server answered but
+      ${esc(missing.join(' and '))} ${missing.length > 1 ? 'are' : 'is'} missing, so the
+      overview cannot be drawn. This usually means a source timed out mid-pull.</div>
+      <button class="btn btn-primary" data-load="overview" style="margin-top:4px;">Retry</button>
+    </div></div>`;
+    return;
+  }
+
+  const f = d.funnel || [];
+  const MP = d.marketplace || {};
+
+  const unavail = (d.unavailable||[]).length
+    ? `<div class="warnbox"><b>Unavailable this run:</b> ${d.unavailable.map(esc).join(', ')}. These show as “—”, not zero — the numbers below exclude them.</div>` : '';
+
+  const ec = d.ecommerce;
+
+  $('viewRoot').innerHTML = `
+    ${unavail}
+
+    <!-- funnel -->
+    ${funnelCard(d)}
 
     <!-- channel table + reach-only -->
     <div class="grid g-2-1 mt">
@@ -12497,7 +12554,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.356.0';
+const CLIENT_BUILD = '3.357.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

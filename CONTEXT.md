@@ -1,5 +1,29 @@
 ### Recent (September 2026)
 
+**v3.357.0 — Monthly Report: Overview page after the opening cover (BGH
+first).** MW: the Overview tab's funnel card + four scorecards (Total
+Visibility, Total Visits, Total Contact Us, Total Direction requests), each
+with MoM and YoY. BHQ on every hospital's report (the funnel is the group's).
+- `funnelCard(d)` is now one function used by Overview AND the report, so the
+  two cannot drift.
+- Server: `reportOverviewPage` reuses `cachedOverview` (same cache key as the
+  Overview tab) for the range, `cwr.prev` and `cwr.yoy`; started at the top of
+  `buildReport`, awaited at the end; a failure costs only this page.
+- Visibility = `totalsAll.impressions`; Visits = `totalsAll.visits` (web +
+  shop views); Contact Us = contact_us events + profile calls + Meta
+  conversations + Google Ads calls (MW: include — it is in BOFU); Directions =
+  `gbpDirections`, every listing on the account, same as the funnel.
+- A change is computed only when every source part is measured, and a shop
+  fully pasted (days === windowDays), in BOTH windows; else a dash with
+  "<source> not comparable" printed (tooltips do not print). Full list in
+  `momDetail`/`yoyDetail` as a tooltip.
+- `overviewMarketplace` now carries `days`, `adsDays`, `windowDays`.
+- Rollout gate: `OVERVIEW_PAGE_BRANDS = ['BGH']` in `renderReport`. Add keys
+  to switch on BIH/BHT/WSH.
+- Print: `.ov-cards` keep 26px values. Measured worst case (15-item legend on
+  two rows, all eight change lines as dashes with reasons) at 900px: content
+  ends 680px of 718px. Tests: 7 smoke assertions, 3 negative-tested.
+
 **v3.356.0 — Sheets API retries Google's 5xx.** MW saw "Internal sheets
 unavailable: UTM Builder: Sheets API 502: <!DOCTYPE html>…" on Campaigns: a
 transient Google server error. `sheetBatchGet` now retries 429/5xx twice

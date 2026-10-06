@@ -83,6 +83,19 @@ check "better club"  GET "/api/better-club?from=$FROM&to=$TO"
 # every read with the access list, so /api/report returned the users array with
 # a 200 and nobody noticed. These assert the payload, not the status.
 REPORT="/api/report?from=$FROM&to=$TO"
+echo "--- monthly report: overview page (v3.357.0) ---"
+OV="d.overviewPage"
+expect_field "ov page has 4 cards"  "$REPORT" "$OV.available&&['visibility','visits','contact','directions'].every(k=>$OV.cards[k])?'ok':undefined"
+# The scorecard IS the funnel headline — never a second, drifting sum.
+expect_field "ov vis = funnel TOFU" "$REPORT" "$OV.cards.visibility.value===$OV.totalsAll.impressions?'ok':undefined"
+expect_field "ov visits = MOFU"     "$REPORT" "$OV.cards.visits.value===$OV.totalsAll.visits?'ok':undefined"
+expect_field "ov contact = 4 parts" "$REPORT" "(()=>{const c=$OV.cards.contact;return c.parts.length===4&&c.parts.some(p=>p.name==='Calls from Google Ads')&&c.value===c.parts.reduce((a,p)=>a+p.value,0)?'ok':undefined})()"
+expect_field "ov directions = GBP"  "$REPORT" "$OV.cards.directions.value===$OV.offsiteActions.gbpDirections?'ok':undefined"
+# July's Shopee paste is 2 of 31 days in the fixture: comparing it to a full
+# June would print a collapse. Must be a dash that names Shopee.
+expect_field "ov partial shop dash" "$REPORT" "$OV.cards.visits.mom===null&&/Shopee/.test($OV.cards.visits.momReason)?'ok':undefined"
+# ...and a like-for-like card still gets a real number.
+expect_field "ov like-for-like num" "$REPORT" "typeof $OV.cards.contact.mom==='number'&&$OV.cards.contact.momReason===null?'ok':undefined"
 OVERVIEW="/api/overview?from=$FROM&to=$TO"
 
 echo "--- overview: LINE broadcasts in the funnel (v3.295.0) ---"

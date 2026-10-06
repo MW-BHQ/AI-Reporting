@@ -2024,7 +2024,122 @@ async function buildOverview(from, to) {
  * Shared assets are returned in their own block and are NOT inside any brand,
  * so the four brands deliberately do not sum to the group figure.
  */
+/** ONE cache entry per Overview build, shared by its tab and the Monthly Report. */
+const cachedOverview = (from, to, refresh) =>
+  withCache(`overview:${from}:${to}`, refresh, () => buildOverview(from, to));
+
+/**
+ * MONTHLY REPORT · OVERVIEW PAGE (v3.357.0, MW).
+ *
+ * The Overview funnel card, BHQ-scoped (identical on all four hospital
+ * reports), plus four scorecards with MoM and YoY:
+ *   Visibility     = TOFU impressions, shops included (the funnel headline)
+ *   Visits         = MOFU visits: website sessions + Shopee/Lazada shop views
+ *   Contact us     = contact_us events + profile calls + Meta conversations
+ *                    + Google Ads calls (MW: include it; it is in BOFU)
+ *   Directions     = GBP direction requests, every listing on the account —
+ *                    the same all-hospital figure the funnel draws
+ *
+ * A CHANGE IS ONLY COMPUTED ON LIKE-FOR-LIKE PARTS. Each card is a sum of
+ * sources; if a source is measured in one window and missing (or a shop's
+ * sheet only partly pasted) in the other, the change compares different
+ * things and is a dash with the source named — never a number.
+ */
+function overviewScorecards(cur, prev, yoy) {
+  const keVal = (o, id) => {
+    const r = (o.keyEventBreakdown || []).find((x) => x.id === id);
+    return o.keyEventBreakdown ? (r ? r.value : 0) : null;
+  };
+  const shop = (o, nm) => (o.marketplace || {})[nm] || null;
+  // [name, value, fullyCovered]
+  const shopPart = (o, nm, label, k, daysKey) => {
+    const x = shop(o, nm);
+    const v = x ? x[k] ?? null : null;
+    return [label, v, v == null || (x[daysKey] != null && x[daysKey] === x.windowDays)];
+  };
+  const DEF = {
+    visibility: {
+      total: (o) => (o.totalsAll || o.totals || {}).impressions ?? null,
+      parts: (o) => {
+        const io = o.impressionsBySource || {};
+        return [["Meta Ads", io.meta, true], ["Google Ads", io.gads, true], ["Search Console", io.gsc, true],
+          ["TikTok", io.tiktok, true], ["YouTube", io.youtube, true], ["Facebook page", io.fbPage, true],
+          ["Google Business Profile", io.gmb, true], ["LINE", io.line, true],
+          shopPart(o, "shopee", "Shopee", "impressions", "adsDays"),
+          shopPart(o, "lazada", "Lazada", "impressions", "adsDays")];
+      },
+    },
+    visits: {
+      total: (o) => (o.totalsAll || o.totals || {}).visits ?? null,
+      parts: (o) => [["Website", (o.totals || {}).visits ?? null, true],
+        shopPart(o, "shopee", "Shopee", "shopViews", "days"),
+        shopPart(o, "lazada", "Lazada", "shopViews", "days")],
+    },
+    contact: {
+      total: null,
+      parts: (o) => {
+        const oa = o.offsiteActions || {};
+        return [["Contact us events", keVal(o, "contact_us"), true], ["Calls from profile", oa.gbpCalls ?? null, true],
+          ["Meta conversations", oa.metaMessages ?? null, true], ["Calls from Google Ads", oa.gadsCalls ?? null, true]];
+      },
+    },
+    directions: {
+      total: null,
+      parts: (o) => [["Direction requests", (o.offsiteActions || {}).gbpDirections ?? null, true]],
+    },
+  };
+  const valueOf = (def, o) => {
+    if (def.total) return def.total(o);
+    const ps = def.parts(o).filter((p) => p[1] != null);
+    return ps.length ? ps.reduce((a, p) => a + Number(p[1]), 0) : null;
+  };
+  const change = (def, cv, cmp) => {
+    if (cv == null) return { value: null, reason: "not measured" };
+    if (!cmp) return { value: null, reason: "comparison period unavailable" };
+    const a = def.parts(cur), b = def.parts(cmp);
+    const bad = a.filter((p, i) => {
+      const q = b[i];
+      const okA = p[1] != null && p[2], okB = q[1] != null && q[2];
+      return !((p[1] == null && q[1] == null) || (okA && okB));
+    }).map((p) => p[0]);
+    // Short enough for one printed line; the full list rides in `detail`.
+    if (bad.length) return { value: null, reason: bad.length === 1 ? `${bad[0]} not comparable`
+      : `${bad.length} sources not comparable`, detail: bad.join(", ") };
+    const pv = valueOf(def, cmp);
+    if (!pv) return { value: null, reason: "nothing in the comparison period" };
+    return { value: cv / pv - 1, reason: null };
+  };
+  const out = {};
+  for (const [k, def] of Object.entries(DEF)) {
+    const v = valueOf(def, cur);
+    const mom = change(def, v, prev), yy = change(def, v, yoy);
+    out[k] = { value: v, mom: mom.value, momReason: mom.reason, momDetail: mom.detail || null,
+      yoy: yy.value, yoyReason: yy.reason, yoyDetail: yy.detail || null,
+      parts: def.parts(cur).filter((p) => p[1] != null).map(([name, value]) => ({ name, value })) };
+  }
+  return out;
+}
+async function reportOverviewPage(from, to) {
+  const cw = comparisonWindows(from, to);
+  const get = (f, t) => cachedOverview(f, t, false).then((o) => o.value);
+  const [cur, prev, yoy] = await Promise.all([
+    get(from, to),
+    get(cw.prev.from, cw.prev.to).catch(() => null),
+    get(cw.yoy.from, cw.yoy.to).catch(() => null),
+  ]);
+  return {
+    available: true,
+    // Only what `funnelCard` draws, not the whole Overview payload.
+    funnel: cur.funnel, totals: cur.totals, totalsAll: cur.totalsAll, marketplace: cur.marketplace,
+    impressionsBySource: cur.impressionsBySource, offsiteActions: cur.offsiteActions,
+    cards: overviewScorecards(cur, prev, yoy),
+  };
+}
 async function buildReport(from, to) {
+  // Started first, awaited last: it runs alongside the report's own pulls and a
+  // failure costs only its own page.
+  const overviewPageP = reportOverviewPage(from, to)
+    .catch((e) => ({ available: false, reason: String(e.message || e) }));
   const perBrand = {};
   for (const b of BRANDS) perBrand[b.key] = { key: b.key, label: b.label, segment: b.segment };
 
@@ -3980,6 +4095,7 @@ async function buildReport(from, to) {
       note: "Serves all four hospitals, so it is reported here and not added to any single brand. "
           + "The four brand figures therefore do not sum to the BHQ total.",
     },
+    overviewPage: await overviewPageP,
     unit: "sessions",
   };
 }
@@ -4033,7 +4149,7 @@ app.get("/api/overview", requireTab("overview"), async (req, res) => {
   if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
   if (!WINDSOR_API_KEY) return res.status(500).json({ error: "Server missing WINDSOR_API_KEY" });
   try {
-    const out = await withCache(`overview:${from}:${to}`, req.query.refresh === "1", () => buildOverview(from, to));
+    const out = await cachedOverview(from, to, req.query.refresh === "1");
     res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
   } catch (err) {
     logJson("ERROR", "overview_failed", { error: String(err.message || err) });
@@ -8755,6 +8871,16 @@ async function overviewMarketplace(from, to) {
     productPageViews: lz.products && lz.products.available ? lz.products.pageviews : null,
     cartUnits: sl ? sl.cartUnits : null, orders: sl ? sl.orders : null, revenue: sl ? sl.revenue : null,
   } : null;
+  /**
+   * DAY COVERAGE (v3.357.0), so a comparison can refuse a half-pasted window.
+   * The sheets are filled by hand; a shop with 10 of 31 days is present but
+   * not comparable. `days` is the daily Sales/Key Metrics paste, `adsDays` the
+   * Shopee Ads paste (its own export, its own gaps).
+   */
+  const windowDays = comparisonWindows(from, to).days;
+  if (shopee) Object.assign(shopee, { days: sh.days ?? null,
+    adsDays: sh.shopeeAds && sh.shopeeAds.available ? sh.shopeeAds.days ?? null : null, windowDays });
+  if (lazada) Object.assign(lazada, { days: sl ? sl.days : null, adsDays: null, windowDays });
   return { shopee, lazada };
 }
 /** ONE cache entry per storefront build, shared by its tab and the Overview. */
