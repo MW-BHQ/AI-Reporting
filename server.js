@@ -22,7 +22,14 @@ const fs = require("fs");
 const { GoogleAuth } = require("google-auth-library");
 
 const app = express();
-app.use(express.json({ limit: "256kb" }));
+/**
+ * 256kb everywhere except the Call out, which carries screenshots (base64, the
+ * client shrinks each to ~1400px JPEG, at most 8). Cloud Run caps a request at
+ * 32MB, so 20mb leaves headroom without inviting abuse.
+ */
+const jsonSmall = express.json({ limit: "256kb" });
+const jsonLarge = express.json({ limit: "20mb" });
+app.use((req, res, next) => (req.path === "/api/callout" ? jsonLarge : jsonSmall)(req, res, next));
 
 /**
  * `refresh=1` must reach the wire, not stop at the upstream memo.
@@ -4100,6 +4107,24 @@ async function buildReport(from, to) {
   };
 }
 
+/**
+ * The report, from GCS, memory or a fresh build. One function because two
+ * routes read it (/api/report and /api/callout) and they must share one cache:
+ * a callout written right after the report was opened should not rebuild it.
+ */
+async function reportCached(from, to, refresh = false) {
+  const objectName = `report/v${VERSION}/${from}_${to}.json`;
+  if (!refresh) {
+    const stored = await gcsRead(objectName).catch(() => null);
+    if (stored) return { value: stored, cached: true, ageSec: 0, store: "gcs" };
+  }
+  const out = await withCache(`report:${from}:${to}`, refresh,
+    () => buildReport(from, to), 24 * 3600 * 1000);
+  gcsWrite(objectName, out.value)
+    .catch((e) => logJson("WARNING", "report_store_failed", { error: String(e.message || e) }));
+  return { ...out, store: BENCH_BUCKET ? "gcs" : "memory" };
+}
+
 app.get("/api/report", requireTab("report"), async (req, res) => {
   const { from, to } = req.query;
   if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
@@ -4125,19 +4150,10 @@ app.get("/api/report", requireTab("report"), async (req, res) => {
    * rating mix after v3.99.1. A cache keyed only by date range silently
    * outlives the shape it was written for.
    */
-  const objectName = `report/v${VERSION}/${from}_${to}.json`;
   try {
-    if (!refresh) {
-      const stored = await gcsRead(objectName).catch(() => null);
-      // cacheAgeSec must be present or the client renders "cached undefineds ago".
-      if (stored) return res.json({ ...stored, cached: true, cacheAgeSec: 0, store: "gcs" });
-    }
-    const out = await withCache(`report:${from}:${to}`, refresh,
-      () => buildReport(from, to), 24 * 3600 * 1000);
-    gcsWrite(objectName, out.value)
-      .catch((e) => logJson("WARNING", "report_store_failed", { error: String(e.message || e) }));
-    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec,
-      store: BENCH_BUCKET ? "gcs" : "memory" });
+    const out = await reportCached(from, to, refresh);
+    // cacheAgeSec must be present or the client renders "cached undefineds ago".
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec, store: out.store });
   } catch (err) {
     logJson("ERROR", "report_failed", { error: String(err.message || err) });
     res.status(500).json({ error: err.message || "Report failed" });
@@ -7997,6 +8013,315 @@ app.post("/api/topic", requireTab("topics"), async (req, res) => {
   } catch (err) {
     logJson("ERROR", "topic_failed", { error: String(err.message || err) });
     res.status(500).json({ error: err.message || "Topic exploration failed" });
+  }
+});
+
+// ------------------------------------------------------------------ CALL OUT (AI)
+/**
+ * CALL OUT (v3.360.0). The monthly executive summary the team used to type by
+ * hand from the exported PDF, one per hospital.
+ *
+ * THE NUMBERS NEVER COME FROM THE PDF. They come from the same builders that
+ * render the Monthly Report, E-commerce Report and Better Club tabs, flattened
+ * into a list of FACTS with stable ids. Claude only chooses which facts matter
+ * and words them in Thai; the client then re-checks every number in every
+ * sentence against this list (CalloutLib.verifyText) and marks a miss in red.
+ * The PDF is used for two things only: page snapshots for the document, and the
+ * pages that exist only as pictures (ANGA, SEO positioning map), which Claude
+ * reads and must list as `shotFacts` before it may quote them.
+ *
+ * Gated by `report`: the callout is made from the report, so anyone who may see
+ * the report may summarise it — the same one-permission-two-views pattern as
+ * Google Ads / Benchmarks, and no admin has to re-tick a box.
+ */
+const CALLOUT_SECTIONS = [
+  ["overview",   "Overall Digital Marketing Performances"],
+  ["ecom",       "E-Commerce"],
+  ["betterAi",   "Better AI บนเว็บไซต์ bangkokhospital.com"],
+  ["betterClub", "Better Club: Revenue Attribution"],
+  ["gbp",        "Google Business Profile"],
+  ["website",    "Website Performance"],
+  ["social",     "Social & LINE"],
+  ["aiSeo",      "AI SEO & AI Visibility"],
+  ["seoMap",     "SEO Positioning Map"],
+  ["insight",    "Better Club Insight"],
+];
+const CALLOUT_IDS = CALLOUT_SECTIONS.map(([id]) => id);
+/** Thresholds that make a movement worth an executive's attention, in %. */
+const CALLOUT_NOTABLE_MOM = 15;
+const CALLOUT_NOTABLE_YOY = 25;
+/** Above this a change is more likely a tracking change than a business one. */
+const CALLOUT_SUSPECT = 300;
+
+/** Fractions (0.073) become percent with one decimal (7.3); null stays null. */
+const calloutPct = (x) => (x == null || !Number.isFinite(Number(x)) ? null : Math.round(Number(x) * 1000) / 10);
+
+function buildCalloutFacts(brand, from, to, rep, ecom, bc) {
+  const facts = [];
+  const add = (section, id, label, value, unit, extra = {}) => {
+    if (value == null || !Number.isFinite(Number(value))) return null;
+    const f = { id: `${section}.${id}`, section, label, value: Number(value), unit, ...extra };
+    facts.push(f);
+    return f;
+  };
+  /** A figure with its comparisons, each also a fact so it can be quoted. */
+  const addChg = (section, id, label, value, unit, { mom = null, yoy = null, prev = null, prevYoy = null } = {}) => {
+    const f = add(section, id, label, value, unit, { mom: calloutPct(mom), yoy: calloutPct(yoy) });
+    if (!f) return;
+    if (f.mom != null) add(section, `${id}.mom`, `${label} — change vs previous month`, f.mom, "%");
+    if (f.yoy != null) add(section, `${id}.yoy`, `${label} — change vs same period last year`, f.yoy, "%");
+    if (prev != null) add(section, `${id}.prev`, `${label} — previous month`, prev, unit);
+    if (prevYoy != null) add(section, `${id}.prevYoy`, `${label} — same period last year`, prevYoy, unit);
+    if (prev != null && Number.isFinite(Number(prev))) add(section, `${id}.delta`, `${label} — difference vs previous month`, Number(value) - Number(prev), unit);
+  };
+  const prevOf = (v, chg) => (chg == null || !Number.isFinite(chg) || chg === -1 ? null : Math.round(v / (1 + chg)));
+
+  // ---- overview (BHQ, all four hospitals: the PDF's first page)
+  const cards = (rep.overviewPage && rep.overviewPage.cards) || {};
+  [["visibility", "Total visibility (impressions, BHQ)"], ["visits", "Total visits to digital properties (BHQ)"],
+   ["contact", "Total contact-us attempts (BHQ)"], ["directions", "Total direction requests (BHQ)"]]
+    .forEach(([k, label]) => {
+      const c = cards[k];
+      if (c) addChg("overview", k, label, c.value, "count", { mom: c.mom, yoy: c.yoy });
+    });
+
+  // ---- website (this hospital)
+  const ub = ((rep.usersOverview && rep.usersOverview.byBrand) || []).find((b) => b.key === brand);
+  if (ub) addChg("website", "sessions", `${brand} website sessions`, ub.sessions, "count", { mom: ub.mom, yoy: ub.yoy });
+  const ch = ((rep.channelsByBrand || []).find((b) => b.key === brand) || {}).rows || [];
+  ch.slice(0, 5).forEach((r, i) => addChg("website", `channel${i + 1}`, `${brand} sessions from ${r.channel} (rank ${i + 1})`, r.sessions, "count", { mom: r.mom }));
+  const co = ((rep.countries || []).find((b) => b.key === brand) || {}).rows || [];
+  co.slice(0, 5).forEach((r, i) => addChg("website", `country${i + 1}`, `${brand} sessions from ${r.country} (rank ${i + 1} outside Thailand)`, r.sessions, "count", { mom: r.mom }));
+  const lm = ((rep.languageMatrix && rep.languageMatrix.rows) || []).find((r) => r.key === brand);
+  if (lm) lm.cells.filter((c) => c.sessions > 0).slice(0, 6)
+    .forEach((c) => addChg("website", `lang.${c.key}`, `${brand} sessions on the ${c.key.toUpperCase()} site`, c.sessions, "count", { mom: c.mom }));
+  const ap = rep.appointments && rep.appointments.byScope && rep.appointments.byScope[brand];
+  if (ap) {
+    add("website", "appt.initiates", `${brand} appointment starts (GA4)`, ap.initiates, "count");
+    if (ap.completes > 0) {
+      add("website", "appt.completes", `${brand} appointments completed`, ap.completes, "count");
+      add("website", "appt.rate", `${brand} appointment completion rate`, calloutPct(ap.completionRate), "%");
+      if (ap.revenue > 0) add("website", "appt.revenue", `${brand} revenue from online appointments`, ap.revenue, "THB");
+    }
+  }
+
+  // ---- e-commerce (all hospitals, 1 Jan → end of month, as on the E-commerce Report)
+  if (ecom && !ecom.empty && ecom.mtd) {
+    const m = ecom.mtd;
+    addChg("ecom", "revenue", "E-commerce sales YTD", m.revenue, "THB", { yoy: m.change, prevYoy: m.prev && m.prev.revenue });
+    addChg("ecom", "units", "E-commerce coupons sold YTD", m.units, "count", { yoy: m.unitsChange, prevYoy: m.prev && m.prev.units });
+    addChg("ecom", "aov", "E-commerce average order value YTD", m.aov, "THB", { yoy: m.aovChange, prevYoy: m.prev && m.prev.aov });
+    (ecom.centres || []).slice(0, 12).forEach((c, i) => {
+      const chg = c.revenuePrev > 0 ? (c.revenue - c.revenuePrev) / c.revenuePrev : null;
+      addChg("ecom", `centre${i + 1}`, `E-commerce sales YTD, ${c.name} (rank ${i + 1})`, c.revenue, "THB",
+        { yoy: chg, prevYoy: c.revenuePrev });
+    });
+    (ecom.channels || []).forEach((c, i) => {
+      add("ecom", `channel${i + 1}.share`, `Share of e-commerce sales YTD, ${c.name} (rank ${i + 1})`, calloutPct(c.share), "%");
+    });
+  }
+
+  // ---- Better AI (BHQ)
+  const ai = rep.betterAi;
+  if (ai && ai.available && ai.totals && ai.totals.sessions > 0) {
+    const t = ai.totals, r = ai.rates || {}, mo = ai.mom || {};
+    addChg("betterAi", "conversations", "Better AI conversations", t.sessions, "count", { mom: mo.sessions });
+    add("betterAi", "advice", "Better AI conversations that got a recommendation", t.advice, "count");
+    add("betterAi", "adviceRate", "Better AI recommendation rate", calloutPct(r.advice), "%");
+    add("betterAi", "click", "Better AI booking starts", t.click, "count");
+    add("betterAi", "done", "Better AI appointments made", t.done, "count");
+    add("betterAi", "closeRate", "Better AI appointments made / booking starts", calloutPct(r.close), "%");
+    add("betterAi", "realtime", "Better AI appointments booked in real time", t.rt, "count");
+    [["doctor", "doctor profiles viewed"], ["center", "centres viewed"], ["pkg", "packages viewed"], ["article", "articles viewed"]]
+      .forEach(([k, l]) => add("betterAi", `looked.${k}`, `Better AI users: ${l}`, t[k], "count"));
+    (ai.languages || []).slice(0, 6).forEach((l, i) => {
+      add("betterAi", `lang.${l.code}`, `Better AI conversations in ${l.code.toUpperCase()} (rank ${i + 1})`, l.sessions, "count");
+      add("betterAi", `lang.${l.code}.share`, `Share of Better AI conversations in ${l.code.toUpperCase()}`, calloutPct(l.sessions / t.sessions), "%");
+    });
+  }
+
+  // ---- Better Club (club-wide)
+  if (bc && bc.available && bc.selected) {
+    const s = bc.selected, p = bc.prev || {};
+    const chg = (a, b) => (b > 0 ? (a - b) / b : null);
+    addChg("betterClub", "revenue", `Better Club member revenue, ${s.label}`, s.revenue, "THB", { mom: chg(s.revenue, p.revenue), prev: p.revenue });
+    addChg("betterClub", "paying", `Better Club paying members, ${s.label}`, s.paidHns, "count", { mom: chg(s.paidHns, p.paidHns) });
+    addChg("betterClub", "newMembers", `Better Club new paying members, ${s.label}`, s.newHns, "count", { mom: chg(s.newHns, p.newHns) });
+    addChg("betterClub", "newRevenue", `Revenue from new Better Club members, ${s.label}`, s.newRev, "THB", { mom: chg(s.newRev, p.newRev) });
+    add("betterClub", "newRevenueShare", "New members' share of Better Club revenue", calloutPct(s.newRevShare), "%");
+    add("betterClub", "arpu", "Better Club revenue per paying member", s.arpu, "THB");
+    const year = s.month.slice(0, 4);
+    const ytd = (bc.months || []).filter((x) => x.month.slice(0, 4) === year && x.month <= s.month);
+    if (ytd.length) add("betterClub", "revenueYtd", `Better Club member revenue YTD ${year} (${ytd.length} months)`,
+      ytd.reduce((a, x) => a + n(x.revenue), 0), "THB");
+    const fn = (bc.funnel || []).find((x) => x.month === s.month);
+    if (fn) {
+      add("betterClub", "registers", `Better Club new registrations, ${s.label}`, fn.registers, "count");
+      add("betterClub", "registerToPaid", "New registrations that became paying members", calloutPct(fn.registerToPaid), "%");
+    }
+    const ms = bc.memberStats;
+    if (ms) {
+      add("betterClub", "membersTotal", "Better Club members, total", ms.total, "count");
+      add("betterClub", "everPaid", "Better Club members who have become patients", ms.everPaid, "count");
+      add("betterClub", "everPaidShare", "Share of members who have become patients", calloutPct(ms.everPaidShare), "%");
+    }
+  }
+
+  // ---- Google Business Profile (this hospital)
+  const g = (rep.gbpDetail || []).find((x) => x.key === brand);
+  if (g && g.totals) {
+    [["impressions", "impressions"], ["calls", "call clicks"], ["website", "website clicks"], ["directions", "direction requests"]]
+      .forEach(([k, l]) => addChg("gbp", k, `${brand} Google Business Profile ${l}`, g.totals[k], "count",
+        { mom: g.mom && g.mom[k], prev: prevOf(g.totals[k], g.mom && g.mom[k]) }));
+  }
+  const rk = rep.gbpRanks && rep.gbpRanks.byBrand && rep.gbpRanks.byBrand[brand];
+  if (rk && rk.rows) rk.rows.slice(0, 6).forEach((r, i) => {
+    add("gbp", `kw${i + 1}.rank`, `Google Maps rank for "${r.keyword}"`, r.rank, "rank");
+    if (r.volume > 0) add("gbp", `kw${i + 1}.volume`, `Search volume for "${r.keyword}"`, r.volume, "count");
+  });
+  const rv = ((rep.gbp && rep.gbp.reviewsByBrand) || []).find((x) => x.key === brand);
+  if (rv) {
+    add("gbp", "reviews", `${brand} Google reviews this period`, rv.count, "count");
+    add("gbp", "reviewAvg", `${brand} average rating this period`, rv.avg, "stars");
+    if (rv.lifetime) {
+      add("gbp", "reviewsLifetime", `${brand} Google reviews, lifetime`, rv.lifetime.total, "count");
+      add("gbp", "reviewAvgLifetime", `${brand} average rating, lifetime`, rv.lifetime.avg, "stars");
+    }
+  }
+
+  // ---- social & LINE (group accounts)
+  const tt = rep.tiktok && rep.tiktok.channel;
+  if (tt) {
+    const mo = tt.momAvailable ? (tt.mom || {}) : {};
+    addChg("social", "tiktok.views", "TikTok views", tt.views, "count", { mom: mo.views });
+    addChg("social", "tiktok.likes", "TikTok likes", tt.likes, "count", { mom: mo.likes });
+  }
+  const yt = rep.youtube;
+  if (yt && yt.available && yt.totals) {
+    addChg("social", "youtube.views", "YouTube views", yt.totals.views, "count", { mom: yt.mom && yt.mom.views, yoy: yt.yoyChange && yt.yoyChange.views });
+    add("social", "youtube.subs", "YouTube net new subscribers", yt.totals.subsNet, "count");
+  }
+  const fb = rep.facebook && rep.facebook.page;
+  if (fb) {
+    add("social", "fb.impressions", "Facebook page impressions", fb.impressions, "count");
+    add("social", "fb.followers", "Facebook followers", fb.followers, "count");
+  }
+  const ln = rep.line;
+  if (ln && ln.available && ln.delivered > 0) {
+    add("social", "line.delivered", "LINE OA messages delivered", ln.delivered, "count");
+    add("social", "line.opens", "LINE OA messages opened", ln.opens, "count");
+    add("social", "line.openRate", "LINE OA open rate", calloutPct(ln.openRate), "%");
+  }
+
+  // Interest is decided here, in code, so the model is told rather than asked.
+  for (const f of facts) {
+    const m = Math.abs(f.mom == null ? 0 : f.mom), y = Math.abs(f.yoy == null ? 0 : f.yoy);
+    if (m >= CALLOUT_SUSPECT || y >= CALLOUT_SUSPECT) f.flag = "suspect";
+    else if (m >= CALLOUT_NOTABLE_MOM || y >= CALLOUT_NOTABLE_YOY) f.flag = "notable";
+  }
+  return facts;
+}
+
+/**
+ * Direction in words, beside the numbers. The September callout said Beauty
+ * grew when it fell; a model reading two close figures can do the same, so the
+ * verdict is stated outright.
+ */
+function calloutNotes(ecom) {
+  return (ecom && ecom.centres ? ecom.centres : []).filter((c) => c.revenuePrev > 0)
+    .map((c) => `${c.name}: sales ${c.revenue >= c.revenuePrev ? "GREW" : "FELL"} vs last year`);
+}
+
+const CALLOUT_SYSTEM = `You write the monthly executive "Call out" for Bangkok Hospital's digital marketing report, in Thai, in the style of a concise briefing to hospital executives.
+
+Hard rules:
+1. Every number you write must come from FACTS or from your own SHOTFACTS list. Never compute a new number (no sums, differences or rates of your own). If you want a difference or a rate, use the fact that already holds it, or leave it out.
+2. Write each number the way it rounds from the fact: large numbers as 68.7 ล้าน / 92.2K / 1.2M, percentages with the decimals the fact has (or fewer). Use % for percentages.
+3. Never call something growth if the fact says it fell. Read each fact's sign.
+4. Facts flagged "suspect" (a jump over ${CALLOUT_SUSPECT}%) are probably a tracking change, not a business result: do not present them as wins. Put them in "checks" instead.
+5. Prefer "notable" facts. Skip a section rather than pad it. 1–4 bullets per section, each bullet 1–2 sentences.
+6. Screenshots: before quoting any number from an image, list it in "shotFacts" with a short label. If an image is unreadable, say so in "checks". If two screenshots disagree, say so in "checks" — do not write both into the callout.
+7. Keep English terms the team uses (E-Commerce, Better AI, AOV, MoM, YoY, AI Overviews, ChatGPT, Gemini).
+
+Return ONLY JSON, no prose, in this shape:
+{"shotFacts":[{"id":"shot.<slot>.<name>","slot":"<slot>","label":"...","value":59,"unit":"%"}],
+ "sections":[{"id":"<section id>","bullets":[{"text":"...","facts":["<fact id>", "..."]}]}],
+ "checks":["short note for the team, in English"]}`;
+
+function calloutPrompt({ brand, from, to, facts, notes, shots, userNotes, only }) {
+  const blocks = [];
+  shots.forEach((s, i) => {
+    blocks.push({ type: "text", text: `IMAGE ${i + 1} — slot "${s.slot}"${s.label ? ` (${s.label})` : ""}` });
+    blocks.push({ type: "image", source: { type: "base64", media_type: s.mediaType, data: s.data } });
+  });
+  const sections = CALLOUT_SECTIONS.filter(([id]) => !only || id === only)
+    .map(([id, title]) => `- ${id}: "${title}"`).join("\n");
+  blocks.push({ type: "text", text:
+`CALLOUT_V1
+Hospital: ${brand}. Period: ${from} to ${to}. E-commerce figures are 1 January to ${to}.
+Sections to write${only ? " (ONLY this one)" : ", in this order"}:
+${sections}
+Section notes: "overview", "ecom", "betterAi", "betterClub" and "social" are group-wide; "gbp" and "website" are ${brand} only. "aiSeo" and "seoMap" come only from images (slots anga / seoMap). "insight" comes only from images or team notes (slot insight).
+
+NOTES (no numbers to quote, direction only):
+${notes.map((x) => `- ${x}`).join("\n") || "- none"}
+
+TEAM NOTES:
+${userNotes || "none"}
+
+FACTS (JSON):
+${JSON.stringify(facts.map(({ id, label, value, unit, mom, yoy, flag }) => ({ id, label, value, unit, mom, yoy, flag })))}` });
+  return blocks;
+}
+
+const CALLOUT_SLOTS = new Set(["seoMap", "anga", "insight", "other"]);
+const CALLOUT_MAX_SHOTS = 8;
+
+app.post("/api/callout", requireTab("report"), async (req, res) => {
+  const b = req.body || {};
+  const brand = String(b.brand || "").toUpperCase();
+  if (!BRAND_KEYS.includes(brand)) return res.status(400).json({ error: `brand must be one of ${BRAND_KEYS.join(", ")}` });
+  if (!isoDate(b.from) || !isoDate(b.to) || b.from > b.to) return res.status(400).json({ error: "from and to must be YYYY-MM-DD, from ≤ to" });
+  if (b.only != null && !CALLOUT_IDS.includes(b.only)) return res.status(400).json({ error: "unknown section" });
+  const shots = (Array.isArray(b.shots) ? b.shots : []).slice(0, CALLOUT_MAX_SHOTS)
+    .filter((s) => s && CALLOUT_SLOTS.has(s.slot) && /^image\/(jpeg|png|webp)$/.test(s.mediaType) && typeof s.data === "string")
+    .map((s) => ({ slot: s.slot, mediaType: s.mediaType, data: s.data, label: String(s.label || "").slice(0, 80) }));
+  if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: "Server missing ANTHROPIC_API_KEY" });
+  try {
+    const ytdFrom = `${b.to.slice(0, 4)}-01-01`;
+    const [rep, ecom, bc] = await Promise.all([
+      reportCached(b.from, b.to).then((o) => o.value),
+      withCache(`ecommonthly:online:${ytdFrom}:${b.to}`, false, () => buildMonthly(ytdFrom, b.to, "online"))
+        .then((o) => o.value).catch((e) => { logJson("WARNING", "callout_ecom_failed", { error: String(e.message || e) }); return null; }),
+      withCache(`bclub:${b.from}:${b.to}`, false, () => buildBetterClub(b.from, b.to))
+        .then((o) => o.value).catch((e) => { logJson("WARNING", "callout_bclub_failed", { error: String(e.message || e) }); return null; }),
+    ]);
+    const facts = buildCalloutFacts(brand, b.from, b.to, rep, ecom, bc);
+    const notes = calloutNotes(ecom);
+    const userNotes = String(b.notes || "").slice(0, 4000);
+    const { text, stopReason } = await anthropic(
+      calloutPrompt({ brand, from: b.from, to: b.to, facts, notes, shots, userNotes, only: b.only }),
+      { system: CALLOUT_SYSTEM, maxTokens: 6000 });
+    let parsed;
+    try { parsed = extractJson(text); } catch (_) { parsed = {}; }
+    const shotFacts = (Array.isArray(parsed.shotFacts) ? parsed.shotFacts : [])
+      .filter((f) => f && Number.isFinite(Number(f.value)))
+      .map((f) => ({ id: String(f.id || "shot"), section: "shot", slot: String(f.slot || ""), label: String(f.label || ""),
+        value: Number(f.value), unit: f.unit === "%" ? "%" : String(f.unit || "count"), fromShot: true }));
+    const sections = (Array.isArray(parsed.sections) ? parsed.sections : [])
+      .filter((s) => s && CALLOUT_IDS.includes(s.id) && (!b.only || s.id === b.only))
+      .map((s) => ({ id: s.id, bullets: (Array.isArray(s.bullets) ? s.bullets : [])
+        .map((x) => ({ text: String((x && x.text) || x || "").trim(), facts: Array.isArray(x && x.facts) ? x.facts.map(String) : [] }))
+        .filter((x) => x.text) }))
+      .filter((s) => s.bullets.length);
+    if (!sections.length) throw new Error(`Claude returned no usable sections${stopReason === "max_tokens" ? " (response cut off)" : ""}`);
+    const checks = (Array.isArray(parsed.checks) ? parsed.checks : []).map(String).slice(0, 20);
+    for (const f of facts) if (f.flag === "suspect") checks.push(`${f.label}: ${f.mom != null ? `MoM ${f.mom}%` : ""}${f.yoy != null ? ` YoY ${f.yoy}%` : ""} — likely a tracking change, check before quoting.`);
+    res.json({ brand, from: b.from, to: b.to, titles: Object.fromEntries(CALLOUT_SECTIONS),
+      order: CALLOUT_IDS, facts, shotFacts, sections, checks: [...new Set(checks)], model: ANTHROPIC_MODEL });
+  } catch (err) {
+    logJson("ERROR", "callout_failed", { error: String(err.message || err) });
+    res.status(500).json({ error: err.message || "Call out failed" });
   }
 });
 

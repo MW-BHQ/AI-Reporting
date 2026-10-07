@@ -55,6 +55,9 @@ echo
 echo "--- static audit ---"
 node "$(dirname "$0")/audit.js" || FAIL=$((FAIL+1))
 echo
+echo "--- call out (number check, PDF map, docx, client) ---"
+node "$(dirname "$0")/callout.js" || FAIL=$((FAIL+1))
+echo
 echo "--- endpoints ---"
 check "version"    GET "/api/version"
 check "me"         GET "/api/me"
@@ -1284,6 +1287,32 @@ expect_field "awareness=CPM"    "$AUD" "d.audiences.every(a=>a.objectiveClass!==
 expect_field "no false CPAS"    "$AUD" "d.audiences.every(a=>!a.isCpas||a.purchases>0)||'BAD'"
 
 check "topic"      POST "/api/topic" "{\"topic\":\"gallbladder\",\"from\":\"$FROM\",\"to\":\"$TO\"}"
+echo "--- call out endpoint (v3.360.0) ---"
+CO_BODY="{\"brand\":\"BGH\",\"from\":\"$FROM\",\"to\":\"$TO\",\"shots\":[{\"slot\":\"anga\",\"mediaType\":\"image/jpeg\",\"data\":\"AAAA\"}]}"
+check "callout"    POST "/api/callout" "$CO_BODY"
+CO_OUT=$(curl -s -X POST -H "$ADMIN" -H 'content-type: application/json' -d "$CO_BODY" "$BASE/api/callout")
+echo "$CO_OUT" | node -e "
+  let r='';process.stdin.on('data',d=>r+=d).on('end',()=>{const d=JSON.parse(r);const bad=[];
+  if(!(d.facts&&d.facts.length>20)) bad.push('facts missing');
+  if(!d.facts.some(f=>f.id==='overview.visibility')) bad.push('overview fact missing');
+  if(d.sections.some(s=>!d.order.includes(s.id))) bad.push('unknown section passed through');
+  if(!d.shotFacts.every(f=>f.fromShot)) bad.push('screenshot facts not marked');
+  console.log(bad.length?'FAIL '+bad.join('; '):'ok');process.exit(bad.length?1:0);})" \
+  && printf '  ok   %-22s %s\n' "callout shape" "facts, order, shotFacts" \
+  || { FAIL=$((FAIL+1)); printf '  FAIL %-22s\n' "callout shape"; }
+for BAD in '{"brand":"XYZ","from":"2026-07-01","to":"2026-07-31"}' '{"brand":"BGH","from":"2026-07-31","to":"2026-07-01"}'; do
+  CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "$ADMIN" -H 'content-type: application/json' -d "$BAD" "$BASE/api/callout")
+  [ "$CODE" = "400" ] && printf '  ok   %-22s %s\n' "callout rejects" "$CODE" \
+    || { FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "callout rejects" "$CODE"; }
+done
+# Screenshots make the body large; the 256kb limit elsewhere must not apply.
+BIG=$(node -e "console.log(JSON.stringify({brand:'BGH',from:'$FROM',to:'$TO',shots:[{slot:'other',mediaType:'image/jpeg',data:'A'.repeat(3e6)}]}))")
+CODE=$(echo "$BIG" | curl -s -o /dev/null -w '%{http_code}' -X POST -H "$ADMIN" -H 'content-type: application/json' --data-binary @- "$BASE/api/callout")
+[ "$CODE" = "200" ] && printf '  ok   %-22s %s\n' "callout 3MB body" "$CODE" \
+  || { FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "callout 3MB body" "$CODE"; }
+CODE=$(echo "$BIG" | sed 's/BGH/x/' | curl -s -o /dev/null -w '%{http_code}' -X POST -H "$ADMIN" -H 'content-type: application/json' --data-binary @- "$BASE/api/topic")
+[ "$CODE" = "413" ] && printf '  ok   %-22s %s\n' "other routes stay 256kb" "$CODE" \
+  || { FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "other routes stay 256kb" "$CODE"; }
 check "user upsert" POST "/api/users" '{"email":"x@bkh.test","tabs":["overview"]}'
 
 echo "--- youtube: sheet only, the API path is GONE (v3.129.0) ---"

@@ -1,3 +1,36 @@
+### Recent (October 2026)
+
+**v3.360.0 — Call out tab (AI)** (MW): the monthly executive callout the team
+typed by hand from the exported PDF, one per hospital. Nav: Monthly Reports >
+Call out, under WSH, with the `AI` chip (house rule: every AI tab carries it).
+- Flow: hospital → exported PDF (+ extra screenshots, each tagged ANGA / SEO map
+  / Better Club insight / Other) → Generate → team edits/removes → Export .docx
+  (MW uploads to Drive by hand; Google Doc export was skipped on purpose).
+- NUMBERS NEVER COME FROM THE PDF. `buildCalloutFacts` flattens the same
+  builders as the report (`reportCached`, `buildMonthly` 1 Jan→to online,
+  `buildBetterClub`) into ~100 facts with ids. Code flags notable (MoM ≥15%,
+  YoY ≥25%) and suspect (≥300%, likely tracking) — suspects go to "For the team
+  to check", never into the text. Claude (`ANTHROPIC_API_KEY`, the Topic
+  Explorer key) only chooses and words them in Thai; centre GREW/FELL is stated
+  in words because the Sep hand callout said Beauty grew when it fell.
+- `public/callout-lib.js` (testable with require): `verifyText` re-checks every
+  number in every sentence, including the team's edits, at the precision
+  written ("68.7 ล้าน", "92.2K", "26,500", hedged "กว่า 1,600" gets 5%); red if
+  no fact matches. `mapPdfPages` finds sections by the PDF's own COVER pages
+  (whitespace removed: the export letter-spaces headings, so word regexes never
+  matched the real file). `buildDocx` = store-only zip + WordprocessingML, Tahoma.
+- The PDF supplies page snapshots for the doc and the picture-only pages (ANGA,
+  SEO map), which Claude reads and must list as `shotFacts` before quoting.
+- pdf.js 3.11.174 vendored (`/vendor/pdf.min.js` + worker), loaded only on this tab.
+- Permission rides on `report` (client adds `callout`; server gates
+  `/api/callout` on `report`), like gads → gadsbench.
+- `/api/callout` gets a 20mb JSON limit; every other route stays 256kb (smoke
+  checks both). `reportCached()` now serves /api/report and the callout from
+  one cache.
+- Tests: `test/callout.js` (in smoke.sh) — Sep mistakes as negative cases, real
+  letter-spaced covers, docx read back with CRCs, client run-through (grant,
+  marks, edit re-check, removal, export).
+
 ### Recent (September 2026)
 
 **v3.359.0 — Overview page on all four Monthly Reports** (MW, after BGH

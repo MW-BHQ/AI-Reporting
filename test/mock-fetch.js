@@ -1867,6 +1867,21 @@ global.fetch = async (url, opts = {}) => {
   }
 
   if (u.includes("api.anthropic.com")) {
+    // The Call out prompt is tagged so it gets a callout-shaped answer.
+    if (String((opts && opts.body) || "").includes("CALLOUT_V1")) {
+      return jsonRes({
+        stop_reason: "end_turn",
+        content: [{ type: "text", text: "```json\n" + JSON.stringify({
+          shotFacts: [{ id: "shot.anga.bh", slot: "anga", label: "BH ChatGPT visibility", value: 59, unit: "%" }],
+          sections: [
+            { id: "overview", bullets: [{ text: "BHQ ได้รับการมองเห็นทั้งหมด 202.3K ครั้ง", facts: ["overview.visibility"] }] },
+            { id: "aiSeo", bullets: [{ text: "ChatGPT แนะนำ Bangkok Hospital 59%", facts: ["shot.anga.bh"] }] },
+            { id: "notASection", bullets: [{ text: "dropped", facts: [] }] },
+          ],
+          checks: ["mock check"],
+        }) + "\n```" }],
+      });
+    }
     return jsonRes({
       stop_reason: "end_turn",
       content: [{ type: "text", text: JSON.stringify({ TH: ["นิ่วในถุงน้ำดี"], EN: ["gallstones"] }) }],

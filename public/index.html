@@ -2180,6 +2180,38 @@
     body.print-prep .bc-pg1a .note, body.print-prep .bc-pg1b .note{display:none!important;}
     body.print-prep .bc-stage{height:0.82in!important;max-height:none!important;}
   }
+  /* ---------------- call out ---------------- */
+  .co-in{display:flex;flex-direction:column;gap:12px;}
+  .co-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .co-row.co-top{align-items:flex-start;}
+  .co-lab{width:130px;flex:none;font-size:var(--text-xs);color:var(--muted);}
+  .co-meta{font-size:var(--text-xs);color:var(--muted);}
+  .co-badtxt{color:#D9534F;}
+  .co-row textarea{flex:1;min-width:240px;font-family:inherit;font-size:var(--text-sm);resize:vertical;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-sm);}
+  .co-shots,.co-imgs{display:flex;flex-wrap:wrap;gap:10px;}
+  .co-shots{margin-left:142px;}
+  .co-shot,.co-img{position:relative;display:flex;flex-direction:column;gap:4px;}
+  .co-shot img{width:150px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--line);}
+  .co-shot select{font-size:var(--text-2xs);max-width:150px;}
+  .co-imgs{margin-top:12px;}
+  .co-img img{width:260px;border-radius:8px;border:1px solid var(--line);}
+  .co-x{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;border:0;cursor:pointer;
+    background:rgba(27,35,64,.65);color:#fff;font-size:var(--text-sm);line-height:22px;padding:0;}
+  .co-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+  .co-bar .btn{margin-left:auto;}
+  .co-sech{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .co-small{padding:4px 10px;font-size:var(--text-2xs);}
+  .co-bl{position:relative;padding-right:30px;}
+  .co-bl .co-x{top:6px;right:0;background:transparent;color:var(--faint);}
+  .co-bl .co-x:hover{color:#D9534F;}
+  .co-b{font-size:var(--text-sm);line-height:1.75;padding:6px 8px 6px 20px;border-radius:8px;position:relative;outline:none;}
+  .co-b::before{content:"\2022";position:absolute;left:6px;color:var(--violet);}
+  .co-b:hover{background:var(--glass-2);}
+  .co-b:focus{background:#fff;box-shadow:0 0 0 2px var(--violet-soft);}
+  .co-n{border-radius:4px;padding:0 2px;}
+  .co-n.ok{background:rgba(74,190,140,.14);color:#2E9E6F;}
+  .co-n.bad{background:rgba(217,83,79,.12);color:#D9534F;text-decoration:underline wavy;}
+  .co-checks{margin:0;padding-left:18px;font-size:var(--text-xs);color:var(--ink-2);line-height:1.7;}
   @media(max-width:1080px){.g-6,.g-5,.g-4{grid-template-columns:repeat(2,1fr);}.g-2-1,.g-3,.g-2{grid-template-columns:1fr;}}
   @media(max-width:760px){
     .shell{flex-direction:column;}
@@ -2244,6 +2276,11 @@
       <div class="nav-item sub" data-view="report" data-brand="WSH">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
         WSH
+      </div>
+      <div class="nav-item sub" data-view="callout">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10v4a1 1 0 001 1h3l6 4V5L7 9H4a1 1 0 00-1 1z"/><path d="M17 9a4 4 0 010 6M19.5 6.5a8 8 0 010 11"/></svg>
+        Call out
+        <span class="ai-badge" title="Claude picks the points worth an executive's attention and words them in Thai. Every number is checked against the report data; the team reviews before export.">AI</span>
       </div>
 
       <div class="nav-sep"></div>
@@ -3256,7 +3293,8 @@ const ECOM_VIEWS = new Set(['ecom', 'ecommonthly', 'ecomchannels', 'ecompackages
  * honest label. Only the two GA4 cards on its funnel page are BHQ, and those
  * say so themselves.
  */
-const UNSCOPED_VIEWS = new Set(['users', 'audit', 'benchmark', 'gadsbench', 'topics', 'campaigns', 'bclub']);
+// `callout` mixes BHQ, one hospital and club-wide sections; each says which.
+const UNSCOPED_VIEWS = new Set(['users', 'audit', 'benchmark', 'gadsbench', 'topics', 'campaigns', 'bclub', 'callout']);
 function scopeFor(view) {
   if (UNSCOPED_VIEWS.has(view)) return '';
   if (ECOM_VIEWS.has(view)) return S.ecomScope === 'online' ? 'Online only' : 'All channels';
@@ -3273,6 +3311,7 @@ const TITLES = {
   campaigns: ['Campaigns', 'Enter a campaign code to see its campaign performances'],
   report: ['Monthly Reports', 'The four hospitals side by side \u2014 one view instead of four exports'],
   topics: ['Topic Explorer', 'Multilingual search demand across 10 site languages'],
+  callout: ['Call out', 'The month in a few lines for executives — drafted by Claude, checked against the data, edited by the team'],
   users: ['Users', 'Who can see which tab'],
   audit: ['Tagging audit', 'How much traffic and spend the campaign view cannot attribute'],
   benchmark: ['Benchmarks', 'Latest complete month against trailing 3, 6 and 12-month norms'],
@@ -3708,7 +3747,8 @@ function render() {
   syncDateLabel();
   // On Campaigns the Analyse button already fetches with the current dates,
   // so a second fetch button would just be a confusing twin.
-  $('loadBtn').classList.toggle('hidden', S.view === 'campaigns');
+  // Call out has its own Generate button, and a refetch would discard the team's edits.
+  $('loadBtn').classList.toggle('hidden', S.view === 'campaigns' || S.view === 'callout');
   // Scope is a global filter like the date range, so it lives in the header and
   // only appears where it means something. Migration is the exception: a switch
   // between channel types cannot be observed inside a single type, so the
@@ -3757,6 +3797,7 @@ function render() {
   else if (S.view === 'report') renderReport();
   else if (S.view === 'pages') renderPages();
   else if (S.view === 'users') renderUsers();
+  else if (S.view === 'callout') renderCallout();
   else renderTopics();
 
   // Heat bars are painted after every render, so a table shows them on arrival
@@ -7128,6 +7169,328 @@ function renderTopicBody(d) {
       <div class="note">A coloured language pill means the language was read from the page URL locale (reliable). A grey pill means it was inferred from the query's script, which cannot separate English, German, Vietnamese and Indonesian.</div>
     </div>
   `;
+}
+
+// ============================================================ CALL OUT (AI)
+/**
+ * CALL OUT (v3.360.0). One executive summary per hospital per month.
+ *
+ * The flow MW agreed: pick the hospital → drop the exported PDF (+ any extra
+ * screenshots) → Generate → the team reads, edits and removes → Export .docx.
+ *
+ * Numbers are never trusted, including the ones the team types in an edit:
+ * every sentence is re-checked against the facts the server sent, and a
+ * number that matches nothing is marked red. That check lives in
+ * /callout-lib.js so the suite can test it without a browser.
+ *
+ * The PDF never supplies a figure. It supplies page snapshots for the document,
+ * found by the PDF's own cover pages (CalloutLib.mapPdfPages), and the two
+ * picture-only sections (ANGA, SEO positioning map), which Claude reads.
+ */
+const CO_SLOTS = [
+  ['anga', 'ANGA · AI visibility', 'aiSeo'],
+  ['seoMap', 'SEO positioning map', 'seoMap'],
+  ['insight', 'Better Club insight', 'insight'],
+  ['other', 'Other (Claude reads, not in the doc)', null],
+];
+const CO_IMG_MAX = 1400;   // px wide: readable for Claude, small enough to post
+
+function coState() {
+  if (!S.co) S.co = { brand: 'BGH', shots: [], notes: '', pdf: null, result: null, removed: {}, busy: false };
+  return S.co;
+}
+
+function coLoadScript(src) {
+  return new Promise((ok, bad) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = ok; s.onerror = () => bad(new Error(`could not load ${src}`));
+    document.head.appendChild(s);
+  });
+}
+async function coLib() {
+  if (!window.CalloutLib) await coLoadScript('/callout-lib.js');
+  return window.CalloutLib;
+}
+async function coPdfJs() {
+  if (!window.pdfjsLib) await coLoadScript('/vendor/pdf.min.js');
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdf.worker.min.js';
+  return window.pdfjsLib;
+}
+
+/** Any drawable → { b64, type, w, h } as a JPEG no wider than CO_IMG_MAX. */
+function coJpeg(source, w, h) {
+  const k = Math.min(1, CO_IMG_MAX / w);
+  const c = document.createElement('canvas');
+  c.width = Math.round(w * k); c.height = Math.round(h * k);
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+  g.drawImage(source, 0, 0, c.width, c.height);
+  return { b64: c.toDataURL('image/jpeg', 0.85).split(',')[1], type: 'image/jpeg', w: c.width, h: c.height };
+}
+function coReadImage(file) {
+  return new Promise((ok, bad) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { try { ok(coJpeg(img, img.naturalWidth, img.naturalHeight)); } catch (e) { bad(e); } finally { URL.revokeObjectURL(url); } };
+    img.onerror = () => { URL.revokeObjectURL(url); bad(new Error(`${file.name} is not an image`)); };
+    img.src = url;
+  });
+}
+
+async function coReadPdf(file) {
+  const C = coState();
+  C.pdf = { name: file.name, status: 'Reading pages…' }; renderCallout();
+  try {
+    const [lib, pdfjs] = await Promise.all([coLib(), coPdfJs()]);
+    const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+    const pages = [];
+    for (let n = 1; n <= doc.numPages; n++) {
+      const tc = await (await doc.getPage(n)).getTextContent();
+      pages.push({ n, text: tc.items.map(i => i.str).join(' ') });
+    }
+    const map = lib.mapPdfPages(pages);
+    const snaps = {};
+    for (const [sec, nums] of Object.entries(map)) {
+      snaps[sec] = [];
+      for (const n of nums) {
+        const page = await doc.getPage(n);
+        const vp0 = page.getViewport({ scale: 1 });
+        const vp = page.getViewport({ scale: CO_IMG_MAX / vp0.width });
+        const c = document.createElement('canvas');
+        c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+        await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+        snaps[sec].push({ ...coJpeg(c, c.width, c.height), page: n });
+      }
+    }
+    const found = Object.keys(snaps).length;
+    C.pdf = { name: file.name, pages: doc.numPages, snaps,
+      status: found ? `${doc.numPages} pages · ${found} sections matched` : `${doc.numPages} pages · no section covers found` };
+  } catch (err) {
+    C.pdf = { name: file.name, status: `Could not read: ${err.message}`, bad: true };
+  }
+  renderCallout();
+}
+
+/** What goes into the document for a section: PDF pages, then the team's shots. */
+function coImagesFor(sec) {
+  const C = coState();
+  const fromPdf = ((C.pdf && C.pdf.snaps && C.pdf.snaps[sec]) || []).map((s, i) => ({ ...s, key: `pdf:${sec}:${i}` }));
+  const fromShots = C.shots.filter(s => (CO_SLOTS.find(x => x[0] === s.slot) || [])[2] === sec)
+    .map(s => ({ ...s, key: `shot:${s.id}` }));
+  return [...fromPdf, ...fromShots].filter(s => !C.removed[s.key]);
+}
+
+/** Images Claude must read: the picture-only PDF pages plus every team shot. */
+function coShotsForClaude() {
+  const C = coState();
+  const out = [];
+  const pdfSlot = { aiSeo: 'anga', seoMap: 'seoMap' };
+  Object.entries(pdfSlot).forEach(([sec, slot]) =>
+    ((C.pdf && C.pdf.snaps && C.pdf.snaps[sec]) || []).forEach(s =>
+      out.push({ slot, mediaType: s.type, data: s.b64, label: `PDF page ${s.page}` })));
+  C.shots.forEach(s => out.push({ slot: s.slot, mediaType: s.type, data: s.b64, label: s.name }));
+  return out.slice(0, 8);
+}
+
+function coAllFacts() {
+  const r = coState().result;
+  return r ? [...(r.facts || []), ...(r.shotFacts || [])] : [];
+}
+
+/** Sentence → HTML with every figure marked found / not found. */
+function coMark(text) {
+  const lib = window.CalloutLib;
+  if (!lib) return esc(text);
+  const toks = lib.verifyText(text, coAllFacts());
+  let html = '', at = 0;
+  for (const t of toks) {
+    html += esc(text.slice(at, t.start));
+    if (t.neutral) html += esc(t.text);
+    else if (t.ok) html += `<span class="co-n ok" title="${esc(`${t.fact.label}: ${num(t.fact.value)}${t.fact.unit === '%' ? '%' : ''}${t.fact.fromShot ? ' (read from a screenshot — check it)' : ''}`)}">${esc(t.text)}</span>`;
+    else html += `<span class="co-n bad" title="Not in the data. Correct it or remove it.">${esc(t.text)}</span>`;
+    at = t.end;
+  }
+  return html + esc(text.slice(at));
+}
+
+function coTally() {
+  const lib = window.CalloutLib, r = coState().result;
+  if (!lib || !r) return { all: 0, bad: 0, shot: 0 };
+  const facts = coAllFacts();
+  let all = 0, bad = 0, shot = 0;
+  r.sections.forEach(s => s.bullets.forEach(b => lib.verifyText(b.text, facts).forEach(t => {
+    if (t.neutral) return;
+    all++; if (!t.ok) bad++; else if (t.fact.fromShot) shot++;
+  })));
+  return { all, bad, shot };
+}
+
+function renderCallout() {
+  const C = coState();
+  const r = C.result;
+  const brands = ['BGH', 'BIH', 'BHT', 'WSH'];
+  $('viewRoot').innerHTML = `
+    <div class="card co-in">
+      <div class="co-row"><div class="co-lab">Hospital</div>
+        <div class="seg" id="coBrand">${brands.map(b => `<button data-b="${b}" class="${C.brand === b ? 'on' : ''}">${b}</button>`).join('')}</div></div>
+      <div class="co-row"><div class="co-lab">Exported report</div>
+        <label class="btn btn-ghost">Choose PDF<input type="file" accept="application/pdf" id="coPdf" hidden></label>
+        <span class="co-meta ${C.pdf && C.pdf.bad ? 'co-badtxt' : ''}">${C.pdf ? `${esc(C.pdf.name)} · ${esc(C.pdf.status)}` : 'Snapshots for the doc, plus the ANGA and SEO map pages for Claude to read'}</span></div>
+      <div class="co-row"><div class="co-lab">Screenshots</div>
+        <label class="btn btn-ghost">Add images<input type="file" accept="image/png,image/jpeg,image/webp" id="coShots" multiple hidden></label>
+        <span class="co-meta">ANGA, SEO map, Better Club insight — anything not in the PDF</span></div>
+      ${C.shots.length ? `<div class="co-shots">${C.shots.map(s => `
+        <div class="co-shot"><img src="data:${s.type};base64,${s.b64}" alt="">
+          <select data-slot="${esc(s.id)}">${CO_SLOTS.map(([k, l]) => `<option value="${k}" ${s.slot === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
+          <button class="co-x" data-unshot="${esc(s.id)}" title="Remove">×</button></div>`).join('')}</div>` : ''}
+      <div class="co-row co-top"><div class="co-lab">Notes for Claude</div>
+        <textarea id="coNotes" class="text" rows="2" placeholder="Optional — e.g. Better AI launched in August; focus on international patients">${esc(C.notes)}</textarea></div>
+      <div class="co-row"><div class="co-lab"></div>
+        <button class="btn btn-primary" id="coGo" ${C.busy ? 'disabled' : ''}><span class="spin"></span><span>${r ? 'Generate again' : 'Generate call out'}</span></button>
+        <span class="co-meta">${esc(coRange())}</span></div>
+    </div>
+    <div id="coBody" class="mt">${C.busy ? loadingState(C.busy) : C.error ? errorState(C.error) : r ? coResultHtml() : ''}</div>`;
+  coWire();
+}
+
+function coRange() {
+  const f = $('from').value, t = $('to').value;
+  return f && t ? `${f} → ${t} · e-commerce from 1 Jan` : '';
+}
+
+function coResultHtml() {
+  const C = coState(), r = C.result, tally = coTally();
+  const byId = Object.fromEntries(r.sections.map(s => [s.id, s]));
+  const cards = r.order.filter(id => byId[id]).map(id => {
+    const s = byId[id], imgs = coImagesFor(id);
+    return `<div class="card co-sec mt" data-sec="${esc(id)}">
+      <div class="co-sech"><h2>${esc(r.titles[id] || id)}</h2>
+        <button class="btn btn-ghost co-small" data-regen="${esc(id)}">Rewrite</button></div>
+      ${s.bullets.map((b, i) => `<div class="co-bl"><div class="co-b" contenteditable="true" spellcheck="false"
+          data-s="${esc(id)}" data-i="${i}">${coMark(b.text)}</div>
+          <button class="co-x" data-unbullet="${esc(id)}:${i}" title="Remove this point">×</button></div>`).join('')}
+      ${imgs.length ? `<div class="co-imgs">${imgs.map(m => `<div class="co-img"><img src="data:${m.type};base64,${m.b64}" alt="">
+        <button class="co-x" data-unimg="${esc(m.key)}" title="Leave out of the doc">×</button></div>`).join('')}</div>` : ''}
+    </div>`;
+  }).join('');
+  return `<div class="card co-bar">
+      <span class="pill ${tally.bad ? 'warn' : 'green'}" id="coTally">${coTallyText(tally)}</span>
+      <span class="co-meta">Hover a number to see where it came from. Click any point to edit it.</span>
+      <button class="btn btn-primary" id="coExport">Export .docx</button>
+    </div>
+    ${cards}
+    ${r.checks && r.checks.length ? `<div class="card mt"><h2>For the team to check</h2>
+      <ul class="co-checks">${r.checks.map(c => `<li>${esc(c)}</li>`).join('')}</ul></div>` : ''}`;
+}
+const coTallyText = (t) => t.bad
+  ? `${t.bad} of ${t.all} numbers not found in the data`
+  : `All ${t.all} numbers match the data${t.shot ? ` · ${t.shot} read from screenshots` : ''}`;
+
+function coWire() {
+  const C = coState();
+  document.querySelectorAll('#coBrand button').forEach(b => b.addEventListener('click', () => {
+    if (C.brand === b.dataset.b) return;
+    C.brand = b.dataset.b; C.result = null; C.removed = {}; C.error = null;
+    renderCallout();
+  }));
+  const pdf = $('coPdf');
+  if (pdf) pdf.addEventListener('change', () => { if (pdf.files[0]) { C.removed = {}; coReadPdf(pdf.files[0]); } });
+  const shots = $('coShots');
+  if (shots) shots.addEventListener('change', async () => {
+    for (const f of [...shots.files]) {
+      try { C.shots.push({ id: `s${Date.now()}${Math.random().toString(36).slice(2, 6)}`, name: f.name, slot: 'other', ...(await coReadImage(f)) }); }
+      catch (e) { C.error = e.message; }
+    }
+    renderCallout();
+  });
+  document.querySelectorAll('[data-slot]').forEach(el => el.addEventListener('change', () => {
+    const s = C.shots.find(x => x.id === el.dataset.slot); if (s) s.slot = el.value; renderCallout();
+  }));
+  document.querySelectorAll('[data-unshot]').forEach(el => el.addEventListener('click', () => {
+    C.shots = C.shots.filter(x => x.id !== el.dataset.unshot); renderCallout();
+  }));
+  const notes = $('coNotes');
+  if (notes) notes.addEventListener('input', () => { C.notes = notes.value; });
+  const go = $('coGo');
+  if (go) go.addEventListener('click', () => coGenerate());
+  document.querySelectorAll('[data-regen]').forEach(el => el.addEventListener('click', () => coGenerate(el.dataset.regen)));
+  document.querySelectorAll('[data-unbullet]').forEach(el => el.addEventListener('click', () => {
+    const [id, i] = el.dataset.unbullet.split(':');
+    const s = C.result.sections.find(x => x.id === id);
+    s.bullets.splice(Number(i), 1);
+    if (!s.bullets.length) C.result.sections = C.result.sections.filter(x => x !== s);
+    renderCallout();
+  }));
+  document.querySelectorAll('[data-unimg]').forEach(el => el.addEventListener('click', () => {
+    C.removed[el.dataset.unimg] = true; renderCallout();
+  }));
+  // Edits are re-checked on blur: re-marking while typing would move the caret.
+  document.querySelectorAll('.co-b').forEach(el => el.addEventListener('blur', () => {
+    const s = C.result.sections.find(x => x.id === el.dataset.s);
+    const b = s && s.bullets[Number(el.dataset.i)];
+    if (!b) return;
+    b.text = el.textContent.replace(/\s+/g, ' ').trim();
+    el.innerHTML = coMark(b.text);
+    const t = $('coTally');
+    if (t) { const tally = coTally(); t.textContent = coTallyText(tally); t.className = `pill ${tally.bad ? 'warn' : 'green'}`; }
+  }));
+  const ex = $('coExport');
+  if (ex) ex.addEventListener('click', coExport);
+}
+
+async function coGenerate(only) {
+  const C = coState();
+  C.error = null;
+  C.busy = only ? `Rewriting ${(C.result && C.result.titles[only]) || only}…` : `Reading the ${C.brand} report and writing the call out…`;
+  renderCallout();
+  try {
+    await coLib();
+    const res = await fetch('/api/callout', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ brand: C.brand, from: $('from').value, to: $('to').value,
+        notes: C.notes, shots: coShotsForClaude(), ...(only ? { only } : {}) }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Server ${res.status}`);
+    if (only && C.result) {
+      const fresh = body.sections.find(s => s.id === only);
+      C.result.sections = C.result.sections.filter(s => s.id !== only).concat(fresh ? [fresh] : []);
+      const have = new Set(C.result.shotFacts.map(f => f.id));
+      C.result.shotFacts.push(...body.shotFacts.filter(f => !have.has(f.id)));
+    } else {
+      C.result = body;
+    }
+    setStatus('ok', `written by ${body.model}`);
+  } catch (err) {
+    setStatus('bad', 'failed');
+    C.error = err.message;
+  } finally {
+    C.busy = false;
+    renderCallout();
+  }
+}
+
+async function coExport() {
+  const C = coState(), r = C.result;
+  const tally = coTally();
+  if (tally.bad && !confirm(`${tally.bad} number(s) are not in the data. Export anyway?`)) return;
+  const lib = await coLib();
+  const byId = Object.fromEntries(r.sections.map(s => [s.id, s]));
+  const doc = {
+    title: `Call out (${C.brand})`,
+    sections: r.order.filter(id => byId[id]).map(id => ({
+      title: r.titles[id] || id,
+      bullets: byId[id].bullets.map(b => b.text),
+      images: coImagesFor(id),
+    })),
+  };
+  const blob = new Blob([lib.buildDocx(doc)],
+    { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `Call out ${C.brand} ${$('to').value.slice(0, 7)}.docx`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 
 // ============================================================ USERS
@@ -12558,7 +12921,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.359.0';
+const CLIENT_BUILD = '3.360.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
@@ -12602,6 +12965,11 @@ fetch('/api/me').then(r => r.json()).then(me => {
    */
   if (me && Array.isArray(me.tabs) && me.tabs.includes('gads') && !me.tabs.includes('gadsbench')) {
     me.tabs = [...me.tabs, 'gadsbench'];
+  }
+  // Same pattern for the Call out: it is made from the Monthly Report, so the
+  // report grant carries it (the server gates /api/callout on `report` too).
+  if (me && Array.isArray(me.tabs) && me.tabs.includes('report') && !me.tabs.includes('callout')) {
+    me.tabs = [...me.tabs, 'callout'];
   }
   S.me = me;
   document.querySelectorAll('.nav-item').forEach(item => {
