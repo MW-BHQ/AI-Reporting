@@ -1,5 +1,15 @@
 ### Recent (October 2026)
 
+**v3.363.0 — Call out: MW's standing email per hospital; Export above Email** (MW):
+- `CalloutLib.EMAIL_PRESETS` holds To / Cc / salutation for BGH, BIH, BHT,
+  WSH "until further notice" — change the list there, nowhere else. Subject
+  `DMKT: Monthly Report <BRAND> (Sep 2026)` (English month), opening
+  "…ประจำเดือน กันยายน 2569 ดังไฟล์แนบ / โดยมี Key Highlights ดังนี้" (Thai month,
+  Buddhist year), both from the report's end date.
+- New "Opening" box; edits apply to that draft only. The per-browser
+  localStorage recipients from v3.362.0 are gone (the preset replaces them).
+- Export .docx moved into its own "Document" card directly above Email.
+
 **v3.362.0 — Call out: email draft for Outlook web** (MW; no IT, so no Graph):
 - Email card under the callout: To, Cc (remembered per hospital in this
   browser, `warroom.callout.mail.<BRAND>`), Subject (default "Digital Marketing

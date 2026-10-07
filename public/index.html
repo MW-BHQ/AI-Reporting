@@ -2195,6 +2195,7 @@
   .co-x{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;border:0;cursor:pointer;
     background:rgba(27,35,64,.65);color:#fff;font-size:var(--text-sm);line-height:22px;padding:0;}
   .co-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+  .co-bar h2{margin:0;}
   .co-bar .btn{margin-left:auto;}
   .co-sech{display:flex;align-items:center;justify-content:space-between;gap:10px;}
   .co-small{padding:4px 10px;font-size:var(--text-2xs);}
@@ -7364,9 +7365,11 @@ function coResultHtml() {
   return `<div class="card co-bar">
       <span class="pill ${tally.bad ? 'warn' : 'green'}" id="coTally">${coTallyText(tally)}</span>
       <span class="co-meta">Hover a number to see where it came from. Click any point to edit it.</span>
-      <button class="btn btn-primary" id="coExport">Export .docx</button>
     </div>
     ${cards}
+    <div class="card mt co-bar"><h2>Document</h2>
+      <span class="co-meta">The callout as edited above, with its page snapshots</span>
+      <button class="btn btn-primary" id="coExport">Export .docx</button></div>
     ${coMailHtml()}
     ${r.checks && r.checks.length ? `<div class="card mt"><h2>For the team to check</h2>
       <ul class="co-checks">${r.checks.map(c => `<li>${esc(c)}</li>`).join('')}</ul></div>` : ''}`;
@@ -7409,12 +7412,11 @@ function coWire() {
     const t = $('coTally');
     if (t) { const tally = coTally(); t.textContent = coTallyText(tally); t.className = `pill ${tally.bad ? 'warn' : 'green'}`; }
   }));
-  [['coTo', 'to'], ['coCc', 'cc'], ['coSubject', 'subject']].forEach(([elId, k]) => {
+  [['coTo', 'to'], ['coCc', 'cc'], ['coSubject', 'subject'], ['coIntro', 'intro']].forEach(([elId, k]) => {
     const el = $(elId); if (!el) return;
     el.addEventListener('input', () => { coMail()[k] = el.value; });
     el.addEventListener('change', () => {
-      const m = coMail(); coMailSet(C.brand, { to: m.to, cc: m.cc });
-      if (k !== 'subject') renderCallout();   // re-check the addresses
+      if (k === 'to' || k === 'cc') renderCallout();   // re-check the addresses
     });
   });
   const mg = $('coMailGo'); if (mg) mg.addEventListener('click', coMailOpen);
@@ -7482,30 +7484,17 @@ function coDoc() {
     })),
   };
 }
-const coMonthLabel = () => {
-  const t = $('to').value;
-  return t ? new Date(`${t}T00:00:00`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : '';
-};
-
 /**
- * RECIPIENTS ARE REMEMBERED PER HOSPITAL, IN THIS BROWSER (v3.362.0). Typed
- * once, kept. Not shared across the team on purpose: no server store, no
- * permission to manage — MW's call is the smallest thing that works.
+ * THE EMAIL STARTS FROM MW'S STANDING PRESET (CalloutLib.EMAIL_PRESETS, v3.363.0):
+ * recipients, subject and opening per hospital, month filled from the report
+ * date. Edits in the card belong to this draft only; the next hospital or a new
+ * month starts from the preset again.
  */
-const CO_MAIL_KEY = (b) => `warroom.callout.mail.${b}`;
-function coMailGet(brand) {
-  try { return JSON.parse(localStorage.getItem(CO_MAIL_KEY(brand)) || '{}'); } catch (_) { return {}; }
-}
-function coMailSet(brand, v) {
-  try { localStorage.setItem(CO_MAIL_KEY(brand), JSON.stringify(v)); } catch (_) { /* private mode: still works, just not kept */ }
-}
 function coMail() {
-  const C = coState();
-  if (!C.mail || C.mail.brand !== C.brand) {
-    const saved = coMailGet(C.brand);
-    C.mail = { brand: C.brand, to: saved.to || '', cc: saved.cc || '', subject: '' };
+  const C = coState(), month = $('to').value.slice(0, 7);
+  if (!C.mail || C.mail.brand !== C.brand || C.mail.month !== month) {
+    C.mail = { brand: C.brand, month, ...window.CalloutLib.emailPreset(C.brand, $('to').value) };
   }
-  if (!C.mail.subject) C.mail.subject = `Digital Marketing Call out – ${C.brand} – ${coMonthLabel()}`;
   return C.mail;
 }
 
@@ -7515,19 +7504,20 @@ function coMailHtml() {
   return `<div class="card mt co-mail">
     <h2>Email</h2>
     <div class="co-row"><div class="co-lab">To</div><input class="text co-in-text" id="coTo" value="${esc(m.to)}" placeholder="name@bangkokhospital.com; …"></div>
-    <div class="co-row"><div class="co-lab">Cc</div><input class="text co-in-text" id="coCc" value="${esc(m.cc)}" placeholder="optional"></div>
+    <div class="co-row"><div class="co-lab">Cc</div><textarea class="text co-in-text" id="coCc" rows="2" placeholder="optional">${esc(m.cc)}</textarea></div>
     <div class="co-row"><div class="co-lab">Subject</div><input class="text co-in-text" id="coSubject" value="${esc(m.subject)}"></div>
+    <div class="co-row co-top"><div class="co-lab">Opening</div><textarea class="text co-in-text" id="coIntro" rows="4">${esc(m.intro)}</textarea></div>
     ${bad.length ? `<div class="co-row"><div class="co-lab"></div><span class="co-badtxt co-meta">Not an email address: ${esc(bad.join(', '))}</span></div>` : ''}
     <div class="co-row"><div class="co-lab"></div>
       <button class="btn btn-primary" id="coMailGo">Open draft in Outlook</button>
       <button class="btn btn-ghost" id="coMailCopy">Copy body again</button>
-      <span class="co-meta" id="coMailMsg">Opens Outlook with To, Cc and Subject filled and the body copied — press Ctrl+V (⌘V) in the message, then attach the Final PDF${coState().pdf && coState().pdf.name ? ` (${esc(coState().pdf.name)})` : ''}.</span></div>
+      <span class="co-meta" id="coMailMsg">Opens Outlook with To, Cc and Subject filled and the opening + highlights copied — press Ctrl+V (⌘V) in the message, then attach the Final PDF${coState().pdf && coState().pdf.name ? ` (${esc(coState().pdf.name)})` : ''}.</span></div>
   </div>`;
 }
 
 /** Puts the callout on the clipboard as formatted HTML (plain text as fallback). */
 function coCopyBody() {
-  const { html, text } = window.CalloutLib.buildEmail(coDoc());
+  const { html, text } = window.CalloutLib.buildEmail(coDoc(), { intro: coMail().intro });
   if (navigator.clipboard && window.ClipboardItem) {
     return navigator.clipboard.write([new ClipboardItem({
       'text/html': new Blob([html], { type: 'text/html' }),
@@ -12995,7 +12985,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.362.0';
+const CLIENT_BUILD = '3.363.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

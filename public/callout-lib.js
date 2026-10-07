@@ -304,10 +304,13 @@
    * mail clients drop <style>. Images are data URIs, which Outlook web turns
    * into inline attachments on paste.
    */
-  function buildEmail(doc, { greeting = "เรียน ผู้บริหาร", images = true } = {}) {
+  function buildEmail(doc, { intro = "", images = true } = {}) {
     const F = "font-family:Tahoma,Arial,sans-serif;";
-    const out = [`<div style="${F}font-size:14px;color:#1B2340;line-height:1.6;">`, `<p>${html(greeting)}</p>`];
-    const text = [greeting, ""];
+    const out = [`<div style="${F}font-size:14px;color:#1B2340;line-height:1.6;">`];
+    // The opening keeps the team's line breaks: blank line = new paragraph.
+    String(intro).trim().split(/\n\s*\n/).filter(Boolean)
+      .forEach((para) => out.push(`<p>${para.split("\n").map(html).join("<br>")}</p>`));
+    const text = intro.trim() ? [intro.trim(), ""] : [];
     for (const sec of doc.sections || []) {
       out.push(`<p style="margin:18px 0 6px;font-size:16px;font-weight:bold;color:#0B2A6B;">${html(sec.title)}</p><ul style="margin:0 0 8px;padding-left:20px;">`);
       text.push(sec.title);
@@ -322,8 +325,47 @@
     return { html: out.join(""), text: text.join("\n").trim() };
   }
 
+  // ------------------------------------------------------------ email presets (v3.363.0)
+  /**
+   * MW'S STANDING EMAIL, PER HOSPITAL — "until further notice". Only the month
+   * changes: subject "Sep 2026" (English), body "กันยายน 2569" (Thai, Buddhist
+   * era). Edits in the tab apply to that one draft; change the list here.
+   */
+  const CC_COMMON = ["Jiaranai.Bo@bangkokhospital.com", "Kumpoo.Fo@bangkokhospital.com"];
+  const CC_TAIL = ["Siwattraporn.sr@bangkokhospital.com", "BHQ-Hospital-Marketing-Group@bangkokhospital.com",
+    "BHQ-Digital-Marketing@bangkokhospital.com", "panruetai.ko@bangkokhospital.com"];
+  const EMAIL_PRESETS = {
+    BGH: { to: ["boonthida.ja@bangkokhospital.com"], salutation: "เรียน อ บุญธิดา ที่เคารพ",
+      cc: [...CC_COMMON, "ekkit.su@bangkokhospital.com", "paweena.ri@bangkokhospital.com", ...CC_TAIL] },
+    BIH: { to: ["ratapong.am@bangkokhospital.com"], salutation: "เรียน คุณรัฐพงษ์ ที่เคารพ",
+      cc: [...CC_COMMON, "nutthinee.ba@bangkokhospital.com", ...CC_TAIL] },
+    BHT: { to: ["Kriengkrai.He@bangkokhospital.com"], salutation: "เรียน อ เกรียงไกร ที่เคารพ",
+      cc: [...CC_COMMON, "kunyada.pa@bangkokhospital.com", ...CC_TAIL] },
+    WSH: { to: ["Thiravud.Kh@Bangkokhospital.com", "Yongyut.Si@bangkokhospital.com"], salutation: "เรียน อ ธีรวุฒิ, อ ยงยุทธ ที่เคารพ",
+      cc: [...CC_COMMON, "PARANEE.PH@bangkokhospital.com", ...CC_TAIL] },
+  };
+  const MON_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const MON_TH = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+    "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+
+  /** brand + report end date (YYYY-MM-DD) → { to, cc, subject, intro } */
+  function emailPreset(brand, isoTo) {
+    const p = EMAIL_PRESETS[brand];
+    if (!p) return { to: "", cc: "", subject: "", intro: "" };
+    const y = Number(String(isoTo).slice(0, 4)), m = Number(String(isoTo).slice(5, 7)) - 1;
+    const ok = Number.isFinite(y) && m >= 0 && m < 12;
+    const en = ok ? `${MON_EN[m]} ${y}` : "";
+    const th = ok ? `${MON_TH[m]} ${y + 543}` : "";
+    return {
+      to: p.to.join("; "),
+      cc: p.cc.join("; "),
+      subject: `DMKT: Monthly Report ${brand} (${en})`,
+      intro: `${p.salutation}\n\nขอนำส่งรายงานจาก Digital Marketing ประจำเดือน ${th} ดังไฟล์แนบ\nโดยมี Key Highlights ดังนี้`,
+    };
+  }
+
   const api = { verifyText, mapPdfPages, coverTitle, buildDocx, zipStore, crc32, VISUAL_SECTIONS,
-    parseRecipients, outlookComposeUrl, buildEmail };
+    parseRecipients, outlookComposeUrl, buildEmail, emailPreset, EMAIL_PRESETS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.CalloutLib = api;
 })(typeof window !== "undefined" ? window : this);

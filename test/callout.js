@@ -127,6 +127,20 @@ const em = L.buildEmail({ sections: [{ title: "E-Commerce", bullets: ["ยอด
 expect("email: html escaped, image inline", em.html.includes("ยอดขาย &lt;111.7 ล้าน&gt; &amp; ดี") && em.html.includes('src="data:image/jpeg;base64,QUJD"'), "");
 expect("email: plain text fallback", em.text.includes("• ยอดขาย <111.7 ล้าน> & ดี") && !em.text.includes("<li"), "");
 
+const pre = L.emailPreset("BGH", "2026-09-30");
+expect("preset: subject month in English", pre.subject === "DMKT: Monthly Report BGH (Sep 2026)", pre.subject);
+expect("preset: body month in Thai BE", pre.intro.startsWith("เรียน อ บุญธิดา ที่เคารพ\n\n") && pre.intro.includes("ประจำเดือน กันยายน 2569 ดังไฟล์แนบ\nโดยมี Key Highlights ดังนี้"), pre.intro);
+expect("preset: rolls with the month", L.emailPreset("WSH", "2027-01-31").subject === "DMKT: Monthly Report WSH (Jan 2027)"
+  && L.emailPreset("WSH", "2027-01-31").intro.includes("มกราคม 2570"), "");
+const counts = Object.fromEntries(["BGH", "BIH", "BHT", "WSH"].map((b) => {
+  const x = L.emailPreset(b, "2026-09-30"); return [b, `${L.parseRecipients(x.to).good.length}/${L.parseRecipients(x.cc).good.length}`];
+}));
+expect("preset: MW's lists, all valid", JSON.stringify(counts) === '{"BGH":"1/8","BIH":"1/7","BHT":"1/7","WSH":"2/7"}', JSON.stringify(counts));
+const bad = ["BGH", "BIH", "BHT", "WSH"].flatMap((b) => { const x = L.emailPreset(b, "2026-09-30"); return [...L.parseRecipients(x.to).bad, ...L.parseRecipients(x.cc).bad]; });
+expect("preset: no malformed address", bad.length === 0, bad.join(","));
+const intro = L.buildEmail({ sections: [] }, { intro: pre.intro }).html;
+expect("email: opening keeps paragraphs", intro.includes("<p>เรียน อ บุญธิดา ที่เคารพ</p><p>ขอนำส่ง") && intro.includes("ดังไฟล์แนบ<br>โดยมี"), "");
+
 // ---------------------------------------------------------------- 4. client
 const { JSDOM } = require("jsdom");
 const html = fs.readFileSync(path.join(__dirname, "..", "public", "index.html"), "utf8");
@@ -238,7 +252,10 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   }
   // EMAIL (v3.362.0): Outlook web compose + formatted body on the clipboard.
   const to = d.getElementById("coTo"), cc = d.getElementById("coCc"), subj = d.getElementById("coSubject");
-  expect("email: card with default subject", to && cc && /Digital Marketing Call out – BHT – September 2026/.test(subj.value), subj && subj.value);
+  expect("email: preset for the hospital", to && /Kriengkrai.He@/.test(to.value) && /kunyada.pa@/.test(cc.value)
+    && subj.value === "DMKT: Monthly Report BHT (Sep 2026)" && /เรียน อ เกรียงไกร/.test(d.getElementById("coIntro").value), subj && subj.value);
+  const docCard = [...d.querySelectorAll("#coBody .card")];
+  expect("layout: Export sits above Email", docCard.findIndex((c) => c.querySelector("#coExport")) === docCard.findIndex((c) => c.classList.contains("co-mail")) - 1, "");
   to.value = "ceo@bangkokhospital.com; oops"; to.dispatchEvent(new dom.window.Event("input")); to.dispatchEvent(new dom.window.Event("change"));
   await wait(20);
   expect("email: bad address shown", /Not an email address: oops/.test(d.querySelector(".co-mail").textContent), "");
@@ -249,10 +266,9 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   await wait(20);
   d.getElementById("coMailGo").click();
   await wait(20);
-  expect("email: Outlook opened, fields filled", opened.length === 1 && /to=ceo%40bangkokhospital.com/.test(opened[0]) && /subject=Digital%20Marketing/.test(opened[0]), opened[0]);
+  expect("email: Outlook opened, fields filled", opened.length === 1 && /to=ceo%40bangkokhospital.com/.test(opened[0]) && /subject=DMKT%3A%20Monthly%20Report%20BHT/.test(opened[0]) && /cc=Jiaranai/.test(opened[0]), opened[0]);
   expect("email: body is the edited callout", clip.length === 1 && clip[0].includes("Vaccine จาก 995K บาท") && !clip[0].includes("581,000"), "");
-  expect("email: recipients kept per hospital", /ceo@bangkokhospital.com/.test(dom.window.localStorage.getItem("warroom.callout.mail.BHT") || "")
-    && !dom.window.localStorage.getItem("warroom.callout.mail.BGH"), "");
+  expect("email: body opens with the preset", clip[0].indexOf("เรียน อ เกรียงไกร") < clip[0].indexOf("Vaccine") && clip[0].includes("กันยายน 2569"), "");
   const mine = errors.slice(before);
   expect("client: no thrown errors", mine.length === 0, mine.slice(0, 2).join(" | "));
   finish();
