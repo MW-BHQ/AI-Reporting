@@ -1306,7 +1306,7 @@ for BAD in '{"brand":"XYZ","from":"2026-07-01","to":"2026-07-31"}' '{"brand":"BG
     || { FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "callout rejects" "$CODE"; }
 done
 # Screenshots make the body large; the 256kb limit elsewhere must not apply.
-BIG=$(node -e "console.log(JSON.stringify({brand:'BGH',from:'$FROM',to:'$TO',shots:[{slot:'other',mediaType:'image/jpeg',data:'A'.repeat(3e6)}]}))")
+BIG=$(node -e "console.log(JSON.stringify({brand:'BGH',from:'$FROM',to:'$TO',shots:[{slot:'anga',mediaType:'image/jpeg',data:'A'.repeat(3e6)}]}))")
 CODE=$(echo "$BIG" | curl -s -o /dev/null -w '%{http_code}' -X POST -H "$ADMIN" -H 'content-type: application/json' --data-binary @- "$BASE/api/callout")
 [ "$CODE" = "200" ] && printf '  ok   %-22s %s\n' "callout 3MB body" "$CODE" \
   || { FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "callout 3MB body" "$CODE"; }

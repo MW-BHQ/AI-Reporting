@@ -97,6 +97,8 @@
   const SECTION_COVERS = [
     ["overview",   /^digitalmarketingperformance/, 1],
     ["ecom",       /^e-?commerce/,                 1],
+    // Before betterClub: "Better Club Insight" also starts with "betterclub".
+    ["insight",    /^betterclubinsight/,           2],
     ["betterClub", /^betterclub/,                  1],
     ["website",    /^websiteperformance/,          1],
     ["gbp",        /^googlebusinessprofile/,       1],
@@ -105,7 +107,7 @@
     ["aiSeo",      /^seoandaireport|anga/,         2],
   ];
   /** Sections whose content exists ONLY as a picture, so Claude must read it. */
-  const VISUAL_SECTIONS = ["seoMap", "aiSeo"];
+  const VISUAL_SECTIONS = ["seoMap", "aiSeo", "insight"];
 
   /** A cover is short and ends "Digital Marketing <Month> <Year>". Returns its squashed title. */
   function coverTitle(text) {

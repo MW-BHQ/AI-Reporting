@@ -8261,7 +8261,7 @@ function calloutPrompt({ brand, from, to, facts, notes, shots, userNotes, only }
 Hospital: ${brand}. Period: ${from} to ${to}. E-commerce figures are 1 January to ${to}.
 Sections to write${only ? " (ONLY this one)" : ", in this order"}:
 ${sections}
-Section notes: "overview", "ecom", "betterAi", "betterClub" and "social" are group-wide; "gbp" and "website" are ${brand} only. "aiSeo" and "seoMap" come only from images (slots anga / seoMap). "insight" comes only from images or team notes (slot insight).
+Section notes: "overview", "ecom", "betterAi", "betterClub" and "social" are group-wide; "gbp" and "website" are ${brand} only. "aiSeo" and "seoMap" come only from images (slots anga / seoMap). "insight" comes only from images (slot insight) or team notes. Images are pages of the team's Final PDF.
 
 NOTES (no numbers to quote, direction only):
 ${notes.map((x) => `- ${x}`).join("\n") || "- none"}
@@ -8274,7 +8274,8 @@ ${JSON.stringify(facts.map(({ id, label, value, unit, mom, yoy, flag }) => ({ id
   return blocks;
 }
 
-const CALLOUT_SLOTS = new Set(["seoMap", "anga", "insight", "other"]);
+// Pages of the Final PDF that exist only as pictures (v3.361.0: no free screenshots).
+const CALLOUT_SLOTS = new Set(["seoMap", "anga", "insight"]);
 const CALLOUT_MAX_SHOTS = 8;
 
 app.post("/api/callout", requireTab("report"), async (req, res) => {

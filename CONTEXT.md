@@ -1,5 +1,15 @@
 ### Recent (October 2026)
 
+**v3.361.0 — Call out: Final PDF only; Rewrite busies one block** (MW):
+- "Exported report" → "Final PDF". Screenshot upload removed: the Final PDF
+  (ANGA + SEO map combined in) is the only input. Picture-only covers read by
+  Claude: SEO Positioning Map, SEO and AI Report by ANGA, and a "Better Club
+  Insight" cover if the team adds one (matched BEFORE Better Club, same prefix).
+  Server slots: anga, seoMap, insight.
+- Rewrite keeps the callout on screen: only that block dims and shimmers, its
+  button spins, other Rewrite/Generate buttons wait; the new text flashes once.
+  A failed rewrite alerts and keeps the old text and the team's edits.
+
 **v3.360.0 — Call out tab (AI)** (MW): the monthly executive callout the team
 typed by hand from the exported PDF, one per hospital. Nav: Monthly Reports >
 Call out, under WSH, with the `AI` chip (house rule: every AI tab carries it).

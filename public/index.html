@@ -2188,11 +2188,8 @@
   .co-meta{font-size:var(--text-xs);color:var(--muted);}
   .co-badtxt{color:#D9534F;}
   .co-row textarea{flex:1;min-width:240px;font-family:inherit;font-size:var(--text-sm);resize:vertical;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-sm);}
-  .co-shots,.co-imgs{display:flex;flex-wrap:wrap;gap:10px;}
-  .co-shots{margin-left:142px;}
-  .co-shot,.co-img{position:relative;display:flex;flex-direction:column;gap:4px;}
-  .co-shot img{width:150px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--line);}
-  .co-shot select{font-size:var(--text-2xs);max-width:150px;}
+  .co-imgs{display:flex;flex-wrap:wrap;gap:10px;}
+  .co-img{position:relative;display:flex;flex-direction:column;gap:4px;}
   .co-imgs{margin-top:12px;}
   .co-img img{width:260px;border-radius:8px;border:1px solid var(--line);}
   .co-x{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;border:0;cursor:pointer;
@@ -2211,6 +2208,15 @@
   .co-n{border-radius:4px;padding:0 2px;}
   .co-n.ok{background:rgba(74,190,140,.14);color:#2E9E6F;}
   .co-n.bad{background:rgba(217,83,79,.12);color:#D9534F;text-decoration:underline wavy;}
+  .co-sec{position:relative;overflow:hidden;transition:box-shadow .3s;}
+  .co-busy{box-shadow:0 0 0 2px var(--violet-soft),var(--shadow);}
+  .co-busy .co-bl,.co-busy .co-imgs{opacity:.35;pointer-events:none;}
+  .co-busy::after{content:"";position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(100deg,transparent 30%,rgba(124,107,245,.14) 50%,transparent 70%);
+    background-size:220% 100%;animation:coShimmer 1.3s linear infinite;}
+  @keyframes coShimmer{from{background-position:120% 0;}to{background-position:-120% 0;}}
+  .co-fresh{animation:coFresh 1.6s ease-out 1;}
+  @keyframes coFresh{0%{box-shadow:0 0 0 3px var(--violet);}100%{box-shadow:var(--shadow);}}
   .co-checks{margin:0;padding-left:18px;font-size:var(--text-xs);color:var(--ink-2);line-height:1.7;}
   @media(max-width:1080px){.g-6,.g-5,.g-4{grid-template-columns:repeat(2,1fr);}.g-2-1,.g-3,.g-2{grid-template-columns:1fr;}}
   @media(max-width:760px){
@@ -7175,8 +7181,13 @@ function renderTopicBody(d) {
 /**
  * CALL OUT (v3.360.0). One executive summary per hospital per month.
  *
- * The flow MW agreed: pick the hospital → drop the exported PDF (+ any extra
- * screenshots) → Generate → the team reads, edits and removes → Export .docx.
+ * The flow MW agreed: pick the hospital → drop the Final PDF → Generate → the
+ * team reads, edits, removes or rewrites one block → Export .docx.
+ *
+ * THE FINAL PDF IS THE ONLY INPUT (v3.361.0, MW). Screenshot upload is gone:
+ * ANGA, the SEO map and any Better Club insight page are combined into the
+ * Final PDF by the team, so one file is the whole brief and nothing outside it
+ * reaches the callout.
  *
  * Numbers are never trusted, including the ones the team types in an edit:
  * every sentence is re-checked against the facts the server sent, and a
@@ -7187,16 +7198,12 @@ function renderTopicBody(d) {
  * found by the PDF's own cover pages (CalloutLib.mapPdfPages), and the two
  * picture-only sections (ANGA, SEO positioning map), which Claude reads.
  */
-const CO_SLOTS = [
-  ['anga', 'ANGA · AI visibility', 'aiSeo'],
-  ['seoMap', 'SEO positioning map', 'seoMap'],
-  ['insight', 'Better Club insight', 'insight'],
-  ['other', 'Other (Claude reads, not in the doc)', null],
-];
+/** Picture-only PDF sections → the slot name Claude sees them under. */
+const CO_VISUAL = { aiSeo: 'anga', seoMap: 'seoMap', insight: 'insight' };
 const CO_IMG_MAX = 1400;   // px wide: readable for Claude, small enough to post
 
 function coState() {
-  if (!S.co) S.co = { brand: 'BGH', shots: [], notes: '', pdf: null, result: null, removed: {}, busy: false };
+  if (!S.co) S.co = { brand: 'BGH', notes: '', pdf: null, result: null, removed: {}, busy: false, busySec: null, fresh: null };
   return S.co;
 }
 
@@ -7227,16 +7234,6 @@ function coJpeg(source, w, h) {
   g.drawImage(source, 0, 0, c.width, c.height);
   return { b64: c.toDataURL('image/jpeg', 0.85).split(',')[1], type: 'image/jpeg', w: c.width, h: c.height };
 }
-function coReadImage(file) {
-  return new Promise((ok, bad) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => { try { ok(coJpeg(img, img.naturalWidth, img.naturalHeight)); } catch (e) { bad(e); } finally { URL.revokeObjectURL(url); } };
-    img.onerror = () => { URL.revokeObjectURL(url); bad(new Error(`${file.name} is not an image`)); };
-    img.src = url;
-  });
-}
-
 async function coReadPdf(file) {
   const C = coState();
   C.pdf = { name: file.name, status: 'Reading pages…' }; renderCallout();
@@ -7271,24 +7268,20 @@ async function coReadPdf(file) {
   renderCallout();
 }
 
-/** What goes into the document for a section: PDF pages, then the team's shots. */
+/** What goes into the document for a section: its pages of the Final PDF. */
 function coImagesFor(sec) {
   const C = coState();
-  const fromPdf = ((C.pdf && C.pdf.snaps && C.pdf.snaps[sec]) || []).map((s, i) => ({ ...s, key: `pdf:${sec}:${i}` }));
-  const fromShots = C.shots.filter(s => (CO_SLOTS.find(x => x[0] === s.slot) || [])[2] === sec)
-    .map(s => ({ ...s, key: `shot:${s.id}` }));
-  return [...fromPdf, ...fromShots].filter(s => !C.removed[s.key]);
+  return ((C.pdf && C.pdf.snaps && C.pdf.snaps[sec]) || [])
+    .map((s, i) => ({ ...s, key: `pdf:${sec}:${i}` })).filter(s => !C.removed[s.key]);
 }
 
-/** Images Claude must read: the picture-only PDF pages plus every team shot. */
+/** Images Claude must read: the picture-only pages of the Final PDF. */
 function coShotsForClaude() {
   const C = coState();
   const out = [];
-  const pdfSlot = { aiSeo: 'anga', seoMap: 'seoMap' };
-  Object.entries(pdfSlot).forEach(([sec, slot]) =>
+  Object.entries(CO_VISUAL).forEach(([sec, slot]) =>
     ((C.pdf && C.pdf.snaps && C.pdf.snaps[sec]) || []).forEach(s =>
-      out.push({ slot, mediaType: s.type, data: s.b64, label: `PDF page ${s.page}` })));
-  C.shots.forEach(s => out.push({ slot: s.slot, mediaType: s.type, data: s.b64, label: s.name }));
+      out.push({ slot, mediaType: s.type, data: s.b64, label: `Final PDF page ${s.page}` })));
   return out.slice(0, 8);
 }
 
@@ -7306,7 +7299,7 @@ function coMark(text) {
   for (const t of toks) {
     html += esc(text.slice(at, t.start));
     if (t.neutral) html += esc(t.text);
-    else if (t.ok) html += `<span class="co-n ok" title="${esc(`${t.fact.label}: ${num(t.fact.value)}${t.fact.unit === '%' ? '%' : ''}${t.fact.fromShot ? ' (read from a screenshot — check it)' : ''}`)}">${esc(t.text)}</span>`;
+    else if (t.ok) html += `<span class="co-n ok" title="${esc(`${t.fact.label}: ${num(t.fact.value)}${t.fact.unit === '%' ? '%' : ''}${t.fact.fromShot ? ' (read from a PDF image — check it)' : ''}`)}">${esc(t.text)}</span>`;
     else html += `<span class="co-n bad" title="Not in the data. Correct it or remove it.">${esc(t.text)}</span>`;
     at = t.end;
   }
@@ -7333,20 +7326,13 @@ function renderCallout() {
     <div class="card co-in">
       <div class="co-row"><div class="co-lab">Hospital</div>
         <div class="seg" id="coBrand">${brands.map(b => `<button data-b="${b}" class="${C.brand === b ? 'on' : ''}">${b}</button>`).join('')}</div></div>
-      <div class="co-row"><div class="co-lab">Exported report</div>
+      <div class="co-row"><div class="co-lab">Final PDF</div>
         <label class="btn btn-ghost">Choose PDF<input type="file" accept="application/pdf" id="coPdf" hidden></label>
-        <span class="co-meta ${C.pdf && C.pdf.bad ? 'co-badtxt' : ''}">${C.pdf ? `${esc(C.pdf.name)} · ${esc(C.pdf.status)}` : 'Snapshots for the doc, plus the ANGA and SEO map pages for Claude to read'}</span></div>
-      <div class="co-row"><div class="co-lab">Screenshots</div>
-        <label class="btn btn-ghost">Add images<input type="file" accept="image/png,image/jpeg,image/webp" id="coShots" multiple hidden></label>
-        <span class="co-meta">ANGA, SEO map, Better Club insight — anything not in the PDF</span></div>
-      ${C.shots.length ? `<div class="co-shots">${C.shots.map(s => `
-        <div class="co-shot"><img src="data:${s.type};base64,${s.b64}" alt="">
-          <select data-slot="${esc(s.id)}">${CO_SLOTS.map(([k, l]) => `<option value="${k}" ${s.slot === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
-          <button class="co-x" data-unshot="${esc(s.id)}" title="Remove">×</button></div>`).join('')}</div>` : ''}
+        <span class="co-meta ${C.pdf && C.pdf.bad ? 'co-badtxt' : ''}">${C.pdf ? `${esc(C.pdf.name)} · ${esc(C.pdf.status)}` : 'The combined report with ANGA and the SEO map inside — the only input'}</span></div>
       <div class="co-row co-top"><div class="co-lab">Notes for Claude</div>
         <textarea id="coNotes" class="text" rows="2" placeholder="Optional — e.g. Better AI launched in August; focus on international patients">${esc(C.notes)}</textarea></div>
       <div class="co-row"><div class="co-lab"></div>
-        <button class="btn btn-primary" id="coGo" ${C.busy ? 'disabled' : ''}><span class="spin"></span><span>${r ? 'Generate again' : 'Generate call out'}</span></button>
+        <button class="btn btn-primary" id="coGo" ${C.busy || C.busySec ? 'disabled' : ''}><span class="spin"></span><span>${r ? 'Generate again' : 'Generate call out'}</span></button>
         <span class="co-meta">${esc(coRange())}</span></div>
     </div>
     <div id="coBody" class="mt">${C.busy ? loadingState(C.busy) : C.error ? errorState(C.error) : r ? coResultHtml() : ''}</div>`;
@@ -7363,9 +7349,10 @@ function coResultHtml() {
   const byId = Object.fromEntries(r.sections.map(s => [s.id, s]));
   const cards = r.order.filter(id => byId[id]).map(id => {
     const s = byId[id], imgs = coImagesFor(id);
-    return `<div class="card co-sec mt" data-sec="${esc(id)}">
+    const busy = C.busySec === id;
+    return `<div class="card co-sec mt ${busy ? 'co-busy' : ''} ${C.fresh === id ? 'co-fresh' : ''}" data-sec="${esc(id)}">
       <div class="co-sech"><h2>${esc(r.titles[id] || id)}</h2>
-        <button class="btn btn-ghost co-small" data-regen="${esc(id)}">Rewrite</button></div>
+        <button class="btn btn-ghost co-small ${busy ? 'loading' : ''}" data-regen="${esc(id)}" ${C.busySec ? 'disabled' : ''}><span class="spin"></span><span>${busy ? 'Rewriting…' : 'Rewrite'}</span></button></div>
       ${s.bullets.map((b, i) => `<div class="co-bl"><div class="co-b" contenteditable="true" spellcheck="false"
           data-s="${esc(id)}" data-i="${i}">${coMark(b.text)}</div>
           <button class="co-x" data-unbullet="${esc(id)}:${i}" title="Remove this point">×</button></div>`).join('')}
@@ -7384,7 +7371,7 @@ function coResultHtml() {
 }
 const coTallyText = (t) => t.bad
   ? `${t.bad} of ${t.all} numbers not found in the data`
-  : `All ${t.all} numbers match the data${t.shot ? ` · ${t.shot} read from screenshots` : ''}`;
+  : `All ${t.all} numbers match the data${t.shot ? ` · ${t.shot} read from PDF images` : ''}`;
 
 function coWire() {
   const C = coState();
@@ -7395,20 +7382,6 @@ function coWire() {
   }));
   const pdf = $('coPdf');
   if (pdf) pdf.addEventListener('change', () => { if (pdf.files[0]) { C.removed = {}; coReadPdf(pdf.files[0]); } });
-  const shots = $('coShots');
-  if (shots) shots.addEventListener('change', async () => {
-    for (const f of [...shots.files]) {
-      try { C.shots.push({ id: `s${Date.now()}${Math.random().toString(36).slice(2, 6)}`, name: f.name, slot: 'other', ...(await coReadImage(f)) }); }
-      catch (e) { C.error = e.message; }
-    }
-    renderCallout();
-  });
-  document.querySelectorAll('[data-slot]').forEach(el => el.addEventListener('change', () => {
-    const s = C.shots.find(x => x.id === el.dataset.slot); if (s) s.slot = el.value; renderCallout();
-  }));
-  document.querySelectorAll('[data-unshot]').forEach(el => el.addEventListener('click', () => {
-    C.shots = C.shots.filter(x => x.id !== el.dataset.unshot); renderCallout();
-  }));
   const notes = $('coNotes');
   if (notes) notes.addEventListener('input', () => { C.notes = notes.value; });
   const go = $('coGo');
@@ -7441,7 +7414,14 @@ function coWire() {
 async function coGenerate(only) {
   const C = coState();
   C.error = null;
-  C.busy = only ? `Rewriting ${(C.result && C.result.titles[only]) || only}…` : `Reading the ${C.brand} report and writing the call out…`;
+  /**
+   * A REWRITE BUSIES ITS OWN BLOCK ONLY (MW v3.361.0). The rest of the callout
+   * stays on screen, readable and in place; only the block being rewritten
+   * shimmers, and it flashes once when the new text lands.
+   */
+  if (only && C.result) C.busySec = only;
+  else C.busy = `Reading the ${C.brand} report and writing the call out…`;
+  C.fresh = null;
   renderCallout();
   try {
     await coLib();
@@ -7454,7 +7434,10 @@ async function coGenerate(only) {
     if (!res.ok) throw new Error(body.error || `Server ${res.status}`);
     if (only && C.result) {
       const fresh = body.sections.find(s => s.id === only);
-      C.result.sections = C.result.sections.filter(s => s.id !== only).concat(fresh ? [fresh] : []);
+      if (!fresh) throw new Error('Claude returned nothing for this block — the old text is kept.');
+      C.result.sections = C.result.sections.filter(s => s.id !== only).concat([fresh]);
+      C.fresh = only;
+      setTimeout(() => { if (C.fresh === only) C.fresh = null; }, 1700);   // flash once, not on every re-render
       const have = new Set(C.result.shotFacts.map(f => f.id));
       C.result.shotFacts.push(...body.shotFacts.filter(f => !have.has(f.id)));
     } else {
@@ -7463,9 +7446,11 @@ async function coGenerate(only) {
     setStatus('ok', `written by ${body.model}`);
   } catch (err) {
     setStatus('bad', 'failed');
-    C.error = err.message;
+    // A failed rewrite must not throw away the callout the team is editing.
+    if (only && C.result) alert(err.message);
+    else C.error = err.message;
   } finally {
-    C.busy = false;
+    C.busy = false; C.busySec = null;
     renderCallout();
   }
 }
@@ -12921,7 +12906,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.360.0';
+const CLIENT_BUILD = '3.361.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

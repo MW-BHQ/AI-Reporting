@@ -75,6 +75,9 @@ expect("pdf: one page per section", JSON.stringify(map.betterClub) === "[7]", JS
 expect("pdf: image-only page still mapped", JSON.stringify(map.seoMap) === "[12]", JSON.stringify(map.seoMap));
 expect("pdf: ANGA keeps two pages", JSON.stringify(map.aiSeo) === "[14,15]", JSON.stringify(map.aiSeo));
 expect("pdf: unknown covers ignored", !("facebook" in map) && Object.keys(map).length === 5, Object.keys(map).join(","));
+const insightMap = L.mapPdfPages([cover("Better Club Insight"), { text: "" }, cover("Better Club Revenue Attribution"), { text: "x" }]
+  .map((p, i) => ({ n: i + 1, ...p })));
+expect("pdf: insight is not Better Club", JSON.stringify(insightMap) === '{"insight":[2],"betterClub":[4]}', JSON.stringify(insightMap));
 // The real export letter-spaces every heading (v3.360.0, September PDF).
 const spaced = (t) => t.split("").join(" ");
 const realMap = L.mapPdfPages([cover(spaced("Better AI")), { text: spaced("BETTER AI BHQ 01 SEP 2026") }].map((p, i) => ({ n: i + 1, text: spaced(p.text) })));
@@ -139,6 +142,11 @@ const dom = new JSDOM(html, {
     w.fetch = (url, opts) => {
       const u = String(url);
       if (u.includes("/api/callout")) posted = JSON.parse(opts.body);
+      // A rewrite answers late, so the test can look at the screen mid-flight.
+      if (u.includes("/api/callout") && posted.only) {
+        const body = { ...RESULT, sections: [{ id: posted.only, bullets: [{ text: "เขียนใหม่ 68.7 ล้านครั้ง" }] }] };
+        return new Promise((r) => setTimeout(() => r({ ok: true, status: 200, json: () => Promise.resolve(body) }), 150));
+      }
       const body = u.includes("/api/callout") ? RESULT
         : u.includes("/api/me") || !u.includes("/api/") ? { tabs: ["overview", "report"], version: "test", isAdmin: false } : {};
       return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body), text: () => Promise.resolve(JSON.stringify(body)) });
@@ -167,6 +175,8 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   nav.click();
   await wait(50);
   expect("client: tab renders", d.getElementById("coGo") && d.getElementById("coBrand"), "");
+  expect("client: input is the Final PDF only", /Final PDF/.test(d.querySelector(".co-in").textContent)
+    && !d.getElementById("coShots") && !/Screenshots/.test(d.querySelector(".co-in").textContent), "");
   d.querySelector('#coBrand button[data-b="BHT"]').click();
   await wait(20);
   d.getElementById("coGo").click();
@@ -185,6 +195,20 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   bad.dispatchEvent(new dom.window.Event("blur"));
   await wait(20);
   expect("client: edit is re-checked", /All 5 numbers match/.test(d.getElementById("coTally").textContent), d.getElementById("coTally").textContent);
+  // REWRITE BUSIES ONE BLOCK (MW v3.361.0): the rest stays readable, in place.
+  d.querySelector('[data-regen="overview"]').click();
+  await wait(40);
+  const busyCard = d.querySelector('[data-sec="overview"]');
+  expect("client: rewrite keeps the report", d.querySelectorAll(".co-sec").length === 3 && !/Reading the/.test(body.textContent),
+    `${d.querySelectorAll(".co-sec").length} blocks`);
+  expect("client: only that block is busy", busyCard && busyCard.classList.contains("co-busy")
+    && d.querySelectorAll(".co-busy").length === 1 && /Rewriting/.test(busyCard.textContent), "");
+  expect("client: rewrite posts its block", posted.only === "overview", String(posted.only));
+  await wait(250);
+  const after = d.querySelector('[data-sec="overview"]');
+  expect("client: new text lands in the block", after && /เขียนใหม่/.test(after.textContent) && !after.classList.contains("co-busy")
+    && after.classList.contains("co-fresh"), "");
+  expect("client: other edits survive a rewrite", /995K/.test(d.getElementById("coBody").textContent), "");
   // Removing a point removes it from the export.
   d.querySelector('[data-unbullet="aiSeo:0"]').click();
   await wait(20);
