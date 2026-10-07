@@ -1,5 +1,18 @@
 ### Recent (October 2026)
 
+**v3.362.0 — Call out: email draft for Outlook web** (MW; no IT, so no Graph):
+- Email card under the callout: To, Cc (remembered per hospital in this
+  browser, `warroom.callout.mail.<BRAND>`), Subject (default "Digital Marketing
+  Call out – <BRAND> – <Month YYYY>").
+- "Open draft in Outlook" copies the body (same content as the .docx: sections,
+  points, page images as data URIs, inline styles) to the clipboard as HTML,
+  THEN opens `outlook.office.com/mail/deeplink/compose` with to/cc/subject —
+  clipboard first, while the page still has focus. The team pastes, attaches the
+  Final PDF by hand (a link cannot carry a file), sends.
+- Graph drafting (Entra app, Mail.ReadWrite) was designed and parked: needs IT.
+- `CalloutLib.parseRecipients / outlookComposeUrl / buildEmail`, tested;
+  bad addresses block the open.
+
 **v3.361.0 — Call out: Final PDF only; Rewrite busies one block** (MW):
 - "Exported report" → "Final PDF". Screenshot upload removed: the Final PDF
   (ANGA + SEO map combined in) is the only input. Picture-only covers read by

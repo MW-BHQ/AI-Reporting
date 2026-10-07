@@ -118,6 +118,15 @@ try {
   fail("docx: readable zip", e.message);
 }
 
+// ---------------------------------------------------------------- 3b. email
+const rc = L.parseRecipients("a@bkh.co; b.c@bangkokhospital.com,  nope ,x@y");
+expect("email: recipients split", rc.good.length === 2 && rc.bad.join("|") === "nope|x@y", JSON.stringify(rc));
+const url = L.outlookComposeUrl({ to: ["a@bkh.co", "b@bkh.co"], cc: [], subject: "Call out – BGH & co" });
+expect("email: deeplink", url === "https://outlook.office.com/mail/deeplink/compose?to=a%40bkh.co%3Bb%40bkh.co&subject=Call%20out%20%E2%80%93%20BGH%20%26%20co", url);
+const em = L.buildEmail({ sections: [{ title: "E-Commerce", bullets: ["ยอดขาย <111.7 ล้าน> & ดี"], images: [{ b64: "QUJD", type: "image/jpeg" }] }] });
+expect("email: html escaped, image inline", em.html.includes("ยอดขาย &lt;111.7 ล้าน&gt; &amp; ดี") && em.html.includes('src="data:image/jpeg;base64,QUJD"'), "");
+expect("email: plain text fallback", em.text.includes("• ยอดขาย <111.7 ล้าน> & ดี") && !em.text.includes("<li"), "");
+
 // ---------------------------------------------------------------- 4. client
 const { JSDOM } = require("jsdom");
 const html = fs.readFileSync(path.join(__dirname, "..", "public", "index.html"), "utf8");
@@ -135,6 +144,7 @@ const RESULT = {
 };
 const errors = [];
 let posted = null, downloaded = null;
+const opened = [], clip = [], alerts = [];
 const dom = new JSDOM(html, {
   runScripts: "dangerously", pretendToBeVisual: true, url: "http://localhost/",
   beforeParse(w) {
@@ -152,6 +162,10 @@ const dom = new JSDOM(html, {
       return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body), text: () => Promise.resolve(JSON.stringify(body)) });
     };
     w.confirm = () => true;
+    w.alert = (m) => alerts.push(m);
+    w.open = (u) => { opened.push(u); return null; };
+    w.ClipboardItem = class { constructor(items) { this.items = items; } };
+    Object.defineProperty(w.navigator, "clipboard", { value: { write: (items) => { clip.push(items[0].items["text/html"].parts[0]); return Promise.resolve(); } } });
     // JSDOM's Blob cannot be read back; keep the bytes the export handed it.
     w.Blob = class { constructor(parts) { this.parts = parts; } };
     w.URL.createObjectURL = (b) => { downloaded = b; return "blob:x"; };
@@ -222,6 +236,23 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     expect("client: export carries the edit", doc.includes("Vaccine จาก 995K บาท") && !doc.includes("581,000"), "");
     expect("client: export drops removed points", !doc.includes("ChatGPT 59%") && doc.includes("Call out (BHT)"), "");
   }
+  // EMAIL (v3.362.0): Outlook web compose + formatted body on the clipboard.
+  const to = d.getElementById("coTo"), cc = d.getElementById("coCc"), subj = d.getElementById("coSubject");
+  expect("email: card with default subject", to && cc && /Digital Marketing Call out – BHT – September 2026/.test(subj.value), subj && subj.value);
+  to.value = "ceo@bangkokhospital.com; oops"; to.dispatchEvent(new dom.window.Event("input")); to.dispatchEvent(new dom.window.Event("change"));
+  await wait(20);
+  expect("email: bad address shown", /Not an email address: oops/.test(d.querySelector(".co-mail").textContent), "");
+  d.getElementById("coMailGo").click();
+  expect("email: bad address blocks", opened.length === 0 && alerts.some((a) => /oops/.test(a)), String(alerts));
+  const to2 = d.getElementById("coTo");
+  to2.value = "ceo@bangkokhospital.com"; to2.dispatchEvent(new dom.window.Event("input")); to2.dispatchEvent(new dom.window.Event("change"));
+  await wait(20);
+  d.getElementById("coMailGo").click();
+  await wait(20);
+  expect("email: Outlook opened, fields filled", opened.length === 1 && /to=ceo%40bangkokhospital.com/.test(opened[0]) && /subject=Digital%20Marketing/.test(opened[0]), opened[0]);
+  expect("email: body is the edited callout", clip.length === 1 && clip[0].includes("Vaccine จาก 995K บาท") && !clip[0].includes("581,000"), "");
+  expect("email: recipients kept per hospital", /ceo@bangkokhospital.com/.test(dom.window.localStorage.getItem("warroom.callout.mail.BHT") || "")
+    && !dom.window.localStorage.getItem("warroom.callout.mail.BGH"), "");
   const mine = errors.slice(before);
   expect("client: no thrown errors", mine.length === 0, mine.slice(0, 2).join(" | "));
   finish();

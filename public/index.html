@@ -2217,6 +2217,7 @@
   @keyframes coShimmer{from{background-position:120% 0;}to{background-position:-120% 0;}}
   .co-fresh{animation:coFresh 1.6s ease-out 1;}
   @keyframes coFresh{0%{box-shadow:0 0 0 3px var(--violet);}100%{box-shadow:var(--shadow);}}
+  .co-in-text{flex:1;min-width:240px;font-family:inherit;font-size:var(--text-sm);padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-sm);}
   .co-checks{margin:0;padding-left:18px;font-size:var(--text-xs);color:var(--ink-2);line-height:1.7;}
   @media(max-width:1080px){.g-6,.g-5,.g-4{grid-template-columns:repeat(2,1fr);}.g-2-1,.g-3,.g-2{grid-template-columns:1fr;}}
   @media(max-width:760px){
@@ -7366,6 +7367,7 @@ function coResultHtml() {
       <button class="btn btn-primary" id="coExport">Export .docx</button>
     </div>
     ${cards}
+    ${coMailHtml()}
     ${r.checks && r.checks.length ? `<div class="card mt"><h2>For the team to check</h2>
       <ul class="co-checks">${r.checks.map(c => `<li>${esc(c)}</li>`).join('')}</ul></div>` : ''}`;
 }
@@ -7407,6 +7409,18 @@ function coWire() {
     const t = $('coTally');
     if (t) { const tally = coTally(); t.textContent = coTallyText(tally); t.className = `pill ${tally.bad ? 'warn' : 'green'}`; }
   }));
+  [['coTo', 'to'], ['coCc', 'cc'], ['coSubject', 'subject']].forEach(([elId, k]) => {
+    const el = $(elId); if (!el) return;
+    el.addEventListener('input', () => { coMail()[k] = el.value; });
+    el.addEventListener('change', () => {
+      const m = coMail(); coMailSet(C.brand, { to: m.to, cc: m.cc });
+      if (k !== 'subject') renderCallout();   // re-check the addresses
+    });
+  });
+  const mg = $('coMailGo'); if (mg) mg.addEventListener('click', coMailOpen);
+  const mc = $('coMailCopy'); if (mc) mc.addEventListener('click', () => coCopyBody()
+    .then(() => { $('coMailMsg').textContent = 'Body copied — paste it into the Outlook message.'; })
+    .catch(() => { $('coMailMsg').textContent = 'Copy failed — the browser blocked the clipboard.'; }));
   const ex = $('coExport');
   if (ex) ex.addEventListener('click', coExport);
 }
@@ -7455,13 +7469,11 @@ async function coGenerate(only) {
   }
 }
 
-async function coExport() {
+/** The callout as the team has it now (edits, removals) — one shape for .docx and email. */
+function coDoc() {
   const C = coState(), r = C.result;
-  const tally = coTally();
-  if (tally.bad && !confirm(`${tally.bad} number(s) are not in the data. Export anyway?`)) return;
-  const lib = await coLib();
   const byId = Object.fromEntries(r.sections.map(s => [s.id, s]));
-  const doc = {
+  return {
     title: `Call out (${C.brand})`,
     sections: r.order.filter(id => byId[id]).map(id => ({
       title: r.titles[id] || id,
@@ -7469,6 +7481,83 @@ async function coExport() {
       images: coImagesFor(id),
     })),
   };
+}
+const coMonthLabel = () => {
+  const t = $('to').value;
+  return t ? new Date(`${t}T00:00:00`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : '';
+};
+
+/**
+ * RECIPIENTS ARE REMEMBERED PER HOSPITAL, IN THIS BROWSER (v3.362.0). Typed
+ * once, kept. Not shared across the team on purpose: no server store, no
+ * permission to manage — MW's call is the smallest thing that works.
+ */
+const CO_MAIL_KEY = (b) => `warroom.callout.mail.${b}`;
+function coMailGet(brand) {
+  try { return JSON.parse(localStorage.getItem(CO_MAIL_KEY(brand)) || '{}'); } catch (_) { return {}; }
+}
+function coMailSet(brand, v) {
+  try { localStorage.setItem(CO_MAIL_KEY(brand), JSON.stringify(v)); } catch (_) { /* private mode: still works, just not kept */ }
+}
+function coMail() {
+  const C = coState();
+  if (!C.mail || C.mail.brand !== C.brand) {
+    const saved = coMailGet(C.brand);
+    C.mail = { brand: C.brand, to: saved.to || '', cc: saved.cc || '', subject: '' };
+  }
+  if (!C.mail.subject) C.mail.subject = `Digital Marketing Call out – ${C.brand} – ${coMonthLabel()}`;
+  return C.mail;
+}
+
+function coMailHtml() {
+  const m = coMail(), lib = window.CalloutLib;
+  const bad = lib ? [...lib.parseRecipients(m.to).bad, ...lib.parseRecipients(m.cc).bad] : [];
+  return `<div class="card mt co-mail">
+    <h2>Email</h2>
+    <div class="co-row"><div class="co-lab">To</div><input class="text co-in-text" id="coTo" value="${esc(m.to)}" placeholder="name@bangkokhospital.com; …"></div>
+    <div class="co-row"><div class="co-lab">Cc</div><input class="text co-in-text" id="coCc" value="${esc(m.cc)}" placeholder="optional"></div>
+    <div class="co-row"><div class="co-lab">Subject</div><input class="text co-in-text" id="coSubject" value="${esc(m.subject)}"></div>
+    ${bad.length ? `<div class="co-row"><div class="co-lab"></div><span class="co-badtxt co-meta">Not an email address: ${esc(bad.join(', '))}</span></div>` : ''}
+    <div class="co-row"><div class="co-lab"></div>
+      <button class="btn btn-primary" id="coMailGo">Open draft in Outlook</button>
+      <button class="btn btn-ghost" id="coMailCopy">Copy body again</button>
+      <span class="co-meta" id="coMailMsg">Opens Outlook with To, Cc and Subject filled and the body copied — press Ctrl+V (⌘V) in the message, then attach the Final PDF${coState().pdf && coState().pdf.name ? ` (${esc(coState().pdf.name)})` : ''}.</span></div>
+  </div>`;
+}
+
+/** Puts the callout on the clipboard as formatted HTML (plain text as fallback). */
+function coCopyBody() {
+  const { html, text } = window.CalloutLib.buildEmail(coDoc());
+  if (navigator.clipboard && window.ClipboardItem) {
+    return navigator.clipboard.write([new ClipboardItem({
+      'text/html': new Blob([html], { type: 'text/html' }),
+      'text/plain': new Blob([text], { type: 'text/plain' }),
+    })]);
+  }
+  return navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject(new Error('no clipboard'));
+}
+
+function coMailOpen() {
+  const C = coState(), m = coMail(), lib = window.CalloutLib;
+  const to = lib.parseRecipients(m.to), cc = lib.parseRecipients(m.cc);
+  if (to.bad.length || cc.bad.length) { alert(`Fix these first: ${[...to.bad, ...cc.bad].join(', ')}`); return; }
+  const tally = coTally();
+  if (tally.bad && !confirm(`${tally.bad} number(s) are not in the data. Draft the email anyway?`)) return;
+  if (!C.pdf || !C.pdf.name) alert('No Final PDF chosen — the email will go without it.');
+  // Clipboard first, while this page still has focus; the new tab takes it.
+  const copied = coCopyBody();
+  window.open(lib.outlookComposeUrl({ to: to.good, cc: cc.good, subject: m.subject }), '_blank', 'noopener');
+  const msg = $('coMailMsg');
+  copied.then(() => { if (msg) msg.textContent = 'Body copied. In the Outlook tab: click the message, Ctrl+V (⌘V), attach the Final PDF, check, send.'; })
+    .catch(() => { if (msg) msg.textContent = 'Outlook opened, but copying failed — come back and press "Copy body again".'; });
+}
+
+async function coExport() {
+  const C = coState();
+  const tally = coTally();
+  if (tally.bad && !confirm(`${tally.bad} number(s) are not in the data. Export anyway?`)) return;
+  const lib = await coLib();
+  const doc = coDoc();
   const blob = new Blob([lib.buildDocx(doc)],
     { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
   const a = document.createElement('a');
@@ -12906,7 +12995,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.361.0';
+const CLIENT_BUILD = '3.362.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

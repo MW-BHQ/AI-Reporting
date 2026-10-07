@@ -272,7 +272,58 @@
     ]);
   }
 
-  const api = { verifyText, mapPdfPages, coverTitle, buildDocx, zipStore, crc32, VISUAL_SECTIONS };
+
+  // ------------------------------------------------------------ email (v3.362.0)
+  /**
+   * OUTLOOK WEB, NO IT. Without an Entra app the browser cannot create a draft
+   * in anyone's mailbox, so the tab does the two halves it can: opens Outlook's
+   * compose page with To, Cc and Subject filled (deeplink), and puts the body
+   * on the clipboard as formatted HTML for one paste. The Final PDF is dragged
+   * in by hand — a link cannot carry an attachment.
+   */
+  const EMAIL_RE = /^[^\s@;,]+@[^\s@;,]+\.[^\s@;,]+$/;
+  /** "a@x.com; b@x.com, c" → { good: [...], bad: [...] } */
+  function parseRecipients(text) {
+    const parts = String(text || "").split(/[;,\s]+/).map((x) => x.trim()).filter(Boolean);
+    return { good: parts.filter((x) => EMAIL_RE.test(x)), bad: parts.filter((x) => !EMAIL_RE.test(x)) };
+  }
+
+  function outlookComposeUrl({ to, cc, subject }) {
+    const q = [];
+    if (to && to.length) q.push(`to=${encodeURIComponent(to.join(";"))}`);
+    if (cc && cc.length) q.push(`cc=${encodeURIComponent(cc.join(";"))}`);
+    if (subject) q.push(`subject=${encodeURIComponent(subject)}`);
+    return `https://outlook.office.com/mail/deeplink/compose${q.length ? `?${q.join("&")}` : ""}`;
+  }
+
+  const html = (s) => String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+  /**
+   * The same doc object buildDocx takes → { html, text }. Inline styles only:
+   * mail clients drop <style>. Images are data URIs, which Outlook web turns
+   * into inline attachments on paste.
+   */
+  function buildEmail(doc, { greeting = "เรียน ผู้บริหาร", images = true } = {}) {
+    const F = "font-family:Tahoma,Arial,sans-serif;";
+    const out = [`<div style="${F}font-size:14px;color:#1B2340;line-height:1.6;">`, `<p>${html(greeting)}</p>`];
+    const text = [greeting, ""];
+    for (const sec of doc.sections || []) {
+      out.push(`<p style="margin:18px 0 6px;font-size:16px;font-weight:bold;color:#0B2A6B;">${html(sec.title)}</p><ul style="margin:0 0 8px;padding-left:20px;">`);
+      text.push(sec.title);
+      for (const b of sec.bullets || []) { out.push(`<li style="margin:0 0 4px;">${html(b)}</li>`); text.push(`• ${b}`); }
+      out.push("</ul>");
+      if (images) for (const img of sec.images || []) {
+        out.push(`<p><img src="data:${img.type};base64,${img.b64}" width="600" style="width:600px;max-width:100%;border:1px solid #E1E6F2;" alt="${html(sec.title)}"></p>`);
+      }
+      text.push("");
+    }
+    out.push("</div>");
+    return { html: out.join(""), text: text.join("\n").trim() };
+  }
+
+  const api = { verifyText, mapPdfPages, coverTitle, buildDocx, zipStore, crc32, VISUAL_SECTIONS,
+    parseRecipients, outlookComposeUrl, buildEmail };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.CalloutLib = api;
 })(typeof window !== "undefined" ? window : this);
