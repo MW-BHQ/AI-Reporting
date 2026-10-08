@@ -66,6 +66,9 @@ Call out, under WSH, with the `AI` chip (house rule: every AI tab carries it).
 
 ### Recent (September 2026)
 
+**v3.365.0 — Campaign detail result units smaller** (MW): `.res-unit` at
+0.72em, faint; the Result cell no longer wraps the unit under the number.
+
 **v3.364.0 — Campaign detail: each ad judged by its own objective** (MW: a
 Message ad showing landing views makes the marketer look fireable). The ad
 sub-table's "Landing views" column is now Objective · Result · Cost / result.

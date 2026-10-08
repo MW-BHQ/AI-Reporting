@@ -791,6 +791,10 @@
   td.barcell b{position:relative;}
   .stat .sub2{font-size:var(--text-xs);color:var(--faint);margin-top:2px;}
   /* Monthly Report overview scorecards: MoM / YoY lines (v3.357.0). */
+  /* Campaign detail result units ("landing views", "conversations"): a label,
+     not the number, so smaller and fainter; nowrap keeps it beside the
+     number (v3.365.0). */
+  .res-unit{font-size:.72em;color:var(--faint);}
   .ov-chg{font-size:var(--text-xs);color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .ov-chg b{font-weight:600;}
   .ov-why{color:var(--faint);}
@@ -6997,7 +7001,7 @@ function renderCampaignBody(d) {
               <td>${a2.goalLabel?`<span class="pill grey">${esc(a2.goalLabel)}</span>`:'\u2014'}</td>
               <td class="num">${a2.impressions==null?'\u2014':num(a2.impressions)}</td>
               <td class="num">${a2.clicks==null?'\u2014':num(a2.clicks)}</td>
-              <td class="num">${a2.result==null?`<span class="dim" title="${esc(a2.resultReason||'')}">\u2014</span>`:num(a2.result)+(a2.resultUnit?` <span class="dim">${esc(a2.resultUnit)}${a2.result===1||a2.resultUnit==='1k impr'?'':'s'}</span>`:'')+(a2.resultFromGa4?` <span class="pill grey" title="GA4 sessions from google / cpc. Google Ads reports no landing page view, so this is counted on the site, not on the ad platform${a2.resultSplit?' — and split across the Google ad campaigns by link-click share':''}.">GA4${a2.resultSplit?' ~':''}</span>`:'')}</td>
+              <td class="num" style="white-space:nowrap">${a2.result==null?`<span class="dim" title="${esc(a2.resultReason||'')}">\u2014</span>`:num(a2.result)+(a2.resultUnit?` <span class="res-unit">${esc(a2.resultUnit)}${a2.result===1||a2.resultUnit==='1k impr'?'':'s'}</span>`:'')+(a2.resultFromGa4?` <span class="pill grey" title="GA4 sessions from google / cpc. Google Ads reports no landing page view, so this is counted on the site, not on the ad platform${a2.resultSplit?' — and split across the Google ad campaigns by link-click share':''}.">GA4${a2.resultSplit?' ~':''}</span>`:'')}</td>
               <td class="num">${a2.costPerResult==null?'\u2014':num(a2.costPerResult,{money:true,bare:true})}</td>
               <td class="num">${a2.spend==null?'\u2014':num(a2.spend,{money:true,bare:true})}</td>
             </tr>`).join('')}</tbody></table></div></td></tr>`:''}`).join('')||((d.orphanAdCampaigns||[]).length?'':'<tr><td colspan="11" class="num">no traffic matched this code</td></tr>')}
@@ -12987,7 +12991,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.364.0';
+const CLIENT_BUILD = '3.365.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
