@@ -6990,13 +6990,15 @@ function renderCampaignBody(d) {
           </tr>${v.adNames&&v.adNames.length?`<tr class="adrow" data-adfor="${esc(v.code)}::${esc(v.source||'')}" hidden>
             <td colspan="11"><div style="font-size:var(--text-2xs);color:var(--ink-2);line-height:1.7;">
             <table style="width:100%"><thead><tr>
-              <th>Ad campaign</th><th class="num">Impr</th><th class="num">Link clicks</th>
-              <th class="num">Landing views</th><th class="num">Spend (THB)</th></tr></thead><tbody>
+              <th>Ad campaign</th><th>Objective</th><th class="num">Impr</th><th class="num">Link clicks</th>
+              <th class="num">Result</th><th class="num">Cost / result</th><th class="num">Spend (THB)</th></tr></thead><tbody>
             ${(v.adRows||v.adNames.map(nm=>({name:nm}))).map(a2=>`<tr>
               <td class="i18n">${esc(a2.name)}</td>
+              <td>${a2.goalLabel?`<span class="pill grey">${esc(a2.goalLabel)}</span>`:'\u2014'}</td>
               <td class="num">${a2.impressions==null?'\u2014':num(a2.impressions)}</td>
               <td class="num">${a2.clicks==null?'\u2014':num(a2.clicks)}</td>
-              <td class="num">${a2.lpv==null?'\u2014':num(a2.lpv)+(a2.lpvFromGa4?` <span class="pill grey" title="GA4 sessions from google / cpc. Google Ads reports no landing page view, so this is counted on the site, not on the ad platform${a2.lpvSplit?' — and split across the Google ad campaigns by link-click share':''}.">GA4${a2.lpvSplit?' ~':''}</span>`:'')}</td>
+              <td class="num">${a2.result==null?`<span class="dim" title="${esc(a2.resultReason||'')}">\u2014</span>`:num(a2.result)+(a2.resultUnit?` <span class="dim">${esc(a2.resultUnit)}${a2.result===1||a2.resultUnit==='1k impr'?'':'s'}</span>`:'')+(a2.resultFromGa4?` <span class="pill grey" title="GA4 sessions from google / cpc. Google Ads reports no landing page view, so this is counted on the site, not on the ad platform${a2.resultSplit?' — and split across the Google ad campaigns by link-click share':''}.">GA4${a2.resultSplit?' ~':''}</span>`:'')}</td>
+              <td class="num">${a2.costPerResult==null?'\u2014':num(a2.costPerResult,{money:true,bare:true})}</td>
               <td class="num">${a2.spend==null?'\u2014':num(a2.spend,{money:true,bare:true})}</td>
             </tr>`).join('')}</tbody></table></div></td></tr>`:''}`).join('')||((d.orphanAdCampaigns||[]).length?'':'<tr><td colspan="11" class="num">no traffic matched this code</td></tr>')}
 
@@ -12985,7 +12987,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.363.0';
+const CLIENT_BUILD = '3.364.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

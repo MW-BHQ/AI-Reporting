@@ -696,6 +696,15 @@ expect_field "lpv gads not split"  "$CAMP1" "d.adCampaigns.filter(c=>c.platform=
 # figure is another 100 — if it leaked in, this would read 200.
 expect_field "lpv total meta only" "$CAMP1" "d.totals.landingPageViews===100?100:undefined"
 
+echo "--- campaign detail: each ad judged by its own objective (v3.364.0) ---"
+# The fixture's Meta campaign says OUTCOME_TRAFFIC but its ad set buys
+# CONVERSATIONS (the real WhatsApp/Message shape). The ad row must report
+# conversations and cost per conversation, never landing page views.
+AR="d.variants.flatMap(v=>v.adRows||[])"
+expect_field "ad row message goal"  "$CAMP1" "(()=>{const a=$AR.find(x=>x.name.includes('BHT_test'));return a&&a.goal==='messages'&&a.resultUnit==='conversation'&&a.result===100&&a.costPerResult===1?'ok':undefined})()"
+# Google: no objective, so traffic, counted from GA4 and flagged as such.
+expect_field "ad row google traffic" "$CAMP1" "(()=>{const a=$AR.find(x=>x.name.includes('BGH_Search'));return a&&a.goal==='traffic'&&a.resultFromGa4&&a.costPerResult===25?'ok':undefined})()"
+
 echo "--- campaign: LINE broadcasts matched by campaign code (v3.304.0) ---"
 # Step 2 of MW's LINE pipeline. The fixture sends one broadcast tagged
 # 260701-08_bgh_tra (90,000 delivered, 22,000 opened) plus two untagged in the

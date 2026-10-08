@@ -66,6 +66,21 @@ Call out, under WSH, with the `AI` chip (house rule: every AI tab carries it).
 
 ### Recent (September 2026)
 
+**v3.364.0 — Campaign detail: each ad judged by its own objective** (MW: a
+Message ad showing landing views makes the marketer look fireable). The ad
+sub-table's "Landing views" column is now Objective · Result · Cost / result.
+- Meta goal = spend-weighted dominant `adsset_optimization_goal` (newly pulled
+  on the campaign query; already used by Audiences), via `GOAL_CLASS` ->
+  `OPT_GOAL_TO_GOAL`; then `campaign_objective`; then the name. Message ads sit
+  under OUTCOME_TRAFFIC/ENGAGEMENT at campaign level, so the campaign field
+  alone would misjudge them.
+- Result: messages -> conversations, leads -> leads, traffic -> landing views
+  (Google: GA4 sessions, flagged), awareness -> cost per 1,000 impressions,
+  engagement/other -> link clicks, sales -> dash (no per-ad purchase count).
+- Google Ads with no telling name = traffic (also lifts the campaign's
+  headline goal off "unclassified").
+- `adResultRow` builds each row. Smoke: 2 assertions, negative-tested.
+
 **v3.359.0 — Overview page on all four Monthly Reports** (MW, after BGH
 sign-off): `OVERVIEW_PAGE_BRANDS` = BGH, BIH, BHT, WSH. Same BHQ page and
 covers on every hospital; the cover keeps its "Digital Marketing" subtitle

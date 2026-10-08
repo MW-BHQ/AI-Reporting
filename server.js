@@ -1405,7 +1405,9 @@ const AD_METRIC_FIELDS = ["impressions", "clicks", "spend"];
  */
 const AD_PLATFORMS = [
   { id: "facebook", label: "Meta Ads", campaignKey: "campaign",
-    extra: ["campaign_objective", "actions_link_click", "actions_landing_page_view",
+    // `adsset_optimization_goal` (v3.364.0): what each ad set was told to buy.
+    // Same field `buildAudiences` reads on this connector; it decides `goal`.
+    extra: ["campaign_objective", "adsset_optimization_goal", "actions_link_click", "actions_landing_page_view",
             "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d"] },
   { id: "google_ads", label: "Google Ads", campaignKey: "campaign", extra: [] },
 ];
@@ -4714,8 +4716,11 @@ async function buildCampaign(code, from, to) {
          * arrived.
          */
         impressions: 0, clicks: 0, linkClicks: 0, landingPageViews: null, spend: 0, leads: 0, messages: 0,
+        optGoals: new Map(),
       });
       const a = agg.get(name);
+      if (r.adsset_optimization_goal) a.optGoals.set(String(r.adsset_optimization_goal).toUpperCase(),
+        (a.optGoals.get(String(r.adsset_optimization_goal).toUpperCase()) || 0) + n(r.spend) + n(r.impressions) / 1e6);
       a.impressions += n(r.impressions);
       a.clicks += n(r.clicks);
       a.linkClicks += n(r.actions_link_click);
@@ -4725,6 +4730,22 @@ async function buildCampaign(code, from, to) {
       a.spend += n(r.spend);
       a.leads += n(r.actions_lead);
       a.messages += n(r.actions_onsite_conversion_messaging_conversation_started_7d);
+    }
+    /**
+     * THE AD SET GOAL DECIDES THE CAMPAIGN'S GOAL (v3.364.0, MW). Meta files
+     * Message ads under OUTCOME_TRAFFIC or OUTCOME_ENGAGEMENT at campaign level
+     * while the ad set buys CONVERSATIONS — the trap `classifyObjective`
+     * already documents. Spend-weighted dominant ad-set goal first, then the
+     * campaign objective, then the name.
+     */
+    for (const a of agg.values()) {
+      const top = [...a.optGoals.entries()].sort((x, y) => y[1] - x[1])[0];
+      const cls = top ? OPT_GOAL_TO_GOAL[GOAL_CLASS[top[0]]] : null;
+      if (cls) { a.goal = cls; a.optimizationGoal = top[0]; }
+      // Google Ads reports no objective; a name that says nothing is a search
+      // click bought to land on the site, so it is judged as traffic.
+      if (p.id === "google_ads" && a.goal === "unclassified") a.goal = "traffic";
+      delete a.optGoals;
     }
     const list = [...agg.values()].sort((a, b) => b.impressions - a.impressions);
     adCampaigns.push(...list);
@@ -4928,12 +4949,7 @@ async function buildCampaign(code, from, to) {
        * attaches to the row carrying the largest share, which is the one a
        * reader opens.
        */
-      v.adRows = (v !== owned[0]) ? (v.adRows || []) : [...(v.adRows || []), ...mine.map((c) => ({
-        name: c.name, spend: c.spend, impressions: c.impressions,
-        clicks: c.linkClicks || c.clicks, lpv: c.landingPageViews,
-        lpvFromGa4: c.landingPageViewsFromGa4 || false,
-        lpvSplit: c.landingPageViewsSplit || false,
-      }))];
+      v.adRows = (v !== owned[0]) ? (v.adRows || []) : [...(v.adRows || []), ...mine.map(adResultRow)];
       v.adNames = (v !== owned[0]) ? [] : v.adNames;
       v.platform = p.platform;
       if (owned.length > 1) v.spendEstimated = true;
@@ -5904,7 +5920,46 @@ app.get("/api/campaign", requireTab("campaigns"), async (req, res) => {
   }
 });
 
+/**
+ * ONE AD CAMPAIGN ROW, JUDGED BY ITS OWN OBJECTIVE (v3.364.0, MW).
+ *
+ * The sub-table used to show landing page views for every ad. A Message ad
+ * then read "3 landing views for THB 7.9K" — a result it was never buying —
+ * while its 52 conversations sat unseen. The result column now follows the
+ * objective Meta reports (`goalOf`):
+ *   messages -> conversations started   leads -> leads
+ *   traffic  -> landing page views (Google: GA4 sessions, flagged)
+ *   awareness -> impressions, cost per 1,000
+ *   engagement / app / unclassified -> link clicks
+ *   sales -> no per-ad purchase count exists: null, never 0
+ * Meta's goal comes from the ad set's optimization goal (see the campaign
+ * pull); Google Ads with an uninformative name is traffic.
+ */
+function adResultRow(c) {
+  const goal = c.goal || "unclassified";
+  const def = GOAL_DEFS[goal] || GOAL_DEFS.unclassified;
+  const clicks = c.linkClicks || c.clicks;
+  let result = null, ga4 = false;
+  if (goal === "messages") result = c.messages ?? null;
+  else if (goal === "leads") result = c.leads ?? null;
+  else if (goal === "traffic") { result = c.landingPageViews; ga4 = !!c.landingPageViewsFromGa4; }
+  else if (goal === "awareness") result = c.impressions;
+  else if (goal === "sales") result = null;
+  else result = clicks;
+  const unit = goal === "traffic" ? "landing view" : (goal === "awareness" ? "1k impr" : def.resultLabel);
+  const per = def.perThousand ? 1000 : 1;
+  return {
+    name: c.name, spend: c.spend, impressions: c.impressions, clicks,
+    goal, goalLabel: def.label, result, resultUnit: unit,
+    resultFromGa4: ga4, resultSplit: ga4 && !!c.landingPageViewsSplit,
+    resultReason: result == null ? (goal === "sales" ? "no per-ad purchase count" : "not reported") : null,
+    costPerResult: result ? c.spend / result * per : null,
+  };
+}
 // ----------------------------------------------- ad objective classification
+// `classifyObjective`'s classes (audiences) -> this file's GOAL_DEFS keys.
+const OPT_GOAL_TO_GOAL = { traffic: "traffic", clicks: "engagement", lead: "leads", message: "messages",
+  ecommerce: "sales", engagement: "engagement", awareness: "awareness" };
 /**
  * A campaign's efficiency can only be judged against its own goal: cost per
  * visit is meaningless for a lead form that never sends anyone to the site, and
