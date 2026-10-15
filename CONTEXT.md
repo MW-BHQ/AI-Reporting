@@ -66,6 +66,11 @@ Call out, under WSH, with the `AI` chip (house rule: every AI tab carries it).
 
 ### Recent (September 2026)
 
+**v3.366.0 — E-commerce > Channels: "What moved between the two halves"
+removed** (MW). The bridge card and its payload (`split`, per-channel
+`firstHalf`/`lastHalf`/`delta`) are gone. The Momentum column stays; it still
+splits the range in halves inside `buildEcomChannels`.
+
 **v3.365.0 — Campaign detail result units smaller** (MW): `.res-unit` at
 0.72em, faint; the Result cell no longer wraps the unit under the number.
 

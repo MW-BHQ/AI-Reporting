@@ -10811,52 +10811,6 @@ function renderEcomChannels() {
         : "Each trend line is scaled to its own channel, so a small channel's shape is readable next to a large one — compare direction, not height."}</div>
     </div>
 
-    ${(() => {
-      // A bridge compares two periods. With one month there is no first half,
-      // so every channel would appear to have grown from zero — which is an
-      // artefact of the range, not a finding. Say so instead of drawing it.
-      if (d.months.length < 2) return `<div class="card mt">
-        <div class="card-title">What moved between the two halves</div>
-        <div class="note" style="margin:0;">Needs at least two months. The range currently covers
-        <b>${esc(humanDate(d.months[0]||'') || d.months[0] || 'one month')}</b> only — widen it to 90D or a custom range and this
-        will show which channels drove the change.</div></div>`;
-      const movers = d.channels.filter(c => Math.abs(c.delta) > 0).sort((a,b) => b.delta - a.delta);
-      if (!movers.length || !d.split.lastFrom) return '';
-      const start = d.channels.reduce((a,c) => a + c.firstHalf, 0);
-      const end = d.channels.reduce((a,c) => a + c.lastHalf, 0);
-      // A bridge only reads clearly with a handful of bars, so the smallest
-      // movers are pooled rather than drawn as slivers nobody can label.
-      const big = movers.filter(c => Math.abs(c.delta) >= Math.abs(end-start) * 0.04 || movers.length <= 8);
-      const rest = movers.filter(c => !big.includes(c));
-      const restDelta = rest.reduce((a,c) => a + c.delta, 0);
-      const steps = [{label:'First half', value:start, type:'total'},
-        ...big.map(c => ({label:c.channel, value:c.delta, type:'step'})),
-        ...(rest.length ? [{label:`${rest.length} smaller channels`, value:restDelta, type:'step'}] : []),
-        {label:'Second half', value:end, type:'total'}];
-      const peak = Math.max(start, end, ...steps.reduce((acc,s,i) => { acc.push(Math.abs(s.value)); return acc; }, []));
-      const W2 = 760, H2 = 200, bw2 = W2 / steps.length;
-      let run = 0;
-      const bars = steps.map((s, i) => {
-        const x = i * bw2 + 6, w = bw2 - 12;
-        let y0, y1, fill;
-        if (s.type === 'total') { y0 = 0; y1 = s.value; fill = '#4C5878'; run = s.value; }
-        else { y0 = run; y1 = run + s.value; run = y1; fill = s.value >= 0 ? '#4ABE8C' : '#E8724F'; }
-        const top = H2 - (Math.max(y0,y1) / peak) * H2;
-        const hgt = Math.max(2, (Math.abs(y1 - y0) / peak) * H2);
-        return `<rect x="${x.toFixed(1)}" y="${top.toFixed(1)}" width="${w.toFixed(1)}" height="${hgt.toFixed(1)}" rx="2" fill="${fill}">
-            <title>${esc(s.label)}: ${s.type==='step'&&s.value>=0?'+':''}฿${num(Math.round(s.value))}</title></rect>
-          <text x="${(x+w/2).toFixed(1)}" y="${Math.max(10, top-5).toFixed(1)}" text-anchor="middle" font-size="9.5" fill="var(--muted)">${s.type==='step'&&s.value>=0?'+':''}${Math.abs(s.value)>=1000?(s.value/1000000>=1?(s.value/1000000).toFixed(1)+'M':(s.value/1000).toFixed(0)+'K'):Math.round(s.value)}</text>`;
-      }).join('');
-      const labels = steps.map((s,i) => `<span style="width:${(100/steps.length).toFixed(2)}%;text-align:center;font-size:var(--text-3xs);color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 3px;" title="${esc(s.label)}">${esc(s.label)}</span>`).join('');
-      return `<div class="card mt">
-        <div class="card-title">What moved between the two halves</div>
-        <svg viewBox="0 0 ${W2} ${H2}" width="100%" height="${H2}" style="display:block;overflow:visible;">${bars}</svg>
-        <div style="display:flex;margin-top:7px;">${labels}</div>
-        <div class="note">Bridging <b>${esc(d.split.firstFrom)}–${esc(d.split.firstTo)}</b> to <b>${esc(d.split.lastFrom)}–${esc(d.split.lastTo)}</b>.
-        Green added revenue, orange lost it. This answers which channels caused the change, which a stacked total cannot.</div>
-      </div>`;
-    })()}
-
     <div class="card mt">
       <div class="card-title">What each channel is distinctively good at</div>
       <div class="affinity">
@@ -12991,7 +12945,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.365.0';
+const CLIENT_BUILD = '3.366.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

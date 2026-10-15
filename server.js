@@ -9504,7 +9504,6 @@ async function buildChannels(from, to, scope) {
       couponsPerOrder: c.orders.size ? c.coupons / c.orders.size : 0,
       series,
       momentum: firstHalf > 0 ? (lastHalf - firstHalf) / firstHalf : null,
-      firstHalf, lastHalf, delta: lastHalf - firstHalf,
       activeMonths: series.filter((v) => v > 0).length,
       bestAt: affinity.slice(0, 3),
       topPackages: [...c.packages.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 3),
@@ -9531,17 +9530,12 @@ async function buildChannels(from, to, scope) {
     c.yoy = pctChange(c.revenue, c.yoyRevenue);
   }
 
-  const mid = months[half] || null;
   return {
     scope: scope === "all" ? "all" : "online",
     unclassified,
     compare: { windows: cwH,
       prev: { revenue: pH.total, change: pctChange(revenue, pH.total) },
       yoy: { revenue: yH.total, change: pctChange(revenue, yH.total) } },
-    // Where the range was cut for momentum and the bridge, so the UI can label
-    // the two periods honestly instead of saying "before" and "after".
-    split: { index: half, firstFrom: months[0] || null, firstTo: months[half-1] || null,
-             lastFrom: mid, lastTo: months[months.length-1] || null },
     months, revenue, channels,
     monthly: months.map((m) => ({
       month: m,
