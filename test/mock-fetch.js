@@ -1031,8 +1031,11 @@ global.fetch = async (url, opts = {}) => {
    */
   if (/connectors\.windsor\.ai\/tiktok\?/.test(u)) {
     return jsonRes({ data: [
-      { campaign: "260701-08_BHT_TikTok_2JUL2026", objective_type: "TRAFFIC",
-        impressions: 8000, clicks: 150, spend: 600, results: 120 },
+      // Live shape (v3.368.0): flight number first, `results` 0 despite clicks.
+      { campaign: "TT01_260701-08_BHT_TikTok_2JUL2026_Traffic_THB 600", objective_type: "TRAFFIC",
+        impressions: 8000, clicks: 150, spend: 600, results: 0 },
+      // A PO number that starts with the code's digits must NOT match.
+      { campaign: "BIH_KOL_2607012228_VDO View_THB 9", objective_type: "VIDEO_VIEWS", impressions: 999, clicks: 9, spend: 9, results: 9 },
       { campaign: "250101-01_other", objective_type: "REACH", impressions: 999, clicks: 9, spend: 9, results: 9 },
     ]});
   }

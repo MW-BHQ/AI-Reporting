@@ -707,8 +707,12 @@ expect_field "ad row google traffic" "$CAMP1" "(()=>{const a=$AR.find(x=>x.name.
 
 echo "--- campaign: TikTok Ads + TikTok organic (v3.367.0) ---"
 expect_field "tiktok ads platform"  "$CAMP1" "(()=>{const p=d.byPlatform.find(x=>x.platform==='TikTok Ads');return p&&p.connected&&p.matched===1&&p.spend===600&&p.landingPageViews===null?'ok':undefined})()"
-# results (120), not clicks (150): THB 600 / 120 = 5 per click.
-expect_field "tiktok ad row result" "$CAMP1" "(()=>{const a=$AR.find(x=>x.name.includes('TikTok'));return a&&a.goal==='traffic'&&a.result===120&&a.resultUnit==='click'&&a.costPerResult===5?'ok':undefined})()"
+# Name leads with "TT01_" and must still match the code. `results` is 0 live,
+# so traffic is destination clicks: THB 600 / 150 = 4 per click.
+expect_field "tiktok ad row result" "$CAMP1" "(()=>{const a=$AR.find(x=>x.name.includes('TikTok'));return a&&a.name.startsWith('TT01_')&&a.goal==='traffic'&&a.result===150&&a.resultUnit==='click'&&a.costPerResult===4?'ok':undefined})()"
+# PO number 2607012228 starts with the 6-digit search's digits: never a match.
+CAMP6="/api/campaign?code=260701&from=$FROM&to=$TO"
+expect_field "tiktok PO no match"   "$CAMP6" "(()=>{const p=d.byPlatform.find(x=>x.platform==='TikTok Ads');return p&&p.matched===1?'ok':undefined})()"
 # No tiktok utm row in the fixture: the spend must not land on facebook/paid.
 expect_field "tiktok not on meta"   "$CAMP1" "(()=>{const v=d.variants.find(x=>x.source==='facebook');return v&&!(v.adRows||[]).some(a=>a.name.includes('TikTok'))&&v.spend===100?'ok':undefined})()"
 # Caption carries the code: matched, clicks null (TikTok has none). The

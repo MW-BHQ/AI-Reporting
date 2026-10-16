@@ -66,6 +66,19 @@ Call out, under WSH, with the `AI` chip (house rule: every AI tab carries it).
 
 ### Recent (September 2026)
 
+**v3.368.0 — TikTok ad names with a flight prefix now match** (MW: 260918-02
+showed "No data"). Live names lead with a flight number:
+`TT14_260918-02_Have a Good Day_...`, so `startsWith(code)` missed all 14.
+- `adNameMatchesCode`: starts with the code, OR its first `yymmdd-nn` token
+  (after `_` or a space) does. The dash is required so PO numbers
+  (`_2609152228`) never match a 6-digit search. Ad platforms only; GA4 still
+  matches `utm_campaign` by prefix.
+- TikTok `results` reads 0 on every live campaign (260918-02: 14 campaigns,
+  ~49K destination clicks, results 0). Trusted now only for leads, messages,
+  sales; traffic/engagement use destination clicks.
+- Fixture mirrors the live shape (TT01_ prefix, results 0, a PO-number decoy);
+  smoke adds a 6-digit search. Both guards negative-tested.
+
 **v3.367.0 — Campaign tab: TikTok Ads and TikTok organic** (MW).
 - `AD_PLATFORMS` gains `tiktok` (TikTok Ads). Fields checked with `get_fields`:
   `campaign`, `impressions`, `clicks` (destination clicks, so also

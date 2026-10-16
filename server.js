@@ -4718,7 +4718,7 @@ async function buildCampaign(code, from, to) {
     for (const r of rows) {
       const name = r[p.campaignKey];
       const camp = norm(name);
-      if (!camp || !camp.startsWith(needle)) continue;
+      if (!camp || !adNameMatchesCode(camp, needle)) continue;
       if (!agg.has(name)) agg.set(name, {
         name, platform: p.label, objective: r.campaign_objective || r.objective_type || null,
         goal: goalOf(r.campaign_objective || r.objective_type, name),
@@ -5990,12 +5990,33 @@ app.get("/api/campaign", requireTab("campaigns"), async (req, res) => {
  * Meta's goal comes from the ad set's optimization goal (see the campaign
  * pull); Google Ads with an uninformative name is traffic.
  */
+/**
+ * AD CAMPAIGN NAME vs CAMPAIGN CODE (v3.368.0, MW: 260918-02 "still not
+ * coming through"). TikTok names lead with a flight number —
+ * "TT14_260918-02_Have a Good Day_..." — so a plain prefix test missed all
+ * fourteen. The name matches when it starts with the code, OR when its first
+ * code-shaped token (yymmdd-nn, after "_" or a space) does. The token needs the
+ * dash: PO numbers like "_2609152228" sit in the same names and must never
+ * match a "260915" search.
+ */
+function adNameMatchesCode(nameLower, needle) {
+  if (nameLower.startsWith(needle)) return true;
+  const m = nameLower.match(/(?:^|[_\s])(\d{6}-\d{2}[a-z0-9-]*)/);
+  return !!(m && m[1].startsWith(needle));
+}
 function adResultRow(c) {
   const goal = c.goal || "unclassified";
   const def = GOAL_DEFS[goal] || GOAL_DEFS.unclassified;
   const clicks = c.linkClicks || c.clicks;
   let result = null, ga4 = false;
-  if (c.platformResults != null && goal !== "awareness") result = c.platformResults;   // TikTok
+  /**
+   * TikTok's `results` reads 0 on every live campaign (checked 260918-02: 14
+   * campaigns, 49K destination clicks, results 0), so it is trusted only for
+   * goals with no other count. Traffic and engagement use destination clicks,
+   * which is what those objectives buy.
+   */
+  if (c.platformResults != null && ["leads", "messages", "sales"].includes(goal)) result = c.platformResults;   // TikTok
+  else if (c.platformResults != null && goal !== "awareness") result = clicks;
   else if (goal === "messages") result = c.messages ?? null;
   else if (goal === "leads") result = c.leads ?? null;
   else if (goal === "traffic") { result = c.landingPageViews; ga4 = !!c.landingPageViewsFromGa4; }
