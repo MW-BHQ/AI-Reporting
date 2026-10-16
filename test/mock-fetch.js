@@ -1023,8 +1023,32 @@ global.fetch = async (url, opts = {}) => {
    * is exactly the mock that cannot fail (§10.4). The Video pull is identified
    * by `video_id`.
    */
+  /**
+   * TIKTOK ADS (v3.367.0): `/tiktok?` exactly — `tiktok_organic` also contains
+   * "tiktok". One campaign under the shared code, objective TRAFFIC, and a
+   * `results` (120) different from clicks (150), so a row that reads the
+   * wrong field shows a different cost per result.
+   */
+  if (/connectors\.windsor\.ai\/tiktok\?/.test(u)) {
+    return jsonRes({ data: [
+      { campaign: "260701-08_BHT_TikTok_2JUL2026", objective_type: "TRAFFIC",
+        impressions: 8000, clicks: 150, spend: 600, results: 120 },
+      { campaign: "250101-01_other", objective_type: "REACH", impressions: 999, clicks: 9, spend: 9, results: 9 },
+    ]});
+  }
   if (u.includes("connectors.windsor.ai/tiktok_organic")) {
     const f = (new URL(u)).searchParams.get("fields") || "";
+    // The Campaign tab's pull asks for no thumbnail: answer it with one video
+    // whose caption carries the campaign code (v3.367.0). The Monthly Report's
+    // pull keeps its four videos untouched.
+    if (f.includes("video_id") && !f.includes("video_thumbnail_url")) {
+      return jsonRes({ data: [
+        { video_id: "c1", video_caption: "ตรวจหัวใจ 260701-08 ลิงก์ในโปรไฟล์", video_share_url: "https://tiktok.com/@bkh/video/c1",
+          video_views_count: 5000, video_likes: 40, video_comments: 5, video_shares: 3, video_favorites: 2 },
+        { video_id: "c2", video_caption: "unrelated clip", video_share_url: "",
+          video_views_count: 900, video_likes: 1, video_comments: 0, video_shares: 0, video_favorites: 0 },
+      ]});
+    }
     if (f.includes("video_id")) {
       /**
        * Distinct winners per metric, so a top-N that reads the wrong field is

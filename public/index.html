@@ -3064,6 +3064,7 @@ const SOURCE_BRAND = {
   "Google Search": "#4285F4",            // Google blue
   "Google Business Profile": "#188038",  // Google green
   "TikTok views": "#25F4EE",             // TikTok cyan
+  "TikTok Ads": "#FE2C55",               // TikTok red: paid, against organic cyan
   "YouTube views": "#FF0000",            // YouTube red
   "LINE broadcasts": "#06C755",          // LINE green
   // Marketplaces (v3.349.0): the channel colours the E-commerce tabs use.
@@ -6860,7 +6861,7 @@ function renderCampaignBody(d) {
     })()}
 
     ${(d.organicPosts&&d.organicPosts.length)||(d.shortLinks&&d.shortLinks.length)?`<div class="card mt">
-      <h2>Organic reach · matched by short link</h2>
+      <h2>Organic reach · Facebook and TikTok</h2>
       ${d.organicTotals&&d.organicTotals.posts?`<div class="grid g-4" style="margin-bottom:14px;">
         <div class="stat"><div class="lab">Posts found</div><div class="val">${num(d.organicTotals.posts)}</div></div>
         <div class="stat"><div class="lab">Post impressions</div><div class="val">${num(d.organicTotals.impressions)}</div></div>
@@ -6869,8 +6870,8 @@ function renderCampaignBody(d) {
       </div>`:''}
       ${(d.organicPosts||[]).length?`<table><thead><tr><th>Post</th><th class="num">Impr</th><th class="num">Clicks</th><th class="num">Engmt</th></tr></thead><tbody>
       ${d.organicPosts.slice(0,10).map(o=>`<tr>
-        <td class="strong i18n trunc" title="${esc(o.excerpt)}">${o.permalink?`<a href="${esc(o.permalink)}" target="_blank" rel="noopener" style="color:var(--violet);text-decoration:none;">${esc(o.excerpt)}</a>`:esc(o.excerpt)}</td>
-        <td class="num">${num(o.impressions)}</td><td class="num">${num(o.clicks)}</td><td class="num">${num(o.engagements)}</td></tr>`).join('')}
+        <td class="strong i18n trunc" title="${esc(o.excerpt)}">${o.platform?`<span class="pill grey" style="margin-right:6px;">${esc(o.platform.replace(' organic',''))}</span>`:''}${o.permalink?`<a href="${esc(o.permalink)}" target="_blank" rel="noopener" style="color:var(--violet);text-decoration:none;">${esc(o.excerpt)}</a>`:esc(o.excerpt)}</td>
+        <td class="num">${num(o.impressions)}</td><td class="num">${o.clicks==null?'<span class="dim" title="TikTok reports no click-out">\u2014</span>':num(o.clicks)}</td><td class="num">${num(o.engagements)}</td></tr>`).join('')}
       </tbody></table>`:`<div style="font-size:var(--text-xs);color:var(--muted);">No organic posts carried this campaign's short links in this date range.</div>`}
       ${d.lineSameDay?`<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
         <div style="font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:10px;">LINE sends on campaign date · ${esc(humanDate(d.lineSameDay.date) || d.lineSameDay.date)}</div>
@@ -12945,7 +12946,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.366.0';
+const CLIENT_BUILD = '3.367.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

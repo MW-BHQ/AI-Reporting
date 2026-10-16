@@ -1410,6 +1410,14 @@ const AD_PLATFORMS = [
     extra: ["campaign_objective", "adsset_optimization_goal", "actions_link_click", "actions_landing_page_view",
             "actions_lead", "actions_onsite_conversion_messaging_conversation_started_7d"] },
   { id: "google_ads", label: "Google Ads", campaignKey: "campaign", extra: [] },
+  /**
+   * TIKTOK ADS (v3.367.0, MW). Fields checked with `get_fields` on `tiktok`:
+   * `objective_type` (TRAFFIC, REACH, LEAD_GENERATION, ...) and `results`, the
+   * platform's own count of the outcome the campaign optimises for. TikTok
+   * `clicks` is "clicks (destination)", i.e. already a link click. TikTok
+   * reports no landing page view, so `landingPageViews` stays null.
+   */
+  { id: "tiktok", label: "TikTok Ads", campaignKey: "campaign", extra: ["objective_type", "results"] },
 ];
 
 // utm_source patterns that indicate traffic came from a given ad platform, used
@@ -1419,6 +1427,7 @@ const PLATFORM_SOURCE_HINTS = {
   // GA4 records Google Ads traffic as google/cpc, and YouTube buys arrive as
   // youtube or the auto-tagged gclid source.
   "Google Ads": [/^google$/i, /googleads/i, /youtube/i, /(^|[^a-z])gclid([^a-z]|$)/i],
+  "TikTok Ads": [/tiktok/i, /(^|[^a-z])tt([^a-z]|$)/i],
 };
 /**
  * NO LONGER USED IN THE CAMPAIGN JOIN (v3.247.0) — kept only so the pattern is
@@ -4609,6 +4618,14 @@ async function buildCampaign(code, from, to) {
       return windsor("facebook_organic",
         ["post_id", "post_created_time", "post_message", "url", "permalink_url", "post_impressions", "post_clicks", "post_engagements"], pFrom, pTo);
     })(),
+    /**
+     * TIKTOK ORGANIC (v3.367.0, MW). Same fields the Monthly Report already
+     * reads from `tiktok_organic`. TikTok captions carry no clickable link, so
+     * a video matches on the campaign's short link OR its code in the caption.
+     */
+    ttVideos: windsor("tiktok_organic",
+      ["video_id", "video_caption", "video_share_url", "video_create_datetime",
+        "video_views_count", "video_likes", "video_comments", "video_shares", "video_favorites"], from, to),
   };
   // One job per ad platform; unconnected ones fail harmlessly into null.
   for (const p of AD_PLATFORMS) {
@@ -4703,8 +4720,10 @@ async function buildCampaign(code, from, to) {
       const camp = norm(name);
       if (!camp || !camp.startsWith(needle)) continue;
       if (!agg.has(name)) agg.set(name, {
-        name, platform: p.label, objective: r.campaign_objective || null,
-        goal: goalOf(r.campaign_objective, name),
+        name, platform: p.label, objective: r.campaign_objective || r.objective_type || null,
+        goal: goalOf(r.campaign_objective || r.objective_type, name),
+        // TikTok's own result count; null on platforms that do not report one.
+        platformResults: null,
         /**
          * `landingPageViews` STARTS NULL, NOT ZERO (MW spotted a Google Ads row
          * reading 0). `actions_landing_page_view` is a META field. Google Ads
@@ -4723,7 +4742,9 @@ async function buildCampaign(code, from, to) {
         (a.optGoals.get(String(r.adsset_optimization_goal).toUpperCase()) || 0) + n(r.spend) + n(r.impressions) / 1e6);
       a.impressions += n(r.impressions);
       a.clicks += n(r.clicks);
-      a.linkClicks += n(r.actions_link_click);
+      // TikTok `clicks` IS the destination click; Meta's is "clicks (all)".
+      a.linkClicks += p.id === "tiktok" ? n(r.clicks) : n(r.actions_link_click);
+      if (r.results !== undefined && r.results !== null) a.platformResults = (a.platformResults || 0) + n(r.results);
       if (r.actions_landing_page_view !== undefined && r.actions_landing_page_view !== null) {
         a.landingPageViews = (a.landingPageViews || 0) + n(r.actions_landing_page_view);
       }
@@ -4811,6 +4832,30 @@ async function buildCampaign(code, from, to) {
         platform: "Facebook organic",
       });
     }
+  }
+  if (data.ttVideos !== null && data.ttVideos !== undefined) {
+    const seenT = new Set();
+    for (const r of data.ttVideos) {
+      const cap = norm(r.video_caption);
+      if (!cap) continue;
+      const hit = linkKeys.find((k) => cap.includes(k)) || (cap.includes(needle) ? code : null);
+      if (!hit) continue;
+      const id = r.video_id || r.video_share_url || cap.slice(0, 40);
+      if (seenT.has(id)) continue;
+      seenT.add(id);
+      (organicPosts = organicPosts || []).push({
+        postId: r.video_id || null,
+        permalink: r.video_share_url || null,
+        excerpt: String(r.video_caption || "").slice(0, 140),
+        impressions: n(r.video_views_count),     // TikTok's reach unit is the view
+        clicks: null,                            // TikTok reports no click-out
+        engagements: n(r.video_likes) + n(r.video_comments) + n(r.video_shares) + n(r.video_favorites),
+        matchedLink: hit,
+        platform: "TikTok organic",
+      });
+    }
+  }
+  if (organicPosts) {
     organicPosts.sort((a, b) => b.impressions - a.impressions);
   }
   const organicTotals = organicPosts ? {
@@ -4917,7 +4962,17 @@ async function buildCampaign(code, from, to) {
      * orphaned. The medium is no longer consulted at all.
      */
     const bySource = variants.filter((v) => hints.some((re) => re.test(v.source)));
-    const owned = bySource.length ? bySource : variants;
+    /**
+     * THE FALLBACK SKIPS ROWS ANOTHER PLATFORM OWNS (v3.367.0). With TikTok
+     * added, a TikTok flight with no tiktok utm row spread its spend onto the
+     * facebook/paid row and listed a TikTok ad under it. A row whose source
+     * names a different platform is that platform's; what is left (LINE,
+     * referrals, untagged) still takes the spread, as v3.247.0 intended. If
+     * nothing is left the spend shows as "no GA4 match", never on a rival row.
+     */
+    const others = Object.entries(PLATFORM_SOURCE_HINTS).filter(([k]) => k !== p.platform).flatMap(([, rs]) => rs);
+    const unclaimed = variants.filter((v) => !others.some((re) => re.test(v.source)));
+    const owned = bySource.length ? bySource : unclaimed;
     const mine = adCampaigns.filter((c) => c.platform === p.platform);
     const names = mine.map((c) => c.name);
     if (!owned.length) {
@@ -5940,13 +5995,18 @@ function adResultRow(c) {
   const def = GOAL_DEFS[goal] || GOAL_DEFS.unclassified;
   const clicks = c.linkClicks || c.clicks;
   let result = null, ga4 = false;
-  if (goal === "messages") result = c.messages ?? null;
+  if (c.platformResults != null && goal !== "awareness") result = c.platformResults;   // TikTok
+  else if (goal === "messages") result = c.messages ?? null;
   else if (goal === "leads") result = c.leads ?? null;
   else if (goal === "traffic") { result = c.landingPageViews; ga4 = !!c.landingPageViewsFromGa4; }
   else if (goal === "awareness") result = c.impressions;
   else if (goal === "sales") result = null;
   else result = clicks;
-  const unit = goal === "traffic" ? "landing view" : (goal === "awareness" ? "1k impr" : def.resultLabel);
+  // TikTok: `results` is TikTok's own outcome count, used for every goal but
+  // awareness; a traffic result there is a destination click, not a landing.
+  const unit = goal === "awareness" ? "1k impr"
+    : (goal === "traffic" ? (c.platformResults != null ? "click" : "landing view")
+      : (goal === "sales" && c.platformResults != null ? "conversion" : def.resultLabel));
   const per = def.perThousand ? 1000 : 1;
   return {
     name: c.name, spend: c.spend, impressions: c.impressions, clicks,
@@ -5976,6 +6036,9 @@ const OBJECTIVE_GOALS = {
   OUTCOME_ENGAGEMENT: "engagement", POST_ENGAGEMENT: "engagement", PAGE_LIKES: "engagement",
   OUTCOME_AWARENESS: "awareness", BRAND_AWARENESS: "awareness", REACH: "awareness", VIDEO_VIEWS: "awareness",
   OUTCOME_APP_PROMOTION: "app",
+  // TikTok `objective_type` values not already covered above (v3.367.0).
+  WEB_CONVERSIONS: "sales", PRODUCT_SALES: "sales", SHOP_PURCHASES: "sales",
+  TOPVIEW_REACH: "awareness", RF_REACH: "awareness", ENGAGEMENT: "engagement", APP_PROMOTION: "app",
 };
 
 function goalOf(objective, campaignName) {

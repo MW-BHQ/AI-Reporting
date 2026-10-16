@@ -66,6 +66,27 @@ Call out, under WSH, with the `AI` chip (house rule: every AI tab carries it).
 
 ### Recent (September 2026)
 
+**v3.367.0 — Campaign tab: TikTok Ads and TikTok organic** (MW).
+- `AD_PLATFORMS` gains `tiktok` (TikTok Ads). Fields checked with `get_fields`:
+  `campaign`, `impressions`, `clicks` (destination clicks, so also
+  `linkClicks`), `spend`, `objective_type`, `results`. No landing page view
+  exists: stays null. `results` (TikTok's own outcome count) is the ad row's
+  result for every goal but awareness; traffic unit is "click".
+- `OBJECTIVE_GOALS` gains TikTok's WEB_CONVERSIONS, PRODUCT_SALES,
+  SHOP_PURCHASES, TOPVIEW_REACH, RF_REACH, ENGAGEMENT, APP_PROMOTION.
+- `PLATFORM_SOURCE_HINTS["TikTok Ads"]` = tiktok / tt.
+- SPEND FALLBACK NOW SKIPS ROWS ANOTHER PLATFORM OWNS: with no matching utm
+  row, a platform's spend spreads only over rows no other platform's hints
+  claim (else "no GA4 match"). Before this, TikTok spend landed on
+  facebook/paid. It can still land on LINE/referral rows (v3.247.0 rule).
+- TikTok organic: `tiktok_organic` videos (same fields as the Monthly Report)
+  matched when the caption holds a short link OR the campaign code; views as
+  impressions, likes+comments+shares+saves as engagements, clicks null.
+  Card renamed "Organic reach · Facebook and TikTok", each row has a platform
+  pill. Mock answers the campaign's pull (no thumbnail field) separately so
+  the Monthly Report fixture is untouched.
+- Smoke: 4 assertions, 3 negative-tested.
+
 **v3.366.0 — E-commerce > Channels: "What moved between the two halves"
 removed** (MW). The bridge card and its payload (`split`, per-channel
 `firstHalf`/`lastHalf`/`delta`) are gone. The Momentum column stays; it still

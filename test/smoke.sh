@@ -705,6 +705,16 @@ expect_field "ad row message goal"  "$CAMP1" "(()=>{const a=$AR.find(x=>x.name.i
 # Google: no objective, so traffic, counted from GA4 and flagged as such.
 expect_field "ad row google traffic" "$CAMP1" "(()=>{const a=$AR.find(x=>x.name.includes('BGH_Search'));return a&&a.goal==='traffic'&&a.resultFromGa4&&a.costPerResult===25?'ok':undefined})()"
 
+echo "--- campaign: TikTok Ads + TikTok organic (v3.367.0) ---"
+expect_field "tiktok ads platform"  "$CAMP1" "(()=>{const p=d.byPlatform.find(x=>x.platform==='TikTok Ads');return p&&p.connected&&p.matched===1&&p.spend===600&&p.landingPageViews===null?'ok':undefined})()"
+# results (120), not clicks (150): THB 600 / 120 = 5 per click.
+expect_field "tiktok ad row result" "$CAMP1" "(()=>{const a=$AR.find(x=>x.name.includes('TikTok'));return a&&a.goal==='traffic'&&a.result===120&&a.resultUnit==='click'&&a.costPerResult===5?'ok':undefined})()"
+# No tiktok utm row in the fixture: the spend must not land on facebook/paid.
+expect_field "tiktok not on meta"   "$CAMP1" "(()=>{const v=d.variants.find(x=>x.source==='facebook');return v&&!(v.adRows||[]).some(a=>a.name.includes('TikTok'))&&v.spend===100?'ok':undefined})()"
+# Caption carries the code: matched, clicks null (TikTok has none). The
+# unrelated clip is not.
+expect_field "tiktok organic match" "$CAMP1" "(()=>{const t=(d.organicPosts||[]).filter(o=>o.platform==='TikTok organic');return t.length===1&&t[0].postId==='c1'&&t[0].clicks===null&&t[0].impressions===5000?'ok':undefined})()"
+
 echo "--- campaign: LINE broadcasts matched by campaign code (v3.304.0) ---"
 # Step 2 of MW's LINE pipeline. The fixture sends one broadcast tagged
 # 260701-08_bgh_tra (90,000 delivered, 22,000 opened) plus two untagged in the
