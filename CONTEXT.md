@@ -66,6 +66,19 @@ Call out, under WSH, with the `AI` chip (house rule: every AI tab carries it).
 
 ### Recent (September 2026)
 
+**v3.370.0 — Visual regression safety net (`test/visual.py`)** (skill pack
+item 1, `uxui-design-qa`). 26 screens + every printed slide of the BGH
+Monthly Report (61 captures) compared to `test/visual/`:
+- geometry of every card/stat/slide/grid/table/canvas in #viewRoot (±3px),
+  and a 320px grayscale thumbnail (mean |delta| ≤ 1.5).
+- Deterministic: dates pinned to July 2026, reduced motion, CSS transitions
+  and Chart.js animation off. Two consecutive runs: 0.00 on 60 of 61.
+- Negative-tested: a print-only font-size change on the Overview page fails
+  `print-01` at 22.4.
+- Run before every push with the mock server; `--update` accepts a meant
+  change, and the PNG diff in git shows which screens moved. `--only=<key>`
+  for one screen. ~2 minutes; not in `npm test` (needs a browser).
+
 **v3.369.0 — Campaign PDF file name** (MW): "[code] - [range]", e.g.
 `261001-05 - 1 Sep - 31 Oct 2026`. Set on `document.title` (what Save as PDF
 uses) in the PDF button handler, from `dpRangeLabel` with the en dash as

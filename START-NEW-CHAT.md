@@ -16,6 +16,7 @@ Shopee section matters most — read it before touching anything there.
 ```
 ECOM_SHEET_ID=mock npm test                      # must exit 0
 python3 test/print-overflow.py 900 <port>        # must exit 0
+python3 test/visual.py <port>                    # must exit 0 (~2 min); --update to accept a meant change
 ```
 Mock server (dies between bash calls — start it in the SAME command):
 ```
