@@ -19,7 +19,7 @@
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
-const { GoogleAuth } = require("google-auth-library");
+const { GoogleAuth, OAuth2Client } = require("google-auth-library");
 
 const app = express();
 /**
@@ -42,6 +42,14 @@ app.use((req, res, next) => (req.path === "/api/callout" ? jsonLarge : jsonSmall
  * `Vary: Accept-Encoding` on both, so a proxy never serves brotli to a client
  * that cannot read it.
  */
+// Baseline browser hardening (v3.374.0), on EVERY response, so it sits before
+// any route: no MIME sniffing, no framing by another site (clickjacking), no
+// full URL (campaign codes) in the Referer sent to other sites.
+app.use((req, res, next) => {
+  res.set({ "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin" });
+  next();
+});
 const zlib = require("zlib");
 const pickEncoding = (req) => {
   const ae = String(req.headers["accept-encoding"] || "");
@@ -1076,6 +1084,59 @@ async function tabsFor(email) {
   if (!rec) return DEFAULT_TABS.slice();
   return (rec.tabs || []).filter((t) => TAB_IDS.includes(t));
 }
+
+/**
+ * IAP SIGNED-HEADER CHECK (v3.374.0, skill pack item 5: security review).
+ *
+ * `callerEmail` trusts X-Goog-Authenticated-User-Email. That is safe ONLY
+ * while the service refuses unauthenticated traffic (DEPLOY.md); one
+ * `--allow-unauthenticated` and anyone could send the header and be admin.
+ * IAP also sends `x-goog-iap-jwt-assertion`, signed by Google. This verifies
+ * it (signature, issuer, expiry) and that its email matches the header.
+ *
+ * LOG-ONLY BY DEFAULT: the audience string for Cloud Run-native IAP was not
+ * verified against the live service, and a wrong guess would lock everyone
+ * out. So it is not checked, results are logged (`iap_jwt_*`) and shown in
+ * /api/me as `jwt`. Set IAP_ENFORCE_JWT=1 once /api/me reads "verified" on
+ * the live site; then a missing or bad assertion is a 401.
+ */
+const IAP_ENFORCE = process.env.IAP_ENFORCE_JWT === "1";
+const iapClient = new OAuth2Client();
+const _iapSeen = new Map();   // token -> { at, result }, 5 min
+const _iapLogged = new Map();
+async function iapJwtStatus(req) {
+  const hdr = req.header("X-Goog-Authenticated-User-Email");
+  if (!hdr) return "no-iap-header";
+  const tok = req.header("x-goog-iap-jwt-assertion");
+  if (!tok) return "missing";
+  const hit = _iapSeen.get(tok);
+  if (hit && Date.now() - hit.at < 5 * 60 * 1000) return hit.result;
+  let result;
+  try {
+    const keys = await iapClient.getIapPublicKeys();
+    const ticket = await iapClient.verifySignedJwtWithCertsAsync(tok, keys.pubkeys, undefined, ["https://cloud.google.com/iap"]);
+    const jwtEmail = String((ticket.getPayload() || {}).email || "").toLowerCase();
+    result = jwtEmail && jwtEmail === callerEmail(req) ? "verified" : "mismatch";
+  } catch (e) {
+    result = `invalid: ${String(e.message || e).slice(0, 80)}`;
+  }
+  if (_iapSeen.size > 500) _iapSeen.clear();
+  _iapSeen.set(tok, { at: Date.now(), result });
+  return result;
+}
+app.use("/api", async (req, res, next) => {
+  const st = await iapJwtStatus(req);
+  req.iapJwt = st;
+  if (st === "verified" || st === "no-iap-header") return next();
+  // Once per caller+status per 10 minutes, or log-only mode floods the logs.
+  const lk = `${callerEmail(req)}|${st.slice(0, 20)}`;
+  if (!(_iapLogged.get(lk) > Date.now() - 10 * 60 * 1000)) {
+    _iapLogged.set(lk, Date.now());
+    logJson("WARNING", "iap_jwt_unverified", { status: st, path: req.path, email: callerEmail(req), enforced: IAP_ENFORCE });
+  }
+  if (IAP_ENFORCE) return res.status(401).json({ error: "Sign-in could not be verified" });
+  next();
+});
 
 /** Gate a data endpoint on the tab it belongs to. Client-side hiding is cosmetic. */
 function requireTab(tabId) {
@@ -13233,6 +13294,7 @@ app.get("/api/me", async (req, res) => {
     allTabs: TABS,
     configured: email ? (admin || (users || await readAccess()).some((u) => String(u.email||"").toLowerCase() === email)) : false,
     identitySource: req.header("X-Goog-Authenticated-User-Email") ? "iap" : (DEV_USER ? "dev" : "none"),
+    jwt: req.iapJwt || null, jwtEnforced: IAP_ENFORCE,
     persistence: ACCESS_BUCKET ? "gcs" : "memory-only",
   });
 });

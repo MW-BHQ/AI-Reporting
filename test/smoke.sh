@@ -86,6 +86,21 @@ check "better club"  GET "/api/better-club?from=$FROM&to=$TO"
 # every read with the access list, so /api/report returned the users array with
 # a 200 and nobody noticed. These assert the payload, not the status.
 REPORT="/api/report?from=$FROM&to=$TO"
+echo "--- IAP signed header (v3.374.0) ---"
+expect_field "jwt missing reported" "/api/me" "d.jwt==='missing'&&d.jwtEnforced===false?'ok':undefined"
+FORGED=$(curl -s -H "$ADMIN" -H "x-goog-iap-jwt-assertion: abc.def.ghi" "$BASE/api/me" | node -e "let r='';process.stdin.on('data',c=>r+=c).on('end',()=>console.log(/^invalid/.test(JSON.parse(r).jwt)?'ok':JSON.parse(r).jwt))")
+if [ "$FORGED" = "ok" ]; then printf '  ok   %-22s %s\n' "forged jwt invalid" ok; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "forged jwt invalid" "$FORGED"; fi
+HDRS=$(curl -sI -H "$ADMIN" "$BASE/api/me" | tr -d '\r' | grep -ci "x-frame-options: deny\|x-content-type-options: nosniff\|referrer-policy")
+if [ "$HDRS" = "3" ]; then printf '  ok   %-22s %s\n' "security headers" 3; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "security headers" "$HDRS"; fi
+# Enforce mode: a header without a signed assertion is refused.
+EPORT=$((PORT+7))
+WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ECOM_SHEET_ID=mock ADMIN_EMAILS=admin@bkh.test ACCESS_BUCKET=mock-bucket IAP_ENFORCE_JWT=1 PORT=$EPORT node --require ./test/mock-fetch.js server.js >/tmp/smoke-enforce.log 2>&1 &
+ESRV=$!
+sleep 2.5
+ECODE=$(curl -s -o /dev/null -w '%{http_code}' -H "$ADMIN" "http://localhost:$EPORT/api/me")
+kill $ESRV 2>/dev/null
+if [ "$ECODE" = "401" ]; then printf '  ok   %-22s %s\n' "enforce refuses" 401; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "enforce refuses" "$ECODE"; fi
+
 echo "--- compression (v3.372.0) ---"
 # brotli and gzip must decode to the SAME JSON as the plain response, and the
 # page must come back compressed with a working ETag.

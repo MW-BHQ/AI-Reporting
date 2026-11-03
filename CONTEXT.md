@@ -66,6 +66,25 @@ Call out, under WSH, with the `AI` chip (house rule: every AI tab carries it).
 
 ### Recent (September 2026)
 
+**v3.374.0 — Security review: IAP signed header (log-only) + headers**
+(skill pack item 5, ecc-security-review / production-audit).
+Findings: no secrets in code; per-tab gate enforced server-side; body
+limits set. One real gap: identity is the X-Goog-Authenticated-User-Email
+header, trusted unverified — safe only while the service refuses
+unauthenticated traffic.
+- Now verifies `x-goog-iap-jwt-assertion` (Google IAP keys, issuer, expiry,
+  email == header; audience NOT checked — Cloud Run-native audience format
+  unverified live). Result per token cached 5 min; shown as `jwt` in
+  /api/me; failures logged `iap_jwt_unverified` once per caller per 10 min.
+- LOG-ONLY. **To enforce:** open /api/me on w.bkhos.co; if `jwt` reads
+  "verified", set env `IAP_ENFORCE_JWT=1` on Cloud Run. Then a missing or
+  bad assertion is a 401. If it reads "missing", IAP is not sending it —
+  do not enforce.
+- Every response: X-Content-Type-Options nosniff, X-Frame-Options DENY,
+  Referrer-Policy strict-origin-when-cross-origin.
+- Smoke: missing → "missing"; forged → "invalid"; 3 headers; a second
+  server with IAP_ENFORCE_JWT=1 returns 401 (negative-tested).
+
 **v3.373.0 — Click-path audit (`test/clickpath.py`)** (skill pack item 4).
 Opens all 29 nav entries, loads each (header Refresh + in-view
 `[data-load]`), then clicks every visible button / tab / summary / sort
