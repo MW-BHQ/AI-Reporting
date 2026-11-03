@@ -1,5 +1,9 @@
 ### Recent (November 2026)
 
+**v3.383.0 — Better Club tabs reordered and renamed** (MW): 1. Performance (`bcengage`,
+was Engagement), 2. Quiz Insight (`bcquiz`), 3. Rev Attribution (`bclub`, was Overview).
+View ids unchanged, so tab permissions and links still work.
+
 **v3.382.0 — Better Club: footnotes, badges, target export, Quiz Insight tab** (MW):
 - Engagement is the TEAM's working dashboard, so every metric has a one-line footnote
   (`.bce-foot`; `stat(..., foot)`) saying what it counts and where from — "Also clicked a
