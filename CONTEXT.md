@@ -66,6 +66,16 @@ Call out, under WSH, with the `AI` chip (house rule: every AI tab carries it).
 
 ### Recent (September 2026)
 
+**v3.376.0 — IAP signed header ENFORCED on Cloud Run.** MW's live
+/api/me read `"jwt":"verified"`, `"identitySource":"iap"`. Enforcement is
+now on whenever `K_SERVICE` is set (Cloud Run only), so a request carrying
+the email header without a valid Google-signed assertion gets 401. Local
+and mock runs stay log-only. Kill switch without a code change: Cloud Run
+env `IAP_ENFORCE_JWT=0`. Smoke: K_SERVICE set → 401; plus =0 → 200.
+IAP public keys cached 1h (last good set kept if a refresh fails); a result
+caused by a key outage is not cached, so one blip cannot lock a user out
+for 5 minutes.
+
 **v3.375.0 — House colours are tokens** (skill pack item 6, design tokens).
 The verdict green #2E9E6F / red #D9534F were hex in 33 places. Now:
 `--good` / `--bad` in :root for CSS and inline styles; `HOUSE.good/bad`

@@ -100,6 +100,14 @@ sleep 2.5
 ECODE=$(curl -s -o /dev/null -w '%{http_code}' -H "$ADMIN" "http://localhost:$EPORT/api/me")
 kill $ESRV 2>/dev/null
 if [ "$ECODE" = "401" ]; then printf '  ok   %-22s %s\n' "enforce refuses" 401; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "enforce refuses" "$ECODE"; fi
+# On Cloud Run (K_SERVICE set) it is ON by default; IAP_ENFORCE_JWT=0 turns it off.
+K_SERVICE=ai-reporting-git WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ECOM_SHEET_ID=mock ADMIN_EMAILS=admin@bkh.test ACCESS_BUCKET=mock-bucket PORT=$EPORT node --require ./test/mock-fetch.js server.js >/tmp/smoke-enforce.log 2>&1 &
+ESRV=$!; sleep 2.5
+KCODE=$(curl -s -o /dev/null -w '%{http_code}' -H "$ADMIN" "http://localhost:$EPORT/api/me"); kill $ESRV 2>/dev/null; sleep 0.5
+K_SERVICE=ai-reporting-git IAP_ENFORCE_JWT=0 WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ECOM_SHEET_ID=mock ADMIN_EMAILS=admin@bkh.test ACCESS_BUCKET=mock-bucket PORT=$EPORT node --require ./test/mock-fetch.js server.js >/tmp/smoke-enforce.log 2>&1 &
+ESRV=$!; sleep 2.5
+OCODE=$(curl -s -o /dev/null -w '%{http_code}' -H "$ADMIN" "http://localhost:$EPORT/api/me"); kill $ESRV 2>/dev/null
+if [ "$KCODE" = "401" ] && [ "$OCODE" = "200" ]; then printf '  ok   %-22s %s\n' "cloud run default on" "401/200"; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "cloud run default on" "$KCODE/$OCODE"; fi
 
 echo "--- compression (v3.372.0) ---"
 # brotli and gzip must decode to the SAME JSON as the plain response, and the

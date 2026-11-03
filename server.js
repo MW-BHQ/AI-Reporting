@@ -1100,10 +1100,19 @@ async function tabsFor(email) {
  * /api/me as `jwt`. Set IAP_ENFORCE_JWT=1 once /api/me reads "verified" on
  * the live site; then a missing or bad assertion is a 401.
  */
-const IAP_ENFORCE = process.env.IAP_ENFORCE_JWT === "1";
+/**
+ * ENFORCED ON CLOUD RUN SINCE v3.376.0. MW's live /api/me read
+ * `"jwt":"verified"` on w.bkhos.co, so IAP does send a valid assertion.
+ * `K_SERVICE` is set by Cloud Run only, so local runs and the mock-server
+ * tests stay log-only. Escape hatch: env IAP_ENFORCE_JWT=0 (or =1 to force
+ * it on anywhere, as the smoke test does).
+ */
+const IAP_ENFORCE = process.env.IAP_ENFORCE_JWT === "1"
+  || (Boolean(process.env.K_SERVICE) && process.env.IAP_ENFORCE_JWT !== "0");
 const iapClient = new OAuth2Client();
 const _iapSeen = new Map();   // token -> { at, result }, 5 min
 const _iapLogged = new Map();
+let _iapKeys = { at: 0, pubkeys: null };
 async function iapJwtStatus(req) {
   const hdr = req.header("X-Goog-Authenticated-User-Email");
   if (!hdr) return "no-iap-header";
@@ -1111,9 +1120,15 @@ async function iapJwtStatus(req) {
   if (!tok) return "missing";
   const hit = _iapSeen.get(tok);
   if (hit && Date.now() - hit.at < 5 * 60 * 1000) return hit.result;
-  let result;
+  let result, cacheIt = true;
   try {
-    const keys = await iapClient.getIapPublicKeys();
+    // Keys cached 1h; a failed refresh keeps the last good set, and a result
+    // caused by a key outage is NOT cached, so the next request retries.
+    if (!_iapKeys.pubkeys || Date.now() - _iapKeys.at > 60 * 60 * 1000) {
+      try { _iapKeys = { at: Date.now(), pubkeys: (await iapClient.getIapPublicKeys()).pubkeys }; }
+      catch (e) { if (!_iapKeys.pubkeys) { cacheIt = false; throw e; } }
+    }
+    const keys = { pubkeys: _iapKeys.pubkeys };
     const ticket = await iapClient.verifySignedJwtWithCertsAsync(tok, keys.pubkeys, undefined, ["https://cloud.google.com/iap"]);
     const jwtEmail = String((ticket.getPayload() || {}).email || "").toLowerCase();
     result = jwtEmail && jwtEmail === callerEmail(req) ? "verified" : "mismatch";
@@ -1121,7 +1136,7 @@ async function iapJwtStatus(req) {
     result = `invalid: ${String(e.message || e).slice(0, 80)}`;
   }
   if (_iapSeen.size > 500) _iapSeen.clear();
-  _iapSeen.set(tok, { at: Date.now(), result });
+  if (cacheIt) _iapSeen.set(tok, { at: Date.now(), result });
   return result;
 }
 app.use("/api", async (req, res, next) => {

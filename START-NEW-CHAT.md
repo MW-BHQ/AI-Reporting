@@ -142,8 +142,8 @@ full .gs; ask him for it before editing.
 
 ## Open items
 
-0b. Security: open `w.bkhos.co/api/me`. If `jwt` = "verified", set Cloud Run env
-   `IAP_ENFORCE_JWT=1` (v3.374.0). If "missing", leave it off.
+0b. IAP signed header enforced on Cloud Run since v3.376.0 (live check read
+   "verified"). Kill switch: env `IAP_ENFORCE_JWT=0`.
 -1. Call out tab (v3.360.0) is new: first real run on October data — check
    Claude's picks, the red-number rate, and the .docx in Google Docs.
 0. Monthly Report Overview page live on all four hospitals (v3.359.0).
