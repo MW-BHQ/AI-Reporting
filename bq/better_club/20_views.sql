@@ -227,5 +227,49 @@ QUALIFY ROW_NUMBER() OVER (PARTITION BY user_id, answered_at, quiz_title, questi
 
 -- Members with a staff flag. Reports exclude is_staff by default.
 CREATE OR REPLACE VIEW `ai-reporting-503911.better_club.members` AS
-SELECT c.*, s.user_id IS NOT NULL AS is_staff
-FROM `ai-reporting-503911.better_club.customers` c LEFT JOIN `ai-reporting-503911.better_club.staff` s USING (user_id);
+SELECT c.*, s.user_id IS NOT NULL AS is_staff,
+  -- FALSE once a member drops out of the customers export (account removed).
+  COALESCE(seen.last_seen = (SELECT MAX(last_seen) FROM `ai-reporting-503911.better_club._customer_seen`), TRUE) AS in_latest_export
+FROM `ai-reporting-503911.better_club.customers` c LEFT JOIN `ai-reporting-503911.better_club.staff` s USING (user_id)
+LEFT JOIN (SELECT SAFE_CAST(user_id AS INT64) AS user_id, last_seen FROM `ai-reporting-503911.better_club._customer_seen`) seen USING (user_id);
+
+-- activity: one row per member action (staff excluded).
+CREATE OR REPLACE VIEW `ai-reporting-503911.better_club.activity` AS
+WITH first_export AS (SELECT DATE(MIN(exported_at)) AS d FROM `ai-reporting-503911.better_club.customers_history`),
+a AS (
+  SELECT user_id, created_at AS ts, CASE event_name WHEN 'DAILY_LOGIN' THEN 'check_in' WHEN 'OT_REGISTER' THEN 'register' WHEN 'OT_COMPLETE_PROFILE' THEN 'profile' WHEN 'REDEEMED_REWARD' THEN 'reward' WHEN 'USED_REWARD' THEN 'reward' WHEN 'REFER_A_USER' THEN 'refer' WHEN 'BETTER_BOOKING' THEN 'booking' END AS action
+  FROM `ai-reporting-503911.better_club.events` WHERE event_name IN ('DAILY_LOGIN', 'OT_REGISTER', 'OT_COMPLETE_PROFILE', 'REDEEMED_REWARD', 'USED_REWARD', 'REFER_A_USER', 'BETTER_BOOKING')
+  UNION ALL SELECT user_id, read_at, 'read' FROM `ai-reporting-503911.better_club.post_reads`
+  UNION ALL SELECT user_id, clicked_at, 'cta' FROM `ai-reporting-503911.better_club.cta_clicks`
+  UNION ALL SELECT user_id, answered_at, 'quiz' FROM `ai-reporting-503911.better_club.quiz_answers`
+  UNION ALL SELECT DISTINCT h.user_id, h.last_login, 'login'
+    FROM `ai-reporting-503911.better_club.customers_history` h, first_export f
+    WHERE DATE(h.last_login) >= DATE_SUB(f.d, INTERVAL 1 DAY))
+SELECT * FROM a
+WHERE user_id IS NOT NULL AND ts IS NOT NULL
+  AND user_id NOT IN (SELECT user_id FROM `ai-reporting-503911.better_club.staff`);
+
+-- user_month: one row per member per active month, with growth-accounting status.
+CREATE OR REPLACE VIEW `ai-reporting-503911.better_club.user_month` AS
+WITH start AS (SELECT DATE_TRUNC(MIN(DATE(ts)), MONTH) AS m FROM `ai-reporting-503911.better_club.activity`),
+um AS (
+  SELECT user_id, DATE_TRUNC(DATE(ts), MONTH) AS month,
+    COUNT(DISTINCT DATE(ts)) AS active_days, COUNT(*) AS actions,
+    COUNTIF(action = 'check_in') AS check_ins, COUNTIF(action = 'read') AS reads,
+    COUNTIF(action = 'quiz') AS quizzes, COUNTIF(action = 'cta') AS ctas,
+    COUNTIF(action = 'reward') AS rewards, COUNTIF(action = 'login') AS logins,
+    COUNTIF(action NOT IN ('register', 'profile')) AS engaged_actions,
+    ARRAY_AGG(IF(action IN ('register', 'profile'), NULL, action) IGNORE NULLS ORDER BY ts LIMIT 1)[SAFE_OFFSET(0)] AS first_engaged_action
+  FROM `ai-reporting-503911.better_club.activity` GROUP BY 1, 2),
+j AS (
+  SELECT um.*, DATE_TRUNC(DATE(c.registered_at), MONTH) AS join_month,
+    c.signup_hospital, c.signup_source, c.register_channel,
+    LAG(um.month) OVER (PARTITION BY um.user_id ORDER BY um.month) AS prev_month
+  FROM um LEFT JOIN `ai-reporting-503911.better_club.customers` c USING (user_id))
+SELECT j.* EXCEPT (prev_month),
+  CASE WHEN j.join_month = j.month THEN 'new'
+       WHEN j.month = (SELECT m FROM start) THEN NULL
+       WHEN j.prev_month = DATE_SUB(j.month, INTERVAL 1 MONTH) THEN 'retained'
+       ELSE 'reactivated' END AS status,
+  DATE_DIFF(j.month, j.join_month, MONTH) AS tenure_months
+FROM j;

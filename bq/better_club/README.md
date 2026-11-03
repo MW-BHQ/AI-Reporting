@@ -31,3 +31,8 @@ run as `715584769614-compute@developer.gserviceaccount.com` (the sheet is shared
 
 Later backfill from the dev's database (2024-2025): load into the same raw_* tables with
 `_source = 'db'`; views dedupe across sources by key.
+
+Analytics views (Engagement tab): `activity` (one row per member action, staff removed)
+and `user_month` (per member per active month, status new / retained / reactivated).
+`_customer_seen` tracks the last export each member appeared in; `members.in_latest_export`
+reads it. The tab's query lives in server.js (`BC_ENGAGE_SQL`).

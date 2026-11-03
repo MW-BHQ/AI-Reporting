@@ -3591,7 +3591,7 @@
 0,
 3180,
 1104,
-867
+847
 ],
 [
 "div.grid.g-2",
@@ -3631,7 +3631,7 @@
 580,
 3372,
 503,
-159
+70
 ],
 [
 "div.grid.g-2",
@@ -3639,7 +3639,7 @@
 0,
 3678,
 1104,
-304
+284
 ],
 [
 "div.card",
@@ -3647,7 +3647,7 @@
 0,
 3678,
 545,
-304
+284
 ],
 [
 "table.roomy",
@@ -3655,7 +3655,7 @@
 21,
 3740,
 503,
-115
+70
 ],
 [
 "div.card",
@@ -3663,7 +3663,7 @@
 559,
 3678,
 545,
-304
+284
 ],
 [
 "table.roomy",
@@ -3671,13 +3671,13 @@
 580,
 3740,
 503,
-114
+158
 ],
 [
 "div.slide.slide-break",
 "Do new members come back? Better Club01 ",
 0,
-4046,
+4026,
 1104,
 478
 ],
@@ -3685,7 +3685,7 @@
 "div.card",
 "",
 0,
-4177,
+4157,
 1104,
 283
 ],
@@ -3693,7 +3693,7 @@
 "table.roomy",
 "",
 21,
-4196,
+4176,
 1062,
 158
 ]
@@ -5355,6 +5355,240 @@
 773,
 1104,
 691
+]
+],
+"bcengage": [
+[
+"div.slide",
+"Monthly active members · October 2026 Be",
+0,
+0,
+1104,
+878
+],
+[
+"div.grid.g-4",
+"Monthly active members",
+0,
+153,
+1104,
+149
+],
+[
+"div.stat",
+"Monthly active members",
+0,
+153,
+266,
+149
+],
+[
+"div.stat",
+"New members",
+280,
+153,
+266,
+149
+],
+[
+"div.stat",
+"Retained",
+559,
+153,
+266,
+149
+],
+[
+"div.stat",
+"Reactivated",
+839,
+153,
+266,
+149
+],
+[
+"div.grid.g-4",
+"Lost from last month",
+0,
+322,
+1104,
+147
+],
+[
+"div.stat",
+"Lost from last month",
+0,
+322,
+266,
+147
+],
+[
+"div.stat",
+"New members who did more than sign up",
+280,
+322,
+266,
+147
+],
+[
+"div.stat",
+"Last month’s joiners back this month",
+559,
+322,
+266,
+147
+],
+[
+"div.stat",
+"Daily active ÷ monthly active",
+839,
+322,
+266,
+147
+],
+[
+"div.card",
+"Where each month’s active members come f",
+0,
+483,
+1104,
+331
+],
+[
+"canvas.",
+"",
+21,
+545,
+1062,
+250
+],
+[
+"div.slide.slide-break",
+"Who comes back, and what brings them Bet",
+0,
+878,
+1104,
+790
+],
+[
+"div.grid.g-2",
+"Reactivated in October 2026, by how long",
+0,
+1009,
+1104,
+193
+],
+[
+"div.card",
+"Reactivated in October 2026, by how long",
+0,
+1009,
+545,
+193
+],
+[
+"div.card",
+"The first thing reactivated members did",
+559,
+1009,
+545,
+193
+],
+[
+"div.card",
+"What each group did in October 2026",
+0,
+1216,
+1104,
+388
+],
+[
+"table.roomy",
+"",
+21,
+1278,
+1062,
+307
+],
+[
+"div.slide.slide-break",
+"Do new members stay? Better Club01 Jul 2",
+0,
+1668,
+1104,
+928
+],
+[
+"div.card",
+"Of each group of joiners, the share acti",
+0,
+1798,
+1104,
+388
+],
+[
+"table.roomy",
+"",
+21,
+1860,
+1062,
+307
+],
+[
+"div.card",
+"Active members per day",
+0,
+2200,
+1104,
+331
+],
+[
+"canvas.",
+"",
+21,
+2262,
+1062,
+250
+],
+[
+"div.slide.slide-break",
+"What active members care about · October",
+0,
+2595,
+1104,
+446
+],
+[
+"div.grid.g-3",
+"Topics read most, by readers",
+0,
+2726,
+1104,
+251
+],
+[
+"div.card",
+"Topics read most, by readers",
+0,
+2726,
+359,
+251
+],
+[
+"div.card",
+"Buttons clicked, share of active members",
+373,
+2726,
+359,
+251
+],
+[
+"div.card",
+"Days active, of members who did more tha",
+745,
+2726,
+359,
+251
 ]
 ]
 }

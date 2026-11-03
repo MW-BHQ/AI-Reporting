@@ -81,6 +81,7 @@ check "ecom monthly" GET "/api/ecommerce/monthly?to=$TO"
 check "ecom roas"    GET "/api/ecommerce/roas?from=$FROM&to=$TO"
 check "report"       GET "/api/report?from=$FROM&to=$TO"
 check "better club"  GET "/api/better-club?from=$FROM&to=$TO"
+check "bclub engagement" GET "/api/better-club/engagement?from=$FROM&to=$TO"
 
 # Monthly Reports had NO smoke coverage until v3.100.0 — the GCS stub answered
 # every read with the access list, so /api/report returned the users array with
@@ -108,6 +109,16 @@ K_SERVICE=ai-reporting-git IAP_ENFORCE_JWT=0 WINDSOR_API_KEY=mock ANTHROPIC_API_
 ESRV=$!; sleep 2.5
 OCODE=$(curl -s -o /dev/null -w '%{http_code}' -H "$ADMIN" "http://localhost:$EPORT/api/me"); kill $ESRV 2>/dev/null
 if [ "$KCODE" = "401" ] && [ "$OCODE" = "200" ]; then printf '  ok   %-22s %s\n' "cloud run default on" "401/200"; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "cloud run default on" "$KCODE/$OCODE"; fi
+
+echo "--- Better Club with BigQuery down: the roster still answers (v3.378.0) ---"
+BPORT=$((PORT+8))
+MOCK_BQ_DOWN=1 WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ECOM_SHEET_ID=mock ADMIN_EMAILS=admin@bkh.test ACCESS_BUCKET=mock-bucket PORT=$BPORT node --require ./test/mock-fetch.js server.js >/tmp/smoke-bqdown.log 2>&1 &
+BSRV=$!; sleep 2.5
+BQDOWN=$(curl -s -H "$ADMIN" "http://localhost:$BPORT/api/better-club?from=$FROM&to=$TO" | node -e "let r='';process.stdin.on('data',c=>r+=c).on('end',()=>{const d=JSON.parse(r);console.log(d.memberSource==='roster'&&d.memberStats.total===15&&d.memberStats.live===14&&d.memberStats.nationality.notRecorded===1&&d.memberStats.byMonth.find(m=>m.month==='2026-07').joined===9?'ok':'bad '+d.memberSource)})")
+ENGDOWN=$(curl -s -o /dev/null -w '%{http_code}' -H "$ADMIN" "http://localhost:$BPORT/api/better-club/engagement?from=$FROM&to=$TO")
+kill $BSRV 2>/dev/null
+if [ "$BQDOWN" = "ok" ]; then printf '  ok   %-22s %s\n' "bclub roster fallback" ok; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "bclub roster fallback" "$BQDOWN"; fi
+if [ "$ENGDOWN" = "200" ]; then printf '  ok   %-22s %s\n' "engagement degrades" 200; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "engagement degrades" "$ENGDOWN"; fi
 
 echo "--- compression (v3.372.0) ---"
 # brotli and gzip must decode to the SAME JSON as the plain response, and the
@@ -1161,6 +1172,19 @@ expect_field "gads uncoded ok"  "$GADS" "d.campaigns.some(c=>c.code===null)?'ok'
 expect_field "gads adgroups"    "$GADS" "d.campaigns.every(c=>Array.isArray(c.groups))?'ok':undefined"
 expect_field "gads group sum"   "$GADS" "d.campaigns.every(c=>!c.groups.length||Math.abs(c.groups.reduce((a,g)=>a+g.spend,0)-c.spend)<1)?'ok':undefined"
 # Google Ads must reach the Campaign tab through the shared platform registry.
+# ---- Better Club · Engagement (BigQuery) -------------------------------------
+ENG="/api/better-club/engagement?from=2026-10-01&to=2026-10-31"
+expect_field "eng available"      "$ENG" "d.available?'ok':undefined"
+expect_field "eng selected oct"   "$ENG" "d.selected==='2026-10'?'ok':undefined"
+# A range before tracking began lands on the newest COMPLETE month, never the
+# partial current one.
+expect_field "eng early range"    "/api/better-club/engagement?from=2026-07-01&to=2026-07-31" "d.selected==='2026-10'?'ok':undefined"
+# August starts on the 2nd: the baseline, never complete, never comparable.
+expect_field "eng baseline"       "$ENG" "d.months[0].first&&!d.months[0].complete?'ok':undefined"
+expect_field "eng partial nov"    "$ENG" "d.months.find(m=>m.month==='2026-11').partial?'ok':undefined"
+# Growth accounting must close: MAU(m)-MAU(m-1) = new + reactivated - lost.
+expect_field "eng identity"       "$ENG" "d.months.slice(1).every((m,i)=>m.mau-d.months[i].mau===m.new_users+m.reactivated-m.churned)?'ok':undefined"
+
 # ---- Better Club -----------------------------------------------------------
 BCLUB="/api/better-club?from=$FROM&to=$TO"
 expect_field "bclub available"   "$BCLUB" "d.available?'ok':undefined"
@@ -1211,11 +1235,17 @@ expect_field "bclub scope bhq"     "$BCLUB" "d.funnelScope.impressions==='BGH, B
 expect_field "bclub scope users"   "$BCLUB" "d.funnelScope.users==='BGH, BIH, BHT, WSH'?'ok':undefined"
 # Roster totals. A tombstoned member still counts in the month they registered —
 # they did register — but not in the current membership.
-expect_field "bclub members"       "$BCLUB" "d.memberStats.total===15&&d.memberStats.live===14?'ok':undefined"
+# v3.378.0: registrations, totals and the membership mix come from BigQuery
+# when it answers; the roster tab is the fallback (checked below with BigQuery down).
+expect_field "bclub bq source"     "$BCLUB" "d.memberSource==='bigquery'?'ok':undefined"
+expect_field "bclub members"       "$BCLUB" "d.memberStats.total===56947&&d.memberStats.live===56900?'ok':undefined"
+expect_field "bclub bq registers"  "$BCLUB" "d.funnel.find(f=>f.month==='2026-07').registers===2828?'ok':undefined"
+# Became-patients share is divided by the SAME member total the card prints.
+expect_field "bclub one total"     "$BCLUB" "Math.abs(d.memberStats.everPaidShare-d.memberStats.everPaid/d.memberStats.live)<1e-9?'ok':undefined"
 expect_field "bclub tombstone reg" "$BCLUB" "d.memberStats.byMonth.find(m=>m.month==='2026-07').joined===9?'ok':undefined"
 # A BLANK NATIONALITY IS REPORTED, NOT DROPPED. 16% of the real roster has none;
 # excluding those rows would inflate every share by a sixth.
-expect_field "bclub blank nat"     "$BCLUB" "d.memberStats.nationality.notRecorded===1?'ok':undefined"
+expect_field "bclub blank nat"     "$BCLUB" "d.memberStats.nationality.notRecorded===9000?'ok':undefined"
 # SMALL CELLS ARE SUPPRESSED. One Icelandic member printed beside a revenue
 # figure names a patient, so groups under five fold into Other.
 expect_field "bclub suppressed"    "$BCLUB" "d.memberStats.nationality.rows.some(r=>r.suppressed)?'ok':undefined"

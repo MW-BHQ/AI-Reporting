@@ -37,6 +37,11 @@ CREATE OR REPLACE FUNCTION `ai-reporting-503911.better_club.decode_html`(s STRIN
 CREATE TABLE IF NOT EXISTS `ai-reporting-503911.better_club._ingest_log` (
   run_at TIMESTAMP, tab STRING, rows_in_source INT64, rows_inserted INT64);
 
+-- When each member was last in the customers export. raw_customers stores a
+-- row only when something changes, so it cannot say who has LEFT; this can.
+CREATE TABLE IF NOT EXISTS `ai-reporting-503911.better_club._customer_seen` (
+  user_id STRING NOT NULL, first_seen TIMESTAMP, last_seen TIMESTAMP);
+
 
 -- customers
 CREATE OR REPLACE EXTERNAL TABLE `ai-reporting-503911.better_club.ext_customers` (

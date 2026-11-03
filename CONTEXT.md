@@ -1,5 +1,30 @@
 ### Recent (November 2026)
 
+**v3.378.0 — Better Club Engagement tab; Overview reads BigQuery** (MW):
+- New tab Better Club > Engagement (`bcengage`, `/api/better-club/engagement`). Team target
+  is MAU. Growth accounting: every active member is new (joined that month), retained
+  (active last month) or reactivated (back after a month or more); lost = active last month,
+  not this. MAU(m)-MAU(m-1) = new + reactivated - lost, asserted in smoke. Reactivated is
+  split by how long ago the member joined (MW's question: recent joiner or long-standing).
+- Activity = BigQuery view `activity`: check-in, read (read_post tab, NOT all_event's
+  READ_POST, which only logs point-earning reads), CTA, quiz, reward, refer, booking,
+  register, profile, and logins from changes in customers.last_login counted only from the
+  first export on. Staff removed. `user_month` holds the per-member month and status.
+- Aug 2026 (tracking starts 2 Aug) is the BASELINE: shown, never split or compared. The
+  current month is partial and never drives the cards. MoM only when both months are
+  fully tracked.
+- Overview: registrations by month, member total and the five composition tables now come
+  from BigQuery (`members`, `in_latest_export` via `_customer_seen`). HN-dependent figures
+  (became patients, time to first visit, revenue by join month, the join-month table) stay
+  on the roster sheet. "Have become patients" is divided by the BigQuery total so the card
+  and share use one number. BigQuery down → roster fallback (smoke checks both).
+- One query per tab; each returns one JSON cell. `-- q:<name>` first line picks the mock
+  fixture (`test/fixtures/bq-better-club.js`, real monthly aggregates). MOCK_BQ_DOWN=1.
+- drawBars value axis now uses axisNum (signed), so negative stacks read -2K not -2000.
+- Findings worth knowing: ~78% of MAU are that month's joiners; ~4.6% of a month's joiners
+  are active the next month; comebacks are mostly members who joined 4+ months earlier and
+  start by reading an article.
+
 **v3.377.0 — Better Club raw data → BigQuery** (MW; groundwork for a Better Club report):
 - Sheet "Better Club - Raw Data" (7 tabs) loads into `ai-reporting-503911.better_club`
   (asia-southeast1). Code in `bq/better_club/`; `build.js` generates every SQL file

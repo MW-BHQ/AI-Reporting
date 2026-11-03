@@ -1137,6 +1137,21 @@ global.fetch = async (url, opts = {}) => {
    * of those URLs is ever requested again it now falls through to the
    * unhandled-URL branch and fails loudly, which is the correct outcome.
    */
+  /**
+   * BIGQUERY (v3.378.0). One fixture per query, picked by the `-- q:<name>`
+   * comment the server puts first. MOCK_BQ_DOWN=1 fails every query, so the
+   * Overview can be checked falling back to the roster tab.
+   */
+  if (u.includes("bigquery.googleapis.com")) {
+    if (process.env.MOCK_BQ_DOWN === "1") return jsonRes({ error: { message: "mock: BigQuery down" } }, 503);
+    let q = "";
+    try { q = JSON.parse(opts.body || "{}").query || ""; } catch (_) { /* no body */ }
+    const name = (/^-- q:(\w+)/.exec(q) || [])[1];
+    const fx = require("./fixtures/bq-better-club.js")[name];
+    if (!fx) return jsonRes({ error: { message: `mock: no BigQuery fixture for ${name || "query"}` } }, 400);
+    return jsonRes({ jobComplete: true, schema: { fields: [{ name: "j", type: "STRING" }] },
+      rows: [{ f: [{ v: JSON.stringify(fx) }] }] });
+  }
   if (u.includes("sheets.googleapis.com")) {
     /**
      * FLAKY GOOGLE (v3.356.0): with MOCK_FLAKY_SHEETS=1 the FIRST request to

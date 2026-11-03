@@ -1014,6 +1014,7 @@ const TABS = [
   { id: "audiences", label: "Audiences" },
   { id: "gads",      label: "Google Ads" },
   { id: "bclub",     label: "Better Club" },
+  { id: "bcengage",  label: "Better Club · Engagement" },
   { id: "line",      label: "LINE OA" },
   { id: "shopee",    label: "Shopee" },
   { id: "lazada",    label: "Lazada" },
@@ -11280,7 +11281,7 @@ async function buildBetterClub(from, to) {
     return m;
   };
 
-  const [impr, users] = await Promise.all([
+  const [impr, users, bqOv] = await Promise.all([
     // No `noBranchFilter`, so GSC_BRANCH_REGEX applies: BGH, BIH, BHT, WSH only.
     gscQuery(["date"], seriesFrom, seriesTo)
       .then((rows) => byMonth(rows, (r) => r.date, (r) => r.impressions))
@@ -11292,6 +11293,9 @@ async function buildBetterClub(from, to) {
     })
       .then((rows) => byMonth(rows, (r) => ga4Date(r.date), (r) => r.totalUsers))
       .catch((e) => { logJson("WARNING", "bclub_ga4_unavailable", { error: String(e.message || e) }); return null; }),
+    // Registrations and membership mix from BigQuery; the roster is the fallback.
+    bqJson(bcSql("overview", BC_OVERVIEW_SQL))
+      .catch((e) => { logJson("WARNING", "bclub_bq_unavailable", { error: String(e.message || e) }); return null; }),
   ]);
 
   /**
@@ -11429,8 +11433,37 @@ async function buildBetterClub(from, to) {
     }
   }
 
+  /**
+   * BIGQUERY OVERRIDES THE ROSTER where it can answer the same question:
+   * how many joined each month, how many members there are, and what they are
+   * made of. It is refreshed daily; the roster tab is refreshed by hand.
+   * Everything that needs an HN (became patients, time to first visit, revenue
+   * by join month) stays on the roster, and "have become patients" is divided
+   * by the BigQuery member count so the card and its share use one total.
+   */
+  let memberSource = memberStats ? "roster" : null;
+  if (bqOv && bqOv.totals) {
+    const mixOf = (f) => new Map((bqOv.mix || []).filter((r) => r.f === f).map((r) => [r.v, r.n]));
+    const base = memberStats || { everPaid: null, meanMonthsToFirst: null, medianMonthsToFirst: null, byMonth: [] };
+    memberStats = {
+      ...base,
+      total: bqOv.totals.total, live: bqOv.totals.live, tombstoned: bqOv.totals.total - bqOv.totals.live,
+      everPaidShare: base.everPaid !== null && bqOv.totals.live ? base.everPaid / bqOv.totals.live : null,
+      nationality: bclubTopN(mixOf("nationality"), 12, 5),
+      country: bclubTopN(mixOf("country"), 10, 5),
+      city: bclubTopN(mixOf("city"), 10, 5),
+      household: bclubTopN(mixOf("household"), 8, 5),
+      channel: bclubTopN(mixOf("channel"), 6, 1),
+      registrations: (bqOv.byMonth || []).map((m) => ({ month: m.month, joined: m.joined })),
+    };
+    memberSource = "bigquery";
+  }
+
   let regBy = null, registerSource = null, registerNote = null;
-  if (memberStats && memberStats.byMonth.length) {
+  if (memberSource === "bigquery") {
+    regBy = new Map(memberStats.registrations.map((m) => [m.month, m.joined]));
+    registerSource = `Total ${num0(memberStats.total)} members`;
+  } else if (memberStats && memberStats.byMonth.length) {
     regBy = new Map(memberStats.byMonth.map((m) => [m.month, m.joined]));
     registerSource = `Total ${num0(memberStats.total)} members`;
   } else if (registers === null) {
@@ -11477,7 +11510,7 @@ async function buildBetterClub(from, to) {
     range: { from, to },
     months, selected, prev, pending,
     cohorts, concentration, detailNote,
-    funnel, memberStats,
+    funnel, memberStats, memberSource,
     funnelScope: {
       impressions: impr ? "BGH, BIH, BHT, WSH" : null,
       users: users ? "BGH, BIH, BHT, WSH" : null,
@@ -11492,6 +11525,250 @@ async function buildBetterClub(from, to) {
     registerSource, registerNote,
   };
 }
+
+// ------------------------------------------------ BigQuery (Better Club)
+
+/**
+ * BETTER CLUB IN BIGQUERY (v3.378.0). The raw member export lands daily in
+ * `better_club` (see bq/better_club/README.md); this service only READS the
+ * views there, never the raw tables, and never writes.
+ *
+ * Each query returns ONE cell, a TO_JSON_STRING of every block the tab needs,
+ * so a tab is one round trip and the mock needs one fixture per query. The
+ * leading `-- q:<name>` comment is how test/mock-fetch.js tells them apart.
+ *
+ * Location is pinned: the dataset lives in asia-southeast1, and a query sent
+ * without a location runs in US and fails.
+ */
+const BQ_PROJECT = process.env.BQ_PROJECT || "ai-reporting-503911";
+const BC_DATASET = process.env.BC_DATASET || "better_club";
+const BQ_LOCATION = "asia-southeast1";
+const BQ_SCOPE = "https://www.googleapis.com/auth/bigquery";
+let _bqAuth = null;
+async function bqToken() {
+  if (!_bqAuth) _bqAuth = new GoogleAuth({ scopes: [BQ_SCOPE] });
+  const client = await _bqAuth.getClient();
+  const t = await client.getAccessToken();
+  const token = typeof t === "string" ? t : t && t.token;
+  if (!token) throw new Error("Could not obtain an access token for BigQuery");
+  return token;
+}
+const bcSql = (name, body) => `-- q:${name}\n` + body.split("{{DS}}").join("`" + BQ_PROJECT + "." + BC_DATASET + "`");
+
+/** Run a query whose single cell is a JSON string; return it parsed. */
+async function bqJson(sql) {
+  const token = await bqToken();
+  const base = `https://bigquery.googleapis.com/bigquery/v2/projects/${BQ_PROJECT}`;
+  const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+  const fail = async (res) => {
+    const body = await res.text().catch(() => "");
+    let msg = body.slice(0, 300);
+    try { msg = JSON.parse(body).error.message || msg; } catch (_) { /* keep text */ }
+    return new Error(`BigQuery ${res.status}: ${/^\s*</.test(msg) ? "Google server error, try Refresh" : msg}`);
+  };
+  let res;
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(`${base}/queries`, { method: "POST", headers,
+      body: JSON.stringify({ query: sql, useLegacySql: false, location: BQ_LOCATION, timeoutMs: 30000 }) });
+    if (res.ok || !(res.status === 429 || res.status >= 500) || attempt >= 2) break;
+    await new Promise((r) => setTimeout(r, 600 * (attempt * 2 + 1)));
+  }
+  if (!res.ok) throw await fail(res);
+  let j = await res.json();
+  // A slow query comes back incomplete; poll its results rather than failing.
+  for (let i = 0; !j.jobComplete && i < 6; i++) {
+    const id = j.jobReference && j.jobReference.jobId;
+    if (!id) break;
+    const r2 = await fetch(`${base}/queries/${id}?location=${BQ_LOCATION}&timeoutMs=20000`, { headers });
+    if (!r2.ok) throw await fail(r2);
+    j = await r2.json();
+  }
+  if (!j.jobComplete) throw new Error("BigQuery query did not finish in time, try Refresh");
+  const cell = j.rows && j.rows[0] && j.rows[0].f && j.rows[0].f[0] && j.rows[0].f[0].v;
+  if (!cell) throw new Error("BigQuery returned no rows");
+  return JSON.parse(cell);
+}
+
+/**
+ * OVERVIEW FROM BIGQUERY: registrations by month, the member total, and what
+ * the current membership is made of. Replaces the same three things the
+ * `Members` roster tab used to supply. The roster still supplies everything
+ * that needs an HN match (became patients, time to first visit, revenue by
+ * join month), because BigQuery has no HN.
+ *
+ * `live` = in the latest customers export. Registrations by month count
+ * everyone, including members who have since left, for the same reason the
+ * roster did: they did join that month.
+ */
+const BC_OVERVIEW_SQL = `
+SELECT TO_JSON_STRING(STRUCT(
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', DATE(registered_at)) AS month, COUNT(*) AS joined
+        FROM {{DS}}.members WHERE registered_at IS NOT NULL GROUP BY 1 ORDER BY 1) AS byMonth,
+  (SELECT AS STRUCT COUNT(*) AS total, COUNTIF(in_latest_export) AS live FROM {{DS}}.members) AS totals,
+  ARRAY(SELECT AS STRUCT f, IFNULL(v, '') AS v, COUNT(*) AS n FROM {{DS}}.members,
+          UNNEST([STRUCT('nationality' AS f, nationality AS v), ('country', INITCAP(TRIM(contact_country))), ('city', INITCAP(TRIM(contact_city))),
+                  ('household', household_type), ('channel', register_channel)])
+        WHERE in_latest_export GROUP BY 1, 2) AS mix
+)) AS j`;
+
+/**
+ * ENGAGEMENT: monthly active members and where they come from.
+ *
+ * Growth accounting, the standard way to read MAU: every active member in a
+ * month is exactly one of NEW (joined that month), RETAINED (active last month
+ * too) or REACTIVATED (back after a month or more off). Members active last
+ * month and not this month are CHURNED. So
+ *     MAU(m) - MAU(m-1) = new + reactivated - churned
+ * and that identity is asserted below: if it ever fails, a definition changed.
+ *
+ * The first tracked month has no "last month", so it cannot be split; it is
+ * returned as `baseline` and drawn as such, never as reactivated.
+ */
+const BC_ENGAGE_SQL = `
+WITH um AS (SELECT * FROM {{DS}}.user_month),
+months AS (SELECT DISTINCT month FROM um),
+cov AS (SELECT MIN(DATE(ts)) AS d0, MAX(DATE(ts)) AS d1 FROM {{DS}}.activity WHERE action != 'login'),
+churn AS (
+  SELECT DATE_ADD(a.month, INTERVAL 1 MONTH) AS month, COUNT(*) AS churned
+  FROM um a LEFT JOIN um b ON b.user_id = a.user_id AND b.month = DATE_ADD(a.month, INTERVAL 1 MONTH)
+  WHERE b.user_id IS NULL GROUP BY 1),
+pool AS (
+  SELECT m.month, COUNTIF(DATE(c.registered_at) < DATE_ADD(m.month, INTERVAL 1 MONTH)) AS members
+  FROM months m CROSS JOIN {{DS}}.members c GROUP BY 1),
+dd AS (SELECT DATE(ts) AS d, COUNT(DISTINCT user_id) AS dau,
+          COUNT(DISTINCT IF(action NOT IN ('register', 'profile'), user_id, NULL)) AS engaged
+        FROM {{DS}}.activity GROUP BY 1),
+ddm AS (SELECT DATE_TRUNC(d, MONTH) AS month, AVG(dau) AS avg_dau, AVG(engaged) AS avg_engaged_dau FROM dd GROUP BY 1),
+nxt AS (
+  SELECT a.month, COUNTIF(b.user_id IS NOT NULL) AS came_back
+  FROM um a LEFT JOIN um b ON b.user_id = a.user_id AND b.month = DATE_ADD(a.month, INTERVAL 1 MONTH)
+  WHERE a.status = 'new' GROUP BY 1),
+ms AS (
+  SELECT month, COUNT(*) AS mau,
+    COUNTIF(status = 'new') AS new_users, COUNTIF(status = 'retained') AS retained,
+    COUNTIF(status = 'reactivated') AS reactivated, COUNTIF(status IS NULL) AS baseline,
+    COUNTIF(engaged_actions > 0) AS engaged,
+    COUNTIF(status = 'new' AND engaged_actions > 0) AS new_engaged,
+    COUNTIF(status = 'reactivated' AND tenure_months BETWEEN 2 AND 3) AS react_t1,
+    COUNTIF(status = 'reactivated' AND tenure_months BETWEEN 4 AND 12) AS react_t2,
+    COUNTIF(status = 'reactivated' AND tenure_months > 12) AS react_t3,
+    COUNTIF(status = 'reactivated' AND tenure_months IS NULL) AS react_tu,
+    AVG(active_days) AS avg_days
+  FROM um GROUP BY 1),
+seg AS (
+  SELECT month, IFNULL(status, 'baseline') AS status, COUNT(*) AS users,
+    COUNTIF(check_ins > 0) AS check_in, COUNTIF(reads > 0) AS read, COUNTIF(quizzes > 0) AS quiz,
+    COUNTIF(ctas > 0) AS cta, COUNTIF(rewards > 0) AS reward, COUNTIF(logins > 0) AS login,
+    COUNTIF(engaged_actions = 0) AS signup_only
+  FROM um GROUP BY 1, 2),
+firstact AS (
+  SELECT month, IFNULL(first_engaged_action, 'none') AS action, COUNT(*) AS users
+  FROM um WHERE status = 'reactivated' GROUP BY 1, 2),
+depth AS (
+  SELECT month, CASE WHEN active_days = 1 THEN '1' WHEN active_days <= 3 THEN '2-3'
+    WHEN active_days <= 7 THEN '4-7' WHEN active_days <= 14 THEN '8-14' ELSE '15+' END AS bin,
+    COUNT(*) AS users
+  FROM um WHERE engaged_actions > 0 GROUP BY 1, 2),
+bucket AS (
+  SELECT user_id, CASE WHEN DATE(registered_at) >= DATE_TRUNC((SELECT MIN(month) FROM months), QUARTER)
+      THEN FORMAT_DATE('%Y-%m', DATE(registered_at))
+      ELSE FORMAT_DATE('%Y-Q%Q', DATE(registered_at)) END AS b
+  FROM {{DS}}.members WHERE registered_at IS NOT NULL),
+cohort AS (
+  SELECT k.b, um.month, COUNT(*) AS active
+  FROM um JOIN bucket k USING (user_id) GROUP BY 1, 2),
+csize AS (SELECT b, COUNT(*) AS size FROM bucket GROUP BY 1),
+tags AS (
+  SELECT * FROM (
+    SELECT DATE_TRUNC(DATE(r.read_at), MONTH) AS month, TRIM(tag) AS tag,
+      COUNT(DISTINCT r.user_id) AS readers, COUNT(*) AS reads
+    FROM {{DS}}.post_reads r, UNNEST([tag_1, tag_2, tag_3, tag_4, tag_5, tag_6, tag_7, tag_8, tag_9, tag_10]) AS tag
+    WHERE tag IS NOT NULL AND r.user_id NOT IN (SELECT user_id FROM {{DS}}.staff)
+    GROUP BY 1, 2)
+  WHERE TRUE QUALIFY ROW_NUMBER() OVER (PARTITION BY month ORDER BY readers DESC, tag) <= 12),
+cta AS (
+  SELECT DATE_TRUNC(DATE(clicked_at), MONTH) AS month,
+    CASE WHEN event LIKE '%APPOINTMENT%' THEN 'Appointment'
+         WHEN event LIKE '%DOCTOR%' THEN 'Find a doctor'
+         WHEN event LIKE '%CART%' OR event LIKE '%PACKAGE%' THEN 'Cart and packages'
+         WHEN event LIKE '%CONTACT%' OR event LIKE '%CHAT%' OR event LIKE '%LINE%' THEN 'Contact and chat'
+         ELSE 'Other' END AS grp,
+    COUNT(DISTINCT user_id) AS users, COUNT(*) AS clicks
+  FROM {{DS}}.cta_clicks WHERE user_id NOT IN (SELECT user_id FROM {{DS}}.staff) GROUP BY 1, 2)
+SELECT TO_JSON_STRING(STRUCT(
+  (SELECT AS STRUCT FORMAT_DATE('%F', d0) AS d0, FORMAT_DATE('%F', d1) AS d1 FROM cov) AS coverage,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', ms.month) AS month, ms.* EXCEPT (month),
+          IFNULL(c.churned, 0) AS churned, p.members, n.came_back, x.avg_dau, x.avg_engaged_dau
+        FROM ms LEFT JOIN churn c USING (month) LEFT JOIN pool p USING (month) LEFT JOIN nxt n USING (month)
+        LEFT JOIN ddm x USING (month)
+        ORDER BY ms.month) AS months,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, seg.* EXCEPT (month) FROM seg ORDER BY month, status) AS segments,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, action, users FROM firstact ORDER BY month, users DESC) AS react_first,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, bin, users FROM depth ORDER BY month, bin) AS depth,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', d) AS d, dau, engaged FROM dd ORDER BY d) AS daily,
+  ARRAY(SELECT AS STRUCT c.b AS cohort, s.size, FORMAT_DATE('%Y-%m', c.month) AS month, c.active
+        FROM cohort c JOIN csize s USING (b) ORDER BY c.b, c.month) AS cohorts,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, tag, readers, reads FROM tags ORDER BY month, readers DESC) AS tags,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, grp, users, clicks FROM cta ORDER BY month, users DESC) AS cta
+)) AS j`;
+
+function bcLastDay(key) {
+  const [y, m] = key.split("-").map(Number);
+  return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+}
+
+async function buildBclubEngagement(from, to) {
+  let d;
+  try { d = await bqJson(bcSql("engagement", BC_ENGAGE_SQL)); }
+  catch (e) { return { available: false, error: String((e && e.message) || e) }; }
+  const cov = d.coverage || {};
+  const months = (d.months || []).map((m) => {
+    const key = m.month;
+    return {
+      ...m,
+      // A month is complete when tracking spans all of it. August starts on
+      // the 2nd, so it is the baseline: shown, never compared.
+      complete: !!cov.d0 && !!cov.d1 && cov.d0 <= `${key}-01` && cov.d1 >= bcLastDay(key),
+      partial: !!cov.d1 && cov.d1 < bcLastDay(key),
+      first: false,
+    };
+  });
+  if (!months.length) return { available: false, error: "no activity in BigQuery yet" };
+  months[0].first = true;
+  // The identity that makes the split trustworthy.
+  for (let i = 1; i < months.length; i++) {
+    const a = months[i - 1], b = months[i];
+    if (b.mau - a.mau !== b.new_users + b.reactivated - b.churned) {
+      logJson("WARNING", "bclub_engage_identity", { month: b.month });
+    }
+  }
+  // Which month the cards describe: the newest complete-or-baseline month in
+  // the picked range; otherwise the newest complete month there is.
+  const inRange = new Set(monthsBetween(from, to));
+  const usable = months.filter((m) => !m.partial);
+  const pick = usable.filter((m) => inRange.has(m.month)).pop() || usable.pop() || months[months.length - 1];
+  return {
+    available: true,
+    coverage: cov, months,
+    selected: pick.month,
+    segments: d.segments || [], reactFirst: d.react_first || [], depth: d.depth || [],
+    daily: d.daily || [], cohorts: d.cohorts || [], tags: d.tags || [], cta: d.cta || [],
+    source: `BigQuery ${BC_DATASET}`,
+  };
+}
+
+app.get("/api/better-club/engagement", requireTab("bcengage"), async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  try {
+    const out = await withCache(`bcengage:${from}:${to}`, req.query.refresh === "1",
+      () => buildBclubEngagement(from, to));
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "bcengage_failed", { error: String(err.message || err) });
+    res.status(500).json({ error: err.message || "Better Club engagement failed" });
+  }
+});
 
 app.get("/api/better-club", requireTab("bclub"), async (req, res) => {
   const { from, to } = req.query;

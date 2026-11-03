@@ -129,6 +129,11 @@ CREATE OR REPLACE FUNCTION ${T('decode_html')}(s STRING) RETURNS STRING LANGUAGE
 -- One row per tab per run. rows_in_source = 0 means the sheet was not refreshed.
 CREATE TABLE IF NOT EXISTS ${T('_ingest_log')} (
   run_at TIMESTAMP, tab STRING, rows_in_source INT64, rows_inserted INT64);
+
+-- When each member was last in the customers export. raw_customers stores a
+-- row only when something changes, so it cannot say who has LEFT; this can.
+CREATE TABLE IF NOT EXISTS ${T('_customer_seen')} (
+  user_id STRING NOT NULL, first_seen TIMESTAMP, last_seen TIMESTAMP);
 `];
   for (const t of TABS) {
     const c = cols(t);
@@ -184,7 +189,18 @@ ON r._row_hash = s._h
 WHEN NOT MATCHED THEN INSERT (${c.map((x) => x.raw).join(', ')}, _row_hash, _source, _loaded_at)
   VALUES (${c.map((x) => 's.' + x.raw).join(', ')}, s._h, '${source}', run_at);
 
-INSERT ${T('_ingest_log')} VALUES (run_at, '${t.tab}', n, @@row_count);`);
+INSERT ${T('_ingest_log')} VALUES (run_at, '${t.tab}', n, @@row_count);${t.tab === 'customers' ? `
+
+-- Who is in today's export. Skipped on an empty sheet so a missed refresh
+-- does not mark every member as gone.
+IF n > 0 THEN
+  MERGE ${T('_customer_seen')} t
+  USING (SELECT DISTINCT TRIM(${first}) AS user_id FROM ${src(t.tab)}
+         WHERE NULLIF(TRIM(${first}), '') IS NOT NULL AND ${first} != '${c[0].h}') s
+  ON t.user_id = s.user_id
+  WHEN MATCHED THEN UPDATE SET last_seen = run_at
+  WHEN NOT MATCHED THEN INSERT (user_id, first_seen, last_seen) VALUES (s.user_id, run_at, run_at);
+END IF;` : ''}`);
   }
   // Keys must parse, or dedup silently merges different rows. Data is already in
   // raw_* when this fails, so fixing the parser and re-running loses nothing.
@@ -195,6 +211,71 @@ ASSERT (SELECT COUNT(*) FROM ${T(t.view)} WHERE ${t.key.map((k) => `${k} IS NULL
   }
   out.push('END;');
   return out.join('\n') + '\n';
+}
+
+/**
+ * ANALYTICS LAYER: what the Engagement tab reads.
+ *
+ * activity   one row per member action, staff removed. Reads come from
+ *            read_post (every read), NOT all_event's READ_POST, which only logs
+ *            reads that earned points (7k vs 26k). Same for quizzes. Badges and
+ *            "was referred" are things that happen TO a member, so they are out.
+ *            Logins come from changes in customers.last_login, counted only from
+ *            the first export on: one snapshot cannot show older logins, and
+ *            counting them would make every past month look emptier than it was.
+ * user_month one row per member per month they did anything, classified the
+ *            growth-accounting way: new (joined that month), retained (active
+ *            last month too) or reactivated (back after at least a month off).
+ *            The first tracked month has no "last month", so its non-new rows
+ *            are NULL rather than guessed.
+ */
+const ENGAGE_EVENTS = {
+  DAILY_LOGIN: 'check_in', OT_REGISTER: 'register', OT_COMPLETE_PROFILE: 'profile',
+  REDEEMED_REWARD: 'reward', USED_REWARD: 'reward', REFER_A_USER: 'refer', BETTER_BOOKING: 'booking',
+};
+function analytics() {
+  const ev = Object.keys(ENGAGE_EVENTS);
+  return `
+-- activity: one row per member action (staff excluded).
+CREATE OR REPLACE VIEW ${T('activity')} AS
+WITH first_export AS (SELECT DATE(MIN(exported_at)) AS d FROM ${T('customers_history')}),
+a AS (
+  SELECT user_id, created_at AS ts, CASE event_name ${ev.map((e) => `WHEN '${e}' THEN '${ENGAGE_EVENTS[e]}'`).join(' ')} END AS action
+  FROM ${T('events')} WHERE event_name IN (${ev.map((e) => `'${e}'`).join(', ')})
+  UNION ALL SELECT user_id, read_at, 'read' FROM ${T('post_reads')}
+  UNION ALL SELECT user_id, clicked_at, 'cta' FROM ${T('cta_clicks')}
+  UNION ALL SELECT user_id, answered_at, 'quiz' FROM ${T('quiz_answers')}
+  UNION ALL SELECT DISTINCT h.user_id, h.last_login, 'login'
+    FROM ${T('customers_history')} h, first_export f
+    WHERE DATE(h.last_login) >= DATE_SUB(f.d, INTERVAL 1 DAY))
+SELECT * FROM a
+WHERE user_id IS NOT NULL AND ts IS NOT NULL
+  AND user_id NOT IN (SELECT user_id FROM ${T('staff')});
+
+-- user_month: one row per member per active month, with growth-accounting status.
+CREATE OR REPLACE VIEW ${T('user_month')} AS
+WITH start AS (SELECT DATE_TRUNC(MIN(DATE(ts)), MONTH) AS m FROM ${T('activity')}),
+um AS (
+  SELECT user_id, DATE_TRUNC(DATE(ts), MONTH) AS month,
+    COUNT(DISTINCT DATE(ts)) AS active_days, COUNT(*) AS actions,
+    COUNTIF(action = 'check_in') AS check_ins, COUNTIF(action = 'read') AS reads,
+    COUNTIF(action = 'quiz') AS quizzes, COUNTIF(action = 'cta') AS ctas,
+    COUNTIF(action = 'reward') AS rewards, COUNTIF(action = 'login') AS logins,
+    COUNTIF(action NOT IN ('register', 'profile')) AS engaged_actions,
+    ARRAY_AGG(IF(action IN ('register', 'profile'), NULL, action) IGNORE NULLS ORDER BY ts LIMIT 1)[SAFE_OFFSET(0)] AS first_engaged_action
+  FROM ${T('activity')} GROUP BY 1, 2),
+j AS (
+  SELECT um.*, DATE_TRUNC(DATE(c.registered_at), MONTH) AS join_month,
+    c.signup_hospital, c.signup_source, c.register_channel,
+    LAG(um.month) OVER (PARTITION BY um.user_id ORDER BY um.month) AS prev_month
+  FROM um LEFT JOIN ${T('customers')} c USING (user_id))
+SELECT j.* EXCEPT (prev_month),
+  CASE WHEN j.join_month = j.month THEN 'new'
+       WHEN j.month = (SELECT m FROM start) THEN NULL
+       WHEN j.prev_month = DATE_SUB(j.month, INTERVAL 1 MONTH) THEN 'retained'
+       ELSE 'reactivated' END AS status,
+  DATE_DIFF(j.month, j.join_month, MONTH) AS tenure_months
+FROM j;`;
 }
 
 function views() {
@@ -225,12 +306,16 @@ FROM ${T('raw_' + t.tab)};`);
   out.push(`
 -- Members with a staff flag. Reports exclude is_staff by default.
 CREATE OR REPLACE VIEW ${T('members')} AS
-SELECT c.*, s.user_id IS NOT NULL AS is_staff
-FROM ${T('customers')} c LEFT JOIN ${T('staff')} s USING (user_id);`);
+SELECT c.*, s.user_id IS NOT NULL AS is_staff,
+  -- FALSE once a member drops out of the customers export (account removed).
+  COALESCE(seen.last_seen = (SELECT MAX(last_seen) FROM ${T('_customer_seen')}), TRUE) AS in_latest_export
+FROM ${T('customers')} c LEFT JOIN ${T('staff')} s USING (user_id)
+LEFT JOIN (SELECT SAFE_CAST(user_id AS INT64) AS user_id, last_seen FROM ${T('_customer_seen')}) seen USING (user_id);`);
+  out.push(analytics());
   return out.join('\n') + '\n';
 }
 
-module.exports = { LOC, TABS, setup, ingest, views, cols, snake, colLetter, T, DS, PROJECT };
+module.exports = { LOC, TABS, analytics, setup, ingest, views, cols, snake, colLetter, T, DS, PROJECT };
 
 if (require.main === module) {
   const dir = __dirname;

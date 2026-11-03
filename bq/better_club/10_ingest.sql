@@ -29,6 +29,17 @@ WHEN NOT MATCHED THEN INSERT (user_id, register_channel, username, name, gender,
 
 INSERT `ai-reporting-503911.better_club._ingest_log` VALUES (run_at, 'customers', n, @@row_count);
 
+-- Who is in today's export. Skipped on an empty sheet so a missed refresh
+-- does not mark every member as gone.
+IF n > 0 THEN
+  MERGE `ai-reporting-503911.better_club._customer_seen` t
+  USING (SELECT DISTINCT TRIM(user_id) AS user_id FROM `ai-reporting-503911.better_club.ext_customers`
+         WHERE NULLIF(TRIM(user_id), '') IS NOT NULL AND user_id != 'User ID') s
+  ON t.user_id = s.user_id
+  WHEN MATCHED THEN UPDATE SET last_seen = run_at
+  WHEN NOT MATCHED THEN INSERT (user_id, first_seen, last_seen) VALUES (s.user_id, run_at, run_at);
+END IF;
+
 -- better_staff: stop if the columns moved. Positional schema would load them silently wrong.
 ASSERT (SELECT COUNT(*) FROM `ai-reporting-503911.better_club.ext_better_staff`
         WHERE ARRAY_TO_STRING([user_id, register_channel, username, name, gender, dob, nationality, contact_country, contact_city, household_type, number_of_quiz_answered, has_completed_profile, has_consented_marketing, has_consented_marketing_updated_at, registered_at, number_of_daily_check_in_all_time, number_of_daily_check_in_complete_all_time, number_of_daily_check_in_complete_this_month, email, phone_no, last_login, remaining_points, points_earned_this_month, exported_at, signup_hospital, signup_language, signup_source, signup_sso_app, signup_context, signup_campaign, signup_country, last_language, last_login_hospital, last_login_otp_passkey, login_hospitals, order_hospitals], '|') = 'User ID|Register Channel|Username|Name|Gender|DOB|Nationality|Contact Country|Contact City|Household type|Number of quiz answered|Has completed profile|Has consented marketing|Has consented marketing updated at|Registered at|Number of daily check-in (all time)|Number of daily check-in complete (all time)|Number of daily check-in complete this month|Email|Phone no.|Last login|Remaining points|Points earned this month|Exported at|Signup hospital|Signup language|Signup source|Signup SSO app|Signup context|Signup campaign|Signup country|Last language|Last login hospital|Last login (OTP/passkey)|Login hospitals|Order hospitals') = 1
