@@ -10050,6 +10050,10 @@ function renderBcengage() {
     return v === null ? '<span class="dlt none">\u2014</span>'
       : `<span class="dlt ${v > 0.005 ? 'up' : (v < -0.005 ? 'down' : 'flat')}">${changeText(v, Math.abs(v) >= 1 ? 0 : 1)}</span> <span class="pill" data-tip="Month on month — against ${esc(pLabel)}">MoM</span>`;
   };
+  // Year on year, only when the same month last year was fully tracked.
+  const ly = ms.find(m => m.month === `${+s.month.slice(0, 4) - 1}${s.month.slice(4)}`);
+  const yoyText = ly && ly.complete && s.complete && ly.mau > 0
+    ? ` <span class="dlt ${s.mau > ly.mau ? 'up' : (s.mau < ly.mau ? 'down' : 'flat')}">${changeText((s.mau - ly.mau) / ly.mau, 0)}</span> <span class="pill" data-tip="Year on year — against ${esc(bclubMonthLabel(ly.month))}">YoY</span>` : '';
   const noSplit = '<span data-tip="The first tracked month has no month before it to compare against">\u2014</span>';
   /**
    * This is the Better Club TEAM's working dashboard, not an executive report, so
@@ -10066,7 +10070,7 @@ function renderBcengage() {
   const backN = p && pc.length ? ((pc.find(r => r.month === s.month) || {}).active || 0) : null;
   const cards = `
     <div class="grid g-4">
-      ${stat('Monthly active members', cnt(s.mau), `${dlt(s.mau, p && p.mau)} · ${pct(share(s.mau, s.members))} of ${cnt(s.members)} members`, null,
+      ${stat('Monthly active members', cnt(s.mau), `${dlt(s.mau, p && p.mau)}${yoyText} · ${pct(share(s.mau, s.members))} of ${cnt(s.members)} members`, null,
         'Active = earned B points at least once in the month: daily check-in, reading a reward article or answering a quiz.',
         'Members who earned B points at least once this month: daily check-in, a reward article or a quiz.')}
       ${stat('New members', cnt(s.new_users), `${pct(share(s.new_users, s.mau))} of active · joined in ${esc(label.replace(/ \d{4}$/, ''))}`, BCE_COL.new, null,
@@ -10090,7 +10094,9 @@ function renderBcengage() {
     </div>`;
 
   // Growth accounting, one bar per tracked month (the partial current month is left out).
-  const gm = ms.filter(m => !m.partial);
+  // With the dev's backfill there are two years of months: chart the 13 up to the
+  // selected month, so this month and the same month last year are both on it.
+  const gm = ms.filter(m => !m.partial && m.month <= s.month).slice(-13);
   const gLab = gm.map(m => bclubMonthLabel(m.month).replace(/ \d{4}$/, '') + (m.first ? ' (baseline)' : ''));
   const growth = `
     <div class="card">
@@ -10143,9 +10149,23 @@ function renderBcengage() {
     </div>`;
 
   // ---- do new members stay: cohort table
-  const cm = ms.map(m => m.month);
-  const coh = new Map();
-  (d.cohorts || []).forEach(r => { if (!coh.has(r.cohort)) coh.set(r.cohort, { size: r.size, by: {} }); coh.get(r.cohort).by[r.month] = r.active; });
+  // Six months of columns ending at the selected month (plus the partial month
+  // after it, if any). Joiners inside the window keep their own row; older
+  // joiners are summed by quarter, which is exact: each member is in one row.
+  const cm = ms.map(m => m.month).filter(k => k <= s.month).slice(-6)
+    .concat(ms.filter(m => m.partial && m.month > s.month).map(m => m.month));
+  const qOf = (k) => { const q = /^(\d{4})-Q([1-4])$/.exec(k); if (q) return k; const [y, mo] = k.split('-').map(Number); return `${y}-Q${Math.ceil(mo / 3)}`; };
+  const bucketOf = (k) => (/^\d{4}-\d{2}$/.test(k) && k >= cm[0]) ? k : qOf(k);
+  const coh = new Map(), seenSize = new Set();
+  (d.cohorts || []).forEach(r => {
+    const b = bucketOf(r.cohort);
+    if (!coh.has(b)) coh.set(b, { size: 0, by: {} });
+    const c = coh.get(b);
+    if (!seenSize.has(r.cohort)) { seenSize.add(r.cohort); c.size += r.size; }
+    c.by[r.month] = (c.by[r.month] || 0) + r.active;
+  });
+  // Quarters older than a year are dropped; the newest eight rows tell the story.
+  [...coh.keys()].filter(k => /Q/.test(k)).sort().reverse().slice(6).forEach(k => coh.delete(k));
   // Newest first, in time order: a quarter sorts by its first month.
   const cohStart = (k) => { const q = /^(\d{4})-Q([1-4])$/.exec(k); return q ? `${q[1]}-${String((+q[2] - 1) * 3 + 1).padStart(2, '0')}` : k; };
   const cohKeys = [...coh.keys()].sort((a, b) => (cohStart(a) < cohStart(b) ? 1 : -1));
@@ -10413,7 +10433,9 @@ function renderBcengage() {
   drawBars('bceHours', Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`), [
     { label: 'Members earning points', data: Array.from({ length: 24 }, (_, h) => ((hrs.find(r => r.hour === h) || {}).users || 0)), color: BCE_COL.retained },
   ], { horizontal: false });
-  drawChart('bceDaily', (d.daily || []).map(r => ({ d: r.d, dau: r.dau, any: r.any_active })), [
+  const dEnd = (([y, m]) => new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10))(s.month.split('-').map(Number));
+  const dStart = new Date(Date.parse(dEnd) - 119 * 864e5).toISOString().slice(0, 10);
+  drawChart('bceDaily', (d.daily || []).filter(r => r.d >= dStart && r.d <= dEnd).map(r => ({ d: r.d, dau: r.dau, any: r.any_active })), [
     { key: 'dau', label: 'Earned B points', color: BCE_COL.retained, axis: 'y' },
     { key: 'any', label: 'Any activity', color: BCE_COL.base, axis: 'y' },
   ]);
@@ -13621,7 +13643,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.384.0';
+const CLIENT_BUILD = '3.385.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

@@ -36,3 +36,11 @@ Analytics views (Engagement tab): `activity` (one row per member action, staff r
 and `user_month` (per member per active month, status new / retained / reactivated).
 `_customer_seen` tracks the last export each member appeared in; `members.in_latest_export`
 reads it. The tab's query lives in server.js (`BC_ENGAGE_SQL`).
+
+Backfill from the dev (any tab, same columns as the sheet):
+1. BigQuery console → `better_club.import_<tab>` → Create table → Upload the CSV,
+   destination `import_<tab>`, Advanced: write preference **Append**, header rows to skip **1**,
+   allow quoted newlines. (The empty table with the right all-STRING schema already exists.)
+2. `CALL better_club.import_<tab>_run('<label>');` — merges into raw_<tab>, logged as
+   `import:<tab>:<label>` in `_ingest_log`. Safe to run twice.
+3. `TRUNCATE TABLE better_club.import_<tab>;` when done.

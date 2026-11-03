@@ -1,0 +1,141 @@
+SET @@location = 'asia-southeast1';
+
+CREATE TABLE IF NOT EXISTS `ai-reporting-503911.better_club.import_customers` (user_id STRING, register_channel STRING, username STRING, name STRING, gender STRING, dob STRING, nationality STRING, contact_country STRING, contact_city STRING, household_type STRING, number_of_quiz_answered STRING, has_completed_profile STRING, has_consented_marketing STRING, has_consented_marketing_updated_at STRING, registered_at STRING, number_of_daily_check_in_all_time STRING, number_of_daily_check_in_complete_all_time STRING, number_of_daily_check_in_complete_this_month STRING, email STRING, phone_no STRING, last_login STRING, remaining_points STRING, points_earned_this_month STRING, exported_at STRING, signup_hospital STRING, signup_language STRING, signup_source STRING, signup_sso_app STRING, signup_context STRING, signup_campaign STRING, signup_country STRING, last_language STRING, last_login_hospital STRING, last_login_otp_passkey STRING, login_hospitals STRING, order_hospitals STRING);
+CREATE OR REPLACE PROCEDURE `ai-reporting-503911.better_club.import_customers_run`(label STRING)
+BEGIN
+DECLARE run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP();
+DECLARE n INT64 DEFAULT (SELECT COUNT(*) FROM `ai-reporting-503911.better_club.import_customers` WHERE NULLIF(TRIM(user_id), '') IS NOT NULL);
+MERGE `ai-reporting-503911.better_club.raw_customers` r
+USING (
+  SELECT *, TO_HEX(SHA256(TO_JSON_STRING(STRUCT(user_id, register_channel, username, name, gender, dob, nationality, contact_country, contact_city, household_type, number_of_quiz_answered, has_completed_profile, has_consented_marketing, has_consented_marketing_updated_at, registered_at, number_of_daily_check_in_all_time, number_of_daily_check_in_complete_all_time, number_of_daily_check_in_complete_this_month, email, phone_no, last_login, remaining_points, points_earned_this_month, signup_hospital, signup_language, signup_source, signup_sso_app, signup_context, signup_campaign, signup_country, last_language, last_login_hospital, last_login_otp_passkey, login_hospitals, order_hospitals)))) AS _h FROM (
+    SELECT NULLIF(TRIM(user_id), '') AS user_id, NULLIF(TRIM(register_channel), '') AS register_channel, NULLIF(TRIM(username), '') AS username, NULLIF(TRIM(name), '') AS name, NULLIF(TRIM(gender), '') AS gender, NULLIF(TRIM(dob), '') AS dob, NULLIF(TRIM(nationality), '') AS nationality, NULLIF(TRIM(contact_country), '') AS contact_country, NULLIF(TRIM(contact_city), '') AS contact_city, NULLIF(TRIM(household_type), '') AS household_type, NULLIF(TRIM(number_of_quiz_answered), '') AS number_of_quiz_answered, NULLIF(TRIM(has_completed_profile), '') AS has_completed_profile, NULLIF(TRIM(has_consented_marketing), '') AS has_consented_marketing, NULLIF(TRIM(has_consented_marketing_updated_at), '') AS has_consented_marketing_updated_at, NULLIF(TRIM(registered_at), '') AS registered_at, NULLIF(TRIM(number_of_daily_check_in_all_time), '') AS number_of_daily_check_in_all_time, NULLIF(TRIM(number_of_daily_check_in_complete_all_time), '') AS number_of_daily_check_in_complete_all_time, NULLIF(TRIM(number_of_daily_check_in_complete_this_month), '') AS number_of_daily_check_in_complete_this_month, NULLIF(TRIM(email), '') AS email, NULLIF(TRIM(phone_no), '') AS phone_no, NULLIF(TRIM(last_login), '') AS last_login, NULLIF(TRIM(remaining_points), '') AS remaining_points, NULLIF(TRIM(points_earned_this_month), '') AS points_earned_this_month, NULLIF(TRIM(exported_at), '') AS exported_at, NULLIF(TRIM(signup_hospital), '') AS signup_hospital, NULLIF(TRIM(signup_language), '') AS signup_language, NULLIF(TRIM(signup_source), '') AS signup_source, NULLIF(TRIM(signup_sso_app), '') AS signup_sso_app, NULLIF(TRIM(signup_context), '') AS signup_context, NULLIF(TRIM(signup_campaign), '') AS signup_campaign, NULLIF(TRIM(signup_country), '') AS signup_country, NULLIF(TRIM(last_language), '') AS last_language, NULLIF(TRIM(last_login_hospital), '') AS last_login_hospital, NULLIF(TRIM(last_login_otp_passkey), '') AS last_login_otp_passkey, NULLIF(TRIM(login_hospitals), '') AS login_hospitals, NULLIF(TRIM(order_hospitals), '') AS order_hospitals
+    FROM `ai-reporting-503911.better_club.import_customers`
+    WHERE NULLIF(TRIM(user_id), '') IS NOT NULL AND user_id != 'User ID')
+  WHERE TRUE
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY _h) = 1
+) s
+ON r._row_hash = s._h
+WHEN NOT MATCHED THEN INSERT (user_id, register_channel, username, name, gender, dob, nationality, contact_country, contact_city, household_type, number_of_quiz_answered, has_completed_profile, has_consented_marketing, has_consented_marketing_updated_at, registered_at, number_of_daily_check_in_all_time, number_of_daily_check_in_complete_all_time, number_of_daily_check_in_complete_this_month, email, phone_no, last_login, remaining_points, points_earned_this_month, exported_at, signup_hospital, signup_language, signup_source, signup_sso_app, signup_context, signup_campaign, signup_country, last_language, last_login_hospital, last_login_otp_passkey, login_hospitals, order_hospitals, _row_hash, _source, _loaded_at)
+  VALUES (s.user_id, s.register_channel, s.username, s.name, s.gender, s.dob, s.nationality, s.contact_country, s.contact_city, s.household_type, s.number_of_quiz_answered, s.has_completed_profile, s.has_consented_marketing, s.has_consented_marketing_updated_at, s.registered_at, s.number_of_daily_check_in_all_time, s.number_of_daily_check_in_complete_all_time, s.number_of_daily_check_in_complete_this_month, s.email, s.phone_no, s.last_login, s.remaining_points, s.points_earned_this_month, s.exported_at, s.signup_hospital, s.signup_language, s.signup_source, s.signup_sso_app, s.signup_context, s.signup_campaign, s.signup_country, s.last_language, s.last_login_hospital, s.last_login_otp_passkey, s.login_hospitals, s.order_hospitals, s._h, CONCAT('import:', label), run_at);
+INSERT `ai-reporting-503911.better_club._ingest_log` VALUES (run_at, CONCAT('import:customers:', label), n, @@row_count);
+END;
+
+CREATE TABLE IF NOT EXISTS `ai-reporting-503911.better_club.import_better_staff` (user_id STRING, register_channel STRING, username STRING, name STRING, gender STRING, dob STRING, nationality STRING, contact_country STRING, contact_city STRING, household_type STRING, number_of_quiz_answered STRING, has_completed_profile STRING, has_consented_marketing STRING, has_consented_marketing_updated_at STRING, registered_at STRING, number_of_daily_check_in_all_time STRING, number_of_daily_check_in_complete_all_time STRING, number_of_daily_check_in_complete_this_month STRING, email STRING, phone_no STRING, last_login STRING, remaining_points STRING, points_earned_this_month STRING, exported_at STRING, signup_hospital STRING, signup_language STRING, signup_source STRING, signup_sso_app STRING, signup_context STRING, signup_campaign STRING, signup_country STRING, last_language STRING, last_login_hospital STRING, last_login_otp_passkey STRING, login_hospitals STRING, order_hospitals STRING);
+CREATE OR REPLACE PROCEDURE `ai-reporting-503911.better_club.import_better_staff_run`(label STRING)
+BEGIN
+DECLARE run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP();
+DECLARE n INT64 DEFAULT (SELECT COUNT(*) FROM `ai-reporting-503911.better_club.import_better_staff` WHERE NULLIF(TRIM(user_id), '') IS NOT NULL);
+MERGE `ai-reporting-503911.better_club.raw_better_staff` r
+USING (
+  SELECT *, TO_HEX(SHA256(TO_JSON_STRING(STRUCT(user_id, register_channel, username, name, gender, dob, nationality, contact_country, contact_city, household_type, number_of_quiz_answered, has_completed_profile, has_consented_marketing, has_consented_marketing_updated_at, registered_at, number_of_daily_check_in_all_time, number_of_daily_check_in_complete_all_time, number_of_daily_check_in_complete_this_month, email, phone_no, last_login, remaining_points, points_earned_this_month, signup_hospital, signup_language, signup_source, signup_sso_app, signup_context, signup_campaign, signup_country, last_language, last_login_hospital, last_login_otp_passkey, login_hospitals, order_hospitals)))) AS _h FROM (
+    SELECT NULLIF(TRIM(user_id), '') AS user_id, NULLIF(TRIM(register_channel), '') AS register_channel, NULLIF(TRIM(username), '') AS username, NULLIF(TRIM(name), '') AS name, NULLIF(TRIM(gender), '') AS gender, NULLIF(TRIM(dob), '') AS dob, NULLIF(TRIM(nationality), '') AS nationality, NULLIF(TRIM(contact_country), '') AS contact_country, NULLIF(TRIM(contact_city), '') AS contact_city, NULLIF(TRIM(household_type), '') AS household_type, NULLIF(TRIM(number_of_quiz_answered), '') AS number_of_quiz_answered, NULLIF(TRIM(has_completed_profile), '') AS has_completed_profile, NULLIF(TRIM(has_consented_marketing), '') AS has_consented_marketing, NULLIF(TRIM(has_consented_marketing_updated_at), '') AS has_consented_marketing_updated_at, NULLIF(TRIM(registered_at), '') AS registered_at, NULLIF(TRIM(number_of_daily_check_in_all_time), '') AS number_of_daily_check_in_all_time, NULLIF(TRIM(number_of_daily_check_in_complete_all_time), '') AS number_of_daily_check_in_complete_all_time, NULLIF(TRIM(number_of_daily_check_in_complete_this_month), '') AS number_of_daily_check_in_complete_this_month, NULLIF(TRIM(email), '') AS email, NULLIF(TRIM(phone_no), '') AS phone_no, NULLIF(TRIM(last_login), '') AS last_login, NULLIF(TRIM(remaining_points), '') AS remaining_points, NULLIF(TRIM(points_earned_this_month), '') AS points_earned_this_month, NULLIF(TRIM(exported_at), '') AS exported_at, NULLIF(TRIM(signup_hospital), '') AS signup_hospital, NULLIF(TRIM(signup_language), '') AS signup_language, NULLIF(TRIM(signup_source), '') AS signup_source, NULLIF(TRIM(signup_sso_app), '') AS signup_sso_app, NULLIF(TRIM(signup_context), '') AS signup_context, NULLIF(TRIM(signup_campaign), '') AS signup_campaign, NULLIF(TRIM(signup_country), '') AS signup_country, NULLIF(TRIM(last_language), '') AS last_language, NULLIF(TRIM(last_login_hospital), '') AS last_login_hospital, NULLIF(TRIM(last_login_otp_passkey), '') AS last_login_otp_passkey, NULLIF(TRIM(login_hospitals), '') AS login_hospitals, NULLIF(TRIM(order_hospitals), '') AS order_hospitals
+    FROM `ai-reporting-503911.better_club.import_better_staff`
+    WHERE NULLIF(TRIM(user_id), '') IS NOT NULL AND user_id != 'User ID')
+  WHERE TRUE
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY _h) = 1
+) s
+ON r._row_hash = s._h
+WHEN NOT MATCHED THEN INSERT (user_id, register_channel, username, name, gender, dob, nationality, contact_country, contact_city, household_type, number_of_quiz_answered, has_completed_profile, has_consented_marketing, has_consented_marketing_updated_at, registered_at, number_of_daily_check_in_all_time, number_of_daily_check_in_complete_all_time, number_of_daily_check_in_complete_this_month, email, phone_no, last_login, remaining_points, points_earned_this_month, exported_at, signup_hospital, signup_language, signup_source, signup_sso_app, signup_context, signup_campaign, signup_country, last_language, last_login_hospital, last_login_otp_passkey, login_hospitals, order_hospitals, _row_hash, _source, _loaded_at)
+  VALUES (s.user_id, s.register_channel, s.username, s.name, s.gender, s.dob, s.nationality, s.contact_country, s.contact_city, s.household_type, s.number_of_quiz_answered, s.has_completed_profile, s.has_consented_marketing, s.has_consented_marketing_updated_at, s.registered_at, s.number_of_daily_check_in_all_time, s.number_of_daily_check_in_complete_all_time, s.number_of_daily_check_in_complete_this_month, s.email, s.phone_no, s.last_login, s.remaining_points, s.points_earned_this_month, s.exported_at, s.signup_hospital, s.signup_language, s.signup_source, s.signup_sso_app, s.signup_context, s.signup_campaign, s.signup_country, s.last_language, s.last_login_hospital, s.last_login_otp_passkey, s.login_hospitals, s.order_hospitals, s._h, CONCAT('import:', label), run_at);
+INSERT `ai-reporting-503911.better_club._ingest_log` VALUES (run_at, CONCAT('import:better_staff:', label), n, @@row_count);
+END;
+
+CREATE TABLE IF NOT EXISTS `ai-reporting-503911.better_club.import_all_event` (id STRING, user_id STRING, date_created STRING, event_name STRING, event_desc_1 STRING, event_desc_2 STRING, event_desc_json STRING, website_url STRING, linked_post_id STRING, should_earn_point STRING, point_earned STRING);
+CREATE OR REPLACE PROCEDURE `ai-reporting-503911.better_club.import_all_event_run`(label STRING)
+BEGIN
+DECLARE run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP();
+DECLARE n INT64 DEFAULT (SELECT COUNT(*) FROM `ai-reporting-503911.better_club.import_all_event` WHERE NULLIF(TRIM(id), '') IS NOT NULL);
+MERGE `ai-reporting-503911.better_club.raw_all_event` r
+USING (
+  SELECT *, TO_HEX(SHA256(TO_JSON_STRING(STRUCT(id, user_id, date_created, event_name, event_desc_1, event_desc_2, event_desc_json, website_url, linked_post_id, should_earn_point, point_earned)))) AS _h FROM (
+    SELECT NULLIF(TRIM(id), '') AS id, NULLIF(TRIM(user_id), '') AS user_id, NULLIF(TRIM(date_created), '') AS date_created, NULLIF(TRIM(event_name), '') AS event_name, NULLIF(TRIM(event_desc_1), '') AS event_desc_1, NULLIF(TRIM(event_desc_2), '') AS event_desc_2, NULLIF(TRIM(event_desc_json), '') AS event_desc_json, NULLIF(TRIM(website_url), '') AS website_url, NULLIF(TRIM(linked_post_id), '') AS linked_post_id, NULLIF(TRIM(should_earn_point), '') AS should_earn_point, NULLIF(TRIM(point_earned), '') AS point_earned
+    FROM `ai-reporting-503911.better_club.import_all_event`
+    WHERE NULLIF(TRIM(id), '') IS NOT NULL AND id != 'id')
+  WHERE TRUE
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY _h) = 1
+) s
+ON r._row_hash = s._h
+WHEN NOT MATCHED THEN INSERT (id, user_id, date_created, event_name, event_desc_1, event_desc_2, event_desc_json, website_url, linked_post_id, should_earn_point, point_earned, _row_hash, _source, _loaded_at)
+  VALUES (s.id, s.user_id, s.date_created, s.event_name, s.event_desc_1, s.event_desc_2, s.event_desc_json, s.website_url, s.linked_post_id, s.should_earn_point, s.point_earned, s._h, CONCAT('import:', label), run_at);
+INSERT `ai-reporting-503911.better_club._ingest_log` VALUES (run_at, CONCAT('import:all_event:', label), n, @@row_count);
+END;
+
+CREATE TABLE IF NOT EXISTS `ai-reporting-503911.better_club.import_badge_history` (id STRING, user_id STRING, date_earned STRING, date_expired STRING, badge_title STRING, badge_type STRING, additional_data STRING);
+CREATE OR REPLACE PROCEDURE `ai-reporting-503911.better_club.import_badge_history_run`(label STRING)
+BEGIN
+DECLARE run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP();
+DECLARE n INT64 DEFAULT (SELECT COUNT(*) FROM `ai-reporting-503911.better_club.import_badge_history` WHERE NULLIF(TRIM(id), '') IS NOT NULL);
+MERGE `ai-reporting-503911.better_club.raw_badge_history` r
+USING (
+  SELECT *, TO_HEX(SHA256(TO_JSON_STRING(STRUCT(id, user_id, date_earned, date_expired, badge_title, badge_type, additional_data)))) AS _h FROM (
+    SELECT NULLIF(TRIM(id), '') AS id, NULLIF(TRIM(user_id), '') AS user_id, NULLIF(TRIM(date_earned), '') AS date_earned, NULLIF(TRIM(date_expired), '') AS date_expired, NULLIF(TRIM(badge_title), '') AS badge_title, NULLIF(TRIM(badge_type), '') AS badge_type, NULLIF(TRIM(additional_data), '') AS additional_data
+    FROM `ai-reporting-503911.better_club.import_badge_history`
+    WHERE NULLIF(TRIM(id), '') IS NOT NULL AND id != 'id')
+  WHERE TRUE
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY _h) = 1
+) s
+ON r._row_hash = s._h
+WHEN NOT MATCHED THEN INSERT (id, user_id, date_earned, date_expired, badge_title, badge_type, additional_data, _row_hash, _source, _loaded_at)
+  VALUES (s.id, s.user_id, s.date_earned, s.date_expired, s.badge_title, s.badge_type, s.additional_data, s._h, CONCAT('import:', label), run_at);
+INSERT `ai-reporting-503911.better_club._ingest_log` VALUES (run_at, CONCAT('import:badge_history:', label), n, @@row_count);
+END;
+
+CREATE TABLE IF NOT EXISTS `ai-reporting-503911.better_club.import_read_post` (user_id STRING, date STRING, post_id STRING, post_type STRING, post_title STRING, fpd_tags STRING, points_earned STRING, tag_1 STRING, tag_2 STRING, tag_3 STRING, tag_4 STRING, tag_5 STRING, tag_6 STRING, tag_7 STRING, tag_8 STRING, tag_9 STRING, tag_10 STRING, email STRING, phone STRING, gender STRING, dob STRING, url STRING);
+CREATE OR REPLACE PROCEDURE `ai-reporting-503911.better_club.import_read_post_run`(label STRING)
+BEGIN
+DECLARE run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP();
+DECLARE n INT64 DEFAULT (SELECT COUNT(*) FROM `ai-reporting-503911.better_club.import_read_post` WHERE NULLIF(TRIM(user_id), '') IS NOT NULL);
+MERGE `ai-reporting-503911.better_club.raw_read_post` r
+USING (
+  SELECT *, TO_HEX(SHA256(TO_JSON_STRING(STRUCT(user_id, date, post_id, post_type, post_title, fpd_tags, points_earned, tag_1, tag_2, tag_3, tag_4, tag_5, tag_6, tag_7, tag_8, tag_9, tag_10, email, phone, gender, dob, url)))) AS _h FROM (
+    SELECT NULLIF(TRIM(user_id), '') AS user_id, NULLIF(TRIM(date), '') AS date, NULLIF(TRIM(post_id), '') AS post_id, NULLIF(TRIM(post_type), '') AS post_type, NULLIF(TRIM(post_title), '') AS post_title, NULLIF(TRIM(fpd_tags), '') AS fpd_tags, NULLIF(TRIM(points_earned), '') AS points_earned, NULLIF(TRIM(tag_1), '') AS tag_1, NULLIF(TRIM(tag_2), '') AS tag_2, NULLIF(TRIM(tag_3), '') AS tag_3, NULLIF(TRIM(tag_4), '') AS tag_4, NULLIF(TRIM(tag_5), '') AS tag_5, NULLIF(TRIM(tag_6), '') AS tag_6, NULLIF(TRIM(tag_7), '') AS tag_7, NULLIF(TRIM(tag_8), '') AS tag_8, NULLIF(TRIM(tag_9), '') AS tag_9, NULLIF(TRIM(tag_10), '') AS tag_10, NULLIF(TRIM(email), '') AS email, NULLIF(TRIM(phone), '') AS phone, NULLIF(TRIM(gender), '') AS gender, NULLIF(TRIM(dob), '') AS dob, NULLIF(TRIM(url), '') AS url
+    FROM `ai-reporting-503911.better_club.import_read_post`
+    WHERE NULLIF(TRIM(user_id), '') IS NOT NULL AND user_id != 'User ID')
+  WHERE TRUE
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY _h) = 1
+) s
+ON r._row_hash = s._h
+WHEN NOT MATCHED THEN INSERT (user_id, date, post_id, post_type, post_title, fpd_tags, points_earned, tag_1, tag_2, tag_3, tag_4, tag_5, tag_6, tag_7, tag_8, tag_9, tag_10, email, phone, gender, dob, url, _row_hash, _source, _loaded_at)
+  VALUES (s.user_id, s.date, s.post_id, s.post_type, s.post_title, s.fpd_tags, s.points_earned, s.tag_1, s.tag_2, s.tag_3, s.tag_4, s.tag_5, s.tag_6, s.tag_7, s.tag_8, s.tag_9, s.tag_10, s.email, s.phone, s.gender, s.dob, s.url, s._h, CONCAT('import:', label), run_at);
+INSERT `ai-reporting-503911.better_club._ingest_log` VALUES (run_at, CONCAT('import:read_post:', label), n, @@row_count);
+END;
+
+CREATE TABLE IF NOT EXISTS `ai-reporting-503911.better_club.import_click_cta` (user_id STRING, date STRING, event STRING, email STRING, phone STRING, gender STRING, dob STRING, url STRING);
+CREATE OR REPLACE PROCEDURE `ai-reporting-503911.better_club.import_click_cta_run`(label STRING)
+BEGIN
+DECLARE run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP();
+DECLARE n INT64 DEFAULT (SELECT COUNT(*) FROM `ai-reporting-503911.better_club.import_click_cta` WHERE NULLIF(TRIM(user_id), '') IS NOT NULL);
+MERGE `ai-reporting-503911.better_club.raw_click_cta` r
+USING (
+  SELECT *, TO_HEX(SHA256(TO_JSON_STRING(STRUCT(user_id, date, event, email, phone, gender, dob, url)))) AS _h FROM (
+    SELECT NULLIF(TRIM(user_id), '') AS user_id, NULLIF(TRIM(date), '') AS date, NULLIF(TRIM(event), '') AS event, NULLIF(TRIM(email), '') AS email, NULLIF(TRIM(phone), '') AS phone, NULLIF(TRIM(gender), '') AS gender, NULLIF(TRIM(dob), '') AS dob, NULLIF(TRIM(url), '') AS url
+    FROM `ai-reporting-503911.better_club.import_click_cta`
+    WHERE NULLIF(TRIM(user_id), '') IS NOT NULL AND user_id != 'User ID')
+  WHERE TRUE
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY _h) = 1
+) s
+ON r._row_hash = s._h
+WHEN NOT MATCHED THEN INSERT (user_id, date, event, email, phone, gender, dob, url, _row_hash, _source, _loaded_at)
+  VALUES (s.user_id, s.date, s.event, s.email, s.phone, s.gender, s.dob, s.url, s._h, CONCAT('import:', label), run_at);
+INSERT `ai-reporting-503911.better_club._ingest_log` VALUES (run_at, CONCAT('import:click_cta:', label), n, @@row_count);
+END;
+
+CREATE TABLE IF NOT EXISTS `ai-reporting-503911.better_club.import_quiz_result` (user_id STRING, date_created STRING, email STRING, phone STRING, gender STRING, dob STRING, quiz_type STRING, url STRING, quiz_title STRING, question STRING, answer STRING);
+CREATE OR REPLACE PROCEDURE `ai-reporting-503911.better_club.import_quiz_result_run`(label STRING)
+BEGIN
+DECLARE run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP();
+DECLARE n INT64 DEFAULT (SELECT COUNT(*) FROM `ai-reporting-503911.better_club.import_quiz_result` WHERE NULLIF(TRIM(user_id), '') IS NOT NULL);
+MERGE `ai-reporting-503911.better_club.raw_quiz_result` r
+USING (
+  SELECT *, TO_HEX(SHA256(TO_JSON_STRING(STRUCT(user_id, date_created, email, phone, gender, dob, quiz_type, url, quiz_title, question, answer)))) AS _h FROM (
+    SELECT NULLIF(TRIM(user_id), '') AS user_id, NULLIF(TRIM(date_created), '') AS date_created, NULLIF(TRIM(email), '') AS email, NULLIF(TRIM(phone), '') AS phone, NULLIF(TRIM(gender), '') AS gender, NULLIF(TRIM(dob), '') AS dob, NULLIF(TRIM(quiz_type), '') AS quiz_type, NULLIF(TRIM(url), '') AS url, NULLIF(TRIM(quiz_title), '') AS quiz_title, NULLIF(TRIM(question), '') AS question, NULLIF(TRIM(answer), '') AS answer
+    FROM `ai-reporting-503911.better_club.import_quiz_result`
+    WHERE NULLIF(TRIM(user_id), '') IS NOT NULL AND user_id != 'user_id')
+  WHERE TRUE
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY _h) = 1
+) s
+ON r._row_hash = s._h
+WHEN NOT MATCHED THEN INSERT (user_id, date_created, email, phone, gender, dob, quiz_type, url, quiz_title, question, answer, _row_hash, _source, _loaded_at)
+  VALUES (s.user_id, s.date_created, s.email, s.phone, s.gender, s.dob, s.quiz_type, s.url, s.quiz_title, s.question, s.answer, s._h, CONCAT('import:', label), run_at);
+INSERT `ai-reporting-503911.better_club._ingest_log` VALUES (run_at, CONCAT('import:quiz_result:', label), n, @@row_count);
+END;

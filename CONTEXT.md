@@ -1,5 +1,17 @@
 ### Recent (November 2026)
 
+**v3.385.0 — Better Club backfill path + two-year history in Performance** (MW):
+- Dev sent the full all_event export: 218,242 rows, 12 Sep 2024 – 3 Nov 2026, ids
+  897–219139, same columns as the sheet tab. Loaded through `import_all_event` (console
+  upload, all STRING) + `CALL import_all_event_run('<label>')` — same trim/hash/merge as
+  the daily load. Formatting differs from the sheet (JSON spacing, `{}` vs `[]`), so the
+  ~32k overlapping events land twice in raw; the views dedupe on event_id (latest load wins).
+- Import runs are logged as `import:<tab>:<label>` and excluded from the freshness strip.
+- Performance with long history: growth chart = 13 months up to the selected month; YoY
+  on the MAU card when the same month last year was fully tracked; cohort table = 6 month
+  columns, joiners inside the window by month, older by quarter (latest 6 quarters).
+  Daily chart = last 120 days. MOCK_BQ_LONG=1 gives a 27-month fixture to look at it.
+
 **v3.384.0 — Better Club freshness strip** (MW: "show the last customer activity in BQ
 after it loads, so I know how fresh the data is"): top of Performance. Last load from
 `_ingest_log` (new rows / rows in sheet) and the newest row in each source. Red "Daily

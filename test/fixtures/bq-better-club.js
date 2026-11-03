@@ -127,3 +127,33 @@ const overview = {
 };
 
 module.exports = { engagement, overview, quiz, targets };
+
+/**
+ * MOCK_BQ_LONG=1: the engagement fixture stretched to Sep 2024 – Nov 2026, the
+ * shape after the dev's backfill, so the 13-month chart, the 6-month cohort
+ * window and YoY can be looked at. Figures are synthetic but still satisfy
+ * MAU(m) - MAU(m-1) = new + reactivated - lost.
+ */
+if (process.env.MOCK_BQ_LONG === "1") {
+  const e = module.exports.engagement;
+  const keys = [];
+  for (let y = 2024, m = 9; y < 2026 || (y === 2026 && m <= 7); m === 12 ? (y++, m = 1) : m++) keys.push(`${y}-${String(m).padStart(2, "0")}`);
+  let prev = null;
+  const early = keys.map((k, i) => {
+    const n = 60 + (i * 7) % 40, react = i ? 20 + (i * 5) % 15 : 0, ret = i ? 40 + (i * 3) % 20 : 0;
+    const mau = i ? n + ret + react : 150;
+    const churned = i ? prev - ret : 0; prev = mau;
+    return { ...e.months[1], month: k, mau, new_users: n, retained: ret, reactivated: react, baseline: i ? 0 : 150 - n,
+      churned, joined: 1500 + i * 60, complete: undefined };
+  });
+  // Re-tie August 2026 to the synthetic July so the identity holds across the join.
+  const aug = { ...e.months[0], retained: 60, reactivated: 61, baseline: 0, new_users: 125 };
+  aug.mau = aug.new_users + aug.retained + aug.reactivated; aug.churned = prev - aug.retained;
+  const sep = e.months[1]; sep.churned = aug.mau - sep.retained; sep.mau = sep.new_users + sep.retained + sep.reactivated;
+  const oct = e.months[2]; oct.churned = sep.mau - oct.retained; oct.mau = oct.new_users + oct.retained + oct.reactivated;
+  const nov = e.months[3]; nov.churned = oct.mau - nov.retained; nov.mau = nov.new_users + nov.retained + nov.reactivated;
+  e.months = [...early, aug, sep, oct, nov];
+  e.coverage = { d0: "2024-09-12", d1: "2026-11-03" };
+  e.cohorts = e.cohorts.concat(keys.slice(0, -1).flatMap((k) => ["2026-08", "2026-09", "2026-10"]
+    .map((month, i) => ({ cohort: k, size: 1500, month, active: 3 + i }))));
+}

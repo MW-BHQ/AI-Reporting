@@ -11789,10 +11789,11 @@ dormant AS (
   GROUP BY 1),
 -- FRESHNESS: the last daily load, and the newest activity BigQuery holds, so
 -- the team can see how current the numbers are without asking.
-lastrun AS (SELECT MAX(run_at) AS t FROM {{DS}}._ingest_log),
+-- Imports (tab 'import:...') are one-off backfills, not the daily load.
+lastrun AS (SELECT MAX(run_at) AS t FROM {{DS}}._ingest_log WHERE NOT STARTS_WITH(tab, 'import:')),
 fresh AS (
   SELECT l.tab, l.rows_in_source, l.rows_inserted
-  FROM {{DS}}._ingest_log l, lastrun WHERE l.run_at = lastrun.t),
+  FROM {{DS}}._ingest_log l, lastrun WHERE l.run_at = lastrun.t AND NOT STARTS_WITH(l.tab, 'import:')),
 latest AS (
   SELECT 'Activity (check-ins, reads, quizzes)' AS what, MAX(created_at) AS t FROM {{DS}}.events
   UNION ALL SELECT 'Articles read', MAX(read_at) FROM {{DS}}.post_reads
