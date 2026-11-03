@@ -1199,6 +1199,7 @@ TCSV=$(curl -s -H "$ADMIN" "http://localhost:$PORT/api/better-club/targets.csv?m
 if printf '%s' "$TCSV" | head -1 | grep -q "user_id,name,email,phone_no" && printf '%s' "$TCSV" | grep -q '"Test, Member"' && printf '%s' "$TCSV" | grep -q '""ทดสอบ""'; then printf '  ok   %-22s %s\n' "target csv" ok; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "target csv" "$(printf '%s' "$TCSV" | head -c 120)"; fi
 TBAD=$(curl -s -o /dev/null -w '%{http_code}' -H "$ADMIN" "http://localhost:$PORT/api/better-club/targets.csv?month=2026-10-01%27")
 if [ "$TBAD" = "400" ]; then printf '  ok   %-22s %s\n' "target bad month" 400; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "target bad month" "$TBAD"; fi
+expect_field "eng freshness"      "$ENG" "d.freshness&&d.freshness.last_run&&d.freshness.latest.length===5?'ok':undefined"
 expect_field "eng identity"       "$ENG" "d.months.slice(1).every((m,i)=>m.mau-d.months[i].mau===m.new_users+m.reactivated-m.churned)?'ok':undefined"
 
 # ---- Better Club -----------------------------------------------------------

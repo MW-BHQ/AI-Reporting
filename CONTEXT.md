@@ -1,5 +1,11 @@
 ### Recent (November 2026)
 
+**v3.384.0 — Better Club freshness strip** (MW: "show the last customer activity in BQ
+after it loads, so I know how fresh the data is"): top of Performance. Last load from
+`_ingest_log` (new rows / rows in sheet) and the newest row in each source. Red "Daily
+load missed" when the last load is over 30 h old. Found while building it: the 06:00
+scheduled run on 4 Nov never logged — only the manual 3 Nov 18:14 load exists.
+
 **v3.383.0 — Better Club tabs reordered and renamed** (MW): 1. Performance (`bcengage`,
 was Engagement), 2. Quiz Insight (`bcquiz`), 3. Rev Attribution (`bclub`, was Overview).
 View ids unchanged, so tab permissions and links still work.

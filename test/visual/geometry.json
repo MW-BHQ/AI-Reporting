@@ -5364,13 +5364,21 @@
 0,
 0,
 1104,
-1036
+1197
+],
+[
+"div.card.bce-fresh",
+"",
+0,
+153,
+1104,
+147
 ],
 [
 "div.grid.g-4",
 "Monthly active members",
 0,
-153,
+314,
 1104,
 207
 ],
@@ -5378,7 +5386,7 @@
 "div.stat",
 "Monthly active members",
 0,
-153,
+314,
 266,
 207
 ],
@@ -5386,7 +5394,7 @@
 "div.stat",
 "New members",
 280,
-153,
+314,
 266,
 207
 ],
@@ -5394,7 +5402,7 @@
 "div.stat",
 "Retained",
 559,
-153,
+314,
 266,
 207
 ],
@@ -5402,7 +5410,7 @@
 "div.stat",
 "Reactivated",
 839,
-153,
+314,
 266,
 207
 ],
@@ -5410,7 +5418,7 @@
 "div.grid.g-4",
 "Lost from last month",
 0,
-380,
+541,
 1104,
 205
 ],
@@ -5418,7 +5426,7 @@
 "div.stat",
 "Lost from last month",
 0,
-380,
+541,
 266,
 205
 ],
@@ -5426,7 +5434,7 @@
 "div.stat",
 "Joiners active in their first month",
 280,
-380,
+541,
 266,
 205
 ],
@@ -5434,7 +5442,7 @@
 "div.stat",
 "Last month’s joiners back this month",
 559,
-380,
+541,
 266,
 205
 ],
@@ -5442,7 +5450,7 @@
 "div.stat",
 "Daily active ÷ monthly active",
 839,
-380,
+541,
 266,
 205
 ],
@@ -5450,7 +5458,7 @@
 "div.card",
 "Where each month’s active members come f",
 0,
-598,
+759,
 1104,
 374
 ],
@@ -5458,7 +5466,7 @@
 "canvas.",
 "",
 21,
-660,
+821,
 1062,
 250
 ],
@@ -5466,7 +5474,7 @@
 "div.slide.slide-break",
 "What to do next · October 2026 Better Cl",
 0,
-1036,
+1197,
 1104,
 941
 ],
@@ -5474,7 +5482,7 @@
 "div.grid.g-3",
 "",
 0,
-1189,
+1350,
 1104,
 288
 ],
@@ -5482,7 +5490,7 @@
 "div.card.bce-play",
 "",
 0,
-1189,
+1350,
 359,
 288
 ],
@@ -5490,7 +5498,7 @@
 "div.card.bce-play",
 "",
 373,
-1189,
+1350,
 359,
 288
 ],
@@ -5498,7 +5506,7 @@
 "div.card.bce-play",
 "",
 745,
-1189,
+1350,
 359,
 288
 ],
@@ -5506,7 +5514,7 @@
 "div.card.mt",
 "Target list: members whose points are wa",
 0,
-1491,
+1652,
 1104,
 173
 ],
@@ -5514,7 +5522,7 @@
 "div.grid.g-2-1",
 "Also this month",
 0,
-1677,
+1838,
 1104,
 236
 ],
@@ -5522,7 +5530,7 @@
 "div.card",
 "Also this month",
 0,
-1677,
+1838,
 671,
 236
 ],
@@ -5530,7 +5538,7 @@
 "div.card",
 "From 248 to 802 active members",
 685,
-1677,
+1838,
 419,
 236
 ],
@@ -5538,7 +5546,7 @@
 "div.slide.slide-break",
 "Who comes back, and what brings them Bet",
 0,
-1977,
+2138,
 1104,
 919
 ],
@@ -5546,7 +5554,7 @@
 "div.grid.g-2",
 "Reactivated in October 2026, by how long",
 0,
-2108,
+2269,
 1104,
 263
 ],
@@ -5554,7 +5562,7 @@
 "div.card",
 "Reactivated in October 2026, by how long",
 0,
-2108,
+2269,
 545,
 263
 ],
@@ -5562,7 +5570,7 @@
 "div.card",
 "What reactivated members came back for",
 559,
-2108,
+2269,
 545,
 263
 ],
@@ -5570,7 +5578,7 @@
 "div.card",
 "What each group did in October 2026",
 0,
-2385,
+2546,
 1104,
 448
 ],
@@ -5578,7 +5586,7 @@
 "table.roomy",
 "",
 21,
-2447,
+2608,
 1062,
 307
 ],
@@ -5586,7 +5594,7 @@
 "div.slide.slide-break",
 "Do new members stay? Better Club01 Jul 2",
 0,
-2896,
+3057,
 1104,
 997
 ],
@@ -5594,7 +5602,7 @@
 "div.card",
 "Of each group of joiners, how many were ",
 0,
-3027,
+3188,
 1104,
 431
 ],
@@ -5602,7 +5610,7 @@
 "table.roomy",
 "",
 21,
-3089,
+3250,
 1062,
 307
 ],
@@ -5610,7 +5618,7 @@
 "div.card",
 "Active members per day",
 0,
-3472,
+3633,
 1104,
 358
 ],
@@ -5618,7 +5626,7 @@
 "canvas.",
 "",
 21,
-3534,
+3695,
 1062,
 250
 ],
@@ -5626,7 +5634,7 @@
 "div.slide.slide-break",
 "What active members care about · October",
 0,
-3893,
+4054,
 1104,
 534
 ],
@@ -5634,7 +5642,7 @@
 "div.grid.g-3",
 "Topics active members read, by readers",
 0,
-4024,
+4185,
 1104,
 340
 ],
@@ -5642,7 +5650,7 @@
 "div.card",
 "Topics active members read, by readers",
 0,
-4024,
+4185,
 359,
 340
 ],
@@ -5650,7 +5658,7 @@
 "div.card",
 "Buttons active members clicked",
 373,
-4024,
+4185,
 359,
 340
 ],
@@ -5658,7 +5666,7 @@
 "div.card",
 "Days active in the month",
 745,
-4024,
+4185,
 359,
 340
 ],
@@ -5666,7 +5674,7 @@
 "div.slide.slide-break",
 "Points and rewards · October 2026 Better",
 0,
-4428,
+4589,
 1104,
 1181
 ],
@@ -5674,7 +5682,7 @@
 "div.grid.g-4",
 "B points earned from activity",
 0,
-4558,
+4719,
 1104,
 190
 ],
@@ -5682,7 +5690,7 @@
 "div.stat",
 "B points earned from activity",
 0,
-4558,
+4719,
 266,
 190
 ],
@@ -5690,7 +5698,7 @@
 "div.stat",
 "Rewards redeemed",
 280,
-4558,
+4719,
 266,
 190
 ],
@@ -5698,7 +5706,7 @@
 "div.stat",
 "Coupons used",
 559,
-4558,
+4719,
 266,
 190
 ],
@@ -5706,7 +5714,7 @@
 "div.stat",
 "Friends referred",
 839,
-4558,
+4719,
 266,
 190
 ],
@@ -5714,7 +5722,7 @@
 "div.card.mt",
 "What members redeemed in October 2026",
 0,
-4762,
+4923,
 1104,
 355
 ],
@@ -5722,7 +5730,7 @@
 "table.roomy",
 "",
 21,
-4824,
+4985,
 1062,
 247
 ],
@@ -5730,7 +5738,7 @@
 "div.card.mt",
 "Badges earned in October 2026 vs Septemb",
 0,
-5131,
+5292,
 1104,
 414
 ],
@@ -5738,7 +5746,7 @@
 "table.roomy",
 "",
 21,
-5193,
+5354,
 1062,
 290
 ],
@@ -5746,7 +5754,7 @@
 "div.slide.slide-break",
 "Campaigns: who joins, and who earns poin",
 0,
-5609,
+5770,
 1104,
 907
 ],
@@ -5754,7 +5762,7 @@
 "div.grid.g-2",
 "Joiners in October 2026, by sign-up chan",
 0,
-5739,
+5900,
 1104,
 431
 ],
@@ -5762,7 +5770,7 @@
 "div.card",
 "Joiners in October 2026, by sign-up chan",
 0,
-5739,
+5900,
 545,
 431
 ],
@@ -5770,7 +5778,7 @@
 "table.roomy",
 "",
 21,
-5801,
+5962,
 503,
 290
 ],
@@ -5778,7 +5786,7 @@
 "div.card",
 "Joiners in October 2026, by campaign",
 559,
-5739,
+5900,
 545,
 431
 ],
@@ -5786,7 +5794,7 @@
 "table.roomy",
 "",
 580,
-5801,
+5962,
 503,
 244
 ],
@@ -5794,7 +5802,7 @@
 "div.card.mt",
 "Reward articles members read most in Oct",
 0,
-6184,
+6345,
 1104,
 268
 ],
@@ -5802,7 +5810,7 @@
 "table.roomy",
 "",
 21,
-6246,
+6407,
 1062,
 160
 ],
@@ -5810,7 +5818,7 @@
 "div.slide.slide-break",
 "Habit and timing · October 2026 Better C",
 0,
-6515,
+6676,
 1104,
 569
 ],
@@ -5818,7 +5826,7 @@
 "div.grid.g-2-1",
 "When members earn points, by hour",
 0,
-6646,
+6807,
 1104,
 374
 ],
@@ -5826,7 +5834,7 @@
 "div.card",
 "When members earn points, by hour",
 0,
-6646,
+6807,
 671,
 374
 ],
@@ -5834,7 +5842,7 @@
 "canvas.",
 "",
 21,
-6708,
+6869,
 628,
 250
 ],
@@ -5842,7 +5850,7 @@
 "div.card",
 "Longest check-in streak in October 2026",
 685,
-6646,
+6807,
 419,
 374
 ]

@@ -11787,6 +11787,18 @@ dormant AS (
   LEFT JOIN um ON um.user_id = c.user_id AND um.month = m.month
   WHERE um.user_id IS NULL AND DATE(c.registered_at) < m.month
   GROUP BY 1),
+-- FRESHNESS: the last daily load, and the newest activity BigQuery holds, so
+-- the team can see how current the numbers are without asking.
+lastrun AS (SELECT MAX(run_at) AS t FROM {{DS}}._ingest_log),
+fresh AS (
+  SELECT l.tab, l.rows_in_source, l.rows_inserted
+  FROM {{DS}}._ingest_log l, lastrun WHERE l.run_at = lastrun.t),
+latest AS (
+  SELECT 'Activity (check-ins, reads, quizzes)' AS what, MAX(created_at) AS t FROM {{DS}}.events
+  UNION ALL SELECT 'Articles read', MAX(read_at) FROM {{DS}}.post_reads
+  UNION ALL SELECT 'Buttons clicked', MAX(clicked_at) FROM {{DS}}.cta_clicks
+  UNION ALL SELECT 'Quiz answers', MAX(answered_at) FROM {{DS}}.quiz_answers
+  UNION ALL SELECT 'Member list exported', MAX(exported_at) FROM {{DS}}.customers),
 -- Badges earned per month (staff out). Starter is the sign-up badge.
 badge AS (
   SELECT DATE_TRUNC(DATE(earned_at), MONTH) AS month, badge_title AS title, badge_type AS type,
@@ -11820,6 +11832,11 @@ SELECT TO_JSON_STRING(STRUCT(
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, bin, users FROM streak ORDER BY month, bin) AS streaks,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, hour, actions, users FROM hours ORDER BY month, hour) AS hours,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, dormant.* EXCEPT (month) FROM dormant ORDER BY month) AS dormant,
+  (SELECT AS STRUCT FORMAT_TIMESTAMP('%FT%T%Ez', t, 'Asia/Bangkok') AS last_run,
+     (SELECT SUM(rows_in_source) FROM fresh) AS rows_in_source,
+     (SELECT SUM(rows_inserted) FROM fresh) AS rows_inserted,
+     ARRAY(SELECT AS STRUCT what, FORMAT_DATETIME('%F %H:%M', t) AS latest FROM latest) AS latest
+   FROM lastrun) AS freshness,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, title, type, earned, members FROM badge
         WHERE month >= DATE_SUB((SELECT MIN(month) FROM months), INTERVAL 1 MONTH) ORDER BY month, earned DESC) AS badges
 )) AS j`;
@@ -11867,7 +11884,7 @@ async function buildBclubEngagement(from, to) {
     daily: d.daily || [], cohorts: d.cohorts || [], tags: d.tags || [], cta: d.cta || [],
     rewards: d.rewards || [], points: d.points || [], channels: d.channels || [], campaigns: d.campaigns || [],
     rewardArticles: d.reward_articles || [], streaks: d.streaks || [], hours: d.hours || [],
-    dormant: d.dormant || [], badges: d.badges || [],
+    dormant: d.dormant || [], badges: d.badges || [], freshness: d.freshness || null,
     source: `BigQuery ${BC_DATASET}`,
   };
 }
