@@ -32,6 +32,39 @@ const jsonLarge = express.json({ limit: "20mb" });
 app.use((req, res, next) => (req.path === "/api/callout" ? jsonLarge : jsonSmall)(req, res, next));
 
 /**
+ * RESPONSE COMPRESSION, NO DEPENDENCY (v3.372.0, skill pack item 3).
+ *
+ * Measured: index.html is 778KB raw, 183KB brotli; report JSON is similar
+ * ratio. Express sent everything uncompressed. Node's own zlib does it:
+ *   - `res.json` bodies over 2KB: brotli q4 (fast) or gzip, by Accept-Encoding.
+ *   - index.html: compressed ONCE at boot (brotli q11, gzip 9) and served
+ *     from memory with an ETag, so a reload is a 304.
+ * `Vary: Accept-Encoding` on both, so a proxy never serves brotli to a client
+ * that cannot read it.
+ */
+const zlib = require("zlib");
+const pickEncoding = (req) => {
+  const ae = String(req.headers["accept-encoding"] || "");
+  return /\bbr\b/.test(ae) ? "br" : (/\bgzip\b/.test(ae) ? "gzip" : null);
+};
+app.use((req, res, next) => {
+  const enc = pickEncoding(req);
+  if (!enc) return next();
+  const plain = res.json.bind(res);
+  res.json = (body) => {
+    const buf = Buffer.from(JSON.stringify(body));
+    if (buf.length < 2048 || res.headersSent) return plain(body);
+    const out = enc === "br"
+      ? zlib.brotliCompressSync(buf, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 4 } })
+      : zlib.gzipSync(buf, { level: 6 });
+    res.set({ "Content-Type": "application/json; charset=utf-8", "Content-Encoding": enc, Vary: "Accept-Encoding" });
+    res.removeHeader("Content-Length");
+    return res.end(out);
+  };
+  next();
+});
+
+/**
  * `refresh=1` must reach the wire, not stop at the upstream memo.
  *
  * Done here rather than at each endpoint so a route added later cannot forget:
@@ -13303,6 +13336,24 @@ app.use((req, res, next) => {
     res.set("Cache-Control", "public, max-age=604800, immutable");
   }
   next();
+});
+const INDEX = (() => {
+  try {
+    const raw = fs.readFileSync(path.join(__dirname, "public", "index.html"));
+    return {
+      raw, etag: `"${require("crypto").createHash("sha1").update(raw).digest("hex").slice(0, 16)}"`,
+      br: zlib.brotliCompressSync(raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 } }),
+      gzip: zlib.gzipSync(raw, { level: 9 }),
+    };
+  } catch (e) { return null; }
+})();
+app.get(["/", "/index.html"], (req, res, next) => {
+  if (!INDEX) return next();
+  res.set({ "Content-Type": "text/html; charset=utf-8", ETag: INDEX.etag, Vary: "Accept-Encoding" });
+  if (req.headers["if-none-match"] === INDEX.etag) return res.status(304).end();
+  const enc = pickEncoding(req);
+  if (enc) res.set("Content-Encoding", enc);
+  res.end(enc ? INDEX[enc] : INDEX.raw);
 });
 app.use(express.static(path.join(__dirname, "public")));
 

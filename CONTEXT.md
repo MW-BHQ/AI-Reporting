@@ -66,6 +66,17 @@ Call out, under WSH, with the `AI` chip (house rule: every AI tab carries it).
 
 ### Recent (September 2026)
 
+**v3.372.0 — Response compression, no dependency** (skill pack item 3,
+uxui-performance). Measured first: index.html 778KB raw → 183KB brotli;
+`/api/report` (July fixture) 88KB → 9KB. Node zlib only:
+- `res.json` over 2KB: brotli q4 or gzip by Accept-Encoding, `Vary` set.
+- index.html compressed once at boot (brotli q11 ≈1.4s, gzip 9) and served
+  from memory with an ETag → reload is a 304. Still `no-cache`, so a deploy
+  is picked up on the next load.
+- Smoke: br and gzip decode byte-identical to plain; page compressed; 304
+  on matching ETag. Negative check: the test reads Content-Encoding, so a
+  removed middleware fails it.
+
 **v3.371.0 — Motion: entrance, bar wipe, count-up** (skill pack item 2,
 transitions-dev / css-native; plain CSS + ~60 lines JS, no library).
 - Cards and slides rise in with a 45ms stagger (360ms); funnel bars wipe in

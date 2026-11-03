@@ -86,6 +86,24 @@ check "better club"  GET "/api/better-club?from=$FROM&to=$TO"
 # every read with the access list, so /api/report returned the users array with
 # a 200 and nobody noticed. These assert the payload, not the status.
 REPORT="/api/report?from=$FROM&to=$TO"
+echo "--- compression (v3.372.0) ---"
+# brotli and gzip must decode to the SAME JSON as the plain response, and the
+# page must come back compressed with a working ETag.
+CMP=$(node -e '
+  const zlib=require("zlib"), http=require("http");
+  const get=(p,h)=>new Promise(r=>http.get({host:"localhost",port:process.argv[1],path:p,headers:{"X-Goog-Authenticated-User-Email":"accounts.google.com:admin@bkh.test",...h}},res=>{const b=[];res.on("data",c=>b.push(c)).on("end",()=>r({res,buf:Buffer.concat(b)}))}));
+  (async()=>{
+    const p="/api/report?from=2026-07-01&to=2026-07-31";
+    const plain=await get(p,{}), br=await get(p,{"accept-encoding":"br"}), gz=await get(p,{"accept-encoding":"gzip"});
+    const ok1=br.res.headers["content-encoding"]==="br"&&zlib.brotliDecompressSync(br.buf).equals(plain.buf);
+    const ok2=gz.res.headers["content-encoding"]==="gzip"&&zlib.gunzipSync(gz.buf).equals(plain.buf);
+    const page=await get("/",{"accept-encoding":"br"}), etag=page.res.headers.etag;
+    const again=await get("/",{"if-none-match":etag});
+    const ok3=page.res.headers["content-encoding"]==="br"&&page.buf.length<plain.buf.length*10&&again.res.statusCode===304;
+    console.log(ok1&&ok2&&ok3?"ok":`br=${ok1} gzip=${ok2} page=${ok3}`);
+  })();' "$PORT")
+if [ "$CMP" = "ok" ]; then printf '  ok   %-22s %s\n' "br/gzip + etag" ok; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "br/gzip + etag" "$CMP"; fi
+
 echo "--- monthly report: overview page (v3.357.0) ---"
 OV="d.overviewPage"
 expect_field "ov page has 4 cards"  "$REPORT" "$OV.available&&['visibility','visits','contact','directions'].every(k=>$OV.cards[k])?'ok':undefined"
