@@ -1,4 +1,4 @@
-# BHQ War Room — handover at v3.363.0
+# BHQ War Room — handover at v3.376.0
 
 Written for a fresh session. MW is bringing a NEW source of Shopee data, so the
 Shopee section matters most — read it before touching anything there.
@@ -8,7 +8,7 @@ Shopee section matters most — read it before touching anything there.
 - Repo `MW-BHQ/AI-Reporting`, branch `main`, working dir `/home/claude/bkh/`.
 - Auto-deploys to Cloud Run `ai-reporting-git`, `asia-southeast1`,
   project `ai-reporting-503911`. Live at `w.bkhos.co`.
-- Current version **3.363.0**. Bump BOTH `package.json` and `CLIENT_BUILD` in
+- Current version **3.376.0**. Bump BOTH `package.json` and `CLIENT_BUILD` in
   `public/index.html`, and add a CONTEXT.md entry.
 - MW supplies a session-scoped GitHub PAT. Ask for it; do not look for one.
 
@@ -142,16 +142,45 @@ full .gs; ask him for it before editing.
 
 ## Open items
 
-0b. IAP signed header enforced on Cloud Run since v3.376.0 (live check read
-   "verified"). Kill switch: env `IAP_ENFORCE_JWT=0`.
--1. Call out tab (v3.360.0) is new: first real run on October data — check
-   Claude's picks, the red-number rate, and the .docx in Google Docs.
-0. Monthly Report Overview page live on all four hospitals (v3.359.0).
 1. MW's team is back-filling the Shopee and Lazada sheets to the present; then
    check Overview, Shopee, Lazada and E-commerce Campaigns on a month both cover.
-2. Lazada: who funds the Sponsored Discovery/Max visitors (ask Lazada AM).
-3. PDF: campaign sheet ~6% blank tail, left alone on purpose.
-4. Older wishlist: PDF date stamp, better month-end forecast, topic ideas.
+2. Call out tab (v3.360.0): first real run on October data — check Claude's
+   picks, the red-number rate, and the .docx in Google Docs.
+3. TikTok GA4 match: TikTok ads show in Campaigns, but visits need the TikTok
+   `utm_campaign` to start with the campaign code. Ask MW for one landing URL.
+4. Campaign detail parent row: THB/visit is a website number; on a Message
+   campaign it should be the campaign's own cost per result. Offered, not done.
+5. Colour tokens round 2: ~22x `#4C5878` (= --ink-2) and ~17x `#4B8DF8`
+   (= --blue) still hand-typed. Same method as v3.375.0.
+6. Lazada: who funds the Sponsored Discovery/Max visitors (ask Lazada AM).
+7. PDF: campaign sheet ~6% blank tail, left alone on purpose.
+8. Older wishlist: PDF date stamp, better month-end forecast, topic ideas.
+
+## Session v3.357 → v3.376 in one screen
+
+- **Monthly Report** (all 4 hospitals): Digital Marketing Performance cover →
+  Overview page (shared `funnelCard(d)` + 4 scorecards: Total Visibility,
+  Total Visits, Total Contact Us incl. Google Ads calls, Total Direction
+  requests; BHQ) → Website Performance cover. MoM/YoY only like-for-like
+  (`overviewScorecards`), else dash + "<source> not comparable" printed.
+- **Campaigns**: ad rows judged by their objective (`adResultRow`; Meta goal =
+  spend-weighted `adsset_optimization_goal`). TikTok Ads (`tiktok`, live
+  names `TT14_260918-02_...`, matched by `adNameMatchesCode` — code token
+  needs its dash so PO numbers never match; TikTok `results` reads 0 live,
+  traffic uses destination clicks). TikTok organic matched by link or code in
+  caption. Spend fallback never lands on a row another platform owns.
+  PDF file name `[code] - [range]`.
+- **E-commerce Channels**: "What moved between the two halves" removed.
+- **Skill pack items**: `test/visual.py` (screens + printed slides vs
+  `test/visual/`), motion (entrance, bar wipe, count-up; never in print),
+  Node zlib compression (index 778→183KB, ETag), `test/clickpath.py` (109
+  clicks), IAP signed header ENFORCED on Cloud Run (`jwt` in /api/me;
+  kill switch env `IAP_ENFORCE_JWT=0`), `--good/--bad` + `HOUSE` tokens with
+  `colours:house` lint.
+- **Appointments block source** (MW asked): Initiates = GA4 `appointments`
+  event; the rest = sheet `1Yt_4NknQdLQogZKwtZoG9dGAe99HlF0UuilebMxt95Q`
+  (Realtime, Non Realtime, Total Amounts). ฿0 revenue = month missing from
+  Total Amounts — should be a dash; offered, not done.
 
 ## Traps that have each cost a release
 
