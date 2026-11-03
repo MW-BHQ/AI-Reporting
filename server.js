@@ -11763,6 +11763,29 @@ streak AS (
           MAX(IFNULL(SAFE_CAST(JSON_VALUE(event_desc_json, '$.current_streak') AS INT64), 1)) AS s
         FROM ev WHERE event_name = 'DAILY_LOGIN' GROUP BY 1, 2)
   GROUP BY 1, 2),
+-- THE REACHABLE POOL for "What to do next": members who joined before the month
+-- and did not earn points in it, by how long ago they joined, and how many already
+-- hold enough points for the cheapest health guide and agreed to marketing.
+-- remaining_points and consent are TODAY's snapshot, so they describe who can be
+-- reached now, not who could have been reached then.
+guide AS (
+  SELECT IFNULL(MIN(SAFE_CAST(JSON_VALUE(event_desc_json, '$.points_used') AS INT64)), 15) AS pts
+  FROM ev WHERE event_name = 'REDEEMED_REWARD' AND STARTS_WITH(JSON_VALUE(event_desc_json, '$.coupon_code'), 'DIGITAL')),
+dormant AS (
+  SELECT m.month, COUNT(*) AS dormant,
+    COUNTIF(DATE_DIFF(m.month, DATE_TRUNC(DATE(c.registered_at), MONTH), MONTH) BETWEEN 1 AND 3) AS d_1_3,
+    COUNTIF(DATE_DIFF(m.month, DATE_TRUNC(DATE(c.registered_at), MONTH), MONTH) BETWEEN 4 AND 12) AS d_4_12,
+    COUNTIF(DATE_DIFF(m.month, DATE_TRUNC(DATE(c.registered_at), MONTH), MONTH) > 12) AS d_12,
+    COUNTIF(c.remaining_points >= (SELECT pts FROM guide)) AS with_points,
+    COUNTIF(c.has_consented_marketing) AS consented,
+    COUNTIF(c.has_consented_marketing AND c.remaining_points >= (SELECT pts FROM guide)) AS reachable,
+    COUNTIF(c.has_consented_marketing AND c.remaining_points >= (SELECT pts FROM guide)
+            AND DATE_DIFF(m.month, DATE_TRUNC(DATE(c.registered_at), MONTH), MONTH) BETWEEN 4 AND 12) AS reachable_4_12,
+    (SELECT pts FROM guide) AS guide_points
+  FROM months m CROSS JOIN {{DS}}.members c
+  LEFT JOIN um ON um.user_id = c.user_id AND um.month = m.month
+  WHERE um.user_id IS NULL AND DATE(c.registered_at) < m.month
+  GROUP BY 1),
 -- When members earn points (Bangkok wall clock), to time pushes and broadcasts.
 hours AS (
   SELECT DATE_TRUNC(DATE(ts), MONTH) AS month, EXTRACT(HOUR FROM ts) AS hour,
@@ -11789,7 +11812,8 @@ SELECT TO_JSON_STRING(STRUCT(
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, campaign, channel, joined, active FROM camp ORDER BY month, joined DESC) AS campaigns,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, post_id, title, readers, launched FROM rart ORDER BY month, readers DESC) AS reward_articles,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, bin, users FROM streak ORDER BY month, bin) AS streaks,
-  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, hour, actions, users FROM hours ORDER BY month, hour) AS hours
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, hour, actions, users FROM hours ORDER BY month, hour) AS hours,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, dormant.* EXCEPT (month) FROM dormant ORDER BY month) AS dormant
 )) AS j`;
 
 function bcLastDay(key) {
@@ -11835,6 +11859,7 @@ async function buildBclubEngagement(from, to) {
     daily: d.daily || [], cohorts: d.cohorts || [], tags: d.tags || [], cta: d.cta || [],
     rewards: d.rewards || [], points: d.points || [], channels: d.channels || [], campaigns: d.campaigns || [],
     rewardArticles: d.reward_articles || [], streaks: d.streaks || [], hours: d.hours || [],
+    dormant: d.dormant || [],
     source: `BigQuery ${BC_DATASET}`,
   };
 }

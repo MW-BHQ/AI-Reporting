@@ -1,5 +1,23 @@
 ### Recent (November 2026)
 
+**v3.381.0 — Engagement: "What to do next"** (MW: "the number is very discouraging — add
+more so the team knows what to do next"):
+- Second slide, right after the MAU cards. Three plays, each with the number behind it,
+  who to target and how many, what to do, and what it adds to MAU at a STATED conversion
+  (scenario, printed in the play, never a forecast):
+  1. Points are waiting: inactive members who consented to marketing and hold enough
+     points for the cheapest health guide (Oct 33,972; 12,882 joined 4-12 months ago,
+     the group behind 45% of comebacks). 1 in 100 back = +340.
+  2. First points for joiners: Oct 2,964 of 3,089 earned nothing. 1 in 10 = +184.
+  3. Keep next month: retention 28%; 165 one-day check-ins vs 26 full weeks. 40% = +30.
+- "Also this month": send window (top 3 hours), lead with health guides, best vs worst
+  sign-up channel (min 10 / 50 joiners), share of joiners with no campaign tag.
+- "From N to M active members" bar adds the three scenarios to today's MAU.
+- New BigQuery block `dormant` (members joined before the month with no B-point action):
+  by tenure, with_points, consented, reachable, reachable_4_12. Points and consent are
+  TODAY's snapshot, so the pool means "who we can reach now".
+- Note: visual.py takes ~3 min; run it detached (setsid) or the 300 s tool limit kills it.
+
 **v3.380.0 — Engagement: counts, rewards, and marketer sections** (MW):
 - "What each group did" and the cohort table print COUNTS; the share is on hover.
 - Points and rewards: B points earned from the three MAU actions (MoM), rewards redeemed

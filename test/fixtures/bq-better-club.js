@@ -78,6 +78,9 @@ const engagement = {
   streaks: [["1", 165], ["2-6", 25], ["7", 26]].map(([bin, users]) => ({ month: "2026-10", bin, users })),
   hours: [14, 11, 9, 6, 5, 12, 13, 24, 47, 47, 49, 48, 33, 42, 37, 29, 30, 27, 25, 27, 20, 28, 23, 20]
     .map((users, hour) => ({ month: "2026-10", hour, users, actions: users * 5 })),
+  dormant: [["2026-09", 50817, 8681, 20134, 22002, 38904, 34695, 32100, 12500], ["2026-10", 53665, 8941, 20707, 24017, 41199, 36473, 33972, 12882]]
+    .map(([month, dormant, d_1_3, d_4_12, d_12, with_points, consented, reachable, reachable_4_12]) =>
+      ({ month, dormant, d_1_3, d_4_12, d_12, with_points, consented, reachable, reachable_4_12, guide_points: 15 })),
 };
 
 const overview = {

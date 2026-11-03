@@ -1187,6 +1187,7 @@ expect_field "eng partial nov"    "$ENG" "d.months.find(m=>m.month==='2026-11').
 expect_field "eng rewards"        "$ENG" "d.rewards.some(r=>r.kind==='Health guide')&&d.rewards.some(r=>r.used>0)?'ok':undefined"
 expect_field "eng channels"       "$ENG" "d.channels.length&&d.campaigns.length&&d.rewardArticles.length?'ok':undefined"
 expect_field "eng habit"          "$ENG" "d.streaks.length===3&&d.hours.length===24?'ok':undefined"
+expect_field "eng reachable"      "$ENG" "d.dormant.find(r=>r.month==='2026-10').reachable===33972?'ok':undefined"
 expect_field "eng identity"       "$ENG" "d.months.slice(1).every((m,i)=>m.mau-d.months[i].mau===m.new_users+m.reactivated-m.churned)?'ok':undefined"
 
 # ---- Better Club -----------------------------------------------------------

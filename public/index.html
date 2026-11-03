@@ -2009,6 +2009,12 @@
   .bce-track{height:10px;background:rgba(90,110,160,.08);border-radius:5px;overflow:hidden;}
   .bce-fill{height:100%;border-radius:5px;}
   .bce-val{text-align:right;white-space:nowrap;color:var(--ink);} .bce-val span{color:var(--muted);margin-left:4px;}
+  .bce-play{display:flex;flex-direction:column;gap:6px;}
+  .bce-play-n{font-size:28px;font-weight:700;line-height:1.1;}
+  .bce-play-t{font-weight:700;color:var(--ink);font-size:var(--text-sm);}
+  .bce-play-why,.bce-play-do{font-size:var(--text-xs);color:var(--ink-2);line-height:1.5;}
+  .bce-play-gain{margin-top:auto;padding-top:8px;border-top:1px solid var(--line);font-size:var(--text-xs);color:var(--ink);}
+  .bce-list{margin:0;padding-left:18px;font-size:var(--text-xs);color:var(--ink-2);line-height:1.6;} .bce-list li{margin:4px 0;}
   .bc-stage canvas, .bc-hero canvas, .bc-mid canvas { max-width:100%; }
   #viewRoot .grid > * { min-width:0; }
 
@@ -10199,9 +10205,87 @@ function renderBcengage() {
       </div>
     </div>`;
 
+  /**
+   * WHAT TO DO NEXT (v3.381.0, MW: "the number is very discouraging — add more
+   * so the team knows what to do next"). Each play is built from figures already
+   * on this page: the number behind it, who to target and how many, the action,
+   * and what it would add to MAU at a stated conversion. The conversions are
+   * scenarios, printed in the play itself, never presented as forecasts.
+   */
+  const dm = byM(d.dormant)[0] || null;
+  const hrsTop = hrs.slice().sort((a, b) => b.users - a.users).slice(0, 3).map(r => r.hour).sort((a, b) => a - b);
+  const hourText = hrsTop.length ? `${String(hrsTop[0]).padStart(2, '0')}:00–${String(hrsTop[hrsTop.length - 1] + 1).padStart(2, '0')}:00` : '';
+  const oneDay = (st.find(r => r.bin === '1') || {}).users || 0, fullWeek = (st.find(r => r.bin === '7') || {}).users || 0;
+  const bestCh = ch.filter(r => r.channel !== 'Not recorded' && r.joined >= 10)
+    .sort((a, b) => share(b.active, b.joined) - share(a.active, a.joined))[0] || null;
+  const worstCh = ch.filter(r => r.channel !== 'Not recorded' && r.joined >= 50)
+    .sort((a, b) => share(a.active, a.joined) - share(b.active, b.joined))[0] || null;
+  const untagged = (ch.find(r => r.channel === 'Not recorded') || {}).joined || 0;
+  const joinedAll = s.joined;   // every joiner, not just the top channels listed
+  const topReward = rw.slice().sort((a, b) => b.redeemed - a.redeemed)[0] || null;
+  const guideRedeemed = rw.filter(r => r.kind === 'Health guide').reduce((a, r) => a + r.redeemed, 0);
+  const retRate = split && p ? share(s.retained, p.mau) : null;
+  const react412 = split ? share(s.react_t2, s.reactivated) : null;
+
+  const lever = [];
+  const play = (o) => `<div class="card bce-play">
+      <div class="bce-play-n" style="color:${o.colour};">${o.big}</div>
+      <div class="bce-play-t">${esc(o.title)}</div>
+      <div class="bce-play-why">${o.why}</div>
+      <div class="bce-play-do"><b>Do:</b> ${o.todo}</div>
+      ${o.gain ? `<div class="bce-play-gain">${o.gain}</div>` : ''}
+    </div>`;
+  const cards2 = [];
+  if (dm && dm.reachable) {
+    const add = Math.round(dm.reachable * 0.01);
+    lever.push(['Points reminder', add]);
+    cards2.push(play({ colour: BCE_COL.reactivated, big: cnt(dm.reachable),
+      title: 'Remind inactive members their points are waiting',
+      why: `members did not earn points in ${esc(label.replace(/ \d{4}$/, ''))}, agreed to marketing, and already hold ${cnt(dm.guide_points)}+ points — enough for a free health guide.${react412 !== null ? ` Start with the <b>${cnt(dm.reachable_4_12)}</b> who joined 4–12 months ago: they were ${pct(react412)} of this month’s comebacks.` : ''}`,
+      todo: `send “You have B points — claim a free health guide” with a link to today’s check-in${hourText ? `, at ${hourText}` : ''}.`,
+      gain: `If 1 in 100 comes back: <b>+${cnt(add)}</b> active members.` }));
+  }
+  if (s.joined) {
+    const add = Math.max(0, Math.round(s.joined * 0.10) - s.new_users);
+    if (add) lever.push(['First points for joiners', add]);
+    cards2.push(play({ colour: BCE_COL.new, big: cnt(s.joined - s.new_users),
+      title: 'Get new joiners to their first points',
+      why: `of the ${cnt(s.joined)} who joined in ${esc(label.replace(/ \d{4}$/, ''))} never earned a point that month. Only ${cnt(s.new_users)} (${pct(share(s.new_users, s.joined))}) did, and joiners rarely return later${backN !== null ? ` (${cnt(backN)} of ${cnt(backOf)} from the month before)` : ''} — month one is the window.`,
+      todo: 'right after sign-up, show the daily check-in as step one, then one reward article; follow up within 24 hours if no check-in.',
+      gain: add ? `If 1 in 10 earns points in month one: <b>+${cnt(add)}</b> active members.` : '' }));
+  }
+  if (retRate !== null) {
+    const target = 0.40, add = Math.max(0, Math.round(s.mau * target - s.mau * retRate));
+    if (add) lever.push(['Keep 40% next month', add]);
+    cards2.push(play({ colour: BCE_COL.retained, big: pct(retRate),
+      title: 'Keep this month’s active members next month',
+      why: `of ${esc(pLabel.replace(/ \d{4}$/, ''))}’s ${cnt(p.mau)} active members stayed. ${cnt(oneDay)} members checked in on one day only; ${cnt(fullWeek)} finished a full week.`,
+      todo: `remind members on day 2 and 3 of the weekly check-in${hourText ? ` at ${hourText}` : ''}, and make the 7-day finish worth more.`,
+      gain: add ? `If 40% stay: <b>+${cnt(add)}</b> active members next month.` : '' }));
+  }
+  const smaller = [];
+  if (hourText) smaller.push(`<li><b>Send at ${hourText}.</b> That is when the most members earn points.</li>`);
+  if (topReward) smaller.push(`<li><b>Lead with health guides.</b> ${cnt(guideRedeemed)} of ${cnt(rwSum('redeemed'))} redemptions were guides; the top reward was ${esc(topReward.name)} (${cnt(topReward.redeemed)}). Publish a new guide where the reads are: ${esc((tags[0] || {}).tag || 'the top topic')}.</li>`);
+  if (bestCh) smaller.push(`<li><b>Put more behind ${esc(bestCh.channel)}.</b> ${cnt(bestCh.active)} of ${cnt(bestCh.joined)} joiners earned points (${pct(share(bestCh.active, bestCh.joined))})${worstCh && worstCh.channel !== bestCh.channel ? `, against ${cnt(worstCh.active)} of ${cnt(worstCh.joined)} from ${esc(worstCh.channel)}` : ''}.</li>`);
+  if (untagged) smaller.push(`<li><b>Tag every sign-up link.</b> ${cnt(untagged)} of ${cnt(joinedAll)} joiners (${pct(share(untagged, joinedAll))}) came in with no campaign, so the channels that work cannot be found.</li>`);
+  const pathTotal = lever.reduce((a, r) => a + r[1], 0);
+  const nextBody = `
+    <div class="grid g-3">${cards2.join('')}</div>
+    <div class="grid g-2-1 mt">
+      <div class="card">
+        <div class="card-title">Also this month</div>
+        <ul class="bce-list">${smaller.join('')}</ul>
+      </div>
+      <div class="card">
+        <div class="card-title">From ${cnt(s.mau)} to ${cnt(s.mau + pathTotal)} active members</div>
+        ${hbarRows([['Now', s.mau], ...lever], null, BCE_COL.new)}
+      </div>
+    </div>`;
+
   $('viewRoot').innerHTML = `
     ${coverSlide('Better Club\nEngagement')}
     ${slideShell(`Monthly active members \u00b7 ${label}`, cards + `<div class="mt">${growth}</div>`, { first: true, scope: 'Better Club' })}
+    ${slideShell(`What to do next \u00b7 ${label}`, nextBody, { scope: 'Better Club' })}
     ${split ? slideShell('Who comes back, and what brings them', comeback + `<div class="mt">${doTable}</div>`, { scope: 'Better Club', cls: 'quiet' })
             : slideShell('What each group did', doTable, { scope: 'Better Club', cls: 'quiet' })}
     ${slideShell('Do new members stay?', cohort + `<div class="mt">${daily}</div>`, { scope: 'Better Club', cls: 'quiet' })}
@@ -13366,7 +13450,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.380.0';
+const CLIENT_BUILD = '3.381.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
