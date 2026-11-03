@@ -66,6 +66,23 @@ Call out, under WSH, with the `AI` chip (house rule: every AI tab carries it).
 
 ### Recent (September 2026)
 
+**v3.371.0 — Motion: entrance, bar wipe, count-up** (skill pack item 2,
+transitions-dev / css-native; plain CSS + ~60 lines JS, no library).
+- Cards and slides rise in with a 45ms stagger (360ms); funnel bars wipe in
+  (700ms); `.stat .val` / `.stage-val` numbers count up 650ms and then get
+  their ORIGINAL text back exactly. Cards lift their shadow on hover.
+- Plays when a view opens or its data just loaded (`setStatus('ok')` stamps
+  `window.MOTION_STATE.loadedAt`); a plain re-render (toggles) does not
+  replay. One childList observer on #viewRoot — no render site touched.
+- Never in print: CSS is `@media screen` + reduced-motion gated, print block
+  forces final state, and `finishMotion()` runs in `printWhenImagesReady` and
+  on `beforeprint`. Reduced-motion users get none of it, which is also why
+  `test/visual.py` stays deterministic.
+- Trap: `window.MOTION_STATE`, not `typeof MOTION` — typeof on a const in its
+  TDZ throws, and setStatus runs before the motion block is evaluated.
+- Checked live: mid-count values partial, end values identical to the
+  un-animated render, no page errors; visual 61/61 unchanged; overflow 0.
+
 **v3.370.0 — Visual regression safety net (`test/visual.py`)** (skill pack
 item 1, `uxui-design-qa`). 26 screens + every printed slide of the BGH
 Monthly Report (61 captures) compared to `test/visual/`:

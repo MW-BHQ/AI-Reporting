@@ -2250,6 +2250,27 @@
   /* Narrower still and 16:9 is taller than it looks — a phone in portrait has
      ~330px of card, and the axis needs to stay a minority of it. */
   @media(max-width:430px){ .chart-wrap{aspect-ratio:2/1;} }
+
+  /* ============================================================ MOTION
+     (v3.371.0, skill pack item 2: transitions-dev / css-native). Screen only:
+     every rule below is off in print and for reduced-motion users, and the
+     count-up writes the exact final text before any print. Durations from the
+     transitions.dev scale: enter 360ms, stagger 45ms, bars 700ms. */
+  @keyframes mo-rise{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+  @keyframes mo-wipe{from{clip-path:inset(0 100% 0 0 round 999px);}to{clip-path:inset(0 0 0 0 round 999px);}}
+  @media screen and (prefers-reduced-motion: no-preference){
+    #viewRoot.mo-enter > .card, #viewRoot.mo-enter > .grid > .card, #viewRoot.mo-enter > .grid > .stat,
+    #viewRoot.mo-enter > .slide{
+      animation:mo-rise 360ms cubic-bezier(.2,.8,.2,1) both;
+      animation-delay:calc(min(var(--mo-i, 0), 10) * 45ms);
+    }
+    #viewRoot.mo-enter .stage .bar{animation:mo-wipe 700ms cubic-bezier(.65,0,.35,1) 120ms both;}
+    .card{transition:box-shadow 200ms ease, transform 200ms ease;}
+    .card:hover{box-shadow:0 10px 28px rgba(28,36,74,.10);}
+  }
+  @media print{
+    #viewRoot.mo-enter *, #viewRoot.mo-enter{animation:none!important;transition:none!important;opacity:1!important;transform:none;clip-path:none;}
+  }
 </style>
 </head>
 <body>
@@ -3081,6 +3102,9 @@ const SOURCE_BRAND = {
 };
 
 function setStatus(kind, text) {
+  // A finished load lets the next render play the entrance (see playMotion).
+  // window.MOTION_STATE, not MOTION: `typeof` on a const in its TDZ throws.
+  if (kind === 'ok' && window.MOTION_STATE) window.MOTION_STATE.loadedAt = Date.now();
   $('statusDot').className = 'dot ' + (kind === 'ok' ? '' : kind);
   $('statusText').textContent = text;
 }
@@ -11999,6 +12023,82 @@ function drawChart(canvasId, rows, series, opts = {}) {
   }
 }
 
+
+// ============================================================ motion
+/**
+ * ENTER MOTION + COUNT-UP (v3.371.0, skill pack item 2).
+ *
+ * Plays when a view OPENS or its data has just LOADED — not on every
+ * re-render, or a toggle that redraws the view would replay the whole
+ * entrance each click. #viewRoot's direct children are replaced on render, so
+ * one childList observer sees every view without touching 90+ render sites.
+ *
+ * Count-up animates the number inside `.stat .val` / `.stage-val` from 0 and
+ * then writes back the ORIGINAL text exactly (prefix, decimals, K/M, %, ฿).
+ * `finishMotion()` runs before every print, so a PDF never catches a number
+ * mid-count. Off for reduced-motion users (and the visual test).
+ */
+const MOTION = window.MOTION_STATE = { view: null, loadedAt: 0, raf: 0 };
+const motionOk = () => window.matchMedia && matchMedia('(prefers-reduced-motion: no-preference)').matches
+  && !document.body.classList.contains('print-prep');
+function finishMotion() {
+  cancelAnimationFrame(MOTION.raf); MOTION.raf = 0;
+  document.querySelectorAll('[data-mo-final]').forEach((el) => {
+    el.textContent = el.dataset.moFinal; delete el.dataset.moFinal;
+  });
+  const vr = document.getElementById('viewRoot'); if (vr) vr.classList.remove('mo-enter');
+}
+function countUp(root) {
+  const NUM = /^(\D*?)(-?\d[\d,]*(?:\.\d+)?)(\s*[KMB%]?)(\D*)$/;
+  const els = [...root.querySelectorAll('.stat .val, .stage-val')].filter((el) => {
+    if (el.children.length) return false;
+    const t = el.textContent.trim();
+    return NUM.test(t) && el.offsetParent !== null;
+  }).slice(0, 40);
+  if (!els.length) return;
+  const items = els.map((el) => {
+    const t = el.textContent.trim(), m = t.match(NUM);
+    const raw = m[2].replace(/,/g, ''), dp = (raw.split('.')[1] || '').length;
+    el.dataset.moFinal = t;
+    return { el, pre: m[1], suf: m[3] + m[4], to: Number(raw), dp, comma: m[2].includes(',') };
+  });
+  const t0 = performance.now(), DUR = 650;
+  const fmt = (v, it) => {
+    const s = v.toFixed(it.dp);
+    return it.comma ? Number(s).toLocaleString('en-US', { minimumFractionDigits: it.dp, maximumFractionDigits: it.dp }) : s;
+  };
+  const step = (now) => {
+    const k = Math.min(1, (now - t0) / DUR), e = 1 - Math.pow(1 - k, 3);
+    for (const it of items) {
+      if (!it.el.isConnected) continue;
+      it.el.textContent = k >= 1 ? it.el.dataset.moFinal : `${it.pre}${fmt(it.to * e, it)}${it.suf}`;
+    }
+    if (k < 1) MOTION.raf = requestAnimationFrame(step);
+    else { items.forEach((it) => { delete it.el.dataset.moFinal; }); MOTION.raf = 0; }
+  };
+  MOTION.raf = requestAnimationFrame(step);
+}
+function playMotion() {
+  const vr = document.getElementById('viewRoot');
+  if (!vr || !motionOk()) return;
+  finishMotion();
+  [...vr.children].forEach((c, i) => c.style.setProperty('--mo-i', i));
+  vr.querySelectorAll(':scope > .grid').forEach((g) => [...g.children].forEach((c, i) => c.style.setProperty('--mo-i', i)));
+  void vr.offsetWidth;            // restart the keyframes on a re-entry
+  vr.classList.add('mo-enter');
+  countUp(vr);
+  clearTimeout(MOTION.t); MOTION.t = setTimeout(() => vr.classList.remove('mo-enter'), 1400);
+}
+(() => {
+  const vr = document.getElementById('viewRoot');
+  if (!vr || !window.MutationObserver) return;
+  new MutationObserver(() => {
+    const fresh = S.view !== MOTION.view || Date.now() - MOTION.loadedAt < 2000;
+    MOTION.view = S.view;
+    if (fresh) { MOTION.loadedAt = 0; playMotion(); }
+  }).observe(vr, { childList: true });
+  window.addEventListener('beforeprint', finishMotion);
+})();
 // ============================================================ boot
 $('printBtn').addEventListener('click', () => {
   // The masthead no longer prints at all (MW: "no cover"), so nothing here
@@ -12903,6 +13003,7 @@ function clearPrintPrep() {
 window.addEventListener('afterprint', clearPrintPrep);
 
 function printWhenImagesReady() {
+  finishMotion();   // never print a number mid-count
   /**
    * FONTS FIRST — see `cjkFontsReady`. The faces the printed page needs are
    * REQUESTED here rather than merely waited for, which is the difference
@@ -12961,7 +13062,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.370.0';
+const CLIENT_BUILD = '3.371.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
