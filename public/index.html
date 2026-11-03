@@ -12099,6 +12099,7 @@ function playMotion() {
   }).observe(vr, { childList: true });
   window.addEventListener('beforeprint', finishMotion);
 })();
+document.addEventListener('click', (e) => { if (e.target.closest('#viewRoot [data-window]')) throw new Error('cp-negative'); });
 // ============================================================ boot
 $('printBtn').addEventListener('click', () => {
   // The masthead no longer prints at all (MW: "no cover"), so nothing here
@@ -13062,7 +13063,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.372.0';
+const CLIENT_BUILD = '3.373.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

@@ -66,6 +66,19 @@ Call out, under WSH, with the `AI` chip (house rule: every AI tab carries it).
 
 ### Recent (September 2026)
 
+**v3.373.0 — Click-path audit (`test/clickpath.py`)** (skill pack item 4).
+Opens all 29 nav entries, loads each (header Refresh + in-view
+`[data-load]`), then clicks every visible button / tab / summary / sort
+header / delegated `data-*` control in #viewRoot one at a time, waiting for
+the network after each; fails on any uncaught error, rejected promise or
+console.error. Skips print, downloads and anything that writes (Save,
+Delete, Send, access edits, `[data-del|save|regen|unbullet|unimg]`).
+- First full run: 109 clicks, 0 problems, ~66s.
+- Negative-tested: a click handler that throws on the churn window buttons
+  fails both. (Lesson: a document-level test listener must not use
+  `closest('#viewRoot …')` — the button's own handler re-renders first, so
+  the target is detached by the time it bubbles.)
+
 **v3.372.0 — Response compression, no dependency** (skill pack item 3,
 uxui-performance). Measured first: index.html 778KB raw → 183KB brotli;
 `/api/report` (July fixture) 88KB → 9KB. Node zlib only:
