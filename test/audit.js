@@ -719,6 +719,29 @@ attrRisk.length ? fail("attribute escaping", attrRisk.join(" | "))
 }
 
 /**
+ * HOUSE COLOURS ARE TOKENS (v3.375.0, skill pack item 6).
+ *
+ * The verdict green/red were written as hex in 33 places; one tweak meant
+ * finding them all. Now `--good`/`--bad` in :root (CSS) and `HOUSE` (canvas,
+ * which cannot read var()) are the only two places the hex may appear.
+ * Comments are ignored.
+ */
+{
+  const lines = html.split("\n");
+  const bad = [];
+  lines.forEach((l, i) => {
+    if (!/#2E9E6F|#D9534F/i.test(l)) return;
+    const t = l.trim();
+    if (t.startsWith("*") || t.startsWith("//") || t.startsWith("/*")) return;
+    if (/--good:|--bad:|const HOUSE =/.test(l)) return;
+    bad.push(i + 1);
+  });
+  bad.length
+    ? fail("colours:house", `house hex outside the tokens at line(s) ${bad.slice(0, 8).join(", ")} — use var(--good)/var(--bad) or HOUSE`)
+    : ok("colours:house", "verdict green/red only in :root and HOUSE");
+}
+
+/**
  * A HAND CURSOR MUST PROMISE SOMETHING (v3.307.0).
  *
  * MW: "rows in Campaigns that sent traffic here, have hand cursor, but not

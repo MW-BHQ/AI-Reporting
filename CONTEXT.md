@@ -66,6 +66,16 @@ Call out, under WSH, with the `AI` chip (house rule: every AI tab carries it).
 
 ### Recent (September 2026)
 
+**v3.375.0 — House colours are tokens** (skill pack item 6, design tokens).
+The verdict green #2E9E6F / red #D9534F were hex in 33 places. Now:
+`--good` / `--bad` in :root for CSS and inline styles; `HOUSE.good/bad`
+(frozen const) for canvas/Chart.js and objects drawn to canvas, which
+cannot resolve var(). Audit `colours:house` fails any other occurrence
+(comments ignored; negative-tested). Same hex values → visual 61/61
+unchanged, click-path 0 problems, overflow 0. Next candidates for the same
+treatment (not done): the 22× #4C5878 and 17× #4B8DF8 literals that
+duplicate `--ink-2` / `--blue`.
+
 **v3.374.0 — Security review: IAP signed header (log-only) + headers**
 (skill pack item 5, ecc-security-review / production-audit).
 Findings: no secrets in code; per-tab gate enforced server-side; body

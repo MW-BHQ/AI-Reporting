@@ -71,6 +71,10 @@
     --amber:#F2A93B;
     --rose:#F2708F;
     --green:#3BC97F;
+    /* House verdict colours (v3.375.0): favourable / unfavourable. CSS uses
+       these; canvas code (which cannot read var()) uses HOUSE below. */
+    --good:#2E9E6F;
+    --bad:#D9534F;
     --shadow:0 8px 30px rgba(43,60,110,.09);
     --shadow-sm:0 2px 10px rgba(43,60,110,.06);
     --r:18px;
@@ -199,7 +203,7 @@
   .pk-more{display:none;}
   .syn-box{border:1px solid var(--line);border-radius:12px;padding:12px 14px;}
   .syn-t{font-weight:600;font-size:var(--text-sm);}
-  .syn-t.good{color:#2E9E6F;} .syn-t.bad{color:#D9534F;}
+  .syn-t.good{color:var(--good);} .syn-t.bad{color:var(--bad);}
   .syn-r{display:flex;justify-content:space-between;gap:12px;font-size:var(--text-xs);padding:4px 0;border-top:1px solid var(--line);}
   .syn-r .trunc{min-width:0;}
   .sec-h{margin:30px 0 2px;font-size:var(--text-xs);font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
@@ -482,7 +486,7 @@
     font-variant-numeric:tabular-nums;}
   .mr-kpi-yoy{text-align:right;font-size:var(--text-2xs);white-space:nowrap;}
   .mr-yoy-l{font-size:var(--text-4xs);color:var(--faint);letter-spacing:.08em;text-transform:uppercase;}
-  .mr-up{color:#2E9E6F;font-weight:600;} .mr-down{color:#D9534F;font-weight:600;}
+  .mr-up{color:var(--good);font-weight:600;} .mr-down{color:var(--bad);font-weight:600;}
   .mr-flat{color:var(--faint);}
   .mr-kpi-p{font-size:var(--text-3xs);color:var(--faint);margin-top:7px;}
   .mr-tag{display:inline-block;background:var(--violet-soft);color:var(--violet);border-radius:20px;
@@ -774,8 +778,8 @@
   .dlt{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 5px;border-radius:5px;
     margin-left:5px;white-space:nowrap;}
   .dlt[data-tip]{cursor:pointer;}
-  .dlt.up{background:rgba(74,190,140,.14);color:#2E9E6F;}
-  .dlt.down{background:#FFEDE7;color:#D9534F;}
+  .dlt.up{background:rgba(74,190,140,.14);color:var(--good);}
+  .dlt.down{background:#FFEDE7;color:var(--bad);}
   .dlt.flat{background:rgba(140,155,190,.14);color:var(--muted);}
   .dlt.none{background:transparent;color:var(--faint);font-weight:400;}
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;}
@@ -818,7 +822,7 @@
     background:var(--line);display:block;}
   .yt-thumb-none{background:var(--line);}
   @media(max-width:760px){ .yt-thumb{width:58px;height:33px;} }
-  td.num.bad{color:#D9534F;font-weight:600;} td.num.good{color:#2E9E6F;font-weight:600;}
+  td.num.bad{color:var(--bad);font-weight:600;} td.num.good{color:var(--good);font-weight:600;}
   .qec-head,.qec{display:inline-flex;align-items:center;}
   .qec-head b{width:38px;text-align:center;font-weight:600;color:var(--muted);}
   .qec-cell{width:38px;display:inline-flex;align-items:center;justify-content:center;
@@ -826,10 +830,10 @@
   .qec-cell em{font-style:normal;color:#D97B1F;font-weight:600;position:absolute;
     left:calc(50% + 7px);top:50%;transform:translateY(-50%);}
   .dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none;}
-  .dot.d-good{background:#2E9E6F;}
+  .dot.d-good{background:var(--good);}
   .dot.d-mid{background:#A9B4CE;}
   .dot.d-warn{background:#E8A33D;}
-  .dot.d-bad{background:#D9534F;}
+  .dot.d-bad{background:var(--bad);}
   /* Floating tooltip: appended to <body> so a table's overflow can never clip
      it, and shown instantly instead of waiting for the browser's title delay. */
   /* Sized up from 11.5px/400 (MW: "make the tooltip more prominent"). At a
@@ -847,7 +851,7 @@
     padding-top:9px;box-shadow:inset 0 -1px 0 var(--line);}
   table.sticky-head thead th{text-align:center;}
   table.sticky-head thead th:first-child{text-align:left;}
-  .pill.green{background:rgba(74,190,140,.14);color:#2E9E6F;}
+  .pill.green{background:rgba(74,190,140,.14);color:var(--good);}
   .pill.violet{background:var(--violet-soft);color:var(--violet);}
 
   /* ---------------- topic / campaign inputs ---------------- */
@@ -2190,7 +2194,7 @@
   .co-row.co-top{align-items:flex-start;}
   .co-lab{width:130px;flex:none;font-size:var(--text-xs);color:var(--muted);}
   .co-meta{font-size:var(--text-xs);color:var(--muted);}
-  .co-badtxt{color:#D9534F;}
+  .co-badtxt{color:var(--bad);}
   .co-row textarea{flex:1;min-width:240px;font-family:inherit;font-size:var(--text-sm);resize:vertical;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-sm);}
   .co-imgs{display:flex;flex-wrap:wrap;gap:10px;}
   .co-img{position:relative;display:flex;flex-direction:column;gap:4px;}
@@ -2205,14 +2209,14 @@
   .co-small{padding:4px 10px;font-size:var(--text-2xs);}
   .co-bl{position:relative;padding-right:30px;}
   .co-bl .co-x{top:6px;right:0;background:transparent;color:var(--faint);}
-  .co-bl .co-x:hover{color:#D9534F;}
+  .co-bl .co-x:hover{color:var(--bad);}
   .co-b{font-size:var(--text-sm);line-height:1.75;padding:6px 8px 6px 20px;border-radius:8px;position:relative;outline:none;}
   .co-b::before{content:"\2022";position:absolute;left:6px;color:var(--violet);}
   .co-b:hover{background:var(--glass-2);}
   .co-b:focus{background:#fff;box-shadow:0 0 0 2px var(--violet-soft);}
   .co-n{border-radius:4px;padding:0 2px;}
-  .co-n.ok{background:rgba(74,190,140,.14);color:#2E9E6F;}
-  .co-n.bad{background:rgba(217,83,79,.12);color:#D9534F;text-decoration:underline wavy;}
+  .co-n.ok{background:rgba(74,190,140,.14);color:var(--good);}
+  .co-n.bad{background:rgba(217,83,79,.12);color:var(--bad);text-decoration:underline wavy;}
   .co-sec{position:relative;overflow:hidden;transition:box-shadow .3s;}
   .co-busy{box-shadow:0 0 0 2px var(--violet-soft),var(--shadow);}
   .co-busy .co-bl,.co-busy .co-imgs{opacity:.35;pointer-events:none;}
@@ -2963,6 +2967,10 @@ function humanRange() {
   } catch (e) { return ''; }
 }
 const isNA = (v) => v === null || v === undefined;
+// House verdict colours for canvas/Chart.js, which cannot resolve var(--good).
+// Same values as the :root tokens; `colours:house` in the audit keeps them the
+// only two places the hex is written.
+const HOUSE = Object.freeze({ good: '#2E9E6F', bad: '#D9534F' });
 /**
  * FUNNEL BAR WIDTH (MW: "search bar scale doesn't make sense ... at least make
  * it long, mid, short - not long, short, short").
@@ -4073,7 +4081,7 @@ function renderReport() {
          ${logoImg}
        </div>${body}</div>`;
   };
-  const C = { a:'#6C5CE7', b:'#4B8DF8', c:'#2E9E6F', d:'#F2A93B', e:'#E8607A' };
+  const C = { a:'#6C5CE7', b:'#4B8DF8', c:HOUSE.good, d:'#F2A93B', e:'#E8607A' };
   const kpi = (lab, val, sub) => `<div class="stat"><div class="lab">${lab}</div>
     <div class="val">${val}</div>${sub?`<div class="sub2">${sub}</div>`:''}</div>`;
   /**
@@ -4088,7 +4096,7 @@ function renderReport() {
    */
   const kpiChange = (lab, v, sub) => {
     const tone = v === null || v === undefined ? 'var(--muted)'
-      : (v > 0.005 ? '#2E9E6F' : (v < -0.005 ? '#D9534F' : 'var(--muted)'));
+      : (v > 0.005 ? 'var(--good)' : (v < -0.005 ? 'var(--bad)' : 'var(--muted)'));
     const txt = v === null || v === undefined ? '\u2014' : changeText(v);
     return `<div class="stat"><div class="lab">${lab}</div>
       <div class="val" style="color:${tone}">${txt}</div>${sub?`<div class="sub2">${sub}</div>`:''}</div>`;
@@ -4109,7 +4117,7 @@ function renderReport() {
     if (!OP.available) return `<div class="card"><div class="state bad">Overview unavailable this run: ${esc(OP.reason || 'unknown')}</div></div>`;
     const chg = (lab, v, why, detail) => {
       if (v === null || v === undefined) return `<div class="ov-chg"${detail ? ` data-tip="${esc(detail)}"` : ''}><span>${lab}</span> <b style="color:var(--muted)">\u2014</b>${why ? ` <span class="ov-why">${esc(why)}</span>` : ''}</div>`;
-      const tone = v > 0.005 ? '#2E9E6F' : (v < -0.005 ? '#D9534F' : 'var(--muted)');
+      const tone = v > 0.005 ? 'var(--good)' : (v < -0.005 ? 'var(--bad)' : 'var(--muted)');
       return `<div class="ov-chg"><span>${lab}</span> <b style="color:${tone}">${changeText(v, 1)}</b></div>`;
     };
     const card = (lab, c) => {
@@ -4855,7 +4863,7 @@ function renderReport() {
           const pct = RVB.count ? (v/RVB.count)*100 : 0;
           return `<tr><td class="strong" style="width:52px">${st}\u2605</td>
             <td><div style="background:var(--line);border-radius:6px;height:9px">
-              <div style="width:${pct}%;background:${st>=4?'#2E9E6F':(st===3?'#F2A93B':'#D9534F')};height:9px;border-radius:6px"></div>
+              <div style="width:${pct}%;background:${st>=4?'var(--good)':(st===3?'#F2A93B':'var(--bad)')};height:9px;border-radius:6px"></div>
             </div></td><td class="num" style="width:52px">${num(v)}</td></tr>`;
         }).join('')}
         </tbody></table>
@@ -4901,7 +4909,7 @@ function renderReport() {
           const pct = tot ? (v/tot)*100 : 0;
           return `<tr><td class="strong" style="width:52px">${st}\u2605</td>
             <td><div style="background:var(--line);border-radius:6px;height:9px">
-              <div style="width:${pct}%;background:${st>=4?'#2E9E6F':(st===3?'#F2A93B':'#D9534F')};height:9px;border-radius:6px"></div>
+              <div style="width:${pct}%;background:${st>=4?'var(--good)':(st===3?'#F2A93B':'var(--bad)')};height:9px;border-radius:6px"></div>
             </div></td><td class="num" style="width:52px">${num(v)}</td></tr>`;
         }).join('')}
         </tbody></table>`;
@@ -4922,7 +4930,7 @@ function renderReport() {
       <div class="card-title">Customers Voices</div>
       <table><tbody>
       ${RVB.samples.filter(Boolean).map(sm=>`<tr>
-        <td style="width:74px;vertical-align:top;color:${sm.stars>=4?'#2E9E6F':(sm.stars===3?'#F2A93B':'#D9534F')};
+        <td style="width:74px;vertical-align:top;color:${sm.stars>=4?'var(--good)':(sm.stars===3?'#F2A93B':'var(--bad)')};
                    font-size:var(--text-xs);padding-top:3px">${stars5(sm.stars)}</td>
         ${sm.comment ? `<td><div class="i18n" style="white-space:normal;font-size:var(--text-xs)">${esc(sm.comment)}</div>
           <div style="font-size:var(--text-3xs);color:var(--faint);margin-top:2px">
@@ -5791,7 +5799,7 @@ function renderReport() {
     if (RVB && RVB.monthly && RVB.monthly.length) {
       drawChart('rvMonth', RVB.monthly.map(m => ({ d: m.month, count: m.count, avg: m.avg })), [
         { label:'Reviews', key:'count', color:'#6C5CE7', axis:'y' },
-        { label:'Average rating', key:'avg', color:'#2E9E6F', axis:'y1' },
+        { label:'Average rating', key:'avg', color:HOUSE.good, axis:'y1' },
       ]);
     }
     if (RVB && RVB.monthly && RVB.monthly.length && window.Chart) {
@@ -5806,8 +5814,8 @@ function renderReport() {
             { type:'line', label:'Average rating', data: mm.map(m=>m.avg), yAxisID:'y1',
               borderColor:'#6C5CE7', backgroundColor:'#6C5CE7', tension:.3, order:1, pointRadius:3 },
             // 5-star at the base so the small low-rating bands stay visible.
-            band('s5','#2E9E6F','5\u2605'), band('s4','#8ED0A9','4\u2605'),
-            band('s3','#F2A93B','3\u2605'), band('s2','#EE8A5B','2\u2605'), band('s1','#D9534F','1\u2605'),
+            band('s5',HOUSE.good,'5\u2605'), band('s4','#8ED0A9','4\u2605'),
+            band('s3','#F2A93B','3\u2605'), band('s2','#EE8A5B','2\u2605'), band('s1',HOUSE.bad,'1\u2605'),
           ]},
           options:{ responsive:true, maintainAspectRatio:false, animation:false,
             scales:{ x:{ stacked:true, grid:{display:false}, ticks:{color:'#8A94AD',font:cvFont(9),autoSkipPadding:8} },
@@ -10774,7 +10782,7 @@ function renderEcomChannels() {
       <polyline points="${pts}" fill="none" stroke="${colour(c.channel)}" stroke-width="1.6"/></svg>`;
   };
   const mom = (v) => v === null ? '<span style="color:var(--faint)">—</span>'
-    : `<span style="color:${v>=0.05?'#2E9E6F':(v<=-0.05?'#D9534F':'var(--muted)')};font-weight:${Math.abs(v)>=0.05?600:400};">${changeText(v)}</span>`;
+    : `<span style="color:${v>=0.05?'var(--good)':(v<=-0.05?'var(--bad)':'var(--muted)')};font-weight:${Math.abs(v)>=0.05?600:400};">${changeText(v)}</span>`;
 
   $('viewRoot').innerHTML = `
     ${d.unclassified && d.unclassified.length ? `<div class="card" style="border-left:3px solid #D97B1F;margin-bottom:14px;">
@@ -13063,7 +13071,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.374.0';
+const CLIENT_BUILD = '3.375.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
