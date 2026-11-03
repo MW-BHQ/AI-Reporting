@@ -66,6 +66,12 @@ Call out, under WSH, with the `AI` chip (house rule: every AI tab carries it).
 
 ### Recent (September 2026)
 
+**v3.369.0 — Campaign PDF file name** (MW): "[code] - [range]", e.g.
+`261001-05 - 1 Sep - 31 Oct 2026`. Set on `document.title` (what Save as PDF
+uses) in the PDF button handler, from `dpRangeLabel` with the en dash as
+" - "; restored on `afterprint`. `PRINT_DOC_TITLE` is declared after the
+handler but only read when it fires (no TDZ).
+
 **v3.368.0 — TikTok ad names with a flight prefix now match** (MW: 260918-02
 showed "No data"). Live names lead with a flight number:
 `TT14_260918-02_Have a Good Day_...`, so `startsWith(code)` missed all 14.

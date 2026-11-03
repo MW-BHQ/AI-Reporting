@@ -12010,7 +12010,22 @@ $('printBtn').addEventListener('click', () => {
   const brandTag = S.view === 'report' ? ` \\u2014 ${S.reportBrand || 'BHQ'}` : '';
   $('printTitle').textContent = t + extra + brandTag;
   $('printRange').textContent = `${$('from').value} to ${$('to').value} · generated ${new Date().toLocaleString()}`;
+  /**
+   * PDF FILE NAME (v3.369.0, MW): the browser names "Save as PDF" after
+   * document.title. Campaigns: "[code] - [range]", e.g.
+   * "261001-05 - 1 Sep - 31 Oct 2026". Restored after the dialog closes.
+   */
+  if (S.view === 'campaigns' && S.campaign) {
+    const code = S.campaignCode || S.campaign.code || '';
+    const range = dpRangeLabel($('from').value, $('to').value).replace(/\s*\u2013\s*/g, ' - ');
+    PRINT_DOC_TITLE.prev = document.title;
+    document.title = `${code} - ${range}`;
+  }
   printWhenImagesReady();
+});
+const PRINT_DOC_TITLE = { prev: null };
+window.addEventListener('afterprint', () => {
+  if (PRINT_DOC_TITLE.prev !== null) { document.title = PRINT_DOC_TITLE.prev; PRINT_DOC_TITLE.prev = null; }
 });
 
 /**
@@ -12946,7 +12961,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.368.0';
+const CLIENT_BUILD = '3.369.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

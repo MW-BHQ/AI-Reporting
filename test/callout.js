@@ -251,9 +251,14 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     expect("client: export drops removed points", !doc.includes("ChatGPT 59%") && doc.includes("Call out (BHT)"), "");
   }
   // EMAIL (v3.362.0): Outlook web compose + formatted body on the clipboard.
+  // The client presets LAST month from today's date, so the expected month is
+  // computed the same way, not hard-coded (v3.369.0: "Sep 2026" broke in Nov).
+  const lmD = new Date(); lmD.setDate(1); lmD.setMonth(lmD.getMonth() - 1);
+  const lmEn = `${lmD.toLocaleString("en-GB", { month: "short" })} ${lmD.getFullYear()}`;
+  const lmTh = lmD.toLocaleString("th-TH", { month: "long", year: "numeric" });
   const to = d.getElementById("coTo"), cc = d.getElementById("coCc"), subj = d.getElementById("coSubject");
   expect("email: preset for the hospital", to && /Kriengkrai.He@/.test(to.value) && /kunyada.pa@/.test(cc.value)
-    && subj.value === "DMKT: Monthly Report BHT (Sep 2026)" && /เรียน อ เกรียงไกร/.test(d.getElementById("coIntro").value), subj && subj.value);
+    && subj.value === `DMKT: Monthly Report BHT (${lmEn})` && /เรียน อ เกรียงไกร/.test(d.getElementById("coIntro").value), subj && subj.value);
   const docCard = [...d.querySelectorAll("#coBody .card")];
   expect("layout: Export sits above Email", docCard.findIndex((c) => c.querySelector("#coExport")) === docCard.findIndex((c) => c.classList.contains("co-mail")) - 1, "");
   to.value = "ceo@bangkokhospital.com; oops"; to.dispatchEvent(new dom.window.Event("input")); to.dispatchEvent(new dom.window.Event("change"));
@@ -268,7 +273,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   await wait(20);
   expect("email: Outlook opened, fields filled", opened.length === 1 && /to=ceo%40bangkokhospital.com/.test(opened[0]) && /subject=DMKT%3A%20Monthly%20Report%20BHT/.test(opened[0]) && /cc=Jiaranai/.test(opened[0]), opened[0]);
   expect("email: body is the edited callout", clip.length === 1 && clip[0].includes("Vaccine จาก 995K บาท") && !clip[0].includes("581,000"), "");
-  expect("email: body opens with the preset", clip[0].indexOf("เรียน อ เกรียงไกร") < clip[0].indexOf("Vaccine") && clip[0].includes("กันยายน 2569"), "");
+  expect("email: body opens with the preset", clip[0].indexOf("เรียน อ เกรียงไกร") < clip[0].indexOf("Vaccine") && clip[0].includes(lmTh), "");
   const mine = errors.slice(before);
   expect("client: no thrown errors", mine.length === 0, mine.slice(0, 2).join(" | "));
   finish();
