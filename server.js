@@ -1015,6 +1015,7 @@ const TABS = [
   { id: "gads",      label: "Google Ads" },
   { id: "bclub",     label: "Better Club" },
   { id: "bcengage",  label: "Better Club · Engagement" },
+  { id: "bcquiz",    label: "Better Club · Quiz Insight" },
   { id: "line",      label: "LINE OA" },
   { id: "shopee",    label: "Shopee" },
   { id: "lazada",    label: "Lazada" },
@@ -11786,6 +11787,11 @@ dormant AS (
   LEFT JOIN um ON um.user_id = c.user_id AND um.month = m.month
   WHERE um.user_id IS NULL AND DATE(c.registered_at) < m.month
   GROUP BY 1),
+-- Badges earned per month (staff out). Starter is the sign-up badge.
+badge AS (
+  SELECT DATE_TRUNC(DATE(earned_at), MONTH) AS month, badge_title AS title, badge_type AS type,
+    COUNT(*) AS earned, COUNT(DISTINCT user_id) AS members
+  FROM {{DS}}.badges WHERE user_id NOT IN (SELECT user_id FROM {{DS}}.staff) GROUP BY 1, 2, 3),
 -- When members earn points (Bangkok wall clock), to time pushes and broadcasts.
 hours AS (
   SELECT DATE_TRUNC(DATE(ts), MONTH) AS month, EXTRACT(HOUR FROM ts) AS hour,
@@ -11813,7 +11819,9 @@ SELECT TO_JSON_STRING(STRUCT(
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, post_id, title, readers, launched FROM rart ORDER BY month, readers DESC) AS reward_articles,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, bin, users FROM streak ORDER BY month, bin) AS streaks,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, hour, actions, users FROM hours ORDER BY month, hour) AS hours,
-  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, dormant.* EXCEPT (month) FROM dormant ORDER BY month) AS dormant
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, dormant.* EXCEPT (month) FROM dormant ORDER BY month) AS dormant,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, title, type, earned, members FROM badge
+        WHERE month >= DATE_SUB((SELECT MIN(month) FROM months), INTERVAL 1 MONTH) ORDER BY month, earned DESC) AS badges
 )) AS j`;
 
 function bcLastDay(key) {
@@ -11859,10 +11867,113 @@ async function buildBclubEngagement(from, to) {
     daily: d.daily || [], cohorts: d.cohorts || [], tags: d.tags || [], cta: d.cta || [],
     rewards: d.rewards || [], points: d.points || [], channels: d.channels || [], campaigns: d.campaigns || [],
     rewardArticles: d.reward_articles || [], streaks: d.streaks || [], hours: d.hours || [],
-    dormant: d.dormant || [],
+    dormant: d.dormant || [], badges: d.badges || [],
     source: `BigQuery ${BC_DATASET}`,
   };
 }
+
+/**
+ * QUIZ INSIGHT (v3.382.0). Every daily quiz question in the range, with how many
+ * members picked each answer. A multi-select answer arrives as "a|b|c", so it is
+ * split and each choice counts once per member; on those questions the shares add
+ * to more than 100% and the tab says so. Staff are removed. Dates are validated
+ * as YYYY-MM-DD before they reach the SQL.
+ */
+const BC_QUIZ_SQL = `
+WITH q0 AS (
+  -- A quiz's day is the date in its title (main-2026-10-01); late answers stay on it.
+  SELECT *, COALESCE(SAFE.PARSE_DATE('%Y-%m-%d', REGEXP_EXTRACT(quiz_title, r'(\d{4}-\d{2}-\d{2})')), DATE(answered_at)) AS qday
+  FROM {{DS}}.quiz_answers),
+q AS (
+  SELECT user_id, answered_at, quiz_title, quiz_type, question, answer, qday
+  FROM q0
+  WHERE qday BETWEEN DATE '{{FROM}}' AND DATE '{{TO}}'
+    AND user_id NOT IN (SELECT user_id FROM {{DS}}.staff)),
+resp AS (
+  SELECT quiz_title, question, ANY_VALUE(quiz_type) AS type, MIN(qday) AS day,
+    COUNT(DISTINCT user_id) AS respondents, LOGICAL_OR(STRPOS(answer, '|') > 0) AS multi
+  FROM q GROUP BY 1, 2),
+ans AS (
+  SELECT quiz_title, question, TRIM(a) AS answer, COUNT(DISTINCT user_id) AS n
+  FROM q, UNNEST(SPLIT(answer, '|')) AS a WHERE TRIM(a) != '' GROUP BY 1, 2, 3),
+opts AS (
+  SELECT quiz_title, question, ARRAY_AGG(STRUCT(answer, n) ORDER BY n DESC, answer) AS options
+  FROM ans GROUP BY 1, 2)
+SELECT TO_JSON_STRING(STRUCT(
+  (SELECT COUNT(DISTINCT user_id) FROM q) AS members,
+  (SELECT COUNT(*) FROM q) AS answers,
+  ARRAY(SELECT AS STRUCT r.quiz_title AS title, r.type, FORMAT_DATE('%F', r.day) AS day, r.question,
+          r.respondents, r.multi OR STRPOS(r.question, 'มากกว่า 1') > 0 AS multi, o.options
+        FROM resp r JOIN opts o USING (quiz_title, question) ORDER BY r.day DESC, r.quiz_title) AS quizzes
+)) AS j`;
+
+app.get("/api/better-club/quiz", requireTab("bcquiz"), async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  try {
+    const out = await withCache(`bcquiz:${from}:${to}`, req.query.refresh === "1", async () => {
+      try {
+        const d = await bqJson(bcSql("quiz", BC_QUIZ_SQL).split("{{FROM}}").join(from).split("{{TO}}").join(to));
+        return { available: true, ...d, source: `BigQuery ${BC_DATASET}` };
+      } catch (e) { return { available: false, error: String((e && e.message) || e) }; }
+    });
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "bcquiz_failed", { error: String(err.message || err) });
+    res.status(500).json({ error: err.message || "Quiz insight failed" });
+  }
+});
+
+/**
+ * TARGET LIST EXPORT (v3.382.0): the members behind "Remind inactive members
+ * their points are waiting", as a CSV the team can load into LINE / SMS / email.
+ * Same definition as the play: joined before the month, earned no B points in
+ * it, agreed to marketing, and hold at least the points of the cheapest health
+ * guide. `segment=core` narrows to members who joined 4-12 months before the
+ * month (where most comebacks come from); `all` is everyone reachable.
+ *
+ * This is the one place the dashboard hands out contact details, so every
+ * download is logged with who asked. Points and consent are today's.
+ */
+const BC_TARGET_SQL = `
+WITH um AS (SELECT user_id FROM {{DS}}.user_month WHERE month = DATE '{{MONTH}}-01'),
+guide AS (
+  SELECT IFNULL(MIN(SAFE_CAST(JSON_VALUE(event_desc_json, '$.points_used') AS INT64)), 15) AS pts
+  FROM {{DS}}.events WHERE event_name = 'REDEEMED_REWARD' AND STARTS_WITH(JSON_VALUE(event_desc_json, '$.coupon_code'), 'DIGITAL'))
+SELECT TO_JSON_STRING(ARRAY(
+  SELECT AS STRUCT c.user_id, c.name, c.email, c.phone_no, c.remaining_points,
+    FORMAT_DATETIME('%F', c.registered_at) AS joined,
+    DATE_DIFF(DATE '{{MONTH}}-01', DATE_TRUNC(DATE(c.registered_at), MONTH), MONTH) AS months_since_joining,
+    FORMAT_DATETIME('%F %T', c.last_login) AS last_login, c.signup_hospital, c.last_language
+  FROM {{DS}}.members c LEFT JOIN um USING (user_id)
+  WHERE um.user_id IS NULL AND NOT c.is_staff AND c.in_latest_export
+    AND c.has_consented_marketing AND c.remaining_points >= (SELECT pts FROM guide)
+    AND DATE(c.registered_at) < DATE '{{MONTH}}-01'
+    {{CORE}}
+  ORDER BY c.remaining_points DESC, c.user_id)) AS j`;
+
+app.get("/api/better-club/targets.csv", requireTab("bcengage"), async (req, res) => {
+  const { month } = req.query;
+  const segment = req.query.segment === "all" ? "all" : "core";
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(month || ""))) return res.status(400).json({ error: "month must be YYYY-MM" });
+  try {
+    const sql = bcSql("targets", BC_TARGET_SQL).split("{{MONTH}}").join(month)
+      .split("{{CORE}}").join(segment === "core"
+        ? `AND DATE_DIFF(DATE '${month}-01', DATE_TRUNC(DATE(c.registered_at), MONTH), MONTH) BETWEEN 4 AND 12` : "");
+    const rows = await bqJson(sql);
+    logJson("NOTICE", "bclub_target_export", { by: callerEmail(req) || null, month, segment, rows: rows.length });
+    const cols = ["user_id", "name", "email", "phone_no", "remaining_points", "joined", "months_since_joining", "last_login", "signup_hospital", "last_language"];
+    const cell = (v) => { const t = v === null || v === undefined ? "" : String(v); return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+    const csv = "\uFEFF" + [cols.join(","), ...rows.map((r) => cols.map((c) => cell(r[c])).join(","))].join("\r\n") + "\r\n";
+    res.setHeader("content-type", "text/csv; charset=utf-8");
+    res.setHeader("content-disposition", `attachment; filename="better-club-points-waiting-${segment}-${month}.csv"`);
+    res.setHeader("cache-control", "no-store");
+    res.send(csv);
+  } catch (err) {
+    logJson("ERROR", "bclub_target_export_failed", { error: String(err.message || err) });
+    res.status(500).json({ error: err.message || "Export failed" });
+  }
+});
 
 app.get("/api/better-club/engagement", requireTab("bcengage"), async (req, res) => {
   const { from, to } = req.query;

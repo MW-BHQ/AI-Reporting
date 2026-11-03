@@ -49,7 +49,7 @@ VIEWS = [
     ("campaigns", "campaigns", "async()=>{await loadCampaign('260701-08', true); render();}"),
     ("pages", "pages", None), ("benchmark", "benchmark", None), ("audiences", "audiences", None),
     ("audit", "audit", None), ("gads", "gads", None), ("gadsbench", "gadsbench", None),
-    ("bclub", "bclub", None), ("bcengage", "bcengage", None), ("line", "line", None), ("ecom", "ecom", None),
+    ("bclub", "bclub", None), ("bcengage", "bcengage", None), ("bcquiz", "bcquiz", None), ("line", "line", None), ("ecom", "ecom", None),
     ("ecommonthly", "ecommonthly", None), ("ecomcampaigns", "ecomcampaigns", None),
     ("ecomchannels", "ecomchannels", None), ("shopee", "shopee", None), ("lazada", "lazada", None),
     ("ecomcentre", "ecomcentre", None), ("ecompackages", "ecompackages", None),

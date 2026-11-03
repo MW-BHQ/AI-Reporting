@@ -82,6 +82,7 @@ check "ecom roas"    GET "/api/ecommerce/roas?from=$FROM&to=$TO"
 check "report"       GET "/api/report?from=$FROM&to=$TO"
 check "better club"  GET "/api/better-club?from=$FROM&to=$TO"
 check "bclub engagement" GET "/api/better-club/engagement?from=$FROM&to=$TO"
+check "bclub quiz" GET "/api/better-club/quiz?from=$FROM&to=$TO"
 
 # Monthly Reports had NO smoke coverage until v3.100.0 — the GCS stub answered
 # every read with the access list, so /api/report returned the users array with
@@ -1188,6 +1189,16 @@ expect_field "eng rewards"        "$ENG" "d.rewards.some(r=>r.kind==='Health gui
 expect_field "eng channels"       "$ENG" "d.channels.length&&d.campaigns.length&&d.rewardArticles.length?'ok':undefined"
 expect_field "eng habit"          "$ENG" "d.streaks.length===3&&d.hours.length===24?'ok':undefined"
 expect_field "eng reachable"      "$ENG" "d.dormant.find(r=>r.month==='2026-10').reachable===33972?'ok':undefined"
+expect_field "eng badges"         "$ENG" "d.badges.some(r=>r.month==='2026-09')&&d.badges.some(r=>r.month==='2026-10')?'ok':undefined"
+# ---- Quiz Insight + target export (v3.382.0) ----
+QZ="/api/better-club/quiz?from=2026-10-01&to=2026-10-31"
+expect_field "quiz available"     "$QZ" "d.available&&d.quizzes.length===3?'ok':undefined"
+expect_field "quiz multi"         "$QZ" "d.quizzes.find(q=>q.multi).options.reduce((a,o)=>a+o.n,0)>d.quizzes.find(q=>q.multi).respondents?'ok':undefined"
+expect_field "quiz bad date 400"  "/api/better-club/quiz?from=2026-10-01'--&to=2026-10-31" "d.error?'ok':undefined"
+TCSV=$(curl -s -H "$ADMIN" "http://localhost:$PORT/api/better-club/targets.csv?month=2026-10&segment=core")
+if printf '%s' "$TCSV" | head -1 | grep -q "user_id,name,email,phone_no" && printf '%s' "$TCSV" | grep -q '"Test, Member"' && printf '%s' "$TCSV" | grep -q '""ทดสอบ""'; then printf '  ok   %-22s %s\n' "target csv" ok; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "target csv" "$(printf '%s' "$TCSV" | head -c 120)"; fi
+TBAD=$(curl -s -o /dev/null -w '%{http_code}' -H "$ADMIN" "http://localhost:$PORT/api/better-club/targets.csv?month=2026-10-01%27")
+if [ "$TBAD" = "400" ]; then printf '  ok   %-22s %s\n' "target bad month" 400; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "target bad month" "$TBAD"; fi
 expect_field "eng identity"       "$ENG" "d.months.slice(1).every((m,i)=>m.mau-d.months[i].mau===m.new_users+m.reactivated-m.churned)?'ok':undefined"
 
 # ---- Better Club -----------------------------------------------------------

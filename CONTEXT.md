@@ -1,5 +1,26 @@
 ### Recent (November 2026)
 
+**v3.382.0 — Better Club: footnotes, badges, target export, Quiz Insight tab** (MW):
+- Engagement is the TEAM's working dashboard, so every metric has a one-line footnote
+  (`.bce-foot`; `stat(..., foot)`) saying what it counts and where from — "Also clicked a
+  button", sign-up channel (utm_source / utm_medium), campaign (utm_campaign), days active,
+  cohort cells, etc. Exception to the no-footnotes rule, by MW's request, for this tab only.
+- Badges earned this month vs the month before (Points tier / Booking / Check-up), in
+  Points and rewards. Badge history starts Nov 2025, so the month before is always covered.
+- Target export `/api/better-club/targets.csv?month=YYYY-MM&segment=core|all` (tab
+  bcengage): the "points are waiting" members — joined before the month, no B points in it,
+  consented, points >= cheapest health guide; core = joined 4-12 months before. Names,
+  email, phone: the one place the dashboard hands out contact details; every download is
+  logged (`bclub_target_export`, with the caller). UTF-8 BOM so Excel reads Thai. Month is
+  validated before it reaches SQL (smoke checks a quote is a 400).
+- New tab Better Club > Quiz Insight (`bcquiz`, `/api/better-club/quiz`): each daily quiz
+  question with answers, % by default, Percent/Number toggle (S.bcquizMode, re-renders
+  without a refetch). Quiz day = date in the title (main-2026-10-01), so late answers stay
+  on their quiz. Multi-select answers ("a|b|c") are split and each choice counts once per
+  member; those questions are marked "pick several" (shares add to >100%).
+  BigQuery rejects correlated ARRAY subqueries over another CTE: aggregate first (opts).
+- visual.py ~3 min: run it detached (setsid) to stay inside the 300 s tool limit.
+
 **v3.381.0 — Engagement: "What to do next"** (MW: "the number is very discouraging — add
 more so the team knows what to do next"):
 - Second slide, right after the MAU cards. Three plays, each with the number behind it,

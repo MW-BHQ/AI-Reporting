@@ -81,7 +81,32 @@ const engagement = {
   dormant: [["2026-09", 50817, 8681, 20134, 22002, 38904, 34695, 32100, 12500], ["2026-10", 53665, 8941, 20707, 24017, 41199, 36473, 33972, 12882]]
     .map(([month, dormant, d_1_3, d_4_12, d_12, with_points, consented, reachable, reachable_4_12]) =>
       ({ month, dormant, d_1_3, d_4_12, d_12, with_points, consented, reachable, reachable_4_12, guide_points: 15 })),
+  badges: [
+    ["2026-09", "Starter", "point", 2930, 2930], ["2026-09", "Savior", "point", 39, 39], ["2026-09", "Sparker", "point", 8, 8],
+    ["2026-09", "Better Booking", "better_booking", 8, 8], ["2026-09", "Better Checkup: Signature", "better_checkup", 4, 4],
+    ["2026-10", "Starter", "point", 3010, 3010], ["2026-10", "Savior", "point", 35, 35], ["2026-10", "Sparker", "point", 18, 18],
+    ["2026-10", "Better Booking", "better_booking", 5, 5], ["2026-10", "Better Checkup: Prestige", "better_checkup", 5, 5],
+  ].map(([month, title, type, earned, members]) => ({ month, title, type, earned, members })),
 };
+
+/** Quiz Insight: the real 1-3 Oct 2026 quizzes (counts only). */
+const quiz = {
+  members: 42, answers: 88,
+  quizzes: [
+    { title: "main-2026-10-03", type: "main", day: "2026-10-03", question: "เวลาที่ยิ้ม คุณกังวลเรื่องใดมากที่สุด?", respondents: 27, multi: false,
+      options: [["ฟันเหลือง", 12], ["เหงือกร่น", 5], ["กลิ่นปาก", 4], ["ไม่กังวล", 4], ["ฟันเก", 1], ["อื่นๆ", 1]] },
+    { title: "main-2026-10-02", type: "main", day: "2026-10-02", question: "คุณคิดว่าออกกำลังกายแบบใดเหมาะกับผู้ป่วยที่กำลังฟื้นตัวจากโรคสโตรกมากที่สุด?", respondents: 32, multi: false,
+      options: [["เดินเบาๆ ในบ้าน", 18], ["กายบริหารบนเตียง", 6], ["ยืดกล้ามเนื้อ", 3], ["โยคะ", 3], ["ว่ายน้ำ", 2]] },
+    { title: "main-2026-10-01", type: "main", day: "2026-10-01", question: "หากต้องดูแลคนในครอบครัวที่กำลังฟื้นตัวจากโรคสโตรก คุณกังวลเรื่องใดมากที่สุด? (เลือกได้มากกว่า 1 ข้อ)", respondents: 27, multi: true,
+      options: [["ค่าใช้จ่ายในการรักษาและดูแลระยะยาว", 14], ["อารมณ์หรือภาวะซึมเศร้าของผู้ป่วย", 12], ["การสื่อสารกับผู้ป่วย (พูด/ฟัง)", 10], ["การใช้ชีวิตประจำวันของผู้ป่วย", 10], ["ความเหนื่อยล้าและความเครียดของผู้ดูแล", 9]] },
+  ].map((q) => ({ ...q, options: q.options.map(([answer, n]) => ({ answer, n })) })),
+};
+
+/** Target export: invented members (never real contact details in a fixture). */
+const targets = [
+  { user_id: 101, name: "Test, Member", email: "a@example.com", phone_no: "0800000001", remaining_points: 120, joined: "2026-03-04", months_since_joining: 7, last_login: "2026-08-01 09:00:00", signup_hospital: "Bangkok Hospital (BGH)", last_language: "th" },
+  { user_id: 102, name: "สมชาย \"ทดสอบ\"", email: "b@example.com", phone_no: "0800000002", remaining_points: 20, joined: "2025-11-20", months_since_joining: 11, last_login: null, signup_hospital: "BHQ Group", last_language: "en" },
+];
 
 const overview = {
   byMonth: [["2026-03", 1759], ["2026-04", 3869], ["2026-05", 2664], ["2026-06", 2594],
@@ -97,4 +122,4 @@ const overview = {
   ].map(([f, v, n]) => ({ f, v, n })),
 };
 
-module.exports = { engagement, overview };
+module.exports = { engagement, overview, quiz, targets };

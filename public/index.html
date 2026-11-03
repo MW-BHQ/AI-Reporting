@@ -2014,6 +2014,22 @@
   .bce-play-t{font-weight:700;color:var(--ink);font-size:var(--text-sm);}
   .bce-play-why,.bce-play-do{font-size:var(--text-xs);color:var(--ink-2);line-height:1.5;}
   .bce-play-gain{margin-top:auto;padding-top:8px;border-top:1px solid var(--line);font-size:var(--text-xs);color:var(--ink);}
+  .bcq-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+  .bcq-toggle{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;}
+  .bcq-toggle button{border:0;background:transparent;padding:6px 14px;font:inherit;font-size:var(--text-xs);color:var(--ink-2);cursor:pointer;}
+  .bcq-toggle button.on{background:var(--blue);color:#fff;font-weight:600;}
+  .bcq-head{display:flex;gap:10px;align-items:center;font-size:var(--text-xs);color:var(--muted);margin-bottom:6px;}
+  .bcq-day{font-weight:600;color:var(--ink-2);}
+  .bcq-q{font-weight:600;color:var(--ink);font-size:var(--text-sm);line-height:1.45;margin-bottom:8px;}
+  .bcq-card .bce-row{grid-template-columns:minmax(140px,46%) 1fr auto;}
+  @media print{ .bcq-toggle{display:none;} }
+  .bce-foot{margin-top:10px;font-size:11px;line-height:1.5;color:var(--muted);}
+  .bce-foot b{color:var(--ink-2);font-weight:600;}
+  .stat .bce-foot{margin-top:8px;}
+  .bce-dl{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+  .bce-dl .btn-sm{display:inline-block;padding:6px 12px;border-radius:8px;background:var(--blue);color:#fff;font-size:var(--text-xs);font-weight:600;text-decoration:none;}
+  .bce-dl .btn-sm.ghost{background:transparent;color:var(--blue);border:1px solid var(--blue);}
+  @media print{ .bce-dl{display:none;} }
   .bce-list{margin:0;padding-left:18px;font-size:var(--text-xs);color:var(--ink-2);line-height:1.6;} .bce-list li{margin:4px 0;}
   .bc-stage canvas, .bc-hero canvas, .bc-mid canvas { max-width:100%; }
   #viewRoot .grid > * { min-width:0; }
@@ -2382,6 +2398,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
         Engagement
       </div>
+      <div class="nav-item sub" data-view="bcquiz">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg>
+        Quiz Insight
+      </div>
 
       <div class="nav-sep"></div>
       <div class="nav-group">LINE OA</div>
@@ -2629,6 +2649,7 @@ const S = {
   gads: null, gadsKey: null, gadsLoading: false, gadsError: null,
   bclub: null, bclubKey: null, bclubLoading: false, bclubError: null,
   bcengage: null, bcengageKey: null, bcengageLoading: false, bcengageError: null,
+  bcquiz: null, bcquizKey: null, bcquizLoading: false, bcquizError: null, bcquizMode: 'pct',
   line: null, lineKey: null, lineLoading: false, lineError: null,
   shopee: null, shopeeKey: null, shopeeLoading: false, shopeeError: null,
   lazada: null, lazadaKey: null, lazadaLoading: false, lazadaError: null,
@@ -3356,7 +3377,7 @@ const ECOM_VIEWS = new Set(['ecom', 'ecommonthly', 'ecomchannels', 'ecompackages
  * say so themselves.
  */
 // `callout` mixes BHQ, one hospital and club-wide sections; each says which.
-const UNSCOPED_VIEWS = new Set(['users', 'audit', 'benchmark', 'gadsbench', 'topics', 'campaigns', 'bclub', 'bcengage', 'callout']);
+const UNSCOPED_VIEWS = new Set(['users', 'audit', 'benchmark', 'gadsbench', 'topics', 'campaigns', 'bclub', 'bcengage', 'bcquiz', 'callout']);
 function scopeFor(view) {
   if (UNSCOPED_VIEWS.has(view)) return '';
   if (ECOM_VIEWS.has(view)) return S.ecomScope === 'online' ? 'Online only' : 'All channels';
@@ -3383,6 +3404,7 @@ const TITLES = {
   gads: ['Google Ads', 'Spend, campaigns and accounts — newly connected, so start by looking'],
   audiences: ['Audiences', 'Meta audience sets ranked by cost per first-degree result'],
   bclub: ['Better Club', 'Membership revenue, and whether the members we win come back'],
+  bcquiz: ['Better Club · Quiz Insight', 'What members answered in the daily quiz'],
   bcengage: ['Better Club · Engagement', 'Members who earned B points this month — new, staying or coming back'],
   line: ['LINE OA', 'What we broadcast, who received it, and what it cost us in blocks'],
   shopee: ['Shopee', 'What the storefront sold, and where its visits came from'],
@@ -3762,6 +3784,7 @@ $('loadBtn').addEventListener('click', async () => {
     else if (S.view === 'gads') { S.gadsError = null; await loadGads(true); }
     else if (S.view === 'bclub') { S.bclubError = null; await loadBclub(true); }
     else if (S.view === 'bcengage') { S.bcengageError = null; await loadBcengage(true); }
+    else if (S.view === 'bcquiz') { S.bcquizError = null; await loadBcquiz(true); }
     else if (S.view === 'line') { S.lineError = null; await loadLine(true); }
     else if (S.view === 'shopee') { S.shopeeError = null; await loadShopee(true); }
     else if (S.view === 'lazada') { S.lazadaError = null; await loadLazada(true); }
@@ -3855,6 +3878,7 @@ function render() {
   else if (S.view === 'gads') renderGads();
   else if (S.view === 'bclub') renderBclub();
   else if (S.view === 'bcengage') renderBcengage();
+  else if (S.view === 'bcquiz') renderBcquiz();
   else if (S.view === 'line') renderLine();
   else if (S.view === 'shopee') renderShopee();
   else if (S.view === 'lazada') renderLazada();
@@ -7651,7 +7675,7 @@ function renderUsers() {
     { name: 'Reporting', ids: ['overview','report','gbp','campaigns','pages'] },
     { name: 'Meta Ads', ids: ['benchmark','audiences','audit'] },
     { name: 'Google Ads', ids: ['gads'] },
-    { name: 'Better Club', ids: ['bclub', 'bcengage'] },
+    { name: 'Better Club', ids: ['bclub', 'bcengage', 'bcquiz'] },
     { name: 'LINE OA', ids: ['line'] },
     { name: 'E-commerce', ids: ['ecom','ecommonthly','ecomcampaigns','ecomchannels','shopee','lazada',
       'ecomcentre','ecompackages','ecomroas','ecomchurn','ecommigration'] },
@@ -8069,6 +8093,7 @@ const VIEW_LOADERS = {
   gadsbench:     { load: () => loadGadsBench(),     err: 'gadsbenchError', busy: 'gadsbenchLoading', what: 'the Google Ads benchmark' },
   bclub:         { load: () => loadBclub(),         err: 'bclubError',     busy: 'bclubLoading',     what: 'the Better Club sheet' },
   bcengage:      { load: () => loadBcengage(),      err: 'bcengageError',  busy: 'bcengageLoading',  what: 'Better Club activity' },
+  bcquiz:        { load: () => loadBcquiz(),        err: 'bcquizError',    busy: 'bcquizLoading',    what: 'Better Club quiz answers' },
   line:          { load: () => loadLine(),          err: 'lineError',      busy: 'lineLoading',      what: 'the LINE sheets' },
   shopee:        { load: () => loadShopee(),        err: 'shopeeError',    busy: 'shopeeLoading',    what: 'the Shopee storefront' },
   lazada:        { load: () => loadLazada(),        err: 'lazadaError',    busy: 'lazadaLoading',    what: 'the Lazada storefront' },
@@ -10020,8 +10045,14 @@ function renderBcengage() {
       : `<span class="dlt ${v > 0.005 ? 'up' : (v < -0.005 ? 'down' : 'flat')}">${changeText(v, Math.abs(v) >= 1 ? 0 : 1)}</span> <span class="pill" data-tip="Month on month — against ${esc(pLabel)}">MoM</span>`;
   };
   const noSplit = '<span data-tip="The first tracked month has no month before it to compare against">\u2014</span>';
-  const stat = (lab, val, sub, colour, tip) => `<div class="stat"${tip ? ` data-tip="${esc(tip)}"` : ''}>
-    <div class="lab"${colour ? ` style="color:${colour};"` : ''}>${esc(lab)}</div><div class="val">${val}</div><div class="sub2">${sub || ''}</div></div>`;
+  /**
+   * This is the Better Club TEAM's working dashboard, not an executive report, so
+   * every metric carries a one-line footnote saying what it counts and where it
+   * comes from (MW, v3.382.0). `foot` is that line.
+   */
+  const stat = (lab, val, sub, colour, tip, foot) => `<div class="stat"${tip ? ` data-tip="${esc(tip)}"` : ''}>
+    <div class="lab"${colour ? ` style="color:${colour};"` : ''}>${esc(lab)}</div><div class="val">${val}</div><div class="sub2">${sub || ''}</div>${foot ? `<div class="bce-foot">${foot}</div>` : ''}</div>`;
+  const foot = (t) => `<div class="bce-foot">${t}</div>`;
 
   // From the cohort rows, so this card and the cohort table cannot disagree.
   const pc = p ? (d.cohorts || []).filter(r => r.cohort === p.month) : [];
@@ -10030,18 +10061,26 @@ function renderBcengage() {
   const cards = `
     <div class="grid g-4">
       ${stat('Monthly active members', cnt(s.mau), `${dlt(s.mau, p && p.mau)} · ${pct(share(s.mau, s.members))} of ${cnt(s.members)} members`, null,
-        'Active = earned B points at least once in the month: daily check-in, reading a reward article or answering a quiz.')}
-      ${stat('New members', cnt(s.new_users), `${pct(share(s.new_users, s.mau))} of active · joined in ${esc(label.replace(/ \d{4}$/, ''))}`, BCE_COL.new)}
-      ${stat('Retained', split ? cnt(s.retained) : noSplit, split ? `${pct(share(s.retained, p && p.mau))} of ${esc(pLabel.replace(/ \d{4}$/, ''))}'s active stayed` : 'needs a month before', BCE_COL.retained)}
-      ${stat('Reactivated', split ? cnt(s.reactivated) : noSplit, split ? `${pct(share(s.reactivated, s.mau))} of active · back after a quiet month` : 'needs a month before', BCE_COL.reactivated)}
+        'Active = earned B points at least once in the month: daily check-in, reading a reward article or answering a quiz.',
+        'Members who earned B points at least once this month: daily check-in, a reward article or a quiz.')}
+      ${stat('New members', cnt(s.new_users), `${pct(share(s.new_users, s.mau))} of active · joined in ${esc(label.replace(/ \d{4}$/, ''))}`, BCE_COL.new, null,
+        'Active this month and signed up this month.')}
+      ${stat('Retained', split ? cnt(s.retained) : noSplit, split ? `${pct(share(s.retained, p && p.mau))} of ${esc(pLabel.replace(/ \d{4}$/, ''))}'s active stayed` : 'needs a month before', BCE_COL.retained, null,
+        'Active this month and also last month.')}
+      ${stat('Reactivated', split ? cnt(s.reactivated) : noSplit, split ? `${pct(share(s.reactivated, s.mau))} of active · back after a quiet month` : 'needs a month before', BCE_COL.reactivated, null,
+        'Active this month, not last month, joined before this month.')}
     </div>
     <div class="grid g-4 mt">
-      ${stat('Lost from last month', split ? cnt(s.churned) : noSplit, split ? `${pct(share(s.churned, p && p.mau))} of ${esc(pLabel.replace(/ \d{4}$/, ''))}'s active` : 'needs a month before', BCE_COL.lost)}
-      ${stat('Joiners active in their first month', pct(share(s.new_users, s.joined)), `${cnt(s.new_users)} of ${cnt(s.joined)} who joined in ${esc(label.replace(/ \d{4}$/, ''))}`)}
+      ${stat('Lost from last month', split ? cnt(s.churned) : noSplit, split ? `${pct(share(s.churned, p && p.mau))} of ${esc(pLabel.replace(/ \d{4}$/, ''))}'s active` : 'needs a month before', BCE_COL.lost, null,
+        'Active last month, no B points this month.')}
+      ${stat('Joiners active in their first month', pct(share(s.new_users, s.joined)), `${cnt(s.new_users)} of ${cnt(s.joined)} who joined in ${esc(label.replace(/ \d{4}$/, ''))}`, null, null,
+        'Of everyone who signed up this month, the share who also earned B points this month.')}
       ${stat('Last month’s joiners back this month', backN === null ? noSplit : pct(share(backN, backOf)),
-        backN === null ? 'needs a month before' : `${cnt(backN)} of ${cnt(backOf)} who joined in ${esc(pLabel.replace(/ \d{4}$/, ''))}`)}
+        backN === null ? 'needs a month before' : `${cnt(backN)} of ${cnt(backOf)} who joined in ${esc(pLabel.replace(/ \d{4}$/, ''))}`, null, null,
+        'Signed up last month and earned B points this month.')}
       ${stat('Daily active ÷ monthly active', pct(share(s.avg_dau, s.mau)), `${cnt(s.avg_dau)} a day on average`, null,
-        'Stickiness: how much of the month an active member is around. Higher means habit, lower means one-off visits.')}
+        'Stickiness: how much of the month an active member is around. Higher means habit, lower means one-off visits.',
+        'Average members earning points per day, divided by the month’s active members. 100% = every active member, every day.')}
     </div>`;
 
   // Growth accounting, one bar per tracked month (the partial current month is left out).
@@ -10051,6 +10090,7 @@ function renderBcengage() {
     <div class="card">
       <div class="card-title">Where each month’s active members come from</div>
       <div class="chart-wrap"><canvas id="bceGrowth"></canvas></div>
+      ${foot('Each bar is one month’s active members split into new, retained and reactivated; below zero are last month’s actives who earned nothing this month. August is the first tracked month, so it has no month before it to split against.')}
     </div>`;
 
   // ---- who comes back
@@ -10076,10 +10116,12 @@ function renderBcengage() {
       <div class="card">
         <div class="card-title">Reactivated in ${esc(label)}, by how long ago they joined</div>
         ${tenure.length ? hbarRows(tenure, s.reactivated, BCE_COL.reactivated) : '<div class="note">No reactivated members this month.</div>'}
+        ${foot('Months between the member’s sign-up month and this month. “The month before” = joined last month, earned nothing then, earned points now.')}
       </div>
       <div class="card">
         <div class="card-title">What reactivated members came back for</div>
         ${first.length ? hbarRows(first.map(r => [BCE_ACTION[r.action] || r.action, r.users]), s.reactivated, BCE_COL.reactivated) : '<div class="note">\u2014</div>'}
+        ${foot('Their first B-point action of the month — the thing that brought them back.')}
       </div>
     </div>` : '';
   const doTable = `
@@ -10091,6 +10133,7 @@ function renderBcengage() {
       ${actRows.map(([k, name]) => `<tr><td class="strong">${esc(name)}</td>
         ${groups.map(g => { const r = seg(g); return `<td class="num"${r ? ` data-tip="${esc(`${pct(share(r[k], r.users))} of ${gName[g].toLowerCase()} members`)}"` : ''}>${r ? cnt(r[k]) : '\u2014'}</td>`; }).join('')}</tr>`).join('')}
       </tbody></table>
+      ${foot('Members in each group who did each thing at least once this month; hover a number for the share. The first three earn B points and make a member active. <b>Also read any article</b> = opened any article page on bangkokhospital.com while signed in (reward or not). <b>Also clicked a button</b> = clicked a tracked button while signed in, such as Book appointment, Find a doctor, Cart or Chat. <b>Redeemed or used a reward</b> = redeemed a reward with points, or used a coupon.')}
     </div>`;
 
   // ---- do new members stay: cohort table
@@ -10111,11 +10154,13 @@ function renderBcengage() {
           (m < k && /^\d{4}-\d{2}$/.test(k)) ? ''
           : c.by[m] === undefined ? '<span style="color:var(--faint);">0</span>' : `<b data-tip="${esc(`${pct(share(c.by[m], c.size))} of ${cnt(c.size)}`)}">${cnt(c.by[m])}</b>`}</td>`).join('')}</tr>`; }).join('')}
       </tbody></table>
+      ${foot('Rows group members by the month they signed up (older members by quarter). Each number is how many of that group earned B points in that month; hover for the share of the group. The first number in a row is their joining month.')}
     </div>`;
   const daily = `
     <div class="card">
       <div class="card-title">Active members per day</div>
       <div class="chart-wrap"><canvas id="bceDaily"></canvas></div>
+      ${foot('<b>Earned B points</b> = members who earned points that day. <b>Any activity</b> also counts reading any article, clicking a button, redeeming, signing up or logging in.')}
     </div>`;
 
   // ---- what they care about
@@ -10129,14 +10174,17 @@ function renderBcengage() {
       <div class="card">
         <div class="card-title">Topics active members read, by readers</div>
         ${tags.length ? hbarRows(tags.map(r => [r.tag, r.readers]), null, BCE_COL.new) : '<div class="note">\u2014</div>'}
+        ${foot('Tags of the articles this month’s active members opened, reward or not. One article has several tags; a member counts once per tag.')}
       </div>
       <div class="card">
         <div class="card-title">Buttons active members clicked</div>
         ${cta.length ? hbarRows(cta.map(r => [r.grp, r.users]), s.mau, BCE_COL.retained) : '<div class="note">\u2014</div>'}
+        ${foot('Active members who clicked a tracked button on the website while signed in, grouped by the button’s name. Share is of all active members.')}
       </div>
       <div class="card">
         <div class="card-title">Days active in the month</div>
         ${hbarRows(depth, depthTotal, BCE_COL.reactivated)}
+        ${foot('How many different days in the month each active member earned B points. “1 day” = came once; 15+ = a habit.')}
       </div>
     </div>`;
 
@@ -10145,13 +10193,33 @@ function renderBcengage() {
   const pts = byM(d.points)[0] || null, ptsPrev = p ? ((d.points || []).find(r => r.month === p.month) || null) : null;
   const rw = byM(d.rewards);
   const rwSum = (k) => rw.reduce((a, r) => a + (r[k] || 0), 0);
+  // Badges: this month against the month before. Badge history starts Nov 2025,
+  // so the month before is always fully covered.
+  const bgPrev = p ? (d.badges || []).filter(r => r.month === p.month) : [];
+  const bgNow = byM(d.badges);
+  const bgTitles = [...new Set([...bgNow, ...bgPrev].map(r => r.title))];
+  const bgOf = (arr, t) => (arr.find(r => r.title === t) || {}).earned || 0;
+  const BADGE_TYPE = { point: 'Points tier', better_booking: 'Booking', better_checkup: 'Check-up' };
+  const bgRows = bgTitles.map(t => ({ t, type: ([...bgNow, ...bgPrev].find(r => r.title === t) || {}).type, now: bgOf(bgNow, t), prev: bgOf(bgPrev, t) }))
+    .sort((a, b) => b.now - a.now || b.prev - a.prev);
+  const badgeCard = `
+    <div class="card mt">
+      <div class="card-title">Badges earned in ${esc(label)} vs ${esc(pLabel || 'the month before')}</div>
+      ${bgRows.length ? `<table class="roomy"><thead><tr><th>Badge</th><th>Type</th><th class="num">${esc(label.replace(/ \d{4}$/, ''))}</th><th class="num">${esc(pLabel.replace(/ \d{4}$/, '') || 'Before')}</th><th class="num">Change</th></tr></thead><tbody>
+        ${bgRows.map(r => `<tr><td class="strong">${esc(r.t)}</td><td>${esc(BADGE_TYPE[r.type] || r.type || '')}</td>
+          <td class="num"><b>${cnt(r.now)}</b></td><td class="num">${p ? cnt(r.prev) : '\u2014'}</td>
+          <td class="num">${p && r.prev ? `<span class="dlt ${r.now > r.prev ? 'up' : (r.now < r.prev ? 'down' : 'flat')}">${changeText((r.now - r.prev) / r.prev, 0)}</span>` : (p && r.now ? 'new' : '\u2014')}</td></tr>`).join('')}
+      </tbody></table>` : '<div class="note">No badges earned this month.</div>'}
+      ${foot('Badges members earned in each month. <b>Starter</b> is given on sign-up, so it tracks joiners; <b>Sparker</b> and <b>Savior</b> are points tiers; <b>Booking</b> and <b>Check-up</b> badges come with an appointment or a health check-up package.')}
+    </div>`;
   const rewardsBody = `
     <div class="grid g-4">
       ${stat('B points earned from activity', pts ? cnt(pts.earned_activity) : '\u2014', pts ? `${dlt(pts.earned_activity, ptsPrev && ptsPrev.earned_activity)} · check-in, reward reads, quizzes` : '', null,
-        'Points members earned from the three MAU actions. Sign-up and profile bonuses are left out.')}
-      ${stat('Rewards redeemed', cnt(rwSum('redeemed')), `${cnt(rwSum('points'))} points spent`)}
-      ${stat('Coupons used', cnt(rwSum('used')), 'at the hospital or shop, any month redeemed')}
-      ${stat('Friends referred', pts ? cnt(pts.referrals) : '\u2014', 'members who brought a friend in')}
+        'Points members earned from the three MAU actions. Sign-up and profile bonuses are left out.',
+        'Points from check-ins, reward articles and quizzes only.')}
+      ${stat('Rewards redeemed', cnt(rwSum('redeemed')), `${cnt(rwSum('points'))} points spent`, null, null, 'Times members swapped points for a reward this month.')}
+      ${stat('Coupons used', cnt(rwSum('used')), 'at the hospital or shop, any month redeemed', null, null, 'Coupons marked used this month, whenever they were redeemed.')}
+      ${stat('Friends referred', pts ? cnt(pts.referrals) : '\u2014', 'members who brought a friend in', null, null, 'Referral events this month: a member’s invite led to a sign-up.')}
     </div>
     <div class="card mt">
       <div class="card-title">What members redeemed in ${esc(label)}</div>
@@ -10159,7 +10227,9 @@ function renderBcengage() {
         ${rw.map(r => `<tr><td class="strong">${esc(r.name)}</td><td>${esc(r.kind)}</td>
           <td class="num"><b>${cnt(r.redeemed)}</b></td><td class="num">${cnt(r.points)}</td><td class="num">${cnt(r.used)}</td></tr>`).join('')}
       </tbody></table>` : '<div class="note">No rewards redeemed this month.</div>'}
-    </div>`;
+      ${foot('<b>Health guide</b> = a downloadable guide; <b>Coupon</b> = a discount code. <b>Used</b> counts coupons used this month, so it can exceed Redeemed.')}
+    </div>
+    ${badgeCard}`;
 
   // ---- campaigns: who joins, and who goes on to earn points
   const ch = byM(d.channels), cp = byM(d.campaigns), ra = byM(d.rewardArticles);
@@ -10173,10 +10243,12 @@ function renderBcengage() {
       <div class="card">
         <div class="card-title">Joiners in ${esc(label)}, by sign-up channel</div>
         ${ch.length ? joinTable(ch, 'Channel') : '<div class="note">\u2014</div>'}
+        ${foot('<b>Sign-up channel</b> = the source / medium on the link a member arrived by when they signed up (the utm_source and utm_medium tags, e.g. facebook / paid). <b>Not recorded</b> = the link had no tags. <b>Earned points</b> = joined this month and earned B points this month.')}
       </div>
       <div class="card">
         <div class="card-title">Joiners in ${esc(label)}, by campaign</div>
         ${cp.length ? joinTable(cp, 'Campaign') : '<div class="note">No sign-ups carried a campaign this month.</div>'}
+        ${foot('<b>Campaign</b> = the campaign name on the sign-up link (the utm_campaign tag, e.g. 261001-02_bgh_tra). Only tagged sign-ups appear here.')}
       </div>
     </div>
     <div class="card mt">
@@ -10186,6 +10258,7 @@ function renderBcengage() {
           <td>${esc(r.launched ? humanDate(r.launched.slice(0, 10)) || r.launched.slice(0, 10) : '\u2014')}</td>
           <td class="num"><b>${cnt(r.readers)}</b></td></tr>`).join('')}
       </tbody></table>` : '<div class="note">\u2014</div>'}
+      ${foot('Articles that pay B points for reading. <b>Readers</b> = members who earned points reading it this month; <b>Launched</b> = when it started paying points.')}
     </div>`;
 
   // ---- habit and timing
@@ -10198,10 +10271,12 @@ function renderBcengage() {
       <div class="card">
         <div class="card-title">When members earn points, by hour</div>
         <div class="chart-wrap"><canvas id="bceHours"></canvas></div>
+        ${foot('Members who earned B points in each hour of the day (Bangkok time), across the month. A member counts once per hour.')}
       </div>
       <div class="card">
         <div class="card-title">Longest check-in streak in ${esc(label)}</div>
         ${hbarRows(stRows, null, BCE_COL.retained)}
+        ${foot('The longest run of daily check-ins each member reached this month. The challenge is weekly: the streak restarts after 7 days.')}
       </div>
     </div>`;
 
@@ -10268,9 +10343,19 @@ function renderBcengage() {
   if (topReward) smaller.push(`<li><b>Lead with health guides.</b> ${cnt(guideRedeemed)} of ${cnt(rwSum('redeemed'))} redemptions were guides; the top reward was ${esc(topReward.name)} (${cnt(topReward.redeemed)}). Publish a new guide where the reads are: ${esc((tags[0] || {}).tag || 'the top topic')}.</li>`);
   if (bestCh) smaller.push(`<li><b>Put more behind ${esc(bestCh.channel)}.</b> ${cnt(bestCh.active)} of ${cnt(bestCh.joined)} joiners earned points (${pct(share(bestCh.active, bestCh.joined))})${worstCh && worstCh.channel !== bestCh.channel ? `, against ${cnt(worstCh.active)} of ${cnt(worstCh.joined)} from ${esc(worstCh.channel)}` : ''}.</li>`);
   if (untagged) smaller.push(`<li><b>Tag every sign-up link.</b> ${cnt(untagged)} of ${cnt(joinedAll)} joiners (${pct(share(untagged, joinedAll))}) came in with no campaign, so the channels that work cannot be found.</li>`);
+  const targetCard = dm && dm.reachable ? `
+    <div class="card mt">
+      <div class="card-title">Target list: members whose points are waiting</div>
+      <div class="bce-dl">
+          <a class="btn-sm" href="/api/better-club/targets.csv?month=${esc(s.month)}&segment=core" download>Download ${cnt(dm.reachable_4_12)} to start with</a>
+          <a class="btn-sm ghost" href="/api/better-club/targets.csv?month=${esc(s.month)}&segment=all" download>All ${cnt(dm.reachable)}</a>
+        </div>
+      ${foot(`<b>Who is in this list:</b> members who signed up before ${esc(label)}, earned no B points in ${esc(label)}, agreed to receive marketing, and hold at least ${cnt(dm.guide_points)} points (the price of a health guide). They already know Better Club and already have something to spend, so a reminder costs nothing to act on. “To start with” keeps the ones who joined 4–12 months ago, the group most comebacks come from. Points and consent are as of today. The file has names, email and phone: keep it inside the team, and every download is logged.`)}
+    </div>` : '';
   const pathTotal = lever.reduce((a, r) => a + r[1], 0);
   const nextBody = `
     <div class="grid g-3">${cards2.join('')}</div>
+    ${targetCard}
     <div class="grid g-2-1 mt">
       <div class="card">
         <div class="card-title">Also this month</div>
@@ -10279,6 +10364,7 @@ function renderBcengage() {
       <div class="card">
         <div class="card-title">From ${cnt(s.mau)} to ${cnt(s.mau + pathTotal)} active members</div>
         ${hbarRows([['Now', s.mau], ...lever], null, BCE_COL.new)}
+        ${foot('Today’s active members plus what each play above would add at the rate it states. Scenarios, not forecasts.')}
       </div>
     </div>`;
 
@@ -10308,6 +10394,68 @@ function renderBcengage() {
     { key: 'dau', label: 'Earned B points', color: BCE_COL.retained, axis: 'y' },
     { key: 'any', label: 'Any activity', color: BCE_COL.base, axis: 'y' },
   ]);
+}
+
+/**
+ * BETTER CLUB · QUIZ INSIGHT (v3.382.0). Every daily quiz question in the range
+ * with how members answered, newest first. Shares by default, counts on the
+ * toggle (S.bcquizMode); the toggle re-renders from the loaded data, no refetch.
+ * Multi-select questions are marked: each choice counts once per member, so
+ * their shares add to more than 100%.
+ */
+async function loadBcquiz(refresh = false) {
+  const key = `${$('from').value}|${$('to').value}`;
+  if (!refresh && S.bcquizKey === key && S.bcquiz) return S.bcquiz;
+  setStatus('busy', 'reading quiz answers…');
+  const res = await fetch(`/api/better-club/quiz?from=${$('from').value}&to=${$('to').value}${refresh ? '&refresh=1' : ''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0, 220)}`);
+  S.bcquiz = await res.json(); S.bcquizKey = key;
+  setStatus('ok', S.bcquiz.cached ? `cached ${S.bcquiz.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.bcquiz;
+}
+
+function renderBcquiz() {
+  const d = S.bcquiz;
+  if (S.bcquizError) { const m = S.bcquizError; $('viewRoot').innerHTML = errorState(m); S.bcquizError = null; return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('bcquiz', 'Reads daily quiz answers from BigQuery — counts only, no names.'); return; }
+  if (!d.available) { $('viewRoot').innerHTML = errorState(`Quiz answers unavailable — ${esc(d.error || 'unknown error')}`); return; }
+  const mode = S.bcquizMode === 'count' ? 'count' : 'pct';
+  const cnt = (v) => (v === null || v === undefined) ? '\u2014' : Math.round(v).toLocaleString();
+  const qs = d.quizzes || [];
+  const totalResp = qs.reduce((a, q) => a + q.respondents, 0);
+  const top = qs.slice().sort((a, b) => b.respondents - a.respondents)[0] || null;
+  const stat = (lab, val, sub, foot) => `<div class="stat"><div class="lab">${esc(lab)}</div><div class="val">${val}</div><div class="sub2">${sub || ''}</div>${foot ? `<div class="bce-foot">${foot}</div>` : ''}</div>`;
+  const toggle = `<div class="bcq-toggle" role="group" aria-label="Show answers as">
+      <button type="button" class="${mode === 'pct' ? 'on' : ''}" data-bcq-mode="pct">Percent</button>
+      <button type="button" class="${mode === 'count' ? 'on' : ''}" data-bcq-mode="count">Number</button>
+    </div>`;
+  const card = (q) => {
+    const max = Math.max(1, ...q.options.map(o => o.n));
+    return `<div class="card bcq-card">
+      <div class="bcq-head"><span class="bcq-day">${esc(humanDate(q.day) || q.day)}</span>
+        <span class="bcq-n">${cnt(q.respondents)} answered</span>${q.multi ? '<span class="pill" data-tip="Members could pick several answers, so the shares add to more than 100%">pick several</span>' : ''}</div>
+      <div class="bcq-q">${esc(q.question)}</div>
+      ${q.options.map(o => `<div class="bce-row"><div class="bce-name" title="${esc(o.answer)}">${esc(o.answer)}</div>
+        <div class="bce-track"><div class="bce-fill" style="width:${Math.max(1, o.n / max * 100).toFixed(1)}%;background:${BCE_COL.new};"></div></div>
+        <div class="bce-val" data-tip="${esc(mode === 'pct' ? `${cnt(o.n)} of ${cnt(q.respondents)}` : pct(o.n / q.respondents))}"><b>${mode === 'pct' ? pct(o.n / q.respondents) : cnt(o.n)}</b></div></div>`).join('')}
+    </div>`;
+  };
+  const summary = `
+    <div class="grid g-4">
+      ${stat('Quizzes in range', cnt(qs.length), humanRange(), 'One daily quiz question per day, dated by the quiz, not by when it was answered.')}
+      ${stat('Members who answered', cnt(d.members), 'at least one quiz', 'Different members, staff removed.')}
+      ${stat('Answers per quiz', qs.length ? cnt(totalResp / qs.length) : '\u2014', 'average members per question', 'Members answering each question, averaged over the quizzes in range.')}
+      ${stat('Most answered', top ? cnt(top.respondents) : '\u2014', top ? esc(humanDate(top.day) || top.day) : '', 'The quiz in range with the most members answering.')}
+    </div>`;
+  $('viewRoot').innerHTML = `
+    ${coverSlide('Better Club\nQuiz Insight')}
+    ${slideShell('Daily quiz: what members told us', `${summary}
+      <div class="bcq-bar mt">${toggle}<div class="bce-foot" style="margin:0;">Share = members who picked the answer ÷ members who answered that question. Hover a number for the other view.</div></div>
+      <div class="grid g-2 mt bcq-grid">${qs.length ? qs.map(card).join('') : '<div class="card"><div class="note">No quiz answers in this range.</div></div>'}</div>`,
+      { first: true, scope: 'Better Club', flow: true })}`;
+  document.querySelectorAll('[data-bcq-mode]').forEach(b => b.addEventListener('click', () => {
+    S.bcquizMode = b.dataset.bcqMode; renderBcquiz();
+  }));
 }
 
 /**
@@ -13450,7 +13598,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.381.0';
+const CLIENT_BUILD = '3.382.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
