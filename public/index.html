@@ -3377,7 +3377,7 @@ const TITLES = {
   gads: ['Google Ads', 'Spend, campaigns and accounts — newly connected, so start by looking'],
   audiences: ['Audiences', 'Meta audience sets ranked by cost per first-degree result'],
   bclub: ['Better Club', 'Membership revenue, and whether the members we win come back'],
-  bcengage: ['Better Club · Engagement', 'Monthly active members, and whether each one is new, staying or coming back'],
+  bcengage: ['Better Club · Engagement', 'Members who earned B points this month — new, staying or coming back'],
   line: ['LINE OA', 'What we broadcast, who received it, and what it cost us in blocks'],
   shopee: ['Shopee', 'What the storefront sold, and where its visits came from'],
   lazada: ['Lazada', 'Where the storefront\u2019s visitors came from, inside Lazada and out'],
@@ -9960,6 +9960,10 @@ function renderBclub() {
  * question: is a comeback a recent joiner or a long-standing member? The two
  * need different nudges.
  *
+ * ACTIVE IS THE TEAM'S MAU (MW, v3.379.0): earned B points at least once in
+ * the month — daily check-in, reading a reward article, answering a quiz.
+ * Signing up, other reads, clicks and logins are shown only as "also did".
+ *
  * Source is BigQuery (`better_club`), refreshed daily. The first tracked month
  * (Aug 2026, from the 2nd) has no month before it, so it is a baseline: shown,
  * never split, never compared. The current month is partial and is not used
@@ -9967,7 +9971,7 @@ function renderBclub() {
  */
 const BCE_COL = { new: '#4B8DF8', retained: '#7C6BF5', reactivated: '#F2A93B', lost: '#F2708F', base: '#A7B0C7' };
 const BCE_ACTION = {
-  read: 'Read an article', cta: 'Clicked a button', check_in: 'Daily check-in', quiz: 'Answered a quiz',
+  reward_read: 'Read a reward article', read: 'Read an article', cta: 'Clicked a button', check_in: 'Daily check-in', quiz: 'Answered a quiz',
   reward: 'Redeemed or used a reward', booking: 'Booked', refer: 'Referred a friend', login: 'Logged in',
   none: 'Profile or sign-up only',
 };
@@ -10019,14 +10023,15 @@ function renderBcengage() {
   const backN = p && pc.length ? ((pc.find(r => r.month === s.month) || {}).active || 0) : null;
   const cards = `
     <div class="grid g-4">
-      ${stat('Monthly active members', cnt(s.mau), `${dlt(s.mau, p && p.mau)} · ${pct(share(s.mau, s.members))} of ${cnt(s.members)} members`)}
+      ${stat('Monthly active members', cnt(s.mau), `${dlt(s.mau, p && p.mau)} · ${pct(share(s.mau, s.members))} of ${cnt(s.members)} members`, null,
+        'Active = earned B points at least once in the month: daily check-in, reading a reward article or answering a quiz.')}
       ${stat('New members', cnt(s.new_users), `${pct(share(s.new_users, s.mau))} of active · joined in ${esc(label.replace(/ \d{4}$/, ''))}`, BCE_COL.new)}
       ${stat('Retained', split ? cnt(s.retained) : noSplit, split ? `${pct(share(s.retained, p && p.mau))} of ${esc(pLabel.replace(/ \d{4}$/, ''))}'s active stayed` : 'needs a month before', BCE_COL.retained)}
-      ${stat('Reactivated', split ? cnt(s.reactivated) : noSplit, split ? `${pct(share(s.reactivated, s.mau))} of active · back after a month or more` : 'needs a month before', BCE_COL.reactivated)}
+      ${stat('Reactivated', split ? cnt(s.reactivated) : noSplit, split ? `${pct(share(s.reactivated, s.mau))} of active · back after a quiet month` : 'needs a month before', BCE_COL.reactivated)}
     </div>
     <div class="grid g-4 mt">
       ${stat('Lost from last month', split ? cnt(s.churned) : noSplit, split ? `${pct(share(s.churned, p && p.mau))} of ${esc(pLabel.replace(/ \d{4}$/, ''))}'s active` : 'needs a month before', BCE_COL.lost)}
-      ${stat('New members who did more than sign up', pct(share(s.new_engaged, s.new_users)), `${cnt(s.new_engaged)} of ${cnt(s.new_users)}`)}
+      ${stat('Joiners active in their first month', pct(share(s.new_users, s.joined)), `${cnt(s.new_users)} of ${cnt(s.joined)} who joined in ${esc(label.replace(/ \d{4}$/, ''))}`)}
       ${stat('Last month’s joiners back this month', backN === null ? noSplit : pct(share(backN, backOf)),
         backN === null ? 'needs a month before' : `${cnt(backN)} of ${cnt(backOf)} who joined in ${esc(pLabel.replace(/ \d{4}$/, ''))}`)}
       ${stat('Daily active ÷ monthly active', pct(share(s.avg_dau, s.mau)), `${cnt(s.avg_dau)} a day on average`, null,
@@ -10044,7 +10049,7 @@ function renderBcengage() {
 
   // ---- who comes back
   const tenure = split ? [
-    ['Joined 2–3 months before', s.react_t1], ['Joined 4–12 months before', s.react_t2],
+    ['Joined the month before', s.react_t0], ['Joined 2–3 months before', s.react_t1], ['Joined 4–12 months before', s.react_t2],
     ['Joined over a year before', s.react_t3], ['Not in the member list', s.react_tu],
   ].filter(r => r[1] > 0) : [];
   const first = (d.reactFirst || []).filter(r => r.month === s.month);
@@ -10057,8 +10062,9 @@ function renderBcengage() {
   const seg = (st) => segs.find(r => r.status === st) || null;
   const groups = split ? ['new', 'retained', 'reactivated'] : ['new', 'baseline'];
   const gName = { new: 'New', retained: 'Retained', reactivated: 'Reactivated', baseline: 'Earlier members' };
-  const actRows = [['read', 'Read an article'], ['cta', 'Clicked a button'], ['check_in', 'Daily check-in'],
-    ['quiz', 'Answered a quiz'], ['reward', 'Redeemed or used a reward'], ['signup_only', 'Profile or sign-up only']];
+  // The three B-point actions that make a member active, then what else they did.
+  const actRows = [['check_in', 'Daily check-in'], ['reward_read', 'Read a reward article'], ['quiz', 'Answered a quiz'],
+    ['read', 'Also read any article'], ['cta', 'Also clicked a button'], ['reward', 'Also redeemed or used a reward']];
   const comeback = split ? `
     <div class="grid g-2">
       <div class="card">
@@ -10066,7 +10072,7 @@ function renderBcengage() {
         ${tenure.length ? hbarRows(tenure, s.reactivated, BCE_COL.reactivated) : '<div class="note">No reactivated members this month.</div>'}
       </div>
       <div class="card">
-        <div class="card-title">The first thing reactivated members did</div>
+        <div class="card-title">What reactivated members came back for</div>
         ${first.length ? hbarRows(first.map(r => [BCE_ACTION[r.action] || r.action, r.users]), s.reactivated, BCE_COL.reactivated) : '<div class="note">\u2014</div>'}
       </div>
     </div>` : '';
@@ -10115,15 +10121,15 @@ function renderBcengage() {
   const interest = `
     <div class="grid g-3">
       <div class="card">
-        <div class="card-title">Topics read most, by readers</div>
+        <div class="card-title">Topics active members read, by readers</div>
         ${tags.length ? hbarRows(tags.map(r => [r.tag, r.readers]), null, BCE_COL.new) : '<div class="note">\u2014</div>'}
       </div>
       <div class="card">
-        <div class="card-title">Buttons clicked, share of active members</div>
+        <div class="card-title">Buttons active members clicked</div>
         ${cta.length ? hbarRows(cta.map(r => [r.grp, r.users]), s.mau, BCE_COL.retained) : '<div class="note">\u2014</div>'}
       </div>
       <div class="card">
-        <div class="card-title">Days active, of members who did more than sign up</div>
+        <div class="card-title">Days active in the month</div>
         ${hbarRows(depth, depthTotal, BCE_COL.reactivated)}
       </div>
     </div>`;
@@ -10143,9 +10149,9 @@ function renderBcengage() {
     { label: 'Earlier members (not split)', data: gm.map(m => (m.first ? m.baseline : null)), color: BCE_COL.base },
     { label: 'Lost from last month', data: gm.map(m => (m.first ? null : -m.churned)), color: BCE_COL.lost },
   ], { horizontal: false, stacked: true });
-  drawChart('bceDaily', (d.daily || []).map(r => ({ d: r.d, dau: r.dau, engaged: r.engaged })), [
-    { key: 'dau', label: 'Active members', color: BCE_COL.retained, axis: 'y' },
-    { key: 'engaged', label: 'Did more than sign up', color: BCE_COL.new, axis: 'y' },
+  drawChart('bceDaily', (d.daily || []).map(r => ({ d: r.d, dau: r.dau, any: r.any_active })), [
+    { key: 'dau', label: 'Earned B points', color: BCE_COL.retained, axis: 'y' },
+    { key: 'any', label: 'Any activity', color: BCE_COL.base, axis: 'y' },
   ]);
 }
 
@@ -13289,7 +13295,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.378.0';
+const CLIENT_BUILD = '3.379.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

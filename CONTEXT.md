@@ -1,5 +1,21 @@
 ### Recent (November 2026)
 
+**v3.379.0 — Engagement: MAU is the Better Club team's definition** (MW):
+- MW: "MAU means they do at least one of these once: daily check-in, read reward articles,
+  do the quiz. These activities reward B points." Active = at least one all_event
+  DAILY_LOGIN, READ_POST or ANSWER_QUIZ in the month (`activity.mau`). Every such row
+  earned points (checked: 0 zero-point rows). read_post (every read) is NOT a reward read.
+- v3.378.0 counted sign-ups, any read, clicks and logins as activity: MAU read ~3,200. The
+  real figure is ~245 (Sep 239, Oct 248). Sign-ups no longer make a member active, so
+  "new" = joined AND earned points that month; new card is "Joiners active in their first
+  month" (Oct 125 of 3,089 = 4.0%).
+- A member can now be reactivated the month after joining (joined, did nothing, came back):
+  new tenure band "Joined the month before".
+- Other actions stay as "Also did" rows; topics and button clicks are counted over that
+  month's active members only.
+- Oct read: 67 of Sep's 239 stayed (28%); 86% of comebacks return through daily check-in;
+  days active is two groups: 176 one-day members vs 30 on 15+ days.
+
 **v3.378.0 — Better Club Engagement tab; Overview reads BigQuery** (MW):
 - New tab Better Club > Engagement (`bcengage`, `/api/better-club/engagement`). Team target
   is MAU. Growth accounting: every active member is new (joined that month), retained

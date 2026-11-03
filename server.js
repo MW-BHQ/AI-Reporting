@@ -11614,6 +11614,12 @@ SELECT TO_JSON_STRING(STRUCT(
 /**
  * ENGAGEMENT: monthly active members and where they come from.
  *
+ * ACTIVE = the Better Club team's MAU (MW, v3.379.0): at least one B-point
+ * action in the month — daily check-in, reading a reward article, answering a
+ * quiz (`activity.mau`). Signing up, reading a non-reward article, clicking a
+ * button or logging in does NOT make a member active; those are shown only as
+ * what active members also do.
+ *
  * Growth accounting, the standard way to read MAU: every active member in a
  * month is exactly one of NEW (joined that month), RETAINED (active last month
  * too) or REACTIVATED (back after a month or more off). Members active last
@@ -11627,7 +11633,7 @@ SELECT TO_JSON_STRING(STRUCT(
 const BC_ENGAGE_SQL = `
 WITH um AS (SELECT * FROM {{DS}}.user_month),
 months AS (SELECT DISTINCT month FROM um),
-cov AS (SELECT MIN(DATE(ts)) AS d0, MAX(DATE(ts)) AS d1 FROM {{DS}}.activity WHERE action != 'login'),
+cov AS (SELECT MIN(DATE(ts)) AS d0, MAX(DATE(ts)) AS d1 FROM {{DS}}.activity WHERE mau),
 churn AS (
   SELECT DATE_ADD(a.month, INTERVAL 1 MONTH) AS month, COUNT(*) AS churned
   FROM um a LEFT JOIN um b ON b.user_id = a.user_id AND b.month = DATE_ADD(a.month, INTERVAL 1 MONTH)
@@ -11635,10 +11641,12 @@ churn AS (
 pool AS (
   SELECT m.month, COUNTIF(DATE(c.registered_at) < DATE_ADD(m.month, INTERVAL 1 MONTH)) AS members
   FROM months m CROSS JOIN {{DS}}.members c GROUP BY 1),
-dd AS (SELECT DATE(ts) AS d, COUNT(DISTINCT user_id) AS dau,
-          COUNT(DISTINCT IF(action NOT IN ('register', 'profile'), user_id, NULL)) AS engaged
+dd AS (SELECT DATE(ts) AS d, COUNT(DISTINCT IF(mau, user_id, NULL)) AS dau,
+          COUNT(DISTINCT user_id) AS any_active
         FROM {{DS}}.activity GROUP BY 1),
-ddm AS (SELECT DATE_TRUNC(d, MONTH) AS month, AVG(dau) AS avg_dau, AVG(engaged) AS avg_engaged_dau FROM dd GROUP BY 1),
+ddm AS (SELECT DATE_TRUNC(d, MONTH) AS month, AVG(dau) AS avg_dau FROM dd GROUP BY 1),
+jn AS (SELECT DATE_TRUNC(DATE(registered_at), MONTH) AS month, COUNT(*) AS joined
+       FROM {{DS}}.members GROUP BY 1),
 nxt AS (
   SELECT a.month, COUNTIF(b.user_id IS NOT NULL) AS came_back
   FROM um a LEFT JOIN um b ON b.user_id = a.user_id AND b.month = DATE_ADD(a.month, INTERVAL 1 MONTH)
@@ -11647,8 +11655,7 @@ ms AS (
   SELECT month, COUNT(*) AS mau,
     COUNTIF(status = 'new') AS new_users, COUNTIF(status = 'retained') AS retained,
     COUNTIF(status = 'reactivated') AS reactivated, COUNTIF(status IS NULL) AS baseline,
-    COUNTIF(engaged_actions > 0) AS engaged,
-    COUNTIF(status = 'new' AND engaged_actions > 0) AS new_engaged,
+    COUNTIF(status = 'reactivated' AND tenure_months = 1) AS react_t0,
     COUNTIF(status = 'reactivated' AND tenure_months BETWEEN 2 AND 3) AS react_t1,
     COUNTIF(status = 'reactivated' AND tenure_months BETWEEN 4 AND 12) AS react_t2,
     COUNTIF(status = 'reactivated' AND tenure_months > 12) AS react_t3,
@@ -11657,18 +11664,17 @@ ms AS (
   FROM um GROUP BY 1),
 seg AS (
   SELECT month, IFNULL(status, 'baseline') AS status, COUNT(*) AS users,
-    COUNTIF(check_ins > 0) AS check_in, COUNTIF(reads > 0) AS read, COUNTIF(quizzes > 0) AS quiz,
-    COUNTIF(ctas > 0) AS cta, COUNTIF(rewards > 0) AS reward, COUNTIF(logins > 0) AS login,
-    COUNTIF(engaged_actions = 0) AS signup_only
+    COUNTIF(check_ins > 0) AS check_in, COUNTIF(reward_reads > 0) AS reward_read, COUNTIF(quizzes > 0) AS quiz,
+    COUNTIF(reads > 0) AS read, COUNTIF(ctas > 0) AS cta, COUNTIF(rewards > 0) AS reward, COUNTIF(logins > 0) AS login
   FROM um GROUP BY 1, 2),
 firstact AS (
-  SELECT month, IFNULL(first_engaged_action, 'none') AS action, COUNT(*) AS users
+  SELECT month, first_action AS action, COUNT(*) AS users
   FROM um WHERE status = 'reactivated' GROUP BY 1, 2),
 depth AS (
   SELECT month, CASE WHEN active_days = 1 THEN '1' WHEN active_days <= 3 THEN '2-3'
     WHEN active_days <= 7 THEN '4-7' WHEN active_days <= 14 THEN '8-14' ELSE '15+' END AS bin,
     COUNT(*) AS users
-  FROM um WHERE engaged_actions > 0 GROUP BY 1, 2),
+  FROM um GROUP BY 1, 2),
 bucket AS (
   SELECT user_id, CASE WHEN DATE(registered_at) >= DATE_TRUNC((SELECT MIN(month) FROM months), QUARTER)
       THEN FORMAT_DATE('%Y-%m', DATE(registered_at))
@@ -11680,32 +11686,37 @@ cohort AS (
 csize AS (SELECT b, COUNT(*) AS size FROM bucket GROUP BY 1),
 tags AS (
   SELECT * FROM (
+    -- What ACTIVE members read (any article, not only reward ones).
     SELECT DATE_TRUNC(DATE(r.read_at), MONTH) AS month, TRIM(tag) AS tag,
       COUNT(DISTINCT r.user_id) AS readers, COUNT(*) AS reads
-    FROM {{DS}}.post_reads r, UNNEST([tag_1, tag_2, tag_3, tag_4, tag_5, tag_6, tag_7, tag_8, tag_9, tag_10]) AS tag
-    WHERE tag IS NOT NULL AND r.user_id NOT IN (SELECT user_id FROM {{DS}}.staff)
+    FROM {{DS}}.post_reads r
+    JOIN um ON um.user_id = r.user_id AND um.month = DATE_TRUNC(DATE(r.read_at), MONTH),
+    UNNEST([tag_1, tag_2, tag_3, tag_4, tag_5, tag_6, tag_7, tag_8, tag_9, tag_10]) AS tag
+    WHERE tag IS NOT NULL
     GROUP BY 1, 2)
   WHERE TRUE QUALIFY ROW_NUMBER() OVER (PARTITION BY month ORDER BY readers DESC, tag) <= 12),
 cta AS (
-  SELECT DATE_TRUNC(DATE(clicked_at), MONTH) AS month,
+  -- Active members only, so the shares are of MAU.
+  SELECT DATE_TRUNC(DATE(k.clicked_at), MONTH) AS month,
     CASE WHEN event LIKE '%APPOINTMENT%' THEN 'Appointment'
          WHEN event LIKE '%DOCTOR%' THEN 'Find a doctor'
          WHEN event LIKE '%CART%' OR event LIKE '%PACKAGE%' THEN 'Cart and packages'
          WHEN event LIKE '%CONTACT%' OR event LIKE '%CHAT%' OR event LIKE '%LINE%' THEN 'Contact and chat'
          ELSE 'Other' END AS grp,
-    COUNT(DISTINCT user_id) AS users, COUNT(*) AS clicks
-  FROM {{DS}}.cta_clicks WHERE user_id NOT IN (SELECT user_id FROM {{DS}}.staff) GROUP BY 1, 2)
+    COUNT(DISTINCT k.user_id) AS users, COUNT(*) AS clicks
+  FROM {{DS}}.cta_clicks k JOIN um ON um.user_id = k.user_id AND um.month = DATE_TRUNC(DATE(k.clicked_at), MONTH)
+  GROUP BY 1, 2)
 SELECT TO_JSON_STRING(STRUCT(
   (SELECT AS STRUCT FORMAT_DATE('%F', d0) AS d0, FORMAT_DATE('%F', d1) AS d1 FROM cov) AS coverage,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', ms.month) AS month, ms.* EXCEPT (month),
-          IFNULL(c.churned, 0) AS churned, p.members, n.came_back, x.avg_dau, x.avg_engaged_dau
+          IFNULL(c.churned, 0) AS churned, p.members, n.came_back, x.avg_dau, IFNULL(jn.joined, 0) AS joined
         FROM ms LEFT JOIN churn c USING (month) LEFT JOIN pool p USING (month) LEFT JOIN nxt n USING (month)
-        LEFT JOIN ddm x USING (month)
+        LEFT JOIN ddm x USING (month) LEFT JOIN jn USING (month)
         ORDER BY ms.month) AS months,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, seg.* EXCEPT (month) FROM seg ORDER BY month, status) AS segments,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, action, users FROM firstact ORDER BY month, users DESC) AS react_first,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, bin, users FROM depth ORDER BY month, bin) AS depth,
-  ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', d) AS d, dau, engaged FROM dd ORDER BY d) AS daily,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', d) AS d, dau, any_active FROM dd ORDER BY d) AS daily,
   ARRAY(SELECT AS STRUCT c.b AS cohort, s.size, FORMAT_DATE('%Y-%m', c.month) AS month, c.active
         FROM cohort c JOIN csize s USING (b) ORDER BY c.b, c.month) AS cohorts,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, tag, readers, reads FROM tags ORDER BY month, readers DESC) AS tags,

@@ -5424,7 +5424,7 @@
 ],
 [
 "div.stat",
-"New members who did more than sign up",
+"Joiners active in their first month",
 280,
 322,
 266,
@@ -5468,7 +5468,7 @@
 0,
 878,
 1104,
-790
+817
 ],
 [
 "div.grid.g-2",
@@ -5476,7 +5476,7 @@
 0,
 1009,
 1104,
-193
+220
 ],
 [
 "div.card",
@@ -5484,21 +5484,21 @@
 0,
 1009,
 545,
-193
+220
 ],
 [
 "div.card",
-"The first thing reactivated members did",
+"What reactivated members came back for",
 559,
 1009,
 545,
-193
+220
 ],
 [
 "div.card",
 "What each group did in October 2026",
 0,
-1216,
+1243,
 1104,
 388
 ],
@@ -5506,7 +5506,7 @@
 "table.roomy",
 "",
 21,
-1278,
+1305,
 1062,
 307
 ],
@@ -5514,7 +5514,7 @@
 "div.slide.slide-break",
 "Do new members stay? Better Club01 Jul 2",
 0,
-1668,
+1695,
 1104,
 928
 ],
@@ -5522,7 +5522,7 @@
 "div.card",
 "Of each group of joiners, the share acti",
 0,
-1798,
+1825,
 1104,
 388
 ],
@@ -5530,7 +5530,7 @@
 "table.roomy",
 "",
 21,
-1860,
+1887,
 1062,
 307
 ],
@@ -5538,7 +5538,7 @@
 "div.card",
 "Active members per day",
 0,
-2200,
+2227,
 1104,
 331
 ],
@@ -5546,7 +5546,7 @@
 "canvas.",
 "",
 21,
-2262,
+2289,
 1062,
 250
 ],
@@ -5554,41 +5554,41 @@
 "div.slide.slide-break",
 "What active members care about · October",
 0,
-2595,
+2622,
 1104,
-446
+475
 ],
 [
 "div.grid.g-3",
-"Topics read most, by readers",
+"Topics active members read, by readers",
 0,
-2726,
+2753,
 1104,
-251
+280
 ],
 [
 "div.card",
-"Topics read most, by readers",
+"Topics active members read, by readers",
 0,
-2726,
+2753,
 359,
-251
+280
 ],
 [
 "div.card",
-"Buttons clicked, share of active members",
+"Buttons active members clicked",
 373,
-2726,
+2753,
 359,
-251
+280
 ],
 [
 "div.card",
-"Days active, of members who did more tha",
+"Days active in the month",
 745,
-2726,
+2753,
 359,
-251
+280
 ]
 ]
 }

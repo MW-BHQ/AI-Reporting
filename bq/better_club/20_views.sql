@@ -233,34 +233,33 @@ SELECT c.*, s.user_id IS NOT NULL AS is_staff,
 FROM `ai-reporting-503911.better_club.customers` c LEFT JOIN `ai-reporting-503911.better_club.staff` s USING (user_id)
 LEFT JOIN (SELECT SAFE_CAST(user_id AS INT64) AS user_id, last_seen FROM `ai-reporting-503911.better_club._customer_seen`) seen USING (user_id);
 
--- activity: one row per member action (staff excluded).
+-- activity: one row per member action (staff excluded); mau marks the B-point actions.
 CREATE OR REPLACE VIEW `ai-reporting-503911.better_club.activity` AS
 WITH first_export AS (SELECT DATE(MIN(exported_at)) AS d FROM `ai-reporting-503911.better_club.customers_history`),
 a AS (
-  SELECT user_id, created_at AS ts, CASE event_name WHEN 'DAILY_LOGIN' THEN 'check_in' WHEN 'OT_REGISTER' THEN 'register' WHEN 'OT_COMPLETE_PROFILE' THEN 'profile' WHEN 'REDEEMED_REWARD' THEN 'reward' WHEN 'USED_REWARD' THEN 'reward' WHEN 'REFER_A_USER' THEN 'refer' WHEN 'BETTER_BOOKING' THEN 'booking' END AS action
-  FROM `ai-reporting-503911.better_club.events` WHERE event_name IN ('DAILY_LOGIN', 'OT_REGISTER', 'OT_COMPLETE_PROFILE', 'REDEEMED_REWARD', 'USED_REWARD', 'REFER_A_USER', 'BETTER_BOOKING')
+  SELECT user_id, created_at AS ts, CASE event_name WHEN 'DAILY_LOGIN' THEN 'check_in' WHEN 'READ_POST' THEN 'reward_read' WHEN 'ANSWER_QUIZ' THEN 'quiz' WHEN 'OT_REGISTER' THEN 'register' WHEN 'OT_COMPLETE_PROFILE' THEN 'profile' WHEN 'REDEEMED_REWARD' THEN 'reward' WHEN 'USED_REWARD' THEN 'reward' WHEN 'REFER_A_USER' THEN 'refer' WHEN 'BETTER_BOOKING' THEN 'booking' END AS action
+  FROM `ai-reporting-503911.better_club.events` WHERE event_name IN ('DAILY_LOGIN', 'READ_POST', 'ANSWER_QUIZ', 'OT_REGISTER', 'OT_COMPLETE_PROFILE', 'REDEEMED_REWARD', 'USED_REWARD', 'REFER_A_USER', 'BETTER_BOOKING')
   UNION ALL SELECT user_id, read_at, 'read' FROM `ai-reporting-503911.better_club.post_reads`
   UNION ALL SELECT user_id, clicked_at, 'cta' FROM `ai-reporting-503911.better_club.cta_clicks`
-  UNION ALL SELECT user_id, answered_at, 'quiz' FROM `ai-reporting-503911.better_club.quiz_answers`
   UNION ALL SELECT DISTINCT h.user_id, h.last_login, 'login'
     FROM `ai-reporting-503911.better_club.customers_history` h, first_export f
     WHERE DATE(h.last_login) >= DATE_SUB(f.d, INTERVAL 1 DAY))
-SELECT * FROM a
+SELECT *, action IN ('check_in', 'reward_read', 'quiz') AS mau FROM a
 WHERE user_id IS NOT NULL AND ts IS NOT NULL
   AND user_id NOT IN (SELECT user_id FROM `ai-reporting-503911.better_club.staff`);
 
--- user_month: one row per member per active month, with growth-accounting status.
+-- user_month: one row per member per month with a B-point action, plus growth-accounting status.
 CREATE OR REPLACE VIEW `ai-reporting-503911.better_club.user_month` AS
-WITH start AS (SELECT DATE_TRUNC(MIN(DATE(ts)), MONTH) AS m FROM `ai-reporting-503911.better_club.activity`),
+WITH start AS (SELECT DATE_TRUNC(MIN(DATE(ts)), MONTH) AS m FROM `ai-reporting-503911.better_club.activity` WHERE mau),
 um AS (
   SELECT user_id, DATE_TRUNC(DATE(ts), MONTH) AS month,
-    COUNT(DISTINCT DATE(ts)) AS active_days, COUNT(*) AS actions,
-    COUNTIF(action = 'check_in') AS check_ins, COUNTIF(action = 'read') AS reads,
-    COUNTIF(action = 'quiz') AS quizzes, COUNTIF(action = 'cta') AS ctas,
-    COUNTIF(action = 'reward') AS rewards, COUNTIF(action = 'login') AS logins,
-    COUNTIF(action NOT IN ('register', 'profile')) AS engaged_actions,
-    ARRAY_AGG(IF(action IN ('register', 'profile'), NULL, action) IGNORE NULLS ORDER BY ts LIMIT 1)[SAFE_OFFSET(0)] AS first_engaged_action
-  FROM `ai-reporting-503911.better_club.activity` GROUP BY 1, 2),
+    COUNT(DISTINCT IF(mau, DATE(ts), NULL)) AS active_days, COUNTIF(mau) AS actions,
+    COUNTIF(action = 'check_in') AS check_ins, COUNTIF(action = 'reward_read') AS reward_reads,
+    COUNTIF(action = 'quiz') AS quizzes, COUNTIF(action = 'read') AS reads,
+    COUNTIF(action = 'cta') AS ctas, COUNTIF(action = 'reward') AS rewards, COUNTIF(action = 'login') AS logins,
+    ARRAY_AGG(IF(mau, action, NULL) IGNORE NULLS ORDER BY ts LIMIT 1)[SAFE_OFFSET(0)] AS first_action
+  FROM `ai-reporting-503911.better_club.activity` GROUP BY 1, 2
+  HAVING COUNTIF(mau) > 0),
 j AS (
   SELECT um.*, DATE_TRUNC(DATE(c.registered_at), MONTH) AS join_month,
     c.signup_hospital, c.signup_source, c.register_channel,

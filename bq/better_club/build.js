@@ -216,54 +216,58 @@ ASSERT (SELECT COUNT(*) FROM ${T(t.view)} WHERE ${t.key.map((k) => `${k} IS NULL
 /**
  * ANALYTICS LAYER: what the Engagement tab reads.
  *
- * activity   one row per member action, staff removed. Reads come from
- *            read_post (every read), NOT all_event's READ_POST, which only logs
- *            reads that earned points (7k vs 26k). Same for quizzes. Badges and
- *            "was referred" are things that happen TO a member, so they are out.
- *            Logins come from changes in customers.last_login, counted only from
- *            the first export on: one snapshot cannot show older logins, and
- *            counting them would make every past month look emptier than it was.
- * user_month one row per member per month they did anything, classified the
- *            growth-accounting way: new (joined that month), retained (active
- *            last month too) or reactivated (back after at least a month off).
- *            The first tracked month has no "last month", so its non-new rows
- *            are NULL rather than guessed.
+ * MAU IS THE BETTER CLUB TEAM'S DEFINITION (MW, v3.379.0): a member is active in
+ * a month if they did at least one of the three things that earn B points —
+ * daily check-in, read a reward article, answer a quiz. All three are read from
+ * the points ledger (all_event: DAILY_LOGIN, READ_POST, ANSWER_QUIZ), where every
+ * row earned points. read_post (every read, ~30x larger) is NOT a reward read.
+ *
+ * activity   one row per member action, staff removed, with `mau` = TRUE for
+ *            the three point-earning actions. Everything else (any article read,
+ *            button clicks, logins, redeeming rewards) is kept as context: it
+ *            says what active members also do, never who is active.
+ * user_month one row per member per month with at least one MAU action,
+ *            classified the growth-accounting way: new (joined that month),
+ *            retained (active last month too) or reactivated (back after at
+ *            least a month off). The first tracked month has no "last month",
+ *            so its non-new rows are NULL rather than guessed.
  */
-const ENGAGE_EVENTS = {
-  DAILY_LOGIN: 'check_in', OT_REGISTER: 'register', OT_COMPLETE_PROFILE: 'profile',
-  REDEEMED_REWARD: 'reward', USED_REWARD: 'reward', REFER_A_USER: 'refer', BETTER_BOOKING: 'booking',
+const MAU_EVENTS = { DAILY_LOGIN: 'check_in', READ_POST: 'reward_read', ANSWER_QUIZ: 'quiz' };
+const OTHER_EVENTS = {
+  OT_REGISTER: 'register', OT_COMPLETE_PROFILE: 'profile', REDEEMED_REWARD: 'reward',
+  USED_REWARD: 'reward', REFER_A_USER: 'refer', BETTER_BOOKING: 'booking',
 };
 function analytics() {
-  const ev = Object.keys(ENGAGE_EVENTS);
+  const all = { ...MAU_EVENTS, ...OTHER_EVENTS };
+  const ev = Object.keys(all);
   return `
--- activity: one row per member action (staff excluded).
+-- activity: one row per member action (staff excluded); mau marks the B-point actions.
 CREATE OR REPLACE VIEW ${T('activity')} AS
 WITH first_export AS (SELECT DATE(MIN(exported_at)) AS d FROM ${T('customers_history')}),
 a AS (
-  SELECT user_id, created_at AS ts, CASE event_name ${ev.map((e) => `WHEN '${e}' THEN '${ENGAGE_EVENTS[e]}'`).join(' ')} END AS action
+  SELECT user_id, created_at AS ts, CASE event_name ${ev.map((e) => `WHEN '${e}' THEN '${all[e]}'`).join(' ')} END AS action
   FROM ${T('events')} WHERE event_name IN (${ev.map((e) => `'${e}'`).join(', ')})
   UNION ALL SELECT user_id, read_at, 'read' FROM ${T('post_reads')}
   UNION ALL SELECT user_id, clicked_at, 'cta' FROM ${T('cta_clicks')}
-  UNION ALL SELECT user_id, answered_at, 'quiz' FROM ${T('quiz_answers')}
   UNION ALL SELECT DISTINCT h.user_id, h.last_login, 'login'
     FROM ${T('customers_history')} h, first_export f
     WHERE DATE(h.last_login) >= DATE_SUB(f.d, INTERVAL 1 DAY))
-SELECT * FROM a
+SELECT *, action IN (${Object.values(MAU_EVENTS).map((v) => `'${v}'`).join(', ')}) AS mau FROM a
 WHERE user_id IS NOT NULL AND ts IS NOT NULL
   AND user_id NOT IN (SELECT user_id FROM ${T('staff')});
 
--- user_month: one row per member per active month, with growth-accounting status.
+-- user_month: one row per member per month with a B-point action, plus growth-accounting status.
 CREATE OR REPLACE VIEW ${T('user_month')} AS
-WITH start AS (SELECT DATE_TRUNC(MIN(DATE(ts)), MONTH) AS m FROM ${T('activity')}),
+WITH start AS (SELECT DATE_TRUNC(MIN(DATE(ts)), MONTH) AS m FROM ${T('activity')} WHERE mau),
 um AS (
   SELECT user_id, DATE_TRUNC(DATE(ts), MONTH) AS month,
-    COUNT(DISTINCT DATE(ts)) AS active_days, COUNT(*) AS actions,
-    COUNTIF(action = 'check_in') AS check_ins, COUNTIF(action = 'read') AS reads,
-    COUNTIF(action = 'quiz') AS quizzes, COUNTIF(action = 'cta') AS ctas,
-    COUNTIF(action = 'reward') AS rewards, COUNTIF(action = 'login') AS logins,
-    COUNTIF(action NOT IN ('register', 'profile')) AS engaged_actions,
-    ARRAY_AGG(IF(action IN ('register', 'profile'), NULL, action) IGNORE NULLS ORDER BY ts LIMIT 1)[SAFE_OFFSET(0)] AS first_engaged_action
-  FROM ${T('activity')} GROUP BY 1, 2),
+    COUNT(DISTINCT IF(mau, DATE(ts), NULL)) AS active_days, COUNTIF(mau) AS actions,
+    COUNTIF(action = 'check_in') AS check_ins, COUNTIF(action = 'reward_read') AS reward_reads,
+    COUNTIF(action = 'quiz') AS quizzes, COUNTIF(action = 'read') AS reads,
+    COUNTIF(action = 'cta') AS ctas, COUNTIF(action = 'reward') AS rewards, COUNTIF(action = 'login') AS logins,
+    ARRAY_AGG(IF(mau, action, NULL) IGNORE NULLS ORDER BY ts LIMIT 1)[SAFE_OFFSET(0)] AS first_action
+  FROM ${T('activity')} GROUP BY 1, 2
+  HAVING COUNTIF(mau) > 0),
 j AS (
   SELECT um.*, DATE_TRUNC(DATE(c.registered_at), MONTH) AS join_month,
     c.signup_hospital, c.signup_source, c.register_channel,
