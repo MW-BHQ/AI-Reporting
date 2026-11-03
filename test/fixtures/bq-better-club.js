@@ -58,6 +58,26 @@ const engagement = {
     ["Appointment", 57, 102], ["Cart and packages", 31, 56], ["Contact and chat", 29, 33],
     ["Find a doctor", 16, 20], ["Other", 9, 14],
   ].map(([grp, users, clicks]) => ({ month: "2026-10", grp, users, clicks })),
+  rewards: [
+    ["BGH_Child Dev", "Health guide", 8, 8, 120, 2], ["ส่วนลด bangkokhospital.com 1,000 บาท", "Coupon", 6, 6, 6, 1],
+    ["BGH_Stroke", "Health guide", 5, 5, 75, 0], ["Better Club – E-Discount coupon (500)", "Coupon", 1, 1, 500, 1],
+    ["Better Club – E-Discount coupon (1000)", "Coupon", 0, 0, 0, 3],
+  ].map(([name, kind, redeemed, members, points, used]) => ({ month: "2026-10", name, kind, redeemed, members, points, used })),
+  points: [["2026-08", 12980, 68770, 4], ["2026-09", 12522, 64002, 5], ["2026-10", 8635, 63345, 11], ["2026-11", 634, 3514, 0]]
+    .map(([month, earned_activity, earned_all, referrals]) => ({ month, earned_activity, earned_all, referrals })),
+  channels: [["Not recorded", 2692, 107], ["chatgpt.com", 105, 1], ["google-reserve", 76, 3], ["facebook / paid", 61, 8],
+             ["sms / sms", 55, 1], ["line / richmenu", 13, 3]]
+    .map(([channel, joined, active]) => ({ month: "2026-10", channel, joined, active })),
+  campaigns: [["rightchoice-google-reserve", "google-reserve", 81, 3], ["260130-03_bgh_tra", "sms / sms", 55, 1],
+              ["261001-02_bgh_tra", "facebook / paid", 52, 6], ["260807-05_bgh_tra", "line / richmenu", 5, 3]]
+    .map(([campaign, channel, joined, active]) => ({ month: "2026-10", campaign, channel, joined, active })),
+  reward_articles: [[533825, "คลำไม่เจอ ไม่ได้แปลว่าไม่มี", 66, "2026-10-01-000000"],
+                    [8612, "The Child Development Neuropsychiatric Clinic (CNDC)", 38, "2026-10-16-080000"],
+                    [9112, "แพ็กเกจตรวจสุขภาพสมอง Stop Stroke", 38, "2026-10-01-080000"]]
+    .map(([post_id, title, readers, launched]) => ({ month: "2026-10", post_id, title, readers, launched })),
+  streaks: [["1", 165], ["2-6", 25], ["7", 26]].map(([bin, users]) => ({ month: "2026-10", bin, users })),
+  hours: [14, 11, 9, 6, 5, 12, 13, 24, 47, 47, 49, 48, 33, 42, 37, 29, 30, 27, 25, 27, 20, 28, 23, 20]
+    .map((users, hour) => ({ month: "2026-10", hour, users, actions: users * 5 })),
 };
 
 const overview = {

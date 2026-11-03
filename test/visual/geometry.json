@@ -5520,7 +5520,7 @@
 ],
 [
 "div.card",
-"Of each group of joiners, the share acti",
+"Of each group of joiners, how many were ",
 0,
 1825,
 1104,
@@ -5589,6 +5589,174 @@
 2753,
 359,
 280
+],
+[
+"div.slide.slide-break",
+"Points and rewards · October 2026 Better",
+0,
+3097,
+1104,
+686
+],
+[
+"div.grid.g-4",
+"B points earned from activity",
+0,
+3227,
+1104,
+149
+],
+[
+"div.stat",
+"B points earned from activity",
+0,
+3227,
+266,
+149
+],
+[
+"div.stat",
+"Rewards redeemed",
+280,
+3227,
+266,
+149
+],
+[
+"div.stat",
+"Coupons used",
+559,
+3227,
+266,
+149
+],
+[
+"div.stat",
+"Friends referred",
+839,
+3227,
+266,
+149
+],
+[
+"div.card.mt",
+"What members redeemed in October 2026",
+0,
+3390,
+1104,
+328
+],
+[
+"table.roomy",
+"",
+21,
+3452,
+1062,
+247
+],
+[
+"div.slide.slide-break",
+"Campaigns: who joins, and who earns poin",
+0,
+3782,
+1104,
+821
+],
+[
+"div.grid.g-2",
+"Joiners in October 2026, by sign-up chan",
+0,
+3913,
+1104,
+371
+],
+[
+"div.card",
+"Joiners in October 2026, by sign-up chan",
+0,
+3913,
+545,
+371
+],
+[
+"table.roomy",
+"",
+21,
+3975,
+503,
+290
+],
+[
+"div.card",
+"Joiners in October 2026, by campaign",
+559,
+3913,
+545,
+371
+],
+[
+"table.roomy",
+"",
+580,
+3975,
+503,
+244
+],
+[
+"div.card.mt",
+"Reward articles members read most in Oct",
+0,
+4298,
+1104,
+241
+],
+[
+"table.roomy",
+"",
+21,
+4360,
+1062,
+160
+],
+[
+"div.slide.slide-break",
+"Habit and timing · October 2026 Better C",
+0,
+4603,
+1104,
+526
+],
+[
+"div.grid.g-2-1",
+"When members earn points, by hour",
+0,
+4734,
+1104,
+331
+],
+[
+"div.card",
+"When members earn points, by hour",
+0,
+4734,
+671,
+331
+],
+[
+"canvas.",
+"",
+21,
+4796,
+628,
+250
+],
+[
+"div.card",
+"Longest check-in streak in October 2026",
+685,
+4734,
+419,
+331
 ]
 ]
 }

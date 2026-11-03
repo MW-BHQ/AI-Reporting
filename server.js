@@ -11705,7 +11705,69 @@ cta AS (
          ELSE 'Other' END AS grp,
     COUNT(DISTINCT k.user_id) AS users, COUNT(*) AS clicks
   FROM {{DS}}.cta_clicks k JOIN um ON um.user_id = k.user_id AND um.month = DATE_TRUNC(DATE(k.clicked_at), MONTH)
-  GROUP BY 1, 2)
+  GROUP BY 1, 2),
+-- Ledger rows for staff are excluded once here.
+ev AS (SELECT * FROM {{DS}}.events WHERE user_id NOT IN (SELECT user_id FROM {{DS}}.staff)),
+-- Rewards: what members spent points on. A digital health guide carries
+-- download files; everything else is a coupon. USED = a coupon actually used.
+rewards AS (
+  SELECT DATE_TRUNC(DATE(created_at), MONTH) AS month, {{DS}}.decode_html(event_desc_1) AS name,
+    IF(JSON_QUERY(event_desc_json, '$.digital_download_files') IS NOT NULL
+       OR STARTS_WITH(JSON_VALUE(event_desc_json, '$.coupon_code'), 'DIGITAL'), 'Health guide', 'Coupon') AS kind,
+    COUNTIF(event_name = 'REDEEMED_REWARD') AS redeemed,
+    COUNT(DISTINCT IF(event_name = 'REDEEMED_REWARD', user_id, NULL)) AS members,
+    SUM(IF(event_name = 'REDEEMED_REWARD', IFNULL(SAFE_CAST(JSON_VALUE(event_desc_json, '$.points_used') AS INT64), 0), 0)) AS points,
+    COUNTIF(event_name = 'USED_REWARD') AS used
+  FROM ev WHERE event_name IN ('REDEEMED_REWARD', 'USED_REWARD') GROUP BY 1, 2, 3),
+-- Points in and out per month.
+points AS (
+  SELECT DATE_TRUNC(DATE(created_at), MONTH) AS month,
+    SUM(IF(event_name IN ('DAILY_LOGIN', 'READ_POST', 'ANSWER_QUIZ'), point_earned, 0)) AS earned_activity,
+    SUM(point_earned) AS earned_all,
+    COUNTIF(event_name = 'REFER_A_USER') AS referrals
+  FROM ev GROUP BY 1),
+-- Where joiners came from, and whether they earned points in their joining month.
+joiners AS (
+  SELECT DATE_TRUNC(DATE(c.registered_at), MONTH) AS month,
+    -- "source / medium"; Google Reserve puts a listing id where the medium goes, so a
+    -- numeric medium is dropped and its listings group as one channel.
+    IFNULL(NULLIF(ARRAY_TO_STRING(ARRAY(SELECT TRIM(x) FROM UNNEST(SPLIT(c.signup_campaign, '/')) x WITH OFFSET o
+      WHERE o < 2 AND TRIM(x) != '' AND NOT REGEXP_CONTAINS(TRIM(x), r'^[0-9]+$') ORDER BY o), ' / '), ''), 'Not recorded') AS channel,
+    NULLIF(TRIM(SPLIT(c.signup_campaign, '/')[SAFE_OFFSET(2)]), '') AS campaign,
+    um.user_id IS NOT NULL AS active
+  FROM {{DS}}.members c
+  LEFT JOIN um ON um.user_id = c.user_id AND um.month = DATE_TRUNC(DATE(c.registered_at), MONTH)
+  WHERE c.registered_at IS NOT NULL AND DATE(c.registered_at) >= (SELECT MIN(month) FROM months)),
+chan AS (
+  SELECT * FROM (SELECT month, channel, COUNT(*) AS joined, COUNTIF(active) AS active FROM joiners GROUP BY 1, 2)
+  WHERE TRUE QUALIFY ROW_NUMBER() OVER (PARTITION BY month ORDER BY joined DESC) <= 8),
+camp AS (
+  SELECT * FROM (SELECT month, campaign, ANY_VALUE(channel) AS channel, COUNT(*) AS joined, COUNTIF(active) AS active
+                 FROM joiners WHERE campaign IS NOT NULL GROUP BY 1, 2)
+  WHERE TRUE QUALIFY ROW_NUMBER() OVER (PARTITION BY month ORDER BY joined DESC, active DESC) <= 10),
+-- Reward-article campaigns: campaign_key is "<post id>_<launch time>".
+titles AS (SELECT post_id, ANY_VALUE(post_title) AS title FROM {{DS}}.post_reads GROUP BY 1),
+rart AS (
+  SELECT * FROM (
+    SELECT DATE_TRUNC(DATE(e.created_at), MONTH) AS month, e.linked_post_id AS post_id,
+      ANY_VALUE(t.title) AS title, COUNT(DISTINCT e.user_id) AS readers,
+      MIN(SPLIT(JSON_VALUE(e.event_desc_json, '$.campaign_key'), '_')[SAFE_OFFSET(1)]) AS launched
+    FROM ev e LEFT JOIN titles t ON t.post_id = e.linked_post_id
+    WHERE e.event_name = 'READ_POST' GROUP BY 1, 2)
+  WHERE TRUE QUALIFY ROW_NUMBER() OVER (PARTITION BY month ORDER BY readers DESC, post_id) <= 10),
+-- Longest check-in streak each member reached in the month. The challenge is
+-- weekly (current_streak resets after 7), so 7 = completed a full week.
+streak AS (
+  SELECT month, CASE WHEN s < 2 THEN '1' WHEN s < 7 THEN '2-6' ELSE '7' END AS bin, COUNT(*) AS users
+  FROM (SELECT DATE_TRUNC(DATE(created_at), MONTH) AS month, user_id,
+          MAX(IFNULL(SAFE_CAST(JSON_VALUE(event_desc_json, '$.current_streak') AS INT64), 1)) AS s
+        FROM ev WHERE event_name = 'DAILY_LOGIN' GROUP BY 1, 2)
+  GROUP BY 1, 2),
+-- When members earn points (Bangkok wall clock), to time pushes and broadcasts.
+hours AS (
+  SELECT DATE_TRUNC(DATE(ts), MONTH) AS month, EXTRACT(HOUR FROM ts) AS hour,
+    COUNT(*) AS actions, COUNT(DISTINCT user_id) AS users
+  FROM {{DS}}.activity WHERE mau GROUP BY 1, 2)
 SELECT TO_JSON_STRING(STRUCT(
   (SELECT AS STRUCT FORMAT_DATE('%F', d0) AS d0, FORMAT_DATE('%F', d1) AS d1 FROM cov) AS coverage,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', ms.month) AS month, ms.* EXCEPT (month),
@@ -11720,7 +11782,14 @@ SELECT TO_JSON_STRING(STRUCT(
   ARRAY(SELECT AS STRUCT c.b AS cohort, s.size, FORMAT_DATE('%Y-%m', c.month) AS month, c.active
         FROM cohort c JOIN csize s USING (b) ORDER BY c.b, c.month) AS cohorts,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, tag, readers, reads FROM tags ORDER BY month, readers DESC) AS tags,
-  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, grp, users, clicks FROM cta ORDER BY month, users DESC) AS cta
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, grp, users, clicks FROM cta ORDER BY month, users DESC) AS cta,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, name, kind, redeemed, members, points, used FROM rewards ORDER BY month, redeemed DESC, used DESC) AS rewards,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, earned_activity, earned_all, referrals FROM points ORDER BY month) AS points,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, channel, joined, active FROM chan ORDER BY month, joined DESC) AS channels,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, campaign, channel, joined, active FROM camp ORDER BY month, joined DESC) AS campaigns,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, post_id, title, readers, launched FROM rart ORDER BY month, readers DESC) AS reward_articles,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, bin, users FROM streak ORDER BY month, bin) AS streaks,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, hour, actions, users FROM hours ORDER BY month, hour) AS hours
 )) AS j`;
 
 function bcLastDay(key) {
@@ -11764,6 +11833,8 @@ async function buildBclubEngagement(from, to) {
     selected: pick.month,
     segments: d.segments || [], reactFirst: d.react_first || [], depth: d.depth || [],
     daily: d.daily || [], cohorts: d.cohorts || [], tags: d.tags || [], cta: d.cta || [],
+    rewards: d.rewards || [], points: d.points || [], channels: d.channels || [], campaigns: d.campaigns || [],
+    rewardArticles: d.reward_articles || [], streaks: d.streaks || [], hours: d.hours || [],
     source: `BigQuery ${BC_DATASET}`,
   };
 }

@@ -10079,11 +10079,11 @@ function renderBcengage() {
   const doTable = `
     <div class="card">
       <div class="card-title">What each group did in ${esc(label)}</div>
-      <table class="roomy"><thead><tr><th>Share of the group who…</th>
+      <table class="roomy"><thead><tr><th>Members who…</th>
         ${groups.map(g => `<th class="num" style="color:${BCE_COL[g === 'baseline' ? 'base' : g]};">${gName[g]}<br><span style="color:var(--muted);font-weight:500;">${cnt(seg(g) && seg(g).users)}</span></th>`).join('')}
       </tr></thead><tbody>
       ${actRows.map(([k, name]) => `<tr><td class="strong">${esc(name)}</td>
-        ${groups.map(g => { const r = seg(g); return `<td class="num">${r ? pct(share(r[k], r.users)) : '\u2014'}</td>`; }).join('')}</tr>`).join('')}
+        ${groups.map(g => { const r = seg(g); return `<td class="num"${r ? ` data-tip="${esc(`${pct(share(r[k], r.users))} of ${gName[g].toLowerCase()} members`)}"` : ''}>${r ? cnt(r[k]) : '\u2014'}</td>`; }).join('')}</tr>`).join('')}
       </tbody></table>
     </div>`;
 
@@ -10096,14 +10096,14 @@ function renderBcengage() {
   const cohKeys = [...coh.keys()].sort((a, b) => (cohStart(a) < cohStart(b) ? 1 : -1));
   const cohort = `
     <div class="card">
-      <div class="card-title">Of each group of joiners, the share active each month</div>
+      <div class="card-title">Of each group of joiners, how many were active each month</div>
       <table class="roomy"><thead><tr><th>Joined</th><th class="num">Members</th>
         ${cm.map(k => `<th class="num">${esc(bclubMonthLabel(k).replace(/ \d{4}$/, ''))}${ms.find(m => m.month === k).partial ? '<br><span style="color:var(--faint);font-weight:500;">so far</span>' : ''}</th>`).join('')}
       </tr></thead><tbody>
       ${cohKeys.map(k => { const c = coh.get(k); return `<tr><td class="strong">${esc(bceCohortLabel(k))}</td><td class="num">${cnt(c.size)}</td>
         ${cm.map(m => `<td class="num"${m === k ? ' data-tip="Their joining month"' : ''}>${
           (m < k && /^\d{4}-\d{2}$/.test(k)) ? ''
-          : c.by[m] === undefined ? '<span style="color:var(--faint);">0%</span>' : `<b>${pct(share(c.by[m], c.size))}</b>`}</td>`).join('')}</tr>`; }).join('')}
+          : c.by[m] === undefined ? '<span style="color:var(--faint);">0</span>' : `<b data-tip="${esc(`${pct(share(c.by[m], c.size))} of ${cnt(c.size)}`)}">${cnt(c.by[m])}</b>`}</td>`).join('')}</tr>`; }).join('')}
       </tbody></table>
     </div>`;
   const daily = `
@@ -10134,13 +10134,81 @@ function renderBcengage() {
       </div>
     </div>`;
 
+  // ---- points and rewards
+  const byM = (arr) => (arr || []).filter(r => r.month === s.month);
+  const pts = byM(d.points)[0] || null, ptsPrev = p ? ((d.points || []).find(r => r.month === p.month) || null) : null;
+  const rw = byM(d.rewards);
+  const rwSum = (k) => rw.reduce((a, r) => a + (r[k] || 0), 0);
+  const rewardsBody = `
+    <div class="grid g-4">
+      ${stat('B points earned from activity', pts ? cnt(pts.earned_activity) : '\u2014', pts ? `${dlt(pts.earned_activity, ptsPrev && ptsPrev.earned_activity)} · check-in, reward reads, quizzes` : '', null,
+        'Points members earned from the three MAU actions. Sign-up and profile bonuses are left out.')}
+      ${stat('Rewards redeemed', cnt(rwSum('redeemed')), `${cnt(rwSum('points'))} points spent`)}
+      ${stat('Coupons used', cnt(rwSum('used')), 'at the hospital or shop, any month redeemed')}
+      ${stat('Friends referred', pts ? cnt(pts.referrals) : '\u2014', 'members who brought a friend in')}
+    </div>
+    <div class="card mt">
+      <div class="card-title">What members redeemed in ${esc(label)}</div>
+      ${rw.length ? `<table class="roomy"><thead><tr><th>Reward</th><th>Type</th><th class="num">Redeemed</th><th class="num">Points spent</th><th class="num">Used</th></tr></thead><tbody>
+        ${rw.map(r => `<tr><td class="strong">${esc(r.name)}</td><td>${esc(r.kind)}</td>
+          <td class="num"><b>${cnt(r.redeemed)}</b></td><td class="num">${cnt(r.points)}</td><td class="num">${cnt(r.used)}</td></tr>`).join('')}
+      </tbody></table>` : '<div class="note">No rewards redeemed this month.</div>'}
+    </div>`;
+
+  // ---- campaigns: who joins, and who goes on to earn points
+  const ch = byM(d.channels), cp = byM(d.campaigns), ra = byM(d.rewardArticles);
+  const joinTable = (rows, first) => `<table class="roomy"><thead><tr><th>${first}</th>${first === 'Campaign' ? '<th>Channel</th>' : ''}
+      <th class="num">Joined</th><th class="num">Earned points</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td class="strong">${esc(first === 'Campaign' ? r.campaign : r.channel)}</td>${first === 'Campaign' ? `<td>${esc(r.channel)}</td>` : ''}
+      <td class="num">${cnt(r.joined)}</td><td class="num" data-tip="${esc(`${pct(share(r.active, r.joined))} of joiners`)}"><b>${cnt(r.active)}</b></td></tr>`).join('')}
+    </tbody></table>`;
+  const campaignBody = `
+    <div class="grid g-2">
+      <div class="card">
+        <div class="card-title">Joiners in ${esc(label)}, by sign-up channel</div>
+        ${ch.length ? joinTable(ch, 'Channel') : '<div class="note">\u2014</div>'}
+      </div>
+      <div class="card">
+        <div class="card-title">Joiners in ${esc(label)}, by campaign</div>
+        ${cp.length ? joinTable(cp, 'Campaign') : '<div class="note">No sign-ups carried a campaign this month.</div>'}
+      </div>
+    </div>
+    <div class="card mt">
+      <div class="card-title">Reward articles members read most in ${esc(label)}</div>
+      ${ra.length ? `<table class="roomy"><thead><tr><th>Article</th><th>Launched</th><th class="num">Readers</th></tr></thead><tbody>
+        ${ra.map(r => `<tr><td class="strong">${esc(r.title || `Post ${r.post_id}`)}</td>
+          <td>${esc(r.launched ? humanDate(r.launched.slice(0, 10)) || r.launched.slice(0, 10) : '\u2014')}</td>
+          <td class="num"><b>${cnt(r.readers)}</b></td></tr>`).join('')}
+      </tbody></table>` : '<div class="note">\u2014</div>'}
+    </div>`;
+
+  // ---- habit and timing
+  const st = byM(d.streaks);
+  const stRows = [['1 day', '1'], ['2–6 days in a row', '2-6'], ['A full week', '7']]
+    .map(([n, b]) => [n, (st.find(r => r.bin === b) || {}).users || 0]);
+  const hrs = byM(d.hours);
+  const habitBody = `
+    <div class="grid g-2-1">
+      <div class="card">
+        <div class="card-title">When members earn points, by hour</div>
+        <div class="chart-wrap"><canvas id="bceHours"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Longest check-in streak in ${esc(label)}</div>
+        ${hbarRows(stRows, null, BCE_COL.retained)}
+      </div>
+    </div>`;
+
   $('viewRoot').innerHTML = `
     ${coverSlide('Better Club\nEngagement')}
     ${slideShell(`Monthly active members \u00b7 ${label}`, cards + `<div class="mt">${growth}</div>`, { first: true, scope: 'Better Club' })}
     ${split ? slideShell('Who comes back, and what brings them', comeback + `<div class="mt">${doTable}</div>`, { scope: 'Better Club', cls: 'quiet' })
             : slideShell('What each group did', doTable, { scope: 'Better Club', cls: 'quiet' })}
     ${slideShell('Do new members stay?', cohort + `<div class="mt">${daily}</div>`, { scope: 'Better Club', cls: 'quiet' })}
-    ${slideShell(`What active members care about \u00b7 ${label}`, interest, { scope: 'Better Club', cls: 'quiet' })}`;
+    ${slideShell(`What active members care about \u00b7 ${label}`, interest, { scope: 'Better Club', cls: 'quiet' })}
+    ${slideShell(`Points and rewards \u00b7 ${label}`, rewardsBody, { scope: 'Better Club', cls: 'quiet' })}
+    ${slideShell(`Campaigns: who joins, and who earns points \u00b7 ${label}`, campaignBody, { scope: 'Better Club', cls: 'quiet' })}
+    ${slideShell(`Habit and timing \u00b7 ${label}`, habitBody, { scope: 'Better Club', cls: 'quiet' })}`;
 
   drawBars('bceGrowth', gLab, [
     { label: 'New', data: gm.map(m => m.new_users), color: BCE_COL.new },
@@ -10149,6 +10217,9 @@ function renderBcengage() {
     { label: 'Earlier members (not split)', data: gm.map(m => (m.first ? m.baseline : null)), color: BCE_COL.base },
     { label: 'Lost from last month', data: gm.map(m => (m.first ? null : -m.churned)), color: BCE_COL.lost },
   ], { horizontal: false, stacked: true });
+  drawBars('bceHours', Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`), [
+    { label: 'Members earning points', data: Array.from({ length: 24 }, (_, h) => ((hrs.find(r => r.hour === h) || {}).users || 0)), color: BCE_COL.retained },
+  ], { horizontal: false });
   drawChart('bceDaily', (d.daily || []).map(r => ({ d: r.d, dau: r.dau, any: r.any_active })), [
     { key: 'dau', label: 'Earned B points', color: BCE_COL.retained, axis: 'y' },
     { key: 'any', label: 'Any activity', color: BCE_COL.base, axis: 'y' },
@@ -13295,7 +13366,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.379.0';
+const CLIENT_BUILD = '3.380.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

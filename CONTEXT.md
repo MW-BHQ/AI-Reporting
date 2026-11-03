@@ -1,5 +1,20 @@
 ### Recent (November 2026)
 
+**v3.380.0 — Engagement: counts, rewards, and marketer sections** (MW):
+- "What each group did" and the cohort table print COUNTS; the share is on hover.
+- Points and rewards: B points earned from the three MAU actions (MoM), rewards redeemed
+  and points spent, coupons used, friends referred; table of every reward redeemed that
+  month (name from event_desc_1, HTML-decoded; Health guide = has digital_download_files
+  or a DIGITAL- coupon code; points from points_used; Used = USED_REWARD rows).
+- Campaigns: joiners by sign-up channel and by campaign code, with how many earned points
+  in their joining month (members.signup_campaign = "source / medium / campaign"; a
+  numeric medium is Google Reserve's listing id and is dropped). Reward articles ranked
+  by readers, launch time from campaign_key "<post id>_<launch>".
+- Habit and timing: members earning points by hour (Bangkok time), and the longest
+  check-in streak. The streak is a WEEKLY challenge — current_streak resets after 7 — so
+  the bins are 1 day / 2-6 / a full week, not 30+.
+- Oct read: 2,692 of 3,089 joiners have no signup_campaign at all; 8-11am is the peak.
+
 **v3.379.0 — Engagement: MAU is the Better Club team's definition** (MW):
 - MW: "MAU means they do at least one of these once: daily check-in, read reward articles,
   do the quiz. These activities reward B points." Active = at least one all_event

@@ -1183,6 +1183,10 @@ expect_field "eng early range"    "/api/better-club/engagement?from=2026-07-01&t
 expect_field "eng baseline"       "$ENG" "d.months[0].first&&!d.months[0].complete?'ok':undefined"
 expect_field "eng partial nov"    "$ENG" "d.months.find(m=>m.month==='2026-11').partial?'ok':undefined"
 # Growth accounting must close: MAU(m)-MAU(m-1) = new + reactivated - lost.
+# v3.380.0 marketer blocks reach the payload.
+expect_field "eng rewards"        "$ENG" "d.rewards.some(r=>r.kind==='Health guide')&&d.rewards.some(r=>r.used>0)?'ok':undefined"
+expect_field "eng channels"       "$ENG" "d.channels.length&&d.campaigns.length&&d.rewardArticles.length?'ok':undefined"
+expect_field "eng habit"          "$ENG" "d.streaks.length===3&&d.hours.length===24?'ok':undefined"
 expect_field "eng identity"       "$ENG" "d.months.slice(1).every((m,i)=>m.mau-d.months[i].mau===m.new_users+m.reactivated-m.churned)?'ok':undefined"
 
 # ---- Better Club -----------------------------------------------------------
