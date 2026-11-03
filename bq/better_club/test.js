@@ -48,8 +48,8 @@ const v1 = [
 ];
 
 const steps = [
-  `DROP SCHEMA IF EXISTS \`${B.PROJECT}.better_club_test\` CASCADE;`,
-  B.setup(), B.views(), B.ingest((t) => T('fx_' + t), 'test'),
+  B.LOC + `DROP SCHEMA IF EXISTS \`${B.PROJECT}.better_club_test\` CASCADE;`,
+  B.setup({ ext: false }), B.views(), B.ingest((t) => T('fx_' + t), 'test'),
 
   '-- 1. first load', ...v1, CALL,
   count('raw_read_post', 1, 'identical rows in one load must store once'),
@@ -82,18 +82,18 @@ const steps = [
   count('post_reads', 2, '...but the same read counts once'),
 
   '-- 4. empty sheet (header only)',
-  ...['customers', 'better_staff', 'all_event', 'badge_history', 'read_post', 'click_cta', 'quiz_result'].map((t) => fx(t, [])),
+  ...TABS.map((t) => { const f = cols(t)[0]; return `CREATE OR REPLACE TABLE ${T('fx_' + t.tab)} AS SELECT * FROM ${T('fx_' + t.tab)} WHERE ${f.raw} = '${f.h}';`; }),
   CALL,
   count('events', 3, 'empty sheet keeps events'), count('customers', 2, 'empty sheet keeps customers'),
   is(`SELECT LOGICAL_AND(rows_in_source = 0) FROM ${T('_ingest_log')} WHERE run_at = (SELECT MAX(run_at) FROM ${T('_ingest_log')})`, 'log shows an empty sheet'),
 
   '-- 5. negative: a moved column must stop the run',
-  fx('click_cta', [], { header: { event: 'Evnt' } }),
+  `UPDATE ${T('fx_click_cta')} SET event = 'Evnt' WHERE TRUE;`,
   `BEGIN\n${CALL}\nSELECT ERROR('header guard did not fire');\nEXCEPTION WHEN ERROR THEN\n  ASSERT @@error.message LIKE '%click_cta: header row does not match%' AS 'header guard';\nEND;`,
-  fx('click_cta', []),
+  `UPDATE ${T('fx_click_cta')} SET event = 'Event' WHERE TRUE;`,
 
   '-- 6. negative: a key that will not parse must stop the run',
-  fx('quiz_result', [{ user_id: 'abc', date_created: '2026-08-02 19:06:40', quiz_title: 't', question: 'q' }]),
+  `INSERT ${T('fx_quiz_result')} (user_id, date_created, quiz_title, question) VALUES ('abc', '2026-08-02 19:06:40', 't', 'q');`,
   `BEGIN\n${CALL}\nSELECT ERROR('key guard did not fire');\nEXCEPTION WHEN ERROR THEN\n  ASSERT @@error.message LIKE '%quiz_answers: a key column did not parse - see%' AS 'key guard';\nEND;`,
 
   "SELECT 'ALL BETTER CLUB BQ TESTS PASSED' AS result;",

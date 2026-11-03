@@ -1,3 +1,22 @@
+### Recent (November 2026)
+
+**v3.377.0 — Better Club raw data → BigQuery** (MW; groundwork for a Better Club report):
+- Sheet "Better Club - Raw Data" (7 tabs) loads into `ai-reporting-503911.better_club`
+  (asia-southeast1). Code in `bq/better_club/`; `build.js` generates every SQL file
+  from one `TABS` config. See its README.
+- `raw_*` only grows; a row is stored once by a hash of its values. Views dedupe on
+  the business key (latest load wins). A wiped daily sheet deletes nothing.
+- Daily run = scheduled query `CALL better_club.ingest()`. Guards: header row must
+  match build.js (positional schema), keys must parse. `_ingest_log` per tab per run.
+- Traps: Sheets shows a 0 in a date-formatted number column as 12/30/1899 (parse_num
+  turns it back into a serial); dates come as both `2026-08-03 1:33:22` and
+  `11/2/2025`; post titles carry HTML entities. The BigQuery connector defaults to
+  US, so every script starts `SET @@location = 'asia-southeast1'`. The connector
+  cannot read Sheets (no Drive scope): the sheet read only runs from the console or
+  the scheduled query.
+- Tests: `node bq/better_club/test.js` → run in BigQuery; re-run inserts 0, wipe keeps
+  history, duplicate read counts once, header and key guards fire.
+
 ### Recent (October 2026)
 
 **v3.363.0 — Call out: MW's standing email per hospital; Export above Email** (MW):
