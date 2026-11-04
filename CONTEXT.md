@@ -1,5 +1,16 @@
 ### Recent (November 2026)
 
+**v3.391.0 — Google Profile: original text, disagree list, evidence links** (MW).
+- Google bundles "(Translated by Google) <EN> (Original) <text>" in `review_comment`; we
+  showed it whole and cut at 280, so the original never showed. `reviewOriginal` strips it;
+  everything shown starts from the original (Thai stays Thai). Translated reviews also show
+  the original underneath. Cuts are word-safe (`clipText`), 1200 chars for evidence lists.
+  Annotation store bumped to `gbp-annotate/v2.json` (v1 was made on the bundled text).
+- "Stars and words disagree" now lists the reviews (newest 10).
+- Evidence: Google's API has NO per-review link (API review id is not the Maps id). Each
+  shown review carries reviewer + date + "Find on Google" → the listing's reviews page
+  (`search.google.com/local/reviews?placeid=`), place id from its own Windsor pull.
+
 **v3.390.0 — Google Profile: search-terms block removed** (MW: "Windsor also send us
 nothing"). GSC is not a workaround: it reports searches that led to the WEBSITE, not
 searches that surfaced the Google profile on Maps/Search. Removed the page, the Windsor

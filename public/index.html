@@ -850,6 +850,9 @@
   mark.hl-good{background:rgba(46,158,111,.16);color:inherit;border-radius:3px;padding:0 2px;}
   mark.hl-bad{background:rgba(217,83,79,.16);color:inherit;border-radius:3px;padding:0 2px;}
   .tr-tag{font-size:var(--text-2xs);color:var(--faint);white-space:nowrap;}
+  .tr-orig{font-size:var(--text-xs);color:var(--muted);margin-top:4px;}
+  .ev{font-size:var(--text-2xs);color:var(--faint);margin-top:4px;}
+  .ev-link{color:var(--blue);text-decoration:none;white-space:nowrap;}
   table.gbp-sticky thead th{position:sticky;top:0;z-index:3;background:var(--card, #FBFCFE);
     box-shadow:inset 0 -1px 0 var(--line);}
   table.sticky-head{table-layout:fixed;}
@@ -12033,8 +12036,20 @@ function reviewHtml(q) {
   let out = '', pos = 0;
   for (const m of marks) { out += esc(text.slice(pos, m.s)) + `<mark class="${m.cls}">${esc(text.slice(m.s, m.e))}</mark>`; pos = m.e; }
   out += esc(text.slice(pos));
-  if (a && a.en && a.lang) out += ` <span class="tr-tag">from ${esc(a.lang)}</span>`;
+  if (a && a.en && a.lang) out += ` <span class="tr-tag">translated from ${esc(a.lang)}</span>
+    <div class="tr-orig">Original: ${esc(String(q.comment || ''))}</div>`;
   return out;
+}
+
+/**
+ * Evidence line for a review the team may forward (MW). Google's API has no
+ * link to a single review, so this opens the listing's reviews on Google;
+ * reviewer and date pick it out there.
+ */
+function gbpEvidence(q, url) {
+  const bits = [q.star ? `${q.star} \u2605` : '', q.reviewer ? esc(q.reviewer) : '', esc(humanDate(String(q.at || '').slice(0, 10)) || '')].filter(Boolean);
+  const link = url ? ` \u00b7 <a class="ev-link" href="${esc(url)}" target="_blank" rel="noopener">Find on Google \u2197</a>` : '';
+  return `<div class="ev">${bits.join(' \u00b7 ')}${link}</div>`;
 }
 
 function gbpPerfPages(L, d) {
@@ -12107,7 +12122,7 @@ function gbpThemesBody(T) {
   const label = Object.fromEntries(T.themes.map(t => [t.key, t.label]));
   const rows = T.themes.filter(t => t.mentions > 0);
   const quote = (q) => q ? `<div class="i18n" style="white-space:normal;font-size:var(--text-sm)">${reviewHtml(q)}</div>
-      <div style="font-size:var(--text-2xs);color:var(--faint);margin-top:2px">${q.star ? q.star + ' \u2605 \u00b7 ' : ''}${esc(humanDate(q.at) || q.at)}</div>` : '';
+      ${gbpEvidence(q, T.reviewsUrl)}` : '';
   const themeTable = rows.length ? `<table><thead><tr><th>Theme</th><th class="num">Praise</th><th class="num" style="padding-right:18px">Complaint</th>
       <th style="width:16%;padding-right:18px">Complaint share</th><th>Latest complaint</th></tr></thead><tbody>
     ${rows.map(t => `<tr><td class="strong">${esc(t.label)}${t.otherNames.length
@@ -12120,7 +12135,7 @@ function gbpThemesBody(T) {
   const unreplied = T.unrepliedComplaints.length ? `<table><thead><tr><th style="width:52px">Stars</th><th>Review</th>
       <th style="width:150px">About</th><th style="width:92px">Date</th></tr></thead><tbody>
     ${T.unrepliedComplaints.map(r => `<tr><td class="strong" style="color:${r.star >= 4 ? 'var(--green)' : (r.star === 3 ? 'var(--amber)' : 'var(--rose)')}">${r.star ? r.star + ' \u2605' : '\u2014'}</td>
-      <td class="i18n" style="white-space:normal;font-size:var(--text-sm)">${reviewHtml(r)}</td>
+      <td class="i18n" style="white-space:normal;font-size:var(--text-sm)">${reviewHtml(r)}${gbpEvidence(r, T.reviewsUrl)}</td>
       <td style="font-size:var(--text-xs)">${esc(r.themes.map(k => label[k] || k).join(', '))}</td>
       <td style="font-size:var(--text-xs);color:var(--muted)">${esc(humanDate(r.at) || r.at)}</td></tr>`).join('')}
     </tbody></table>` : `<div class="note" style="margin-top:0">Every complaint in this period has a reply.</div>`;
@@ -12133,19 +12148,26 @@ function gbpThemesBody(T) {
       ${sentCard('Negative', S_.negative, 'var(--bad)')}
       <div class="stat card"><div class="lab">Stars and words disagree</div><div class="val">${num(S_.disagree)}</div>
         <div class="sub">4\u20135 \u2605 with negative words, or 1\u20132 \u2605 with positive</div></div></div>`;
+  const D_ = T.disagreeReviews || [];
+  const disagree = D_.length ? `<div class="card mt"><div class="card-title">Stars and words disagree</div>
+    <table><thead><tr><th style="width:52px">Stars</th><th>Review</th><th style="width:110px">Words read as</th></tr></thead><tbody>
+    ${D_.map(r => `<tr><td class="strong" style="color:${r.star >= 4 ? 'var(--green)' : 'var(--rose)'}">${r.star} \u2605</td>
+      <td class="i18n" style="white-space:normal;font-size:var(--text-sm)">${reviewHtml(r)}${gbpEvidence(r, T.reviewsUrl)}</td>
+      <td style="font-size:var(--text-sm);color:${r.sentiment === 'negative' ? 'var(--bad)' : 'var(--good)'}">${esc(r.sentiment)}</td></tr>`).join('')}
+    </tbody></table></div>` : '';
   const W = T.watch || {};
   const watch = `<div class="card mt"><div class="card-title">Watch list \u00b7 what to act on</div>
     ${(W.items || []).length ? `<table class="gbp-sticky"><thead><tr><th style="width:17%">Keyword</th><th class="num" style="width:8%;padding-right:18px">Reviews</th>
         <th style="width:14%">Theme</th><th>Why it matters</th><th>Next action</th></tr></thead><tbody>
       ${W.items.map(w => `<tr><td class="strong i18n">${esc(w.phrase)}
-          <div style="font-size:var(--text-xs);color:var(--muted);font-weight:400;white-space:normal" class="i18n">\u201c${reviewHtml(w.example)}\u201d</div></td>
+          <div style="font-size:var(--text-xs);color:var(--muted);font-weight:400;white-space:normal" class="i18n">\u201c${reviewHtml(w.example)}\u201d${gbpEvidence(w.example, T.reviewsUrl)}</div></td>
         <td class="num" style="padding-right:18px">${num(w.reviews)}${w.negative < w.reviews ? `<div style="font-size:var(--text-3xs);color:var(--faint)">${num(w.negative)} negative</div>` : ''}</td>
         <td style="font-size:var(--text-sm)">${esc(label[w.theme] || w.theme)}</td>
         <td style="white-space:normal;font-size:var(--text-sm)">${esc(w.why)}</td>
         <td style="white-space:normal;font-size:var(--text-sm)">${esc(w.action)}</td></tr>`).join('')}
       </tbody></table>`
       : `<div class="note" style="margin-top:0">\u2014 ${esc(W.reason || 'No watch list')}</div>`}</div>`;
-  return `${sentiment}${watch}<div class="card mt"><div class="card-title">What reviewers praise and complain about</div>${themeTable}
+  return `${sentiment}${disagree}${watch}<div class="card mt"><div class="card-title">What reviewers praise and complain about</div>${themeTable}
       <div class="note">${num(T.tagged)} of ${num(T.withComment)} reviews with a comment read by Claude${T.untagged
         ? ` \u00b7 ${num(T.untagged)} not read yet${T.failedBatches ? ' (AI call failed)' : ''} \u2014 press Load again` : ''}
         \u00b7 ${num(T.ratingOnly)} rating-only reviews have no theme</div></div>
@@ -12262,7 +12284,7 @@ function renderGbp() {
         return `<tr>
         <td class="strong" style="color:${r.star>=4?'var(--green)':(r.star==3?'var(--amber)':'var(--rose)')};">${r.star?r.star+' ★':'—'}</td>
         <td class="i18n" style="white-space:normal;font-size:var(--text-sm);">${r.comment?reviewHtml(r):'<span style="color:var(--faint)">rating only, no comment</span>'}
-          ${r.reviewer?`<div style="font-size:var(--text-2xs);color:var(--faint);margin-top:3px;">${esc(r.reviewer)}</div>`:''}</td>
+          ${r.comment ? gbpEvidence({ reviewer: r.reviewer }, L.reviewsUrl) : ''}</td>
         <td style="font-size:var(--text-2xs);color:var(--muted)">${esc(humanDate(String(r.at||'').slice(0,10)))}</td>
         <td class="no-print">${r.replied?'<span class="pill">yes</span>':'<span class="pill warn">no</span>'}</td>
         </tr>`;
@@ -13873,7 +13895,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.390.0';
+const CLIENT_BUILD = '3.391.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

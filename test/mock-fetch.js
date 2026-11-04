@@ -751,6 +751,9 @@ global.fetch = async (url, opts = {}) => {
       const ds = days(); const keep = process.env.MOCK_GBP_SHORT === "1" ? ds.slice(0, -3) : ds;
       return jsonRes({ data: LOCS.flatMap((l, i) => keep.map((date, j) => ({ date, ...perfRow(l, i, j % 2) }))) });
     }
+    if (want.includes("location_metadata_place_id")) {
+      return jsonRes({ data: LOCS.map((location_title, i) => ({ location_title, location_metadata_place_id: `ChIJmock${i}` })) });
+    }
     if (want.includes("review_total_count")) {
       return jsonRes({ data: LOCS.map((location_title, i) => ({
         location_title, review_total_count: 500 + i * 100, review_average_rating_total: 4.7 })) });
@@ -762,7 +765,7 @@ global.fetch = async (url, opts = {}) => {
         { review_id: `r${i}a`, review_create_time: "2026-06-15", location_title, review_star_rating: "FIVE",
           review_comment: "great", review_reviewer: "A", review_reply_comment: "thank you" },
         { review_id: `r${i}b`, review_create_time: "2026-07-15", location_title, review_star_rating: i % 5 === 0 ? "FOUR" : "FIVE",
-          review_comment: "good", review_reviewer: "B", review_reply_comment: "thanks" },
+          review_comment: i === 0 ? "(Translated by Google) good\n\n(Original)\nดีมาก" : "good", review_reviewer: "B", review_reply_comment: "thanks" },
         { review_id: `r${i}c`, review_create_time: "2026-07-20", location_title, review_star_rating: "TWO",
           review_comment: "long wait at reception", review_reviewer: "C", review_reply_comment: "" },
       ]) });
@@ -1964,7 +1967,8 @@ global.fetch = async (url, opts = {}) => {
       const prompt = JSON.parse(bodyStr).messages[0].content;
       const items = [...prompt.matchAll(/^\[(\d+)\] \(\d?\u2605\) (.*)$/gm)];
       return jsonRes({ stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(items.map((m) => ({
-        i: +m[1], s: /wait/i.test(m[2]) ? "negative" : "positive", t: /wait/i.test(m[2])
+        // The Thai 4-star reads negative: a "stars and words disagree" case.
+        i: +m[1], s: /wait|\u0e14\u0e35\u0e21\u0e32\u0e01/i.test(m[2]) ? "negative" : "positive", t: /wait/i.test(m[2])
           ? [{ k: "wait", p: "complaint" }, { k: "bogus", p: "complaint" }]
           : [{ k: "staff", p: "praise" }, { k: "other", p: "praise", name: "Check-up package" }] }))) }] });
     }

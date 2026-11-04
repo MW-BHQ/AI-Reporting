@@ -7536,7 +7536,7 @@ async function buildGbp(from, to) {
       id: r.review_id || null,
       at: r.review_create_time || null,
       star: starOf(r.review_star_rating),
-      comment: String(r.review_comment || "").slice(0, 400),
+      comment: clipText(reviewOriginal(r.review_comment), 1200),
       reviewer: r.review_reviewer || null,
       replied: Boolean(String(r.review_reply_comment || "").trim()),
     });
@@ -7639,6 +7639,7 @@ async function buildGbp(from, to) {
   }).sort((a, b) => n(b.allTimeCount) - n(a.allTimeCount));
 
   await annotateInto(out.flatMap((l) => (l.samples || []).filter((x) => !x.empty)));
+  for (const l of out) l.reviewsUrl = await gbpReviewsUrl(l.title);
 
   return {
     range: { from, to }, recentFrom,
@@ -7718,6 +7719,43 @@ ${batch.map((r, i) => `[${i}] (${r.star}★) ${r.comment.replace(/\s+/g, " ").sl
 }
 
 /**
+ * GOOGLE BUNDLES ITS OWN TRANSLATION into the comment: "(Translated by Google)
+ * <English>\n\n(Original)\n<text>". Shown whole and then cut at 280 chars, the
+ * original never made it to the screen (MW: "I cannot find where the original
+ * language was"). Everything shown now starts from the ORIGINAL; Thai stays
+ * Thai, English stays English, anything else goes through `annotateInto`.
+ */
+const GOOGLE_TR_RE = /^\s*\((?:Translated by Google|แปลโดย Google)\)\s*([\s\S]*?)\s*\((?:Original|ต้นฉบับ)\)\s*([\s\S]*)$/;
+function reviewOriginal(comment) {
+  const c = String(comment || "");
+  const m = c.match(GOOGLE_TR_RE);
+  return (m ? m[2] : c).trim();
+}
+/** Cut at a word boundary with an ellipsis — never mid-word ("more wat"). */
+function clipText(t, n) {
+  const s = String(t || "");
+  if (s.length <= n) return s;
+  const cut = s.slice(0, n);
+  const sp = Math.max(cut.lastIndexOf(" "), cut.lastIndexOf("\n"));
+  return (sp > n * 0.6 ? cut.slice(0, sp) : cut).trimEnd() + "\u2026";
+}
+
+/**
+ * EVIDENCE LINK. Google's API gives no link to a single review (the API review
+ * id is not the Maps id), so the link opens the listing's reviews on Google;
+ * reviewer name + date shown beside it find the review there. Place id comes
+ * from its own pull — location fields must not share a call with review fields
+ * (separate Windsor tables cross-join).
+ */
+const isoDaysAgo = (d) => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
+async function gbpReviewsUrl(title) {
+  const rows = await windsor("google_my_business", ["location_title", "location_metadata_place_id"],
+    isoDaysAgo(7), isoDaysAgo(1)).catch(() => null);
+  const r = (rows || []).find((x) => norm(x.location_title) === norm(title) && x.location_metadata_place_id);
+  return r ? `https://search.google.com/local/reviews?placeid=${encodeURIComponent(r.location_metadata_place_id)}` : null;
+}
+
+/**
  * REVIEW TEXT AS THE TEAM READS IT (v3.389.0, MW): Thai and English shown as
  * written; any other language shown in English, with the language named.
  * Praise and complaint phrases are marked in the shown text.
@@ -7728,7 +7766,7 @@ ${batch.map((r, i) => `[${i}] (${r.star}★) ${r.comment.replace(/\s+/g, " ").sl
  * anything the model paraphrased instead of copying is dropped, not guessed.
  * Failure is silent by design: the original text still shows, unmarked.
  */
-const GBP_ANNOTATE_OBJECT = "gbp-annotate/v1.json";
+const GBP_ANNOTATE_OBJECT = "gbp-annotate/v2.json"; // v2: annotates the ORIGINAL text, not Google's bundle
 function phrasesIn(text, arr) {
   const t = String(text || "").toLowerCase();
   const out = [];
@@ -7783,8 +7821,9 @@ async function buildGbpThemes(key, from, to) {
   const listing = GBP_LISTINGS.find((l) => l.key === key);
   if (!listing) { const e = new Error("unknown listing"); e.status = 400; throw e; }
   const rows = await windsor("google_my_business",
-    ["review_id", "review_create_time", "location_title", "review_star_rating", "review_comment", "review_reply_comment"],
+    ["review_id", "review_create_time", "location_title", "review_star_rating", "review_comment", "review_reviewer", "review_reply_comment"],
     from, to);
+  const reviewsUrl = await gbpReviewsUrl(listing.title);
   const seen = new Set();
   const reviews = [];
   let ratingOnly = 0;
@@ -7797,6 +7836,7 @@ async function buildGbpThemes(key, from, to) {
     const comment = String(r.review_comment || "").trim();
     if (!comment) { ratingOnly++; continue; }
     reviews.push({ id, at, star: starOf(r.review_star_rating), comment,
+      shown: clipText(reviewOriginal(comment), 1200), reviewer: r.review_reviewer || null,
       replied: Boolean(String(r.review_reply_comment || "").trim()) });
   }
 
@@ -7834,7 +7874,7 @@ async function buildGbpThemes(key, from, to) {
     for (const t of tagsOf(r)) {
       const a = agg.get(t.k); if (!a) continue;
       a[t.p]++;
-      const q = { id: r.id, comment: r.comment.slice(0, 280), star: r.star, at: r.at };
+      const q = { id: r.id, comment: r.shown, star: r.star, at: r.at, reviewer: r.reviewer };
       if (t.p === "praise") a.praiseQuote = newest(a.praiseQuote, q);
       else a.complaintQuote = newest(a.complaintQuote, q);
       if (t.k === "other" && t.name) a.otherNames.set(t.name, (a.otherNames.get(t.name) || 0) + 1);
@@ -7852,7 +7892,7 @@ async function buildGbpThemes(key, from, to) {
   const unrepliedComplaints = tagged
     .filter((r) => !r.replied && tagsOf(r).some((t) => t.p === "complaint"))
     .sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10)
-    .map((r) => ({ id: r.id, at: r.at, star: r.star, comment: r.comment.slice(0, 280),
+    .map((r) => ({ id: r.id, at: r.at, star: r.star, comment: r.shown, reviewer: r.reviewer,
       themes: [...new Set(tagsOf(r).filter((t) => t.p === "complaint").map((t) => t.k))] }));
 
   /**
@@ -7861,16 +7901,22 @@ async function buildGbpThemes(key, from, to) {
    * with positive words — the reviews a star average hides.
    */
   const sentiment = { positive: 0, mixed: 0, negative: 0, disagree: 0 };
+  const disagreeing = [];
   for (const r of tagged) {
     const v = store[r.id].s; sentiment[v]++;
-    if ((r.star >= 4 && v === "negative") || (r.star && r.star <= 2 && v === "positive")) sentiment.disagree++;
+    if ((r.star >= 4 && v === "negative") || (r.star && r.star <= 2 && v === "positive")) {
+      sentiment.disagree++;
+      disagreeing.push({ id: r.id, at: r.at, star: r.star, sentiment: v, comment: r.shown,
+        reviewer: r.reviewer, replied: r.replied });
+    }
   }
+  const disagreeReviews = disagreeing.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10);
 
   const watch = await buildGbpWatch(key, from, to, tagged, store, persisted);
   const shownLater = []; // filled after `themes` and `unrepliedComplaints` exist
 
   for (const t of themes) shownLater.push(t.praiseQuote, t.complaintQuote);
-  shownLater.push(...unrepliedComplaints, ...((watch && watch.items) || []).map((w) => w.example));
+  shownLater.push(...unrepliedComplaints, ...disagreeReviews, ...((watch && watch.items) || []).map((w) => w.example));
   await annotateInto(shownLater.filter(Boolean));
 
   return {
@@ -7878,7 +7924,7 @@ async function buildGbpThemes(key, from, to) {
     withComment: reviews.length, ratingOnly,
     tagged: tagged.length, untagged: reviews.length - tagged.length,
     failedBatches, persisted,
-    sentiment, watch,
+    sentiment, watch, disagreeReviews, reviewsUrl,
     themes, unrepliedComplaints,
   };
 }
@@ -7936,7 +7982,8 @@ ${pool.map((r, i) => `[${i}] (${r.star}★) ${r.comment.replace(/\s+/g, " ").sli
     items.push({ phrase, theme: GBP_THEME_KEYS.has(String(it.k)) ? String(it.k) : "other",
       reviews: hits.length, negative: neg,
       why: String(it.why || "").slice(0, 200), action: String(it.action || "").slice(0, 200),
-      example: { id: ex.id, comment: ex.comment.slice(0, 220), star: ex.star, at: ex.at } });
+      example: { id: ex.id, comment: clipText(reviewOriginal(ex.comment), 400), star: ex.star, at: ex.at,
+        reviewer: ex.reviewer || null } });
   }
   items.sort((a, b) => b.negative - a.negative || b.reviews - a.reviews);
   if (persisted) {
