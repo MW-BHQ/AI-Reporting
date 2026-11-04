@@ -26,7 +26,7 @@ Change anything
 2. `node test.js` → run the output in BigQuery; it must end with `ALL BETTER CLUB BQ TESTS PASSED`.
 3. Run 00_setup.sql, 20_views.sql, 10_ingest.sql (in that order).
 
-Daily: scheduled query `CALL \`ai-reporting-503911.better_club.ingest\`();` at 06:00 Asia/Bangkok,
+Daily: scheduled query `CALL \`ai-reporting-503911.better_club.ingest\`();` at 07:00 Asia/Bangkok,
 run as `715584769614-compute@developer.gserviceaccount.com` (the sheet is shared with it).
 
 Later backfill from the dev's database (2024-2025): load into the same raw_* tables with

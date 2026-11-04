@@ -10397,7 +10397,7 @@ function renderBcengage() {
   /**
    * DATA FRESHNESS (v3.384.0, MW: "show the last customer activity in BQ after it
    * loads, so I know how fresh the data is"). The last daily load and the newest
-   * row in each source. A load older than 30 hours means the 06:00 run was missed.
+   * row in each source. A load older than 30 hours means the 07:00 run was missed.
    */
   const fr = d.freshness;
   const runAt = fr && fr.last_run ? new Date(fr.last_run) : null;
@@ -10409,7 +10409,7 @@ function renderBcengage() {
       <div class="bce-fresh-main"><span class="bce-dot"></span>
         <b>${stale ? 'Daily load missed' : 'Data is current'}</b> · last load ${esc(fmtRun)}${ageH !== null ? ` (${ageH < 1 ? 'under an hour' : `${Math.round(ageH)} h`} ago)` : ''}${fr ? ` · ${cnt(fr.rows_inserted)} new rows of ${cnt(fr.rows_in_source)} in the sheet` : ''}</div>
       <div class="bce-fresh-list">${fr ? fr.latest.map(r => `<span><span class="bce-fresh-k">${esc(r.what)}</span> ${esc(r.latest || '\u2014')}</span>`).join('') : ''}</div>
-      ${foot('Last load = when BigQuery last read the Better Club sheet (daily, 06:00 Bangkok). The times after it are the newest row in each source, so they show how far the data reaches. “New rows” counts rows not already stored; 0 with rows in the sheet means nothing changed, 0 of 0 means the sheet was empty.')}
+      ${foot('Last load = when BigQuery last read the Better Club sheet (daily, 07:00 Bangkok). The times after it are the newest row in each source, so they show how far the data reaches. “New rows” counts rows not already stored; 0 with rows in the sheet means nothing changed, 0 of 0 means the sheet was empty.')}
     </div>`;
   $('viewRoot').innerHTML = `
     ${coverSlide('Better Club\nPerformance')}
@@ -13643,7 +13643,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.385.0';
+const CLIENT_BUILD = '3.385.1';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

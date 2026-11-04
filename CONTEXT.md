@@ -1,5 +1,7 @@
 ### Recent (November 2026)
 
+**v3.385.1** — Better Club daily load moved to 07:00 Bangkok (MW); freshness footnote updated.
+
 **Better Club backfill LOADED (4 Nov 2026, no code change)**: MW uploaded the dev's
 all_event CSV to `import_all_event`; `CALL import_all_event_run('dev-2024-09_2026-11-03')`
 inserted 218,242 rows; import table truncated. `events` = 218,242 unique ids, 0 null keys,
