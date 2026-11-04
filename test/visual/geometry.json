@@ -2106,18 +2106,18 @@
 ],
 "gbp": [
 [
-"div.slide.quiet",
+"div.slide.pn",
 "Google Business Profile · Some Other Cli",
 0,
 56,
 1104,
-700
+722
 ],
 [
 "div.grid.g-5",
 "Views",
 0,
-186,
+208,
 1104,
 130
 ],
@@ -2125,7 +2125,7 @@
 "div.stat.card",
 "Views",
 0,
-186,
+208,
 210,
 130
 ],
@@ -2133,7 +2133,7 @@
 "div.stat.card",
 "Calls",
 224,
-186,
+208,
 210,
 130
 ],
@@ -2141,7 +2141,7 @@
 "div.stat.card",
 "Directions",
 447,
-186,
+208,
 210,
 130
 ],
@@ -2149,7 +2149,7 @@
 "div.stat.card",
 "Website clicks",
 671,
-186,
+208,
 210,
 130
 ],
@@ -2157,7 +2157,7 @@
 "div.stat.card",
 "Action rate",
 894,
-186,
+208,
 210,
 130
 ],
@@ -2165,7 +2165,7 @@
 "div.grid.g-2",
 "Actions by month",
 0,
-336,
+358,
 1104,
 356
 ],
@@ -2173,7 +2173,7 @@
 "div.card",
 "Actions by month",
 0,
-336,
+358,
 545,
 356
 ],
@@ -2181,7 +2181,7 @@
 "canvas.",
 "",
 21,
-398,
+420,
 503,
 230
 ],
@@ -2189,7 +2189,7 @@
 "div.card",
 "Where people saw the profile · by month",
 559,
-336,
+358,
 545,
 356
 ],
@@ -2197,7 +2197,7 @@
 "canvas.",
 "",
 580,
-398,
+420,
 503,
 230
 ],
@@ -2205,7 +2205,7 @@
 "div.slide.slide-break",
 "What people searched Some Other Cli01 Ju",
 0,
-756,
+778,
 1104,
 468
 ],
@@ -2213,7 +2213,7 @@
 "div.card",
 "What people searched to find the profile",
 0,
-886,
+909,
 1104,
 273
 ],
@@ -2221,7 +2221,7 @@
 "table.sortable",
 "",
 21,
-948,
+971,
 1062,
 147
 ],
@@ -2229,15 +2229,15 @@
 "div.slide.slide-break",
 "Google reviews Some Other Cli01 Jul 2026",
 0,
-1223,
+1246,
 1104,
-1413
+1325
 ],
 [
 "div.grid.g-4",
 "All-time rating",
 0,
-1410,
+1455,
 1104,
 130
 ],
@@ -2245,7 +2245,7 @@
 "div.stat.card",
 "All-time rating",
 0,
-1410,
+1455,
 266,
 130
 ],
@@ -2253,7 +2253,7 @@
 "div.stat.card",
 "All-time reviews",
 280,
-1410,
+1455,
 266,
 130
 ],
@@ -2261,7 +2261,7 @@
 "div.stat.card",
 "Reviews in period",
 559,
-1410,
+1455,
 266,
 130
 ],
@@ -2269,23 +2269,23 @@
 "div.stat.card",
 "Rating in period",
 839,
-1410,
+1455,
 266,
 130
 ],
 [
 "div.card.mt",
-"All time",
+"Last 12 months",
 0,
-1554,
+1599,
 1104,
-451
+341
 ],
 [
 "canvas.",
 "",
 21,
-1726,
+1661,
 692,
 260
 ],
@@ -2293,7 +2293,7 @@
 "table.",
 "",
 737,
-1787,
+1722,
 346,
 199
 ],
@@ -2301,7 +2301,7 @@
 "div.grid.g-2-1",
 "Reviews by month",
 0,
-2019,
+1954,
 1104,
 553
 ],
@@ -2309,7 +2309,7 @@
 "div.card.gbp-rvm",
 "Reviews by month",
 0,
-2019,
+1954,
 671,
 553
 ],
@@ -2317,7 +2317,7 @@
 "canvas.",
 "",
 21,
-2081,
+2016,
 628,
 230
 ],
@@ -2325,7 +2325,7 @@
 "table.",
 "",
 21,
-2354,
+2289,
 629,
 199
 ],
@@ -2333,7 +2333,7 @@
 "div.card.no-print",
 "All listings",
 685,
-2019,
+1954,
 419,
 553
 ],
@@ -2341,7 +2341,7 @@
 "table.",
 "",
 706,
-2079,
+2014,
 377,
 418
 ],
@@ -2349,7 +2349,7 @@
 "div.slide.slide-break",
 "Customers Voices Some Other Cli01 Jul 20",
 0,
-2636,
+2571,
 1104,
 542
 ],
@@ -2357,7 +2357,7 @@
 "div.card.mt",
 "Customers Voices",
 0,
-2766,
+2701,
 1104,
 347
 ],
@@ -2365,7 +2365,7 @@
 "table.",
 "",
 21,
-2826,
+2761,
 1062,
 268
 ],
@@ -2373,7 +2373,7 @@
 "div.slide.slide-break",
 "Review sentiment Some Other Cli01 Jul 20",
 0,
-3177,
+3112,
 1104,
 266
 ],
@@ -2381,7 +2381,7 @@
 "div.card",
 "",
 0,
-3308,
+3243,
 1104,
 71
 ]

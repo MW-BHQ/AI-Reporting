@@ -813,6 +813,7 @@
   /* Google Profile review marks and watch-list sticky header (v3.389.0). */
   mark.hl-good{background:rgba(46,158,111,.16);color:inherit;border-radius:3px;padding:0 2px;}
   mark.hl-bad{background:rgba(217,83,79,.16);color:inherit;border-radius:3px;padding:0 2px;}
+  .gbp-stars{font-size:.55em;color:var(--violet);letter-spacing:.06em;vertical-align:.2em;}
   .gbp-rv12{display:grid;grid-template-columns:2fr 1fr;gap:24px;align-items:end;}
   /* min-width:0 — a grid column's min-content is the canvas's drawn width, so
      without it the grid blew out at print width and the slide zoomed to ~50%. */
@@ -823,9 +824,12 @@
      the same 2fr/1fr as the 12-month card above it. */
   /* Print sizes (prep and print share them, so the twins are measured at the
      printed size): shorter charts and tighter mix rows fit the page at ~1:1. */
-  body.print-prep .gbp-rv12 .chart-wrap{height:190px!important;}
-  body.print-prep .gbp-rvm .chart-wrap{height:150px!important;}
-  body.print-prep .gbp-rv12 td, body.print-prep .gbp-rvm td{padding-top:5px!important;padding-bottom:5px!important;}
+  body.print-prep .gbp-rv12 .chart-wrap{height:240px!important;}
+  body.print-prep .gbp-rvm .chart-wrap{height:200px!important;}
+  body.print-prep .gbp-rv12 td, body.print-prep .gbp-rvm td{padding-top:3px!important;padding-bottom:3px!important;}
+  body.print-prep .gs-reviews .stat{padding:12px 18px!important;}
+  body.print-prep .gs-reviews .card{padding:14px 20px!important;}
+  body.print-prep .gs-reviews .card-title{margin-bottom:6px!important;}
   body.print-prep .gbp-rvrow{grid-template-columns:1fr!important;}
   /* All listings is no-print; prep measures on SCREEN, so hide it here too or
      the slide is fitted to a page that still holds it (zoomed to 0.48). */
@@ -835,9 +839,17 @@
     .gbp-rvrow{grid-template-columns:1fr!important;}
     .gbp-rvm{display:grid!important;grid-template-columns:2fr 1fr;gap:24px;align-items:end;}
     .gbp-rv12{grid-template-columns:2fr 1fr!important;}
-    .gbp-rv12 .chart-wrap{height:190px!important;}
-    .gbp-rvm .chart-wrap{height:150px!important;}
-    .gbp-rv12 td, .gbp-rvm td{padding-top:5px!important;padding-bottom:5px!important;}
+    .gbp-rv12 .chart-wrap{height:240px!important;}
+    .gbp-rvm .chart-wrap{height:200px!important;}
+    /* Customers Voices carries its own page break for the old layout; on an
+       auto-height page it split the header from the table. */
+    .slide.gs-auto .gbp-voices{break-before:auto!important;}
+    /* Page 3+ of the GBP PDF: own page size (gbpAutoPages), so no fixed box. */
+    .slide.gs-auto{height:auto!important;max-height:none!important;overflow:visible!important;}
+    .gbp-rv12 td, .gbp-rvm td{padding-top:3px!important;padding-bottom:3px!important;}
+    .gs-reviews .stat{padding:12px 18px!important;}
+    .gs-reviews .card{padding:14px 20px!important;}
+    .gs-reviews .card-title{margin-bottom:6px!important;}
   }
   .tr-tag{font-size:var(--text-2xs);color:var(--faint);white-space:nowrap;}
   .tr-orig{font-size:var(--text-xs);color:var(--muted);margin-top:4px;}
@@ -2946,14 +2958,16 @@ function humanDate(v) {
  *             break is acceptable; an anonymous continuation page is not, so a
  *             flowed section must carry its own header.
  */
-function slideShell(title, body, { first, scope, fill, flow, logo, cls } = {}) {
+function slideShell(title, body, { first, scope, fill, flow, logo, cls, icon } = {}) {
   if (!body) return '';
   const pill = scope ? ` <span class="all-four">${esc(scope)}</span>` : '';
+  // `icon`: a platform mark before the title, the Monthly Report's section header.
+  const mark = icon ? `<img class="plogo" src="/brand/${esc(icon)}" alt="" onerror="this.remove()">` : '';
   const right = `<span class="slide-right"><span class="slide-range">${esc(humanRange())}</span><img
     class="slide-logo" src="/brand/${esc(logo || 'bh-wordmark.png')}" alt=""
     onerror="this.style.display='none'"></span>`;
   return `<div class="slide${first ? '' : ' slide-break'}${fill ? ' slide-fill' : ''}${flow ? ' slide-flow' : ''}${cls ? ' ' + cls : ''}">
-    <div class="slide-title${/\bquiet\b/.test(cls || '') ? ' quiet' : ''}"><span>${esc(title)}${pill}</span>${right}</div>
+    <div class="slide-title${/\bquiet\b/.test(cls || '') ? ' quiet' : ''}"><span>${mark}${esc(title)}${pill}</span>${right}</div>
     ${body}</div>`;
 }
 
@@ -12282,7 +12296,9 @@ function renderGbp() {
 
     <div class="grid g-4">
       <div class="stat card"><div class="lab">All-time rating</div>
-        <div class="val" style="color:${L.allTimeRating>=4.5?'var(--green)':(L.allTimeRating>=4?'var(--amber)':'var(--rose)')}">${L.allTimeRating!=null?L.allTimeRating.toFixed(1)+' ★':'—'}</div>
+        <!-- Stars moved here from the removed All time block (MW), in lavender. -->
+        <div class="val" style="color:${L.allTimeRating>=4.5?'var(--green)':(L.allTimeRating>=4?'var(--amber)':'var(--rose)')}">${L.allTimeRating!=null?L.allTimeRating.toFixed(1):'—'}${L.allTimeRating!=null
+          ? ` <span class="gbp-stars">${'\u2605'.repeat(Math.round(L.allTimeRating))}${'\u2606'.repeat(5-Math.round(L.allTimeRating))}</span>` : ''}</div>
         <div class="sub">${L.allTimeCount!=null?'across '+num(L.allTimeCount)+' reviews':''}</div></div>
       <!-- All-time reviews, its own card (MW). It was a sub-line under the
            rating, where a 9,000-review base read as a footnote to a 4.7. -->
@@ -12309,15 +12325,7 @@ function renderGbp() {
     <div class="card mt">
       <div class="gbp-rv12">
         <div>
-          <div class="card-title">All time</div>
-          <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:2px">
-            <div style="font-size:var(--text-4xl);font-weight:700;color:var(--violet);line-height:1">
-              ${L.allTimeRating != null ? L.allTimeRating.toFixed(1) : '\u2014'}</div>
-            <div style="font-size:var(--text-sm);color:#F2A93B">${L.allTimeRating != null
-              ? '\u2605'.repeat(Math.round(L.allTimeRating)) + '\u2606'.repeat(5 - Math.round(L.allTimeRating)) : ''}</div>
-          </div>
-          <div class="lab" style="margin-bottom:12px">lifetime average across ${num(L.allTimeCount)} reviews</div>
-          <div class="card-title tight">Last 12 months</div>
+          <div class="card-title">Last 12 months</div>
           <div class="chart-wrap" style="height:260px"><canvas id="gbpChart"></canvas></div>
         </div>
         <div>
@@ -12389,18 +12397,22 @@ function renderGbp() {
   const sopt = (more) => ({ scope: L.key, cls: 'quiet pn', logo: GBP_LOGO[L.key], ...more });
   $('viewRoot').innerHTML = tabStrip
     /* Performance first, reviews below (MW, v3.388.0). */
-    + slideShell(`Google Business Profile \u00b7 ${L.title}`, perf.main, sopt({ first: true, cls: 'quiet pn gs-perf' }))
+    /* Monthly Report section headers (MW, v3.397.0): violet caps + platform
+       mark. Performance carries the Google Maps pin, reviews the Business
+       Profile mark. */
+    + slideShell(`Google Business Profile \u00b7 ${L.title}`, perf.main, sopt({ first: true, cls: 'pn gs-perf', icon: 'google-maps.png' }))
     /* Screen only (MW): not printed. */
     + slideShell('What people searched', perf.search, sopt({ cls: 'quiet pn no-print' }))
-    + slideShell('Google reviews', gbpPage1, sopt({ cls: 'quiet pn gs-reviews' }))
-    + slideShell('Customers Voices', gbpVoices, sopt())
+    + slideShell('Google reviews', gbpPage1, sopt({ cls: 'pn gs-reviews', icon: 'gbp.svg' }))
+    /* Page 3+ print at their own height (gs-auto): never cropped, never zoomed. */
+    + slideShell('Customers Voices', gbpVoices, sopt({ cls: 'quiet pn gs-auto' }))
     /* Right under Customers Voices (MW, v3.389.0). Two slides so each prints
        as one readable 16:9 page. */
     + slideShell('Review sentiment', `<div id="gbpThemes">${L.unlisted
         ? '<div class="card"><div class="note" style="margin-top:0">\u2014 Themes cover the six configured listings only.</div></div>'
-        : gbpThemesBody(S.gbpThemes && S.gbpThemes[gbpThemesKey(L.key)], 1)}</div>`, sopt())
+        : gbpThemesBody(S.gbpThemes && S.gbpThemes[gbpThemesKey(L.key)], 1)}</div>`, sopt({ cls: 'quiet pn gs-auto' }))
     + (L.unlisted ? '' : slideShell('Review themes', `<div id="gbpThemes2">${
-        gbpThemesBody(S.gbpThemes && S.gbpThemes[gbpThemesKey(L.key)], 2)}</div>`, sopt()));
+        gbpThemesBody(S.gbpThemes && S.gbpThemes[gbpThemesKey(L.key)], 2)}</div>`, sopt({ cls: 'quiet pn gs-auto' })));
   perf.draw();
   if (!L.unlisted) loadGbpThemes(L.key);
 
@@ -13699,7 +13711,7 @@ function fitNativeSlides() {
    * slides need: measure the natural height at print width, zoom to fit, and
    * enlarge the box by the same factor so the sheet is still filled.
    */
-  document.querySelectorAll('.slide.pn, .mr').forEach((el) => {
+  document.querySelectorAll('.slide.pn:not(.gs-auto), .mr').forEach((el) => {
     el.style.zoom = '';
     const cs = getComputedStyle(el);
     const pad = parseFloat(cs.paddingTop || 0) + parseFloat(cs.paddingBottom || 0);
@@ -13855,6 +13867,36 @@ function gbpPrintOrder(on) {
   first.classList.remove('slide-break'); other.classList.add('slide-break');
 }
 
+/**
+ * PAGE 3+ OF THE GBP PDF AT THEIR OWN HEIGHT (MW, v3.397.0): "auto height, so
+ * the content is not cropped or squeezed". Each `.gs-auto` slide gets a NAMED
+ * page sized to its measured height (never shorter than 16:9), so a long
+ * review list makes a long page instead of a clipped or zoomed one. Pages 1-2
+ * stay 16:9. Measured on screen under print-prep, like every other fit here,
+ * with 4% slack for the print relayout.
+ */
+function gbpAutoPages(on) {
+  let st = document.getElementById('gbpAutoPages');
+  if (!on || S.view !== 'gbp') {
+    if (st) st.textContent = '';
+    document.querySelectorAll('.slide.gs-auto').forEach((el) => { el.style.page = ''; });
+    return;
+  }
+  if (!st) { st = document.createElement('style'); st.id = 'gbpAutoPages'; document.head.appendChild(st); }
+  const rules = [];
+  document.querySelectorAll('.slide.gs-auto').forEach((el, i) => {
+    if (!el.offsetParent) return;
+    const h = Math.max(7.5, (el.scrollHeight * 1.04) / 96);
+    el.style.page = `gbpauto${i}`;
+    rules.push(`@page gbpauto${i}{size:13.333in ${h.toFixed(2)}in;margin:0;}`);
+  });
+  /* The deck caps printed tables at 10 rows (`.slide table:not(.nocap)`);
+     these pages exist to show every row, so lift it here. In this late
+     <style> so it wins over the cap on equal specificity. */
+  st.textContent = `@media print{${rules.join('')}
+    .slide.gs-auto table:not(.nocap) tbody tr:nth-child(n+11){display:table-row!important;}}`;
+}
+
 function sizeForPrint() {
   const body = document.body;
   if (!body) return Promise.resolve();
@@ -13871,11 +13913,12 @@ function sizeForPrint() {
      * straight into `page.pdf()` instead of letting the `@page` rule drive it
      * the way the browser's Print dialog does.
      */
-    .then(() => { resizeChartsForPrint(); markOnePage(); fitNativeSlides(); buildPrintSvgs(); onePageIfAsked();
+    .then(() => { resizeChartsForPrint(); markOnePage(); fitNativeSlides(); buildPrintSvgs(); onePageIfAsked(); gbpAutoPages(true);
                   return new Promise((r) => setTimeout(r, 150)); });
 }
 function clearPrintPrep() {
   gbpPrintOrder(false);
+  gbpAutoPages(false);
   document.body.classList.remove('print-prep');
   document.body.classList.remove('pp-onepage');
   /**
@@ -13979,7 +14022,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.396.0';
+const CLIENT_BUILD = '3.397.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

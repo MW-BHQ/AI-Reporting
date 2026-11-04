@@ -1,5 +1,18 @@
 ### Recent (November 2026)
 
+**v3.397.0 — Google Profile PDF polish** (MW).
+- "All time" block removed; its stars moved into the All-time rating card, lavender
+  (`.gbp-stars`). Charts taller (240/200 px print), scorecards and mix rows tighter on that
+  page: zoom 0.77 → 0.82, charts print ~35% taller.
+- Headers: Google reviews and Performance use the Monthly Report section header (violet caps
+  + platform mark): Business Profile mark (`gbp.svg`) and the Google Maps pin MW supplied
+  (`public/brand/google-maps.png`, from his .webp). `slideShell` gained `icon`.
+- Page 3+ (Customers Voices, Review sentiment, Review themes; `.gs-auto`): each prints on
+  its own NAMED page sized to its measured height (min 7.5in, 4% slack) — `gbpAutoPages`
+  in sizeForPrint/clearPrintPrep. Not zoomed (`fitNativeSlides` skips them), the 10-row
+  print cap lifted there, and the old `.gbp-voices` page break neutralised (it split the
+  header from the table). Tested with 40 injected rows: one 23.8in page, all rows.
+
 **v3.396.0 — Google Profile PDF order** (MW): Google reviews page prints first, the
 performance page after (they swap places); screen keeps performance first. `gbpPrintOrder`
 swaps the two slides in `sizeForPrint` and back in `clearPrintPrep`; `slide-break` follows
