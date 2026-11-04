@@ -1499,6 +1499,46 @@ sleep 2.5
 expect_field "sheets 502 retried" "/api/sheets-check" "d.steps.filter(s=>/^read/.test(s.step)).every(s=>s.ok)?'ok':undefined"
 expect_field "shopee 502 retried" "/api/shopee?from=$FROM&to=$TO" "d.available===true&&d.funnel.sales===32000?'ok':undefined"
 
+# GOOGLE PROFILE PERFORMANCE + THEMES (v3.388.0).
+kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
+WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ADMIN_EMAILS=admin@bkh.test ECOM_SHEET_ID=mock ACCESS_BUCKET=mock-bucket \
+PORT=$PORT node --require ./test/mock-fetch.js server.js >>/tmp/smoke.log 2>&1 &
+SRV=$!
+sleep 2.5
+G="/api/gbp?from=$FROM&to=$TO"
+BGH="d.listings.find(l=>l.key==='BGH').perf"
+expect_field "gbp perf six listings" "$G" "['BGH','BIH','BHT','WSH','Dental','JMS'].every(k=>(d.listings.find(l=>l.key===k)||{}).perf)?'ok':undefined"
+expect_field "gbp views = surfaces" "$G" "(p=>p.views.value===p.surface.mobileSearch+p.surface.mobileMaps+p.surface.desktopSearch+p.surface.desktopMaps&&p.views.value>0?'ok':undefined)($BGH)"
+expect_field "gbp actions sum" "$G" "(p=>p.actions.value===p.calls.value+p.website.value+p.directions.value+(p.bookings?p.bookings.value:0)?'ok':undefined)($BGH)"
+expect_field "gbp full window MoM" "$G" "(p=>p.momReason===null&&p.views.mom!==null?'ok':undefined)($BGH)"
+expect_field "gbp bookings shown BGH" "$G" "$BGH.bookings&&$BGH.bookings.value>0?'ok':undefined"
+expect_field "gbp bookings hidden BHT" "$G" "d.listings.find(l=>l.key==='BHT').perf.bookings===null?'ok':undefined"
+expect_field "gbp kw brand excluded" "$G" "(p=>p.keywords.rows.length>0&&p.keywords.rows.every(r=>!r.brand)&&p.keywords.brandUsers>0?'ok':undefined)($BGH)"
+expect_field "gbp kw withheld kept" "$G" "$BGH.keywords.rows.some(r=>r.below===15&&r.users===0)?'ok':undefined"
+expect_field "gbp kw new flagged" "$G" "$BGH.keywords.rows.some(r=>r.keyword==='new clinic'&&r.isNew)?'ok':undefined"
+expect_field "gbp trend 12 months" "$G" "$BGH.trend.length===12&&$BGH.trend.slice(-1)[0].measured?'ok':undefined"
+expect_field "gbp ranks 4 not dental" "$G" "d.listings.find(l=>l.key==='BGH').ranks&&d.listings.find(l=>l.key==='Dental').ranks===null?'ok':undefined"
+expect_field "gbp kw no whole month" "/api/gbp?from=2026-07-05&to=2026-07-20" "(p=>p.keywords.months.length===0&&/no whole month/.test(p.keywords.reason)?'ok':undefined)($BGH)"
+T="/api/gbp/themes?key=BGH&from=$FROM&to=$TO"
+check "gbp themes" GET "$T"
+expect_field "themes tagged all" "$T" "d.withComment>0&&d.tagged===d.withComment&&d.untagged===0?'ok':undefined"
+expect_field "themes wait complaint" "$T" "d.themes.find(t=>t.key==='wait').complaint===1?'ok':undefined"
+expect_field "themes bogus dropped" "$T" "!d.themes.some(t=>t.key==='bogus')&&d.themes.length===8?'ok':undefined"
+expect_field "themes other named" "$T" "d.themes.find(t=>t.key==='other').otherNames[0].name==='Check-up package'?'ok':undefined"
+expect_field "themes unreplied" "$T" "d.unrepliedComplaints.length===1&&d.unrepliedComplaints[0].themes[0]==='wait'?'ok':undefined"
+expect_field "themes sentiment" "$T" "d.sentiment.negative===1&&d.sentiment.positive===1&&d.sentiment.positive+d.sentiment.mixed+d.sentiment.negative===d.tagged?'ok':undefined"
+expect_field "watch verbatim only" "$T" "d.watch.items.length===1&&d.watch.items[0].phrase==='Long wait'&&d.watch.items[0].reviews===1?'ok':undefined"
+expect_field "themes bad key 400" "/api/gbp/themes?key=nope&from=$FROM&to=$TO" "d.error==='unknown listing'?'ok':undefined"
+
+# NEGATIVE: 3 days missing -> no MoM/YoY, a reason instead of a fake change.
+kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
+WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ADMIN_EMAILS=admin@bkh.test ECOM_SHEET_ID=mock \
+MOCK_GBP_SHORT=1 MOCK_FAIL_THEMES=1 PORT=$PORT node --require ./test/mock-fetch.js server.js >>/tmp/smoke.log 2>&1 &
+SRV=$!
+sleep 2.5
+expect_field "gbp short no MoM" "$G" "(p=>p.views.mom===null&&p.views.yoy===null&&/28 of 31/.test(p.momReason)?'ok':undefined)($BGH)"
+expect_field "themes fail = untagged" "$T" "d.tagged===0&&d.untagged===d.withComment&&d.failedBatches>0&&d.watch.items.length===0&&/No negative/.test(d.watch.reason)?'ok':undefined"
+
 kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
 echo ""
 if [ "$FAIL" -gt 0 ]; then

@@ -725,6 +725,40 @@ global.fetch = async (url, opts = {}) => {
       "Japanese Medical Services (JMS) \u30d0\u30f3\u30b3\u30af\u75c5\u9662\u65e5\u672c\u4eba\u5c02\u9580\u30af\u30ea\u30cb\u30c3\u30af",
       "Some Other Clinic",
     ];
+    /**
+     * DATE-AWARE PULLS (v3.388.0) for the Google Profile performance block.
+     * `year_month` rows: one per month in the requested range. Daily rows with
+     * `business_bookings`: one per day in the range, so the coverage rule
+     * (MoM only when every day is there) has a full window to pass on. BGH gets
+     * a booking in one month, so the bookings card shows there and nowhere else.
+     * MOCK_GBP_SHORT=1 drops the last 3 days: the negative test for coverage.
+     * Keyed on `impressions_mobile_search` too: the overview's own GBP pull also
+     * asks for date + business_bookings and must keep its old fixture.
+     */
+    const sp = (new URL(u)).searchParams;
+    const dFrom = sp.get("date_from"), dTo = sp.get("date_to");
+    const days = () => { const out = []; for (let d = new Date(dFrom + "T00:00:00Z"); d <= new Date(dTo + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + 1)) out.push(d.toISOString().slice(0, 10)); return out; };
+    const yms = () => [...new Set(days().map((d) => d.slice(0, 7)))].map((k) => `${k.slice(0, 4)}|${+k.slice(5, 7)}`);
+    const perfRow = (location_title, i, j) => ({ location_title,
+      impressions_mobile_search: 50 * (i + 1) + j, impressions_mobile_maps: 30 * (i + 1),
+      impressions_desktop_search: 15 * (i + 1), impressions_desktop_maps: 5 * (i + 1),
+      call_clicks: 2 * (i + 1), website_clicks: 1 + i, direction_requests: 3 * (i + 1),
+      business_bookings: (i === 0 && j === 1) ? 4 : 0 });
+    if (dFrom && want.includes("year_month") && want.includes("search_keyword")) {
+      return jsonRes({ data: LOCS.flatMap((location_title, i) => yms().flatMap((year_month, j) =>
+        // keyword "new clinic" only from the second month: exercises isNew.
+        ["hospital near me", "bangkok hospital soi phetchaburi", "chest pain treatment", ...(j > 0 ? ["new clinic"] : [])]
+          .map((search_keyword, k) => k === 2
+            ? { location_title, year_month, search_keyword, search_keyword_value: null, search_keyword_threshold: 15 }
+            : { location_title, year_month, search_keyword, search_keyword_value: 300 - k * 50 + j * 10 + i }))) });
+    }
+    if (dFrom && want.includes("year_month") && want.includes("business_bookings") && want.includes("impressions_mobile_search")) {
+      return jsonRes({ data: LOCS.flatMap((l, i) => yms().map((year_month, j) => ({ year_month, ...perfRow(l, i, j) }))) });
+    }
+    if (dFrom && want.includes("date") && want.includes("business_bookings") && want.includes("impressions_mobile_search")) {
+      const ds = days(); const keep = process.env.MOCK_GBP_SHORT === "1" ? ds.slice(0, -3) : ds;
+      return jsonRes({ data: LOCS.flatMap((l, i) => keep.map((date, j) => ({ date, ...perfRow(l, i, j % 2) }))) });
+    }
     if (want.includes("review_total_count")) {
       return jsonRes({ data: LOCS.map((location_title, i) => ({
         location_title, review_total_count: 500 + i * 100, review_average_rating_total: 4.7 })) });
@@ -733,11 +767,11 @@ global.fetch = async (url, opts = {}) => {
       // Two months so the trend has a line, and one unanswered low rating so
       // the "needs a reply" path is exercised rather than always empty.
       return jsonRes({ data: LOCS.flatMap((location_title, i) => [
-        { review_create_time: "2026-06-15", location_title, review_star_rating: "FIVE",
+        { review_id: `r${i}a`, review_create_time: "2026-06-15", location_title, review_star_rating: "FIVE",
           review_comment: "great", review_reviewer: "A", review_reply_comment: "thank you" },
-        { review_create_time: "2026-07-15", location_title, review_star_rating: i % 5 === 0 ? "FOUR" : "FIVE",
+        { review_id: `r${i}b`, review_create_time: "2026-07-15", location_title, review_star_rating: i % 5 === 0 ? "FOUR" : "FIVE",
           review_comment: "good", review_reviewer: "B", review_reply_comment: "thanks" },
-        { review_create_time: "2026-07-20", location_title, review_star_rating: "TWO",
+        { review_id: `r${i}c`, review_create_time: "2026-07-20", location_title, review_star_rating: "TWO",
           review_comment: "long wait at reception", review_reviewer: "C", review_reply_comment: "" },
       ]) });
     }
@@ -1909,6 +1943,26 @@ global.fetch = async (url, opts = {}) => {
   }
 
   if (u.includes("api.anthropic.com")) {
+    /**
+     * Review themes: tag "wait" as a complaint when the text says wait, praise
+     * "staff" otherwise, plus one bogus key the server must drop.
+     */
+    const bodyStr = String((opts && opts.body) || "");
+    // Watch list: one real phrase, one invented phrase the server must drop.
+    if (bodyStr.includes("GBP_WATCH_V1")) {
+      return jsonRes({ stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify([
+        { phrase: "Long wait", k: "wait", why: "Queues at reception.", action: "Add a greeter at peak hours." },
+        { phrase: "rude parking guard", k: "parking", why: "x", action: "y" }]) }] });
+    }
+    if (bodyStr.includes("GBP_THEMES_V1")) {
+      if (process.env.MOCK_FAIL_THEMES === "1") return jsonRes({ error: "simulated" }, 500);
+      const prompt = JSON.parse(bodyStr).messages[0].content;
+      const items = [...prompt.matchAll(/^\[(\d+)\] \(\d?\u2605\) (.*)$/gm)];
+      return jsonRes({ stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(items.map((m) => ({
+        i: +m[1], s: /wait/i.test(m[2]) ? "negative" : "positive", t: /wait/i.test(m[2])
+          ? [{ k: "wait", p: "complaint" }, { k: "bogus", p: "complaint" }]
+          : [{ k: "staff", p: "praise" }, { k: "other", p: "praise", name: "Check-up package" }] }))) }] });
+    }
     // The Call out prompt is tagged so it gets a callout-shaped answer.
     if (String((opts && opts.body) || "").includes("CALLOUT_V1")) {
       return jsonRes({

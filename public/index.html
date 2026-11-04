@@ -2358,6 +2358,7 @@
       <div class="nav-item" data-view="gbp">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l2.6 5.6 6 .8-4.4 4.2 1.1 6-5.3-3-5.3 3 1.1-6L3.4 9.4l6-.8z"/></svg>
         Google Profile
+        <span class="ai-badge" title="Review themes: Claude tags each review with what it praises or complains about. Tags are kept, so each review is read once.">AI</span>
       </div>
 
       <div class="nav-sep"></div>
@@ -3405,7 +3406,7 @@ const TITLES = {
   audit: ['Tagging audit', 'How much traffic and spend the campaign view cannot attribute'],
   benchmark: ['Benchmarks', 'Latest complete month against trailing 3, 6 and 12-month norms'],
   gadsbench: ['Google Ads Benchmarks', 'Latest complete month against trailing norms, and the impressions we did not win'],
-  gbp: ['Google Business Profile', 'Reviews and ratings by listing'],
+  gbp: ['Google Business Profile', 'Performance, searches and reviews by listing'],
   pages: ['Pages', 'How one page performs — paste the URL you want to look at'],
   gads: ['Google Ads', 'Spend, campaigns and accounts — newly connected, so start by looking'],
   audiences: ['Audiences', 'Meta audience sets ranked by cost per first-degree result'],
@@ -3695,6 +3696,7 @@ async function loadGbp(refresh = false) {
   const res = await fetch(`/api/gbp?from=${$('from').value}&to=${$('to').value}${refresh?'&refresh=1':''}`);
   if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,200)}`);
   S.gbp = await res.json(); S.gbpKey = key;
+  if (refresh) S.gbpThemes = {};
   setStatus('ok', S.gbp.cached ? `cached ${S.gbp.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
   return S.gbp;
 }
@@ -11988,6 +11990,166 @@ These are relative percentiles, not absolute scores, and they are forward-lookin
   }));
 }
 
+/**
+ * GOOGLE PROFILE PERFORMANCE (v3.388.0) — for the GBP team, per listing.
+ * Server: `buildGbpPerf`. Every comparison is null unless both windows are
+ * complete; the reason is printed under the number instead of a fake change.
+ */
+function gbpChange(v, reason) {
+  if (v === null || v === undefined) return `<span class="dlt none">\u2014</span>`;
+  const p = Math.round(v * 1000) / 10;
+  return `<span class="dlt ${p > 0 ? 'up' : (p < 0 ? 'down' : 'flat')}">${p > 0 ? '+' : ''}${p.toFixed(1)}%</span>`;
+}
+
+function gbpPerfPages(L, d) {
+  const P = L.perf;
+  if (!P) {
+    const why = (d.errors && (d.errors.perfCur || d.errors.perfMonthly)) || 'Google Business Profile performance did not load';
+    const msg = `<div class="card"><div class="note" style="margin-top:0">\u2014 ${esc(why)}</div></div>`;
+    return { main: msg, search: msg, draw: () => {} };
+  }
+  const cmpNote = [P.momReason, P.yoyReason].filter(Boolean);
+  const card = (lab, m) => `<div class="stat card"><div class="lab">${lab}</div>
+      <div class="val">${num(m.value)}</div>
+      <div class="sub2">${gbpChange(m.mom)} <span style="font-size:var(--text-3xs);color:var(--faint)">MoM</span>
+        &nbsp;${gbpChange(m.yoy)} <span style="font-size:var(--text-3xs);color:var(--faint)">YoY</span></div></div>`;
+  const cards = [card('Views', P.views), card('Calls', P.calls), card('Directions', P.directions),
+    card('Website clicks', P.website), ...(P.bookings ? [card('Bookings', P.bookings)] : []),
+    `<div class="stat card"><div class="lab">Action rate</div>
+      <div class="val">${P.actionRate === null ? '\u2014' : (P.actionRate * 100).toFixed(1) + '%'}</div>
+      <div class="sub">${num(P.actions.value)} actions \u00f7 views</div></div>`];
+  const sf = P.surface, sfTot = sf.mobileSearch + sf.mobileMaps + sf.desktopSearch + sf.desktopMaps;
+  const share = (v) => sfTot > 0 ? (v / sfTot * 100).toFixed(0) + '%' : '\u2014';
+  const main = `
+    <div class="grid g-${cards.length}" style="margin-bottom:12px">${cards.join('')}</div>
+    ${cmpNote.length ? `<div class="note" style="margin:-4px 0 10px">${cmpNote.map(esc).join(' \u00b7 ')}</div>` : ''}
+    <div class="grid g-2">
+      <div class="card"><div class="card-title">Actions by month</div>
+        <div class="chart-wrap" style="height:230px"><canvas id="gbpActTrend"></canvas></div></div>
+      <div class="card"><div class="card-title">Where people saw the profile \u00b7 by month</div>
+        <div class="chart-wrap" style="height:230px"><canvas id="gbpSurfTrend"></canvas></div>
+        <div class="note">This period: Search ${share(sf.mobileSearch + sf.desktopSearch)} \u00b7 Maps ${share(sf.mobileMaps + sf.desktopMaps)}
+          \u00b7 Mobile ${share(sf.mobileSearch + sf.mobileMaps)} \u00b7 Desktop ${share(sf.desktopSearch + sf.desktopMaps)}</div></div>
+    </div>`;
+
+  const K = P.keywords;
+  const kwCell = (u, below) => u > 0 ? num(u) : (below ? `&lt;${num(below)}` : '\u2014');
+  const kwChange = (r) => {
+    if (!K.comparable) return '<span class="dlt none">\u2014</span>';
+    if (r.isNew) return '<span class="pill">new</span>';
+    if (!(r.users > 0) || !(r.prevUsers > 0)) return '<span class="dlt none">\u2014</span>';
+    return gbpChange((r.users - r.prevUsers) / r.prevUsers);
+  };
+  const kwTable = !K.months.length || !K.rows.length
+    ? `<div class="note" style="margin-top:0">\u2014 ${esc(K.reason || 'No searches reported for this listing')}</div>`
+    : `<table class="sortable"><thead><tr><th>Search (not the hospital's name)</th>
+        <th class="num">Searchers</th><th class="num">vs month before</th></tr></thead><tbody>
+       ${K.rows.map(r => `<tr><td class="strong i18n">${esc(r.keyword)}</td>
+         <td class="num">${kwCell(r.users, r.below)}</td><td class="num">${kwChange(r)}</td></tr>`).join('')}
+       </tbody></table>
+       <div class="note">${esc(K.months.map(m => humanDate(m) || m).join(', '))}
+         \u00b7 name and address searches: ${K.brandShare === null ? '\u2014' : (K.brandShare * 100).toFixed(0) + '%'} of searchers, left out
+         ${K.reason ? ' \u00b7 ' + esc(K.reason) : ''}</div>`;
+  const R = L.ranks;
+  const band = (v) => v <= 3 ? 'up' : (v <= 10 ? 'flat' : 'down');
+  const rankTable = !R
+    ? `<div class="note" style="margin-top:0">\u2014 The rank tracker covers BGH, BIH, BHT and WSH only.</div>`
+    : !R.rows.length
+      ? `<div class="note" style="margin-top:0">\u2014 No tracked keywords in ${esc((d.rankMonths || []).join(', ') || 'this range')}.</div>`
+      : `<table class="sortable"><thead><tr><th>Keyword</th><th class="num">Rank</th><th class="num">Search vol</th></tr></thead><tbody>
+         ${R.rows.map(k => `<tr><td class="strong i18n">${esc(k.keyword)}</td>
+           <td class="num"><span class="dlt ${band(k.rank)}">${k.rank.toFixed(1)}</span></td>
+           <td class="num">${k.volume ? num(k.volume) : '<span class="dlt none">\u2014</span>'}</td></tr>`).join('')}
+         </tbody></table>
+         <div class="note">${num(R.top3)} of ${num(R.keywords)} tracked keywords in the top 3 \u00b7 ${num(R.top10)} in the top 10</div>`;
+  const search = `<div class="grid g-2-1">
+      <div class="card"><div class="card-title">What people searched to find the profile</div>${kwTable}</div>
+      <div class="card"><div class="card-title">Keyword rankings</div>${rankTable}</div>
+    </div>`;
+
+  const draw = () => {
+    const rows = P.trend.map(t => t.measured ? { d: t.month, ...t } : { d: t.month });
+    drawChart('gbpActTrend', rows, [
+      { label: 'Calls', key: 'calls', color: '#4B8DF8', axis: 'y' },
+      { label: 'Directions', key: 'directions', color: '#E8607A', axis: 'y' },
+      { label: 'Website', key: 'website', color: '#2FB6A8', axis: 'y' },
+      ...(P.bookings ? [{ label: 'Bookings', key: 'bookings', color: '#F2A93B', axis: 'y' }] : []),
+    ]);
+    drawChart('gbpSurfTrend', rows, [
+      { label: 'Search', key: 'search', color: '#4B8DF8', axis: 'y' },
+      { label: 'Maps', key: 'maps', color: '#2FB6A8', axis: 'y' },
+    ]);
+  };
+  return { main, search, draw };
+}
+
+const gbpThemesKey = (key) => `${key}|${$('from').value}|${$('to').value}`;
+
+async function loadGbpThemes(key) {
+  S.gbpThemes = S.gbpThemes || {};
+  const k = gbpThemesKey(key);
+  if (S.gbpThemes[k]) return;
+  S.gbpThemes[k] = { loading: true };
+  try {
+    const res = await fetch(`/api/gbp/themes?key=${encodeURIComponent(key)}&from=${$('from').value}&to=${$('to').value}`);
+    S.gbpThemes[k] = res.ok ? await res.json() : { error: `Server ${res.status}` };
+  } catch (e) { S.gbpThemes[k] = { error: String(e.message || e) }; }
+  const el = document.getElementById('gbpThemes');
+  if (el && S.view === 'gbp' && S.gbpTab === key) el.innerHTML = gbpThemesBody(S.gbpThemes[k]);
+}
+
+function gbpThemesBody(T) {
+  if (!T || T.loading) return `<div class="card"><div class="note" style="margin-top:0">Claude is reading the reviews\u2026</div></div>`;
+  if (T.error) return `<div class="card"><div class="note" style="margin-top:0">\u2014 Review themes did not load: ${esc(T.error)}</div></div>`;
+  if (!T.withComment) return `<div class="card"><div class="note" style="margin-top:0">\u2014 No review with a comment in this period.</div></div>`;
+  const label = Object.fromEntries(T.themes.map(t => [t.key, t.label]));
+  const rows = T.themes.filter(t => t.mentions > 0);
+  const quote = (q) => q ? `<div class="i18n" style="white-space:normal;font-size:var(--text-xs)">${esc(q.comment)}</div>
+      <div style="font-size:var(--text-3xs);color:var(--faint);margin-top:2px">${q.star ? q.star + ' \u2605 \u00b7 ' : ''}${esc(humanDate(q.at) || q.at)}</div>` : '';
+  const themeTable = rows.length ? `<table><thead><tr><th>Theme</th><th class="num">Praise</th><th class="num" style="padding-right:18px">Complaint</th>
+      <th style="width:16%;padding-right:18px">Complaint share</th><th>Latest complaint</th></tr></thead><tbody>
+    ${rows.map(t => `<tr><td class="strong">${esc(t.label)}${t.otherNames.length
+        ? `<div style="font-size:var(--text-3xs);color:var(--faint);font-weight:400">${esc(t.otherNames.map(o => o.name).join(', '))}</div>` : ''}</td>
+      <td class="num">${num(t.praise)}</td><td class="num" style="padding-right:18px">${num(t.complaint)}</td>
+      <td style="padding-right:18px"><div style="background:rgba(140,155,190,.13);border-radius:5px;height:9px;overflow:hidden">
+        <div style="width:${Math.round((t.complaintShare || 0) * 100)}%;height:100%;background:var(--bad)"></div></div></td>
+      <td>${quote(t.complaintQuote) || '<span style="color:var(--faint);font-size:var(--text-xs)">no complaint</span>'}</td></tr>`).join('')}
+    </tbody></table>` : `<div class="note" style="margin-top:0">\u2014 The tagged reviews name no specific theme.</div>`;
+  const unreplied = T.unrepliedComplaints.length ? `<table><thead><tr><th style="width:52px">Stars</th><th>Review</th>
+      <th style="width:150px">About</th><th style="width:92px">Date</th></tr></thead><tbody>
+    ${T.unrepliedComplaints.map(r => `<tr><td class="strong" style="color:${r.star >= 4 ? 'var(--green)' : (r.star === 3 ? 'var(--amber)' : 'var(--rose)')}">${r.star ? r.star + ' \u2605' : '\u2014'}</td>
+      <td class="i18n" style="white-space:normal;font-size:var(--text-xs)">${esc(r.comment)}</td>
+      <td style="font-size:var(--text-2xs)">${esc(r.themes.map(k => label[k] || k).join(', '))}</td>
+      <td style="font-size:var(--text-2xs);color:var(--muted)">${esc(humanDate(r.at) || r.at)}</td></tr>`).join('')}
+    </tbody></table>` : `<div class="note" style="margin-top:0">Every complaint in this period has a reply.</div>`;
+  const S_ = T.sentiment || { positive: 0, mixed: 0, negative: 0, disagree: 0 };
+  const sp = (v) => T.tagged ? Math.round(v / T.tagged * 100) + '%' : '\u2014';
+  const sentCard = (lab, v, col) => `<div class="stat card"><div class="lab">${lab}</div>
+      <div class="val" style="color:${col}">${sp(v)}</div><div class="sub">${num(v)} of ${num(T.tagged)} reviews</div></div>`;
+  const sentiment = `<div class="grid g-4" style="margin-bottom:12px">
+      ${sentCard('Positive', S_.positive, 'var(--good)')}${sentCard('Mixed', S_.mixed, 'var(--amber)')}
+      ${sentCard('Negative', S_.negative, 'var(--bad)')}
+      <div class="stat card"><div class="lab">Stars and words disagree</div><div class="val">${num(S_.disagree)}</div>
+        <div class="sub">4\u20135 \u2605 with negative words, or 1\u20132 \u2605 with positive</div></div></div>`;
+  const W = T.watch || {};
+  const watch = `<div class="card mt"><div class="card-title">Watch list \u00b7 what to act on</div>
+    ${(W.items || []).length ? `<table><thead><tr><th style="width:17%">Keyword</th><th class="num" style="width:8%;padding-right:18px">Reviews</th>
+        <th style="width:14%">Theme</th><th>Why it matters</th><th>Next action</th></tr></thead><tbody>
+      ${W.items.map(w => `<tr><td class="strong i18n">${esc(w.phrase)}
+          <div style="font-size:var(--text-3xs);color:var(--faint);font-weight:400;white-space:normal" class="i18n">\u201c${esc(w.example.comment)}\u201d</div></td>
+        <td class="num" style="padding-right:18px">${num(w.reviews)}${w.negative < w.reviews ? `<div style="font-size:var(--text-3xs);color:var(--faint)">${num(w.negative)} negative</div>` : ''}</td>
+        <td style="font-size:var(--text-xs)">${esc(label[w.theme] || w.theme)}</td>
+        <td style="white-space:normal;font-size:var(--text-xs)">${esc(w.why)}</td>
+        <td style="white-space:normal;font-size:var(--text-xs)">${esc(w.action)}</td></tr>`).join('')}
+      </tbody></table>`
+      : `<div class="note" style="margin-top:0">\u2014 ${esc(W.reason || 'No watch list')}</div>`}</div>`;
+  return `${sentiment}${watch}<div class="card mt"><div class="card-title">What reviewers praise and complain about</div>${themeTable}
+      <div class="note">${num(T.tagged)} of ${num(T.withComment)} reviews with a comment read by Claude${T.untagged
+        ? ` \u00b7 ${num(T.untagged)} not read yet${T.failedBatches ? ' (AI call failed)' : ''} \u2014 press Load again` : ''}
+        \u00b7 ${num(T.ratingOnly)} rating-only reviews have no theme</div></div>
+    <div class="card mt"><div class="card-title">Complaints with no reply</div>${unreplied}</div>`;
+}
+
 function renderGbp() {
   const d = S.gbp;
   if (!d) {
@@ -12030,7 +12192,7 @@ function renderGbp() {
     ${d.unparsedStars?`<div class="warnbox">${d.unparsedStars} review(s) had a star rating this build couldn't read, so they're excluded from the breakdown.</div>`:''}
     ${L.unlisted?`<div class="warnbox">This listing wasn't in the five you specified, but the account returns it — showing it rather than dropping data.</div>`:''}
 
-    <div class="grid g-5">
+    <div class="grid g-4">
       <div class="stat card"><div class="lab">All-time rating</div>
         <div class="val" style="color:${L.allTimeRating>=4.5?'var(--green)':(L.allTimeRating>=4?'var(--amber)':'var(--rose)')}">${L.allTimeRating!=null?L.allTimeRating.toFixed(1)+' ★':'—'}</div>
         <div class="sub">${L.allTimeCount!=null?'across '+num(L.allTimeCount)+' reviews':''}</div></div>
@@ -12045,10 +12207,6 @@ function renderGbp() {
       <div class="stat card"><div class="lab">Rating in period</div>
         <div class="val">${L.periodRating!=null?L.periodRating.toFixed(2)+' ★':'—'}</div>
         <div class="sub">${L.allTimeRating!=null&&L.periodRating!=null?(L.periodRating>=L.allTimeRating?'at or above':'below')+' all-time':''}</div></div>
-      <div class="stat card"><div class="lab">Profile views</div>
-        <div class="val ${isNA(L.impressions)?'na':''}">${num(L.impressions)}</div>
-        <div class="sub">${num(L.calls)} calls · ${num(L.directions)} directions</div></div>
-
     </div>
 
       <div class="gbp-row">
@@ -12109,12 +12267,21 @@ function renderGbp() {
       }).join('')}
       </tbody></table>
       </div>` : '';
+  const perf = gbpPerfPages(L, d);
   $('viewRoot').innerHTML = tabStrip
-    /* The pill names the LISTING the page is about (MW). "BHQ" was the group
-       scope, which is wrong on a page showing one profile's reviews. */
-    + slideShell(`Google Business Profile \u00b7 ${L.title}`, gbpPage1,
+    /* Performance first, reviews below (MW, v3.388.0). The pill names the
+       LISTING the page is about, not the group. */
+    + slideShell(`Google Business Profile \u00b7 ${L.title}`, perf.main,
         { first: true, scope: L.key, cls: 'quiet pn' })
+    + slideShell('What people searched', perf.search, { scope: L.key, cls: 'quiet pn' })
+    + slideShell('Review sentiment & themes', `<div id="gbpThemes">${L.unlisted
+        ? '<div class="card"><div class="note" style="margin-top:0">\u2014 Themes cover the six configured listings only.</div></div>'
+        : gbpThemesBody(S.gbpThemes && S.gbpThemes[gbpThemesKey(L.key)])}</div>`,
+        { scope: L.key, cls: 'quiet pn' })
+    + slideShell('Google reviews', gbpPage1, { scope: L.key, cls: 'quiet pn' })
     + slideShell('Customers Voices', gbpVoices, { scope: L.key, cls: 'quiet pn' });
+  perf.draw();
+  if (!L.unlisted) loadGbpThemes(L.key);
 
   document.querySelectorAll('[data-gtab]').forEach(b=>b.addEventListener('click',()=>{ S.gbpTab=b.dataset.gtab; renderGbp(); }));
   document.querySelectorAll('[data-gtab2]').forEach(b=>b.addEventListener('click',()=>{ S.gbpTab=b.dataset.gtab2; renderGbp(); }));
@@ -13704,7 +13871,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.387.0';
+const CLIENT_BUILD = '3.388.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

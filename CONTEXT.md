@@ -1,5 +1,38 @@
 ### Recent (November 2026)
 
+**v3.388.0 — Google Profile tab: performance, searches, AI sentiment, themes, watch list** (MW, for the
+GBP team, per listing; all six incl. Dental and JMS). Order: performance, What people
+searched, Review themes, then the existing reviews pages.
+- Performance (`buildGbpPerf`): Views (4 impression surfaces summed), Calls, Directions,
+  Website clicks, Bookings, Action rate % (actions ÷ views). MoM/YoY only when the period
+  AND the comparison window have a row for every day; else dash + "28 of 31 days".
+  Bookings card hidden on listings with no booking in the 12-month trend (all six live).
+  Monthly trend: actions, and Search vs Maps (`year_month`, chart axis of the reviews chart).
+- Searches: Windsor keywords are MONTHLY — whole months inside the range only; name and
+  address searches (`isBrandKeyword`) left out and given as a share; "<15" kept; MoM per
+  keyword only when the month before is published; `new` pill. Google publishes a month's
+  keywords late (Oct not out on 4 Nov) → reason printed. Rank tracker sheet beside it
+  (4 hospitals; Dental/JMS dash).
+- Themes (`/api/gbp/themes`, AI chip on nav): fixed 7 themes + `other` named by Claude,
+  praise/complaint. Tags kept in GCS `gbp-themes/v1/<key>.json` by review id → each review
+  read once. Max 600 new per request (`GBP_THEME_MAX`); the rest "not read yet", never 0.
+  Unknown keys from the model dropped. Complaints with no reply listed. Cache 60 s.
+- Sentiment (MW: "sentiment of the date range"): Claude reads each commented review as
+  positive / mixed / negative (words, not stars) in the same call as themes; tag store v2
+  (`{s, t}` per review id). Cards: share of each + "stars and words disagree" count.
+- Watch list (MW: "keywords the hospital should notice and act on"): one Claude call over
+  the period's negative/mixed reviews (max 120) returns phrases with why + next action.
+  COUNTS ARE OURS: a phrase is kept only if it appears verbatim in a review; invented ones
+  match nothing and drop. Kept in GCS `gbp-themes/v2/watch/<key>.json` per range,
+  rebuilt only when the tagged set changes.
+- Visual: report-BGH, gads, bclub, ecomchannels, ecomcentre fail by 24–50 px table width on
+  UNTOUCHED v3.387 in this sandbox too (font drift). Baselines left as they were.
+- Trap found: `monthsBetween` is declared twice in server.js; the Better Club one (strings)
+  wins by hoisting. New code reads either shape via `monthKeyOf`.
+- Tests: smoke pins sums, coverage rule (MOCK_GBP_SHORT negative), bookings hide, brand
+  filter, withheld keywords, new keyword, no-whole-month reason, themes (bogus key dropped,
+  AI failure = untagged via MOCK_FAIL_THEMES).
+
 **v3.387.0 — Performance: Daily active members** (MW): new slide for the selected month.
 Cards: average daily active, busiest day, share of daily actives who signed up that same
 day. Charts: daily actives stacked new (joined that day) / existing; members per day doing

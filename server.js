@@ -7259,6 +7259,177 @@ function monthsBetween(fromISO, toISO) {
   return out;
 }
 
+/**
+ * GBP PERFORMANCE PER LISTING (v3.388.0) — the Google Profile tab used to show
+ * reviews only; the GBP team asked for actions, where people saw the profile,
+ * and what they searched. All six listings (Dental and JMS included), not the
+ * four hospitals the Monthly Report covers.
+ *
+ * Views = the four impression surfaces summed. Google counts a unique user once
+ * per day per surface, so this is "daily viewers summed", the same number the
+ * GBP dashboard calls views. Action rate = (calls + directions + website +
+ * bookings) / views, as a % — never "per 100".
+ *
+ * MoM and YoY only when BOTH windows have a row for every day (GBP data lands
+ * 3–5 days late). Anything less is a dash with a reason, because comparing 27
+ * days to 31 reads as a drop that is not there.
+ */
+const GBP_PERF_METRICS = ["impressions_mobile_search", "impressions_mobile_maps",
+  "impressions_desktop_search", "impressions_desktop_maps",
+  "call_clicks", "website_clicks", "direction_requests", "business_bookings"];
+
+function gbpPerfBlank() {
+  return { views: 0, mobileSearch: 0, mobileMaps: 0, desktopSearch: 0, desktopMaps: 0,
+    calls: 0, website: 0, directions: 0, bookings: 0, days: new Set() };
+}
+function gbpPerfAdd(t, r) {
+  const ms = n(r.impressions_mobile_search), mm = n(r.impressions_mobile_maps);
+  const ds = n(r.impressions_desktop_search), dm = n(r.impressions_desktop_maps);
+  t.mobileSearch += ms; t.mobileMaps += mm; t.desktopSearch += ds; t.desktopMaps += dm;
+  t.views += ms + mm + ds + dm;
+  t.calls += n(r.call_clicks); t.website += n(r.website_clicks);
+  t.directions += n(r.direction_requests); t.bookings += n(r.business_bookings);
+  if (r.date) t.days.add(String(r.date).slice(0, 10));
+}
+const gbpActions = (t) => t.calls + t.website + t.directions + t.bookings;
+
+/** `2026|9` (Windsor year_month) -> `2026-09`. Anything else -> null. */
+function gbpYm(v) {
+  const m = String(v || "").match(/^(\d{4})\D(\d{1,2})$/);
+  return m ? `${m[1]}-${m[2].padStart(2, "0")}` : null;
+}
+
+/**
+ * `monthsBetween` is declared TWICE in this file; the later one (Better Club,
+ * returns strings) wins by hoisting, so the earlier {key,label} shape never
+ * exists at runtime. Read either shape.
+ */
+const monthKeyOf = (m) => (typeof m === "string" ? m : (m && m.key) || String(m));
+
+/** Calendar months lying wholly inside [from, to], as `YYYY-MM`. */
+function wholeMonthsIn(from, to) {
+  return monthsBetween(from, to).map(monthKeyOf).filter((k) => {
+    const [y, mo] = k.split("-").map(Number);
+    const first = `${k}-01`;
+    const last = new Date(Date.UTC(y, mo, 0)).toISOString().slice(0, 10);
+    return first >= from && last <= to;
+  });
+}
+const prevMonthKey = (k) => {
+  const [y, m] = k.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 2, 1));
+  return d.toISOString().slice(0, 7);
+};
+
+function buildGbpPerf({ from, to, chartFrom, cwr, data, listings }) {
+  const windowDays = cwr.days;
+  const sumBy = (rows) => {
+    const m = new Map(listings.map((l) => [l.title, gbpPerfBlank()]));
+    for (const r of rows || []) { const t = m.get(r.location_title); if (t) gbpPerfAdd(t, r); }
+    return m;
+  };
+  const cur = sumBy(data.perfCur), prev = sumBy(data.perfPrev), yoy = sumBy(data.perfYoy);
+
+  // Monthly trend over the reviews chart's twelve months.
+  const months = monthsBetween(chartFrom, to).map(monthKeyOf);
+  const monthly = new Map(listings.map((l) => [l.title, new Map(months.map((k) => [k, null]))]));
+  for (const r of data.perfMonthly || []) {
+    const mm = monthly.get(r.location_title); const k = gbpYm(r.year_month);
+    if (!mm || !k || !mm.has(k)) continue;
+    const t = mm.get(k) || gbpPerfBlank();
+    gbpPerfAdd(t, r); mm.set(k, t);
+  }
+
+  // Keywords: whole months only, because Google reports them per month.
+  const kwMonths = wholeMonthsIn(from, to);
+  const kwPrevMonths = kwMonths.map(prevMonthKey).filter((k) => !kwMonths.includes(k));
+  const kwCur = new Map(), kwPrev = new Map(), kwSeen = new Set();
+  for (const r of data.kw || []) {
+    const k = gbpYm(r.year_month); if (!k) continue;
+    const q = String(r.search_keyword || "").trim(); if (!q || q.length > 120) continue;
+    const bucket = kwMonths.includes(k) ? kwCur : (kwPrevMonths.includes(k) ? kwPrev : null);
+    if (!bucket) continue;
+    kwSeen.add(`${r.location_title}|${k}`);
+    const key = `${r.location_title}|${q}`;
+    const e = bucket.get(key) || { keyword: q, users: 0, below: null };
+    const v = n(r.search_keyword_value);
+    if (v > 0) e.users += v;
+    else if (r.search_keyword_threshold) {
+      const th = n(r.search_keyword_threshold);
+      e.below = e.below === null ? th : Math.min(e.below, th);
+    }
+    bucket.set(key, e);
+  }
+
+  const chg = (a, b) => (b > 0 ? (a - b) / b : null);
+  return (l) => {
+    const c = cur.get(l.title) || gbpPerfBlank();
+    const p = prev.get(l.title) || gbpPerfBlank();
+    const y = yoy.get(l.title) || gbpPerfBlank();
+    const curFull = c.days.size >= windowDays;
+    const cmp = (w, label) => {
+      if (!curFull) return { ok: false, reason: `${label}: this period has ${c.days.size} of ${windowDays} days` };
+      if (w.days.size < windowDays) return { ok: false, reason: `${label}: ${w.days.size} of ${windowDays} days in the comparison window` };
+      return { ok: true };
+    };
+    const mom = cmp(p, "MoM"), yo = cmp(y, "YoY");
+    const metric = (k) => ({
+      value: k === "actions" ? gbpActions(c) : c[k],
+      mom: mom.ok ? chg(k === "actions" ? gbpActions(c) : c[k], k === "actions" ? gbpActions(p) : p[k]) : null,
+      yoy: yo.ok ? chg(k === "actions" ? gbpActions(c) : c[k], k === "actions" ? gbpActions(y) : y[k]) : null,
+    });
+    const mm = monthly.get(l.title) || new Map();
+    const trend = months.map((k) => {
+      const t = mm.get(k);
+      if (!t) return { month: k, measured: false };
+      return { month: k, measured: true, views: t.views, calls: t.calls, website: t.website,
+        directions: t.directions, bookings: t.bookings,
+        search: t.mobileSearch + t.desktopSearch, maps: t.mobileMaps + t.desktopMaps,
+        mobile: t.mobileSearch + t.mobileMaps, desktop: t.desktopSearch + t.desktopMaps,
+        actionRate: t.views > 0 ? gbpActions(t) / t.views : null };
+    });
+    // Bookings card only where the listing has ever taken one in the trend
+    // window (MW: hide it, rather than a row of zeros on listings without it).
+    const bookingsOn = trend.some((t) => t.measured && t.bookings > 0) || c.bookings > 0;
+
+    const brandKey = (BRANDS.find((b) => b.gbp.some((g) => norm(g) === norm(l.title))) || {}).key;
+    const kwRows = [...kwCur.entries()].filter(([k]) => k.startsWith(`${l.title}|`)).map(([k, e]) => {
+      const pe = kwPrev.get(k);
+      return { ...e, brand: isBrandKeyword(e.keyword, brandKey),
+        prevUsers: pe ? (pe.users || null) : null, prevBelow: pe ? pe.below : null, isNew: !pe };
+    }).sort((a, b) => (b.users - a.users) || ((b.below || 0) - (a.below || 0)));
+    const publishedCur = kwMonths.filter((k) => kwSeen.has(`${l.title}|${k}`));
+    const publishedPrev = kwPrevMonths.filter((k) => kwSeen.has(`${l.title}|${k}`));
+    const kwReason = !kwMonths.length ? "Range holds no whole month; Google reports keywords by month"
+      : publishedCur.length < kwMonths.length
+        ? `Google has not published ${kwMonths.filter((k) => !publishedCur.includes(k)).join(", ")} keywords yet`
+        : null;
+    const totalUsers = kwRows.reduce((a, x) => a + x.users, 0);
+    const brandUsers = kwRows.filter((x) => x.brand).reduce((a, x) => a + x.users, 0);
+
+    return {
+      days: c.days.size, windowDays,
+      momReason: mom.ok ? null : mom.reason, yoyReason: yo.ok ? null : yo.reason,
+      views: metric("views"), calls: metric("calls"), website: metric("website"),
+      directions: metric("directions"), bookings: bookingsOn ? metric("bookings") : null,
+      actions: metric("actions"),
+      actionRate: c.views > 0 ? gbpActions(c) / c.views : null,
+      surface: { mobileSearch: c.mobileSearch, mobileMaps: c.mobileMaps,
+        desktopSearch: c.desktopSearch, desktopMaps: c.desktopMaps },
+      trend,
+      keywords: {
+        months: publishedCur, reason: kwReason,
+        // MoM per keyword only when the month before was published too.
+        comparable: publishedCur.length > 0 && publishedPrev.length === kwPrevMonths.length && kwPrevMonths.length > 0,
+        totalUsers, brandUsers,
+        brandShare: totalUsers > 0 ? brandUsers / totalUsers : null,
+        rows: kwRows.filter((x) => !x.brand).slice(0, 20),
+        count: kwRows.length,
+      },
+    };
+  };
+}
+
 async function buildGbp(from, to) {
   /**
    * Twelve months back from the FIRST of `to`'s month, so the axis always shows
@@ -7282,6 +7453,7 @@ async function buildGbp(from, to) {
     return f > from ? f : from;
   })();
 
+  const cwr = comparisonWindows(from, to);
   const { data, errors } = await runJobs({
     /**
      * REVIEWS ARE PULLED FOR TWELVE MONTHS, NOT THE SELECTED RANGE (MW: "I
@@ -7313,6 +7485,14 @@ async function buildGbp(from, to) {
        * unreplied count means, and that IS a recency question.
        */
       chartFrom, to),
+    perfCur: windsor("google_my_business", ["date", "location_title", ...GBP_PERF_METRICS], from, to),
+    perfPrev: windsor("google_my_business", ["date", "location_title", ...GBP_PERF_METRICS], cwr.prev.from, cwr.prev.to),
+    perfYoy: windsor("google_my_business", ["date", "location_title", ...GBP_PERF_METRICS], cwr.yoy.from, cwr.yoy.to),
+    perfMonthly: windsor("google_my_business", ["year_month", "location_title", ...GBP_PERF_METRICS], chartFrom, to),
+    kw: windsor("google_my_business",
+      ["year_month", "location_title", "search_keyword", "search_keyword_value", "search_keyword_threshold"],
+      `${prevMonthKey(from.slice(0, 7))}-01`, to),
+    ranks: buildGbpKeywords(from, to),
   });
 
   if (data.reviews === null) {
@@ -7337,6 +7517,9 @@ async function buildGbp(from, to) {
     ...GBP_LISTINGS.filter((l) => seenTitles.has(l.title)),
     ...[...seenTitles].filter((t) => !titleToKey.has(t)).map((t) => ({ key: t.slice(0, 14), title: t, unlisted: true })),
   ];
+
+  const perfFor = buildGbpPerf({ from, to, chartFrom, cwr, data, listings });
+  const perfOk = data.perfCur !== null;
 
   const blankMonth = () => ({ s1: 0, s2: 0, s3: 0, s4: 0, s5: 0, count: 0, ratingSum: 0 });
   const per = new Map(listings.map((l) => [l.title, {
@@ -7513,11 +7696,15 @@ async function buildGbp(from, to) {
        * is a different, and much less actionable, number.
        */
       recentUnreplied: recent.filter((r) => !r.replied && String(r.at || "").slice(0, 10) >= recentFrom).length,
+      perf: perfOk ? perfFor(l) : null,
+      // Rank tracker sheet covers the four hospitals only; Dental/JMS get null.
+      ranks: (data.ranks && data.ranks.byBrand && data.ranks.byBrand[l.key]) || null,
     };
   }).sort((a, b) => n(b.allTimeCount) - n(a.allTimeCount));
 
   return {
     range: { from, to }, recentFrom,
+    rankMonths: (data.ranks && data.ranks.months) || [],
     listings: out,
     months,
     unparsedStars,
@@ -7526,6 +7713,251 @@ async function buildGbp(from, to) {
   };
 }
 
+/**
+ * REVIEW THEMES (v3.388.0, AI) — what reviewers praise and complain about.
+ *
+ * Fixed themes so month-to-month counts compare; anything outside them goes to
+ * `other` with a short name Claude gives it. Each review is tagged ONCE and the
+ * tag is kept in GCS by review id, so a month is paid for once, not on every
+ * load. Only reviews WITH a comment are sent; a bare star rating has no theme.
+ *
+ * Cost guard: at most GBP_THEME_MAX new reviews tagged per request. The rest
+ * are counted as "not tagged yet" and shown as such — never as zero.
+ */
+const GBP_THEMES = [
+  { key: "wait", label: "Wait time" },
+  { key: "staff", label: "Staff & service" },
+  { key: "doctor", label: "Doctors & care" },
+  { key: "cost", label: "Cost & billing" },
+  { key: "parking", label: "Parking & access" },
+  { key: "clean", label: "Cleanliness & facility" },
+  { key: "language", label: "Language & communication" },
+  { key: "other", label: "Other" },
+];
+const GBP_THEME_KEYS = new Set(GBP_THEMES.map((t) => t.key));
+const GBP_SENTIMENTS = ["positive", "mixed", "negative"];
+const GBP_THEME_MAX = Number(process.env.GBP_THEME_MAX || 600);
+const GBP_THEME_BATCH = 40;
+const GBP_THEME_VERSION = "v2"; // v2 adds per-review sentiment `s`
+const gbpThemeObject = (key) => `gbp-themes/${GBP_THEME_VERSION}/${String(key).replace(/[^A-Za-z0-9_-]/g, "_")}.json`;
+
+/** Keep only well-formed tags; drop anything the model invents. */
+function cleanThemeTags(arr) {
+  const out = [];
+  for (const t of Array.isArray(arr) ? arr : []) {
+    const k = String((t && t.k) || "").toLowerCase();
+    const p = String((t && t.p) || "").toLowerCase();
+    if (!GBP_THEME_KEYS.has(k) || !["praise", "complaint"].includes(p)) continue;
+    const name = k === "other" ? String(t.name || "").trim().slice(0, 40) || null : null;
+    if (!out.some((o) => o.k === k && o.p === p && o.name === name)) out.push({ k, p, ...(name ? { name } : {}) });
+  }
+  return out;
+}
+
+async function tagReviewBatch(batch) {
+  const prompt = `GBP_THEMES_V1
+You tag hospital Google reviews. Reviews may be Thai, English, Japanese or other languages.
+For each review return the themes it mentions and whether it praises or complains about each.
+Allowed theme keys: wait (waiting, queues, delays), staff (nurses, reception, service attitude),
+doctor (doctors, diagnosis, treatment quality), cost (price, billing, insurance),
+parking (parking, location, getting there), clean (cleanliness, rooms, building, food),
+language (language, interpreters, explaining clearly), other (anything else; give a 1-3 word English name).
+A review can have several themes, or none if it says nothing specific ("good", "ok").
+Also give the review's overall sentiment "s": positive, mixed or negative (judge the words, not the stars).
+Reply ONLY with JSON: [{"i":<index>,"s":"negative","t":[{"k":"wait","p":"complaint"},{"k":"other","p":"praise","name":"Check-up package"}]}]
+
+${batch.map((r, i) => `[${i}] (${r.star}★) ${r.comment.replace(/\s+/g, " ").slice(0, 600)}`).join("\n")}`;
+  const { text } = await anthropic(prompt, { maxTokens: 4000 });
+  const parsed = extractJson(text);
+  const out = new Map();
+  for (const row of Array.isArray(parsed) ? parsed : []) {
+    const i = Number(row && row.i);
+    const sent = String((row && row.s) || "").toLowerCase();
+    if (Number.isInteger(i) && i >= 0 && i < batch.length && GBP_SENTIMENTS.includes(sent)) {
+      out.set(batch[i].id, { s: sent, t: cleanThemeTags(row.t) });
+    }
+  }
+  return out;
+}
+
+async function buildGbpThemes(key, from, to) {
+  const listing = GBP_LISTINGS.find((l) => l.key === key);
+  if (!listing) { const e = new Error("unknown listing"); e.status = 400; throw e; }
+  const rows = await windsor("google_my_business",
+    ["review_id", "review_create_time", "location_title", "review_star_rating", "review_comment", "review_reply_comment"],
+    from, to);
+  const seen = new Set();
+  const reviews = [];
+  let ratingOnly = 0;
+  for (const r of rows || []) {
+    if (norm(r.location_title) !== norm(listing.title)) continue;
+    const id = String(r.review_id || "").trim();
+    const at = String(r.review_create_time || "").slice(0, 10);
+    if (!id || seen.has(id) || at < from || at > to) continue;
+    seen.add(id);
+    const comment = String(r.review_comment || "").trim();
+    if (!comment) { ratingOnly++; continue; }
+    reviews.push({ id, at, star: starOf(r.review_star_rating), comment,
+      replied: Boolean(String(r.review_reply_comment || "").trim()) });
+  }
+
+  let store = {};
+  const persisted = Boolean(ACCESS_BUCKET);
+  if (persisted) {
+    try { store = (await gcsRead(gbpThemeObject(key), ACCESS_BUCKET)) || {}; } catch (_) { store = {}; }
+    if (!store || typeof store !== "object" || Array.isArray(store)) store = {};
+  }
+  const isTag = (v) => v && typeof v === "object" && GBP_SENTIMENTS.includes(v.s) && Array.isArray(v.t);
+  const todo = reviews.filter((r) => !isTag(store[r.id])).slice(0, GBP_THEME_MAX);
+  let failedBatches = 0;
+  for (let i = 0; i < todo.length; i += GBP_THEME_BATCH * 3) {
+    const group = [];
+    for (let j = i; j < Math.min(todo.length, i + GBP_THEME_BATCH * 3); j += GBP_THEME_BATCH) {
+      group.push(todo.slice(j, j + GBP_THEME_BATCH));
+    }
+    const settled = await Promise.allSettled(group.map(tagReviewBatch));
+    settled.forEach((st) => {
+      if (st.status === "fulfilled") for (const [id, tags] of st.value) store[id] = tags;
+      else { failedBatches++; logJson("WARN", "gbp_themes_batch_failed", { key, error: String(st.reason && st.reason.message || st.reason) }); }
+    });
+  }
+  if (persisted && todo.length) {
+    await gcsWrite(gbpThemeObject(key), store, ACCESS_BUCKET).catch((e) =>
+      logJson("WARN", "gbp_themes_persist_failed", { key, error: String(e.message || e) }));
+  }
+
+  const tagged = reviews.filter((r) => isTag(store[r.id]));
+  const tagsOf = (r) => store[r.id].t;
+  const agg = new Map(GBP_THEMES.map((t) => [t.key, { ...t, praise: 0, complaint: 0,
+    praiseQuote: null, complaintQuote: null, otherNames: new Map() }]));
+  const newest = (a, b) => (!a || b.at > a.at ? b : a);
+  for (const r of tagged) {
+    for (const t of tagsOf(r)) {
+      const a = agg.get(t.k); if (!a) continue;
+      a[t.p]++;
+      const q = { comment: r.comment.slice(0, 280), star: r.star, at: r.at };
+      if (t.p === "praise") a.praiseQuote = newest(a.praiseQuote, q);
+      else a.complaintQuote = newest(a.complaintQuote, q);
+      if (t.k === "other" && t.name) a.otherNames.set(t.name, (a.otherNames.get(t.name) || 0) + 1);
+    }
+  }
+  const themes = [...agg.values()].map((a) => ({
+    key: a.key, label: a.label, praise: a.praise, complaint: a.complaint,
+    mentions: a.praise + a.complaint,
+    complaintShare: (a.praise + a.complaint) > 0 ? a.complaint / (a.praise + a.complaint) : null,
+    praiseQuote: a.praiseQuote, complaintQuote: a.complaintQuote,
+    otherNames: [...a.otherNames.entries()].sort((x, y) => y[1] - x[1]).slice(0, 5)
+      .map(([name, count]) => ({ name, count })),
+  })).sort((x, y) => (y.complaint - x.complaint) || (y.mentions - x.mentions));
+
+  const unrepliedComplaints = tagged
+    .filter((r) => !r.replied && tagsOf(r).some((t) => t.p === "complaint"))
+    .sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10)
+    .map((r) => ({ at: r.at, star: r.star, comment: r.comment.slice(0, 280),
+      themes: [...new Set(tagsOf(r).filter((t) => t.p === "complaint").map((t) => t.k))] }));
+
+  /**
+   * SENTIMENT of the period: Claude's read of the words, over reviews with a
+   * comment. "Stars and words disagree" = 4-5★ with negative words, or 1-2★
+   * with positive words — the reviews a star average hides.
+   */
+  const sentiment = { positive: 0, mixed: 0, negative: 0, disagree: 0 };
+  for (const r of tagged) {
+    const v = store[r.id].s; sentiment[v]++;
+    if ((r.star >= 4 && v === "negative") || (r.star && r.star <= 2 && v === "positive")) sentiment.disagree++;
+  }
+
+  const watch = await buildGbpWatch(key, from, to, tagged, store, persisted);
+
+  return {
+    key, title: listing.title, range: { from, to },
+    withComment: reviews.length, ratingOnly,
+    tagged: tagged.length, untagged: reviews.length - tagged.length,
+    failedBatches, persisted,
+    sentiment, watch,
+    themes, unrepliedComplaints,
+  };
+}
+
+/**
+ * WATCH LIST — phrases the hospital should act on. One Claude call over the
+ * period's negative and mixed reviews returns phrases AS WRITTEN in the
+ * reviews, with why and a next action. The COUNT is ours, not Claude's: a
+ * phrase is kept only if it occurs verbatim in at least one review, and its
+ * count is the number of reviews containing it. A phrase the model invents
+ * matches nothing and is dropped.
+ *
+ * Kept in GCS per listing and range, rebuilt only when the set of tagged
+ * reviews changes (signature = count + newest id).
+ */
+const normText = (t) => String(t || "").toLowerCase().replace(/\s+/g, " ").trim();
+
+async function buildGbpWatch(key, from, to, tagged, store, persisted) {
+  const pool = tagged.filter((r) => store[r.id].s !== "positive")
+    .sort((a, b) => b.at.localeCompare(a.at)).slice(0, 120);
+  if (!pool.length) return { items: [], reason: "No negative or mixed review in this period" };
+  const sig = `${tagged.length}|${tagged.map((r) => r.id).sort().slice(-1)[0]}`;
+  const obj = `gbp-themes/${GBP_THEME_VERSION}/watch/${String(key).replace(/[^A-Za-z0-9_-]/g, "_")}.json`;
+  let saved = {};
+  if (persisted) {
+    try { saved = (await gcsRead(obj, ACCESS_BUCKET)) || {}; } catch (_) { saved = {}; }
+    const hit = saved[`${from}|${to}`];
+    if (hit && hit.sig === sig && Array.isArray(hit.items)) return { items: hit.items, reason: null };
+  }
+  const prompt = `GBP_WATCH_V1
+These are a hospital's negative and mixed Google reviews from ${from} to ${to}.
+Pick up to 6 short phrases (1-4 words) that the hospital should act on: recurring problems,
+named departments, named staff, specific services. Copy each phrase EXACTLY as it appears in
+the reviews, in the review's own language. For each give the theme key (${GBP_THEMES.map((t) => t.key).join(", ")}),
+why it matters (one short English sentence) and a concrete next action (one short English sentence).
+Reply ONLY with JSON: [{"phrase":"...","k":"wait","why":"...","action":"..."}]
+
+${pool.map((r, i) => `[${i}] (${r.star}★) ${r.comment.replace(/\s+/g, " ").slice(0, 300)}`).join("\n")}`;
+  let raw;
+  try { raw = extractJson((await anthropic(prompt, { maxTokens: 2000 })).text); }
+  catch (e) {
+    logJson("WARN", "gbp_watch_failed", { key, error: String(e.message || e) });
+    return { items: null, reason: "Watch list did not load (AI call failed) — press Load again" };
+  }
+  const all = tagged.map((r) => ({ r, t: normText(r.comment) }));
+  const items = [];
+  for (const it of Array.isArray(raw) ? raw : []) {
+    const phrase = String((it && it.phrase) || "").trim().slice(0, 60);
+    const np = normText(phrase);
+    if (np.length < 2 || items.some((x) => normText(x.phrase) === np)) continue;
+    const hits = all.filter((x) => x.t.includes(np));
+    if (!hits.length) continue; // not in any review: invented, dropped
+    const neg = hits.filter((x) => store[x.r.id].s !== "positive").length;
+    const ex = hits.map((x) => x.r).sort((a, b) => b.at.localeCompare(a.at))[0];
+    items.push({ phrase, theme: GBP_THEME_KEYS.has(String(it.k)) ? String(it.k) : "other",
+      reviews: hits.length, negative: neg,
+      why: String(it.why || "").slice(0, 200), action: String(it.action || "").slice(0, 200),
+      example: { comment: ex.comment.slice(0, 220), star: ex.star, at: ex.at } });
+  }
+  items.sort((a, b) => b.negative - a.negative || b.reviews - a.reviews);
+  if (persisted) {
+    saved[`${from}|${to}`] = { sig, items, at: new Date().toISOString() };
+    await gcsWrite(obj, saved, ACCESS_BUCKET).catch(() => {});
+  }
+  return { items, reason: items.length ? null : "No phrase worth flagging this period" };
+}
+
+app.get("/api/gbp/themes", requireTab("gbp"), async (req, res) => {
+  const { from, to, key } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  if (!GBP_LISTINGS.some((l) => l.key === key)) return res.status(400).json({ error: "unknown listing" });
+  try {
+    const out = await withCache(`gbpthemes:${key}:${from}:${to}`, req.query.refresh === "1",
+      // 60 s, not the default: tags live in GCS, so a rebuild is cheap, and a
+      // run that hit an AI failure must not be served for ten minutes.
+      () => buildGbpThemes(key, from, to), 60 * 1000);
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "gbp_themes_failed", { error: String(err.message || err) });
+    res.status(err.status || 500).json({ error: err.message || "GBP themes failed" });
+  }
+});
+
 app.get("/api/gbp", requireTab("gbp"), async (req, res) => {
   const { from, to } = req.query;
   if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
@@ -7533,7 +7965,7 @@ app.get("/api/gbp", requireTab("gbp"), async (req, res) => {
     const out = await withCache(`gbp:${from}:${to}`, req.query.refresh === "1", () => buildGbp(from, to));
     res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
   } catch (err) {
-    logJson("ERROR", "gbp_failed", { error: String(err.message || err) });
+    logJson("ERROR", "gbp_failed", { error: String(err.message || err), stack: String(err.stack || "").slice(0, 400) });
     res.status(err.status || 500).json({ error: err.message || "GBP report failed" });
   }
 });
