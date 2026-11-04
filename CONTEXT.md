@@ -1,5 +1,14 @@
 ### Recent (November 2026)
 
+**Better Club backfill LOADED (4 Nov 2026, no code change)**: MW uploaded the dev's
+all_event CSV to `import_all_event`; `CALL import_all_event_run('dev-2024-09_2026-11-03')`
+inserted 218,242 rows; import table truncated. `events` = 218,242 unique ids, 0 null keys,
+12 Sep 2024 – 3 Nov 2026; every sheet id is inside the export. MAU now runs Sep 2024 – now
+(Sep 2024 = baseline); growth-accounting identity holds in all 27 months. Oct 2026 MAU 248
+vs Oct 2025 195 (+27% YoY). Sep 2025's event spike is 23,543 BADGE_RECEIVED (one-off
+award), not activity. Still sheet-only history (from Aug 2026): read_post, click_cta,
+quiz_result; logins from 2 Nov 2026.
+
 **v3.385.0 — Better Club backfill path + two-year history in Performance** (MW):
 - Dev sent the full all_event export: 218,242 rows, 12 Sep 2024 – 3 Nov 2026, ids
   897–219139, same columns as the sheet tab. Loaded through `import_all_event` (console
