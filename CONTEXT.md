@@ -1,5 +1,19 @@
 ### Recent (November 2026)
 
+**v3.389.0 — Google Profile review text** (MW, 6 points).
+- Review sentiment & themes page moved right under Customers Voices.
+- Watch-list header sticks on scroll (`table.gbp-sticky`).
+- Every review quote on the tab (Customers Voices, theme quotes, unreplied, watch examples):
+  Thai and English as written; other languages in English + "from Japanese" tag.
+  `annotateInto` sends only reviews on screen, kept in GCS `gbp-annotate/v1.json` by id.
+- Praise phrases green, complaint red (`reviewHtml`); a phrase is kept only if it occurs in
+  the shown text. Text escaped piece by piece.
+- Review text one step up (xs→sm, meta 3xs→2xs).
+- Keyword rankings card removed (its Google Sheet is being retired). No connected source has
+  local rank (Windsor GBP gives searches, not position), so no replacement. buildGbp no longer
+  reads the sheet. MONTHLY REPORT still reads it (`gbpRanks`) — when the sheet goes, that card
+  shows its empty note. Open question for MW.
+
 **v3.388.0 — Google Profile tab: performance, searches, AI sentiment, themes, watch list** (MW, for the
 GBP team, per listing; all six incl. Dental and JMS). Order: performance, What people
 searched, Review themes, then the existing reviews pages.

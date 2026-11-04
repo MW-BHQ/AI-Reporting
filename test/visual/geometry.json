@@ -2210,19 +2210,11 @@
 468
 ],
 [
-"div.grid.g-2-1",
-"What people searched to find the profile",
-0,
-886,
-1104,
-273
-],
-[
 "div.card",
 "What people searched to find the profile",
 0,
 886,
-671,
+1104,
 273
 ],
 [
@@ -2230,38 +2222,14 @@
 "",
 21,
 948,
-629,
+1062,
 147
-],
-[
-"div.card",
-"Keyword rankings",
-685,
-886,
-419,
-273
-],
-[
-"div.slide.slide-break",
-"Review sentiment & themes Some Other Cli",
-0,
-1223,
-1104,
-266
-],
-[
-"div.card",
-"",
-0,
-1354,
-1104,
-71
 ],
 [
 "div.slide.slide-break",
 "Google reviews Some Other Cli01 Jul 2026",
 0,
-1489,
+1223,
 1104,
 1285
 ],
@@ -2269,7 +2237,7 @@
 "div.grid.g-4",
 "All-time rating",
 0,
-1675,
+1410,
 1104,
 130
 ],
@@ -2277,7 +2245,7 @@
 "div.stat.card",
 "All-time rating",
 0,
-1675,
+1410,
 266,
 130
 ],
@@ -2285,7 +2253,7 @@
 "div.stat.card",
 "All-time reviews",
 280,
-1675,
+1410,
 266,
 130
 ],
@@ -2293,7 +2261,7 @@
 "div.stat.card",
 "Reviews in period",
 559,
-1675,
+1410,
 266,
 130
 ],
@@ -2301,7 +2269,7 @@
 "div.stat.card",
 "Rating in period",
 839,
-1675,
+1410,
 266,
 130
 ],
@@ -2309,7 +2277,7 @@
 "div.card.mt",
 "Reviews by month · stars stacked, rating",
 0,
-1819,
+1554,
 1104,
 379
 ],
@@ -2317,7 +2285,7 @@
 "canvas.",
 "",
 21,
-1879,
+1614,
 1062,
 300
 ],
@@ -2325,7 +2293,7 @@
 "div.grid.g-2-1",
 "Star distribution · 01 Jul 2026 – 31 Jul",
 0,
-2212,
+1947,
 1104,
 497
 ],
@@ -2333,7 +2301,7 @@
 "div.card",
 "Star distribution · 01 Jul 2026 – 31 Jul",
 0,
-2212,
+1947,
 671,
 497
 ],
@@ -2341,7 +2309,7 @@
 "table.",
 "",
 21,
-2272,
+2007,
 629,
 199
 ],
@@ -2349,7 +2317,7 @@
 "div.card.no-print",
 "All listings",
 685,
-2212,
+1947,
 419,
 497
 ],
@@ -2357,7 +2325,7 @@
 "table.",
 "",
 706,
-2272,
+2007,
 377,
 418
 ],
@@ -2365,25 +2333,41 @@
 "div.slide.slide-break",
 "Customers Voices Some Other Cli01 Jul 20",
 0,
-2773,
+2508,
 1104,
-532
+540
 ],
 [
 "div.card.mt",
 "Customers Voices",
 0,
-2904,
+2638,
 1104,
-337
+345
 ],
 [
 "table.",
 "",
 21,
-2964,
+2698,
 1062,
-258
+266
+],
+[
+"div.slide.slide-break",
+"Review sentiment & themes Some Other Cli",
+0,
+3047,
+1104,
+266
+],
+[
+"div.card",
+"",
+0,
+3178,
+1104,
+71
 ]
 ],
 "campaigns": [

@@ -7472,7 +7472,7 @@ async function buildGbp(from, to) {
     profile: windsor("google_my_business",
       ["location_title", "impressions", "call_clicks", "website_clicks", "direction_requests"], from, to),
     recent: windsor("google_my_business",
-      ["review_create_time", "location_title", "review_star_rating", "review_comment", "review_reviewer", "review_reply_comment"],
+      ["review_id", "review_create_time", "location_title", "review_star_rating", "review_comment", "review_reviewer", "review_reply_comment"],
       /**
        * TWELVE MONTHS, NOT SIXTY DAYS (v3.227.0).
        *
@@ -7492,7 +7492,6 @@ async function buildGbp(from, to) {
     kw: windsor("google_my_business",
       ["year_month", "location_title", "search_keyword", "search_keyword_value", "search_keyword_threshold"],
       `${prevMonthKey(from.slice(0, 7))}-01`, to),
-    ranks: buildGbpKeywords(from, to),
   });
 
   if (data.reviews === null) {
@@ -7596,6 +7595,7 @@ async function buildGbp(from, to) {
     const L = per.get(r.location_title);
     if (!L) continue;
     L.recent.push({
+      id: r.review_id || null,
       at: r.review_create_time || null,
       star: starOf(r.review_star_rating),
       comment: String(r.review_comment || "").slice(0, 400),
@@ -7697,14 +7697,13 @@ async function buildGbp(from, to) {
        */
       recentUnreplied: recent.filter((r) => !r.replied && String(r.at || "").slice(0, 10) >= recentFrom).length,
       perf: perfOk ? perfFor(l) : null,
-      // Rank tracker sheet covers the four hospitals only; Dental/JMS get null.
-      ranks: (data.ranks && data.ranks.byBrand && data.ranks.byBrand[l.key]) || null,
     };
   }).sort((a, b) => n(b.allTimeCount) - n(a.allTimeCount));
 
+  await annotateInto(out.flatMap((l) => (l.samples || []).filter((x) => !x.empty)));
+
   return {
     range: { from, to }, recentFrom,
-    rankMonths: (data.ranks && data.ranks.months) || [],
     listings: out,
     months,
     unparsedStars,
@@ -7780,6 +7779,68 @@ ${batch.map((r, i) => `[${i}] (${r.star}★) ${r.comment.replace(/\s+/g, " ").sl
   return out;
 }
 
+/**
+ * REVIEW TEXT AS THE TEAM READS IT (v3.389.0, MW): Thai and English shown as
+ * written; any other language shown in English, with the language named.
+ * Praise and complaint phrases are marked in the shown text.
+ *
+ * Only the reviews actually ON SCREEN are sent (quotes, samples, watch-list
+ * examples — a few dozen per listing), and each is kept in GCS by review id,
+ * so it is read once. A phrase is kept only if it occurs in the shown text;
+ * anything the model paraphrased instead of copying is dropped, not guessed.
+ * Failure is silent by design: the original text still shows, unmarked.
+ */
+const GBP_ANNOTATE_OBJECT = "gbp-annotate/v1.json";
+function phrasesIn(text, arr) {
+  const t = String(text || "").toLowerCase();
+  const out = [];
+  for (const p of Array.isArray(arr) ? arr : []) {
+    const s = String(p || "").trim().slice(0, 80);
+    if (s.length >= 2 && t.includes(s.toLowerCase()) && !out.includes(s)) out.push(s);
+  }
+  return out.slice(0, 6);
+}
+async function annotateInto(items) {
+  const list = items.filter((x) => x && x.id && String(x.comment || "").trim());
+  if (!list.length) return;
+  let store = {};
+  if (ACCESS_BUCKET) {
+    try { store = (await gcsRead(GBP_ANNOTATE_OBJECT, ACCESS_BUCKET)) || {}; } catch (_) { store = {}; }
+    if (!store || typeof store !== "object" || Array.isArray(store)) store = {};
+  }
+  const todo = [...new Map(list.filter((x) => !store[x.id]).map((x) => [x.id, x])).values()];
+  let wrote = false;
+  for (let i = 0; i < todo.length; i += 40) {
+    const batch = todo.slice(i, i + 40);
+    const prompt = `GBP_ANNOTATE_V1
+For each hospital review below return:
+- "lang": the review's language in English (e.g. "Thai", "English", "Japanese").
+- "en": an English translation ONLY if the language is neither Thai nor English, else null.
+- "good": short praise phrases and "bad": short complaint phrases (1-4 words each), copied
+  EXACTLY from the English translation when there is one, otherwise from the review itself.
+Reply ONLY with JSON: [{"i":0,"lang":"Japanese","en":"...","good":["kind nurses"],"bad":["long wait"]}]
+
+${batch.map((r, j) => `[${j}] ${String(r.comment).replace(/\s+/g, " ").slice(0, 600)}`).join("\n")}`;
+    try {
+      const rows = extractJson((await anthropic(prompt, { maxTokens: 4000 })).text);
+      for (const row of Array.isArray(rows) ? rows : []) {
+        const j = Number(row && row.i); const r = batch[j];
+        if (!Number.isInteger(j) || !r) continue;
+        const lang = String(row.lang || "").trim().slice(0, 30) || null;
+        const isThaiOrEn = /^(thai|english)$/i.test(lang || "");
+        const en = !isThaiOrEn && row.en ? String(row.en).trim().slice(0, 900) : null;
+        const shown = en || r.comment;
+        store[r.id] = { lang, en, good: phrasesIn(shown, row.good), bad: phrasesIn(shown, row.bad) };
+        wrote = true;
+      }
+    } catch (e) {
+      logJson("WARN", "gbp_annotate_failed", { error: String(e.message || e) });
+    }
+  }
+  if (wrote && ACCESS_BUCKET) await gcsWrite(GBP_ANNOTATE_OBJECT, store, ACCESS_BUCKET).catch(() => {});
+  for (const x of list) if (store[x.id]) x.ann = store[x.id];
+}
+
 async function buildGbpThemes(key, from, to) {
   const listing = GBP_LISTINGS.find((l) => l.key === key);
   if (!listing) { const e = new Error("unknown listing"); e.status = 400; throw e; }
@@ -7835,7 +7896,7 @@ async function buildGbpThemes(key, from, to) {
     for (const t of tagsOf(r)) {
       const a = agg.get(t.k); if (!a) continue;
       a[t.p]++;
-      const q = { comment: r.comment.slice(0, 280), star: r.star, at: r.at };
+      const q = { id: r.id, comment: r.comment.slice(0, 280), star: r.star, at: r.at };
       if (t.p === "praise") a.praiseQuote = newest(a.praiseQuote, q);
       else a.complaintQuote = newest(a.complaintQuote, q);
       if (t.k === "other" && t.name) a.otherNames.set(t.name, (a.otherNames.get(t.name) || 0) + 1);
@@ -7853,7 +7914,7 @@ async function buildGbpThemes(key, from, to) {
   const unrepliedComplaints = tagged
     .filter((r) => !r.replied && tagsOf(r).some((t) => t.p === "complaint"))
     .sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10)
-    .map((r) => ({ at: r.at, star: r.star, comment: r.comment.slice(0, 280),
+    .map((r) => ({ id: r.id, at: r.at, star: r.star, comment: r.comment.slice(0, 280),
       themes: [...new Set(tagsOf(r).filter((t) => t.p === "complaint").map((t) => t.k))] }));
 
   /**
@@ -7868,6 +7929,11 @@ async function buildGbpThemes(key, from, to) {
   }
 
   const watch = await buildGbpWatch(key, from, to, tagged, store, persisted);
+  const shownLater = []; // filled after `themes` and `unrepliedComplaints` exist
+
+  for (const t of themes) shownLater.push(t.praiseQuote, t.complaintQuote);
+  shownLater.push(...unrepliedComplaints, ...((watch && watch.items) || []).map((w) => w.example));
+  await annotateInto(shownLater.filter(Boolean));
 
   return {
     key, title: listing.title, range: { from, to },
@@ -7932,7 +7998,7 @@ ${pool.map((r, i) => `[${i}] (${r.star}★) ${r.comment.replace(/\s+/g, " ").sli
     items.push({ phrase, theme: GBP_THEME_KEYS.has(String(it.k)) ? String(it.k) : "other",
       reviews: hits.length, negative: neg,
       why: String(it.why || "").slice(0, 200), action: String(it.action || "").slice(0, 200),
-      example: { comment: ex.comment.slice(0, 220), star: ex.star, at: ex.at } });
+      example: { id: ex.id, comment: ex.comment.slice(0, 220), star: ex.star, at: ex.at } });
   }
   items.sort((a, b) => b.negative - a.negative || b.reviews - a.reviews);
   if (persisted) {

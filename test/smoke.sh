@@ -1517,7 +1517,9 @@ expect_field "gbp kw brand excluded" "$G" "(p=>p.keywords.rows.length>0&&p.keywo
 expect_field "gbp kw withheld kept" "$G" "$BGH.keywords.rows.some(r=>r.below===15&&r.users===0)?'ok':undefined"
 expect_field "gbp kw new flagged" "$G" "$BGH.keywords.rows.some(r=>r.keyword==='new clinic'&&r.isNew)?'ok':undefined"
 expect_field "gbp trend 12 months" "$G" "$BGH.trend.length===12&&$BGH.trend.slice(-1)[0].measured?'ok':undefined"
-expect_field "gbp ranks 4 not dental" "$G" "d.listings.find(l=>l.key==='BGH').ranks&&d.listings.find(l=>l.key==='Dental').ranks===null?'ok':undefined"
+expect_field "gbp rank sheet gone" "$G" "d.listings.every(l=>!('ranks' in l))&&!('rankMonths' in d)?'ok':undefined"
+expect_field "voices translated" "$G" "(s=>s&&s.ann&&s.ann.en==='A great hospital'&&s.ann.lang==='Japanese'&&s.ann.good.join()==='great hospital'?'ok':undefined)(d.listings.find(l=>l.key==='BGH').samples.find(x=>x.comment==='great'))"
+expect_field "en not translated" "$G" "(s=>s&&s.ann&&s.ann.en===null&&s.ann.bad.join()==='long wait'?'ok':undefined)(d.listings.find(l=>l.key==='BGH').samples.find(x=>/wait/.test(x.comment||'')))"
 expect_field "gbp kw no whole month" "/api/gbp?from=2026-07-05&to=2026-07-20" "(p=>p.keywords.months.length===0&&/no whole month/.test(p.keywords.reason)?'ok':undefined)($BGH)"
 T="/api/gbp/themes?key=BGH&from=$FROM&to=$TO"
 check "gbp themes" GET "$T"
@@ -1527,6 +1529,7 @@ expect_field "themes bogus dropped" "$T" "!d.themes.some(t=>t.key==='bogus')&&d.
 expect_field "themes other named" "$T" "d.themes.find(t=>t.key==='other').otherNames[0].name==='Check-up package'?'ok':undefined"
 expect_field "themes unreplied" "$T" "d.unrepliedComplaints.length===1&&d.unrepliedComplaints[0].themes[0]==='wait'?'ok':undefined"
 expect_field "themes sentiment" "$T" "d.sentiment.negative===1&&d.sentiment.positive===1&&d.sentiment.positive+d.sentiment.mixed+d.sentiment.negative===d.tagged?'ok':undefined"
+expect_field "themes quote marked" "$T" "(q=>q&&q.ann&&q.ann.bad.join()==='long wait'?'ok':undefined)(d.themes.find(t=>t.key==='wait').complaintQuote)"
 expect_field "watch verbatim only" "$T" "d.watch.items.length===1&&d.watch.items[0].phrase==='Long wait'&&d.watch.items[0].reviews===1?'ok':undefined"
 expect_field "themes bad key 400" "/api/gbp/themes?key=nope&from=$FROM&to=$TO" "d.error==='unknown listing'?'ok':undefined"
 

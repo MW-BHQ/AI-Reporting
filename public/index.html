@@ -846,6 +846,12 @@
   #tip.on{opacity:1;}
   /* Sticky header for the wide audience table, so the columns stay identified
      while scrolling. Cells need their own background or rows show through. */
+  /* Google Profile review marks and watch-list sticky header (v3.389.0). */
+  mark.hl-good{background:rgba(46,158,111,.16);color:inherit;border-radius:3px;padding:0 2px;}
+  mark.hl-bad{background:rgba(217,83,79,.16);color:inherit;border-radius:3px;padding:0 2px;}
+  .tr-tag{font-size:var(--text-2xs);color:var(--faint);white-space:nowrap;}
+  table.gbp-sticky thead th{position:sticky;top:0;z-index:3;background:var(--card, #FBFCFE);
+    box-shadow:inset 0 -1px 0 var(--line);}
   table.sticky-head{table-layout:fixed;}
   table.sticky-head thead th{position:sticky;top:0;z-index:3;background:var(--card, #FBFCFE);
     padding-top:9px;box-shadow:inset 0 -1px 0 var(--line);}
@@ -12001,6 +12007,36 @@ function gbpChange(v, reason) {
   return `<span class="dlt ${p > 0 ? 'up' : (p < 0 ? 'down' : 'flat')}">${p > 0 ? '+' : ''}${p.toFixed(1)}%</span>`;
 }
 
+/**
+ * A review as the team reads it (MW, v3.389.0): Thai and English as written,
+ * anything else in English with the language named; praise phrases green,
+ * complaint phrases red. `q.ann` comes from the server (`annotateInto`); with
+ * no annotation the original shows unmarked. Text is escaped piece by piece,
+ * so a phrase can never inject markup.
+ */
+function reviewHtml(q) {
+  const a = q && q.ann;
+  const text = String((a && a.en) || (q && q.comment) || '');
+  const marks = [];
+  const lower = text.toLowerCase();
+  for (const [cls, list] of [['hl-bad', (a && a.bad) || []], ['hl-good', (a && a.good) || []]]) {
+    for (const p of list) {
+      const pl = String(p).toLowerCase(); if (!pl) continue;
+      let from = 0, at;
+      while ((at = lower.indexOf(pl, from)) !== -1) {
+        if (!marks.some(m => at < m.e && at + pl.length > m.s)) marks.push({ s: at, e: at + pl.length, cls });
+        from = at + pl.length;
+      }
+    }
+  }
+  marks.sort((x, y) => x.s - y.s);
+  let out = '', pos = 0;
+  for (const m of marks) { out += esc(text.slice(pos, m.s)) + `<mark class="${m.cls}">${esc(text.slice(m.s, m.e))}</mark>`; pos = m.e; }
+  out += esc(text.slice(pos));
+  if (a && a.en && a.lang) out += ` <span class="tr-tag">from ${esc(a.lang)}</span>`;
+  return out;
+}
+
 function gbpPerfPages(L, d) {
   const P = L.perf;
   if (!P) {
@@ -12050,22 +12086,10 @@ function gbpPerfPages(L, d) {
        <div class="note">${esc(K.months.map(m => humanDate(m) || m).join(', '))}
          \u00b7 name and address searches: ${K.brandShare === null ? '\u2014' : (K.brandShare * 100).toFixed(0) + '%'} of searchers, left out
          ${K.reason ? ' \u00b7 ' + esc(K.reason) : ''}</div>`;
-  const R = L.ranks;
-  const band = (v) => v <= 3 ? 'up' : (v <= 10 ? 'flat' : 'down');
-  const rankTable = !R
-    ? `<div class="note" style="margin-top:0">\u2014 The rank tracker covers BGH, BIH, BHT and WSH only.</div>`
-    : !R.rows.length
-      ? `<div class="note" style="margin-top:0">\u2014 No tracked keywords in ${esc((d.rankMonths || []).join(', ') || 'this range')}.</div>`
-      : `<table class="sortable"><thead><tr><th>Keyword</th><th class="num">Rank</th><th class="num">Search vol</th></tr></thead><tbody>
-         ${R.rows.map(k => `<tr><td class="strong i18n">${esc(k.keyword)}</td>
-           <td class="num"><span class="dlt ${band(k.rank)}">${k.rank.toFixed(1)}</span></td>
-           <td class="num">${k.volume ? num(k.volume) : '<span class="dlt none">\u2014</span>'}</td></tr>`).join('')}
-         </tbody></table>
-         <div class="note">${num(R.top3)} of ${num(R.keywords)} tracked keywords in the top 3 \u00b7 ${num(R.top10)} in the top 10</div>`;
-  const search = `<div class="grid g-2-1">
-      <div class="card"><div class="card-title">What people searched to find the profile</div>${kwTable}</div>
-      <div class="card"><div class="card-title">Keyword rankings</div>${rankTable}</div>
-    </div>`;
+  /* Keyword rankings card retired with its Google Sheet (MW, v3.389.0):
+     Business Profile reports what was searched, never where the listing
+     placed, and no connected source has local rank. */
+  const search = `<div class="card"><div class="card-title">What people searched to find the profile</div>${kwTable}</div>`;
 
   const draw = () => {
     const rows = P.trend.map(t => t.measured ? { d: t.month, ...t } : { d: t.month });
@@ -12104,23 +12128,23 @@ function gbpThemesBody(T) {
   if (!T.withComment) return `<div class="card"><div class="note" style="margin-top:0">\u2014 No review with a comment in this period.</div></div>`;
   const label = Object.fromEntries(T.themes.map(t => [t.key, t.label]));
   const rows = T.themes.filter(t => t.mentions > 0);
-  const quote = (q) => q ? `<div class="i18n" style="white-space:normal;font-size:var(--text-xs)">${esc(q.comment)}</div>
-      <div style="font-size:var(--text-3xs);color:var(--faint);margin-top:2px">${q.star ? q.star + ' \u2605 \u00b7 ' : ''}${esc(humanDate(q.at) || q.at)}</div>` : '';
+  const quote = (q) => q ? `<div class="i18n" style="white-space:normal;font-size:var(--text-sm)">${reviewHtml(q)}</div>
+      <div style="font-size:var(--text-2xs);color:var(--faint);margin-top:2px">${q.star ? q.star + ' \u2605 \u00b7 ' : ''}${esc(humanDate(q.at) || q.at)}</div>` : '';
   const themeTable = rows.length ? `<table><thead><tr><th>Theme</th><th class="num">Praise</th><th class="num" style="padding-right:18px">Complaint</th>
       <th style="width:16%;padding-right:18px">Complaint share</th><th>Latest complaint</th></tr></thead><tbody>
     ${rows.map(t => `<tr><td class="strong">${esc(t.label)}${t.otherNames.length
-        ? `<div style="font-size:var(--text-3xs);color:var(--faint);font-weight:400">${esc(t.otherNames.map(o => o.name).join(', '))}</div>` : ''}</td>
+        ? `<div style="font-size:var(--text-2xs);color:var(--faint);font-weight:400">${esc(t.otherNames.map(o => o.name).join(', '))}</div>` : ''}</td>
       <td class="num">${num(t.praise)}</td><td class="num" style="padding-right:18px">${num(t.complaint)}</td>
       <td style="padding-right:18px"><div style="background:rgba(140,155,190,.13);border-radius:5px;height:9px;overflow:hidden">
         <div style="width:${Math.round((t.complaintShare || 0) * 100)}%;height:100%;background:var(--bad)"></div></div></td>
-      <td>${quote(t.complaintQuote) || '<span style="color:var(--faint);font-size:var(--text-xs)">no complaint</span>'}</td></tr>`).join('')}
+      <td>${quote(t.complaintQuote) || '<span style="color:var(--faint);font-size:var(--text-sm)">no complaint</span>'}</td></tr>`).join('')}
     </tbody></table>` : `<div class="note" style="margin-top:0">\u2014 The tagged reviews name no specific theme.</div>`;
   const unreplied = T.unrepliedComplaints.length ? `<table><thead><tr><th style="width:52px">Stars</th><th>Review</th>
       <th style="width:150px">About</th><th style="width:92px">Date</th></tr></thead><tbody>
     ${T.unrepliedComplaints.map(r => `<tr><td class="strong" style="color:${r.star >= 4 ? 'var(--green)' : (r.star === 3 ? 'var(--amber)' : 'var(--rose)')}">${r.star ? r.star + ' \u2605' : '\u2014'}</td>
-      <td class="i18n" style="white-space:normal;font-size:var(--text-xs)">${esc(r.comment)}</td>
-      <td style="font-size:var(--text-2xs)">${esc(r.themes.map(k => label[k] || k).join(', '))}</td>
-      <td style="font-size:var(--text-2xs);color:var(--muted)">${esc(humanDate(r.at) || r.at)}</td></tr>`).join('')}
+      <td class="i18n" style="white-space:normal;font-size:var(--text-sm)">${reviewHtml(r)}</td>
+      <td style="font-size:var(--text-xs)">${esc(r.themes.map(k => label[k] || k).join(', '))}</td>
+      <td style="font-size:var(--text-xs);color:var(--muted)">${esc(humanDate(r.at) || r.at)}</td></tr>`).join('')}
     </tbody></table>` : `<div class="note" style="margin-top:0">Every complaint in this period has a reply.</div>`;
   const S_ = T.sentiment || { positive: 0, mixed: 0, negative: 0, disagree: 0 };
   const sp = (v) => T.tagged ? Math.round(v / T.tagged * 100) + '%' : '\u2014';
@@ -12133,14 +12157,14 @@ function gbpThemesBody(T) {
         <div class="sub">4\u20135 \u2605 with negative words, or 1\u20132 \u2605 with positive</div></div></div>`;
   const W = T.watch || {};
   const watch = `<div class="card mt"><div class="card-title">Watch list \u00b7 what to act on</div>
-    ${(W.items || []).length ? `<table><thead><tr><th style="width:17%">Keyword</th><th class="num" style="width:8%;padding-right:18px">Reviews</th>
+    ${(W.items || []).length ? `<table class="gbp-sticky"><thead><tr><th style="width:17%">Keyword</th><th class="num" style="width:8%;padding-right:18px">Reviews</th>
         <th style="width:14%">Theme</th><th>Why it matters</th><th>Next action</th></tr></thead><tbody>
       ${W.items.map(w => `<tr><td class="strong i18n">${esc(w.phrase)}
-          <div style="font-size:var(--text-3xs);color:var(--faint);font-weight:400;white-space:normal" class="i18n">\u201c${esc(w.example.comment)}\u201d</div></td>
+          <div style="font-size:var(--text-xs);color:var(--muted);font-weight:400;white-space:normal" class="i18n">\u201c${reviewHtml(w.example)}\u201d</div></td>
         <td class="num" style="padding-right:18px">${num(w.reviews)}${w.negative < w.reviews ? `<div style="font-size:var(--text-3xs);color:var(--faint)">${num(w.negative)} negative</div>` : ''}</td>
-        <td style="font-size:var(--text-xs)">${esc(label[w.theme] || w.theme)}</td>
-        <td style="white-space:normal;font-size:var(--text-xs)">${esc(w.why)}</td>
-        <td style="white-space:normal;font-size:var(--text-xs)">${esc(w.action)}</td></tr>`).join('')}
+        <td style="font-size:var(--text-sm)">${esc(label[w.theme] || w.theme)}</td>
+        <td style="white-space:normal;font-size:var(--text-sm)">${esc(w.why)}</td>
+        <td style="white-space:normal;font-size:var(--text-sm)">${esc(w.action)}</td></tr>`).join('')}
       </tbody></table>`
       : `<div class="note" style="margin-top:0">\u2014 ${esc(W.reason || 'No watch list')}</div>`}</div>`;
   return `${sentiment}${watch}<div class="card mt"><div class="card-title">What reviewers praise and complain about</div>${themeTable}
@@ -12255,12 +12279,12 @@ function renderGbp() {
         // so "no review at this rating" is stated instead of inferred.
         if (r.empty) return `<tr>
           <td class="strong" style="color:var(--faint);">${r.star} \u2605</td>
-          <td style="color:var(--faint);font-size:var(--text-xs);">No review at this rating in the period</td>
+          <td style="color:var(--faint);font-size:var(--text-sm);">No review at this rating in the period</td>
           <td></td><td class="no-print"></td></tr>`;
         return `<tr>
         <td class="strong" style="color:${r.star>=4?'var(--green)':(r.star==3?'var(--amber)':'var(--rose)')};">${r.star?r.star+' ★':'—'}</td>
-        <td class="i18n" style="white-space:normal;font-size:var(--text-xs);">${r.comment?esc(r.comment):'<span style="color:var(--faint)">rating only, no comment</span>'}
-          ${r.reviewer?`<div style="font-size:var(--text-3xs);color:var(--faint);margin-top:3px;">${esc(r.reviewer)}</div>`:''}</td>
+        <td class="i18n" style="white-space:normal;font-size:var(--text-sm);">${r.comment?reviewHtml(r):'<span style="color:var(--faint)">rating only, no comment</span>'}
+          ${r.reviewer?`<div style="font-size:var(--text-2xs);color:var(--faint);margin-top:3px;">${esc(r.reviewer)}</div>`:''}</td>
         <td style="font-size:var(--text-2xs);color:var(--muted)">${esc(humanDate(String(r.at||'').slice(0,10)))}</td>
         <td class="no-print">${r.replied?'<span class="pill">yes</span>':'<span class="pill warn">no</span>'}</td>
         </tr>`;
@@ -12274,12 +12298,13 @@ function renderGbp() {
     + slideShell(`Google Business Profile \u00b7 ${L.title}`, perf.main,
         { first: true, scope: L.key, cls: 'quiet pn' })
     + slideShell('What people searched', perf.search, { scope: L.key, cls: 'quiet pn' })
+    + slideShell('Google reviews', gbpPage1, { scope: L.key, cls: 'quiet pn' })
+    + slideShell('Customers Voices', gbpVoices, { scope: L.key, cls: 'quiet pn' })
+    /* Right under Customers Voices (MW, v3.389.0). */
     + slideShell('Review sentiment & themes', `<div id="gbpThemes">${L.unlisted
         ? '<div class="card"><div class="note" style="margin-top:0">\u2014 Themes cover the six configured listings only.</div></div>'
         : gbpThemesBody(S.gbpThemes && S.gbpThemes[gbpThemesKey(L.key)])}</div>`,
-        { scope: L.key, cls: 'quiet pn' })
-    + slideShell('Google reviews', gbpPage1, { scope: L.key, cls: 'quiet pn' })
-    + slideShell('Customers Voices', gbpVoices, { scope: L.key, cls: 'quiet pn' });
+        { scope: L.key, cls: 'quiet pn' });
   perf.draw();
   if (!L.unlisted) loadGbpThemes(L.key);
 
@@ -13871,7 +13896,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.388.0';
+const CLIENT_BUILD = '3.389.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

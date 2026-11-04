@@ -1948,6 +1948,19 @@ global.fetch = async (url, opts = {}) => {
      * "staff" otherwise, plus one bogus key the server must drop.
      */
     const bodyStr = String((opts && opts.body) || "");
+    /**
+     * Annotation: "great" plays a non-English review (translated, Japanese);
+     * "wait" gets a complaint phrase; every row also claims a phrase that is
+     * NOT in the text, which the server must drop.
+     */
+    if (bodyStr.includes("GBP_ANNOTATE_V1")) {
+      const prompt = JSON.parse(bodyStr).messages[0].content;
+      const items = [...prompt.matchAll(/^\[(\d+)\] (.*)$/gm)];
+      return jsonRes({ stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(items.map((m) =>
+        /great/i.test(m[2]) ? { i: +m[1], lang: "Japanese", en: "A great hospital", good: ["great hospital", "invented"], bad: [] }
+        : /wait/i.test(m[2]) ? { i: +m[1], lang: "English", en: "SHOULD BE IGNORED", good: [], bad: ["long wait", "invented"] }
+        : { i: +m[1], lang: "English", en: null, good: [m[2].split(" ")[0]], bad: [] })) }] });
+    }
     // Watch list: one real phrase, one invented phrase the server must drop.
     if (bodyStr.includes("GBP_WATCH_V1")) {
       return jsonRes({ stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify([
