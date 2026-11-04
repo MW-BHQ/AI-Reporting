@@ -10182,11 +10182,35 @@ function renderBcengage() {
       </tbody></table>
       ${foot('Rows group members by the month they signed up (older members by quarter). Each number is how many of that group earned B points in that month; hover for the share of the group. The first number in a row is their joining month.')}
     </div>`;
-  const daily = `
-    <div class="card">
-      <div class="card-title">Active members per day</div>
-      <div class="chart-wrap"><canvas id="bceDaily"></canvas></div>
-      ${foot('<b>Earned B points</b> = members who earned points that day. <b>Any activity</b> also counts reading any article, clicking a button, redeeming, signing up or logging in.')}
+  /**
+   * DAU (v3.387.0, MW: "how many people active on each day, which activities they
+   * do, new users of that day / existing"). Days of the selected month only.
+   * Active = earned B points that day, the same rule as MAU.
+   */
+  const mDays = (d.daily || []).filter(r => r.d.slice(0, 7) === s.month);
+  const avgDau = mDays.length ? mDays.reduce((a, r) => a + r.dau, 0) / mDays.length : null;
+  const peak = mDays.slice().sort((a, b) => b.dau - a.dau)[0] || null;
+  const dauSum = mDays.reduce((a, r) => a + r.dau, 0), newSum = mDays.reduce((a, r) => a + (r.new_users || 0), 0);
+  const dauBody = `
+    <div class="grid g-3">
+      ${stat('Average daily active', avgDau === null ? '\u2014' : cnt(avgDau), `per day in ${esc(label)}`, null, null,
+        'Members who earned B points on a day, averaged over the days of the month.')}
+      ${stat('Busiest day', peak ? cnt(peak.dau) : '\u2014', peak ? esc(humanDate(peak.d) || peak.d) : '', null, null,
+        'The day with the most members earning points.')}
+      ${stat('New members in daily actives', pct(share(newSum, dauSum)), `${cnt(newSum)} of ${cnt(dauSum)} member-days`, BCE_COL.new, null,
+        'Of all daily actives across the month, the share who had signed up that same day.')}
+    </div>
+    <div class="grid g-2 mt">
+      <div class="card">
+        <div class="card-title">Active members each day: new and existing</div>
+        <div class="chart-wrap"><canvas id="bceDauSplit"></canvas></div>
+        ${foot('<b>New</b> = signed up that day and earned points that day. <b>Existing</b> = everyone else who earned points that day.')}
+      </div>
+      <div class="card">
+        <div class="card-title">What they did each day</div>
+        <div class="chart-wrap"><canvas id="bceDauAct"></canvas></div>
+        ${foot('Members doing each activity per day. One member can do more than one, so the lines add up to more than the day’s active members.')}
+      </div>
     </div>`;
 
   // ---- what they care about
@@ -10447,7 +10471,8 @@ function renderBcengage() {
     ${slideShell(`What to do next \u00b7 ${label}`, nextBody, { scope: 'Better Club' })}
     ${split ? slideShell('Who comes back, and what brings them', comeback + `<div class="mt">${doTable}</div>`, { scope: 'Better Club', cls: 'quiet' })
             : slideShell('What each group did', doTable, { scope: 'Better Club', cls: 'quiet' })}
-    ${slideShell('Do new members stay?', cohort + `<div class="mt">${daily}</div>`, { scope: 'Better Club', cls: 'quiet' })}
+    ${slideShell('Do new members stay?', cohort, { scope: 'Better Club', cls: 'quiet' })}
+    ${slideShell(`Daily active members \u00b7 ${label}`, dauBody, { scope: 'Better Club', cls: 'quiet' })}
     ${slideShell(`What active members care about \u00b7 ${label}`, interest, { scope: 'Better Club', cls: 'quiet' })}
     ${slideShell(`Points and rewards \u00b7 ${label}`, rewardsBody, { scope: 'Better Club', cls: 'quiet' })}
     ${ptpBody ? slideShell('Does earning points lead to a visit?', ptpBody, { scope: 'Better Club', cls: 'quiet' }) : ''}
@@ -10464,12 +10489,17 @@ function renderBcengage() {
   drawBars('bceHours', Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`), [
     { label: 'Members earning points', data: Array.from({ length: 24 }, (_, h) => ((hrs.find(r => r.hour === h) || {}).users || 0)), color: BCE_COL.retained },
   ], { horizontal: false });
-  const dEnd = (([y, m]) => new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10))(s.month.split('-').map(Number));
-  const dStart = new Date(Date.parse(dEnd) - 119 * 864e5).toISOString().slice(0, 10);
-  drawChart('bceDaily', (d.daily || []).filter(r => r.d >= dStart && r.d <= dEnd).map(r => ({ d: r.d, dau: r.dau, any: r.any_active })), [
-    { key: 'dau', label: 'Earned B points', color: BCE_COL.retained, axis: 'y' },
-    { key: 'any', label: 'Any activity', color: BCE_COL.base, axis: 'y' },
+  const dLab = mDays.map(r => String(+r.d.slice(8, 10)));
+  drawBars('bceDauSplit', dLab, [
+    { label: 'Existing', data: mDays.map(r => r.dau - (r.new_users || 0)), color: BCE_COL.retained },
+    { label: 'New that day', data: mDays.map(r => r.new_users || 0), color: BCE_COL.new },
+  ], { horizontal: false, stacked: true });
+  drawChart('bceDauAct', mDays.map(r => ({ d: r.d, a: r.check_in, b: r.reward_read, c: r.quiz })), [
+    { key: 'a', label: 'Daily check-in', color: BCE_COL.retained, axis: 'y' },
+    { key: 'b', label: 'Reward article', color: BCE_COL.new, axis: 'y' },
+    { key: 'c', label: 'Quiz', color: BCE_COL.reactivated, axis: 'y' },
   ]);
+
 }
 
 /**
@@ -13674,7 +13704,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.386.0';
+const CLIENT_BUILD = '3.387.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

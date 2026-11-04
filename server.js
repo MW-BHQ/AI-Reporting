@@ -11642,9 +11642,14 @@ churn AS (
 pool AS (
   SELECT m.month, COUNTIF(DATE(c.registered_at) < DATE_ADD(m.month, INTERVAL 1 MONTH)) AS members
   FROM months m CROSS JOIN {{DS}}.members c GROUP BY 1),
-dd AS (SELECT DATE(ts) AS d, COUNT(DISTINCT IF(mau, user_id, NULL)) AS dau,
-          COUNT(DISTINCT user_id) AS any_active
-        FROM {{DS}}.activity GROUP BY 1),
+-- Per day: members who earned points, by activity, and how many joined that day.
+dd AS (SELECT DATE(a.ts) AS d, COUNT(DISTINCT IF(a.mau, a.user_id, NULL)) AS dau,
+          COUNT(DISTINCT a.user_id) AS any_active,
+          COUNT(DISTINCT IF(a.action = 'check_in', a.user_id, NULL)) AS check_in,
+          COUNT(DISTINCT IF(a.action = 'reward_read', a.user_id, NULL)) AS reward_read,
+          COUNT(DISTINCT IF(a.action = 'quiz', a.user_id, NULL)) AS quiz,
+          COUNT(DISTINCT IF(a.mau AND DATE(c.registered_at) = DATE(a.ts), a.user_id, NULL)) AS new_users
+        FROM {{DS}}.activity a LEFT JOIN {{DS}}.customers c USING (user_id) GROUP BY 1),
 ddm AS (SELECT DATE_TRUNC(d, MONTH) AS month, AVG(dau) AS avg_dau FROM dd GROUP BY 1),
 jn AS (SELECT DATE_TRUNC(DATE(registered_at), MONTH) AS month, COUNT(*) AS joined
        FROM {{DS}}.members GROUP BY 1),
@@ -11820,7 +11825,7 @@ SELECT TO_JSON_STRING(STRUCT(
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, seg.* EXCEPT (month) FROM seg ORDER BY month, status) AS segments,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, action, users FROM firstact ORDER BY month, users DESC) AS react_first,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, bin, users FROM depth ORDER BY month, bin) AS depth,
-  ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', d) AS d, dau, any_active FROM dd ORDER BY d) AS daily,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', d) AS d, dau, any_active, check_in, reward_read, quiz, new_users FROM dd ORDER BY d) AS daily,
   ARRAY(SELECT AS STRUCT c.b AS cohort, s.size, FORMAT_DATE('%Y-%m', c.month) AS month, c.active
         FROM cohort c JOIN csize s USING (b) ORDER BY c.b, c.month) AS cohorts,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, tag, readers, reads FROM tags ORDER BY month, readers DESC) AS tags,

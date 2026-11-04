@@ -1204,6 +1204,7 @@ expect_field "eng freshness"      "$ENG" "d.freshness&&d.freshness.last_run&&d.f
 # May and June, first paid June -> 1 month); never-paid members use all months.
 expect_field "eng ptp bins"       "$ENG" "(r=>r['0'].members===11&&r['0'].patients===4&&r['1'].members===2&&r['1'].patients===1&&r['2-3'].patients===1&&r['4+'].members===1&&r['4+'].patients===0)(Object.fromEntries(d.pointsToPatients.rows.map(x=>[x.bin,x])))?'ok':undefined"
 expect_field "eng ptp revenue"    "$ENG" "d.pointsToPatients.rows.find(x=>x.bin==='1').revenue===80000?'ok':undefined"
+expect_field "eng daily fields"   "$ENG" "['check_in','reward_read','quiz','new_users'].every(k=>k in d.daily[0])?'ok':undefined"
 expect_field "eng identity"       "$ENG" "d.months.slice(1).every((m,i)=>m.mau-d.months[i].mau===m.new_users+m.reactivated-m.churned)?'ok':undefined"
 
 # ---- Better Club -----------------------------------------------------------

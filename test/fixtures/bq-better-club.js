@@ -42,7 +42,8 @@ const engagement = {
   ],
   daily: Array.from({ length: 93 }, (_, i) => {
     const d = new Date(Date.UTC(2026, 7, 2 + i)).toISOString().slice(0, 10);
-    return { d, dau: 32 + ((i * 7) % 15), any_active: 140 + ((i * 37) % 45) };
+    const dau = 32 + ((i * 7) % 15), nu = (i * 3) % 6;
+    return { d, dau, any_active: 140 + ((i * 37) % 45), check_in: dau - 6, reward_read: 8 + (i % 9), quiz: 7 + ((i * 5) % 8), new_users: nu };
   }),
   cohorts: [
     ["2025-Q4", 6300, [13, 12, 19, 5]], ["2026-Q2", 9127, [15, 17, 19, 7]],

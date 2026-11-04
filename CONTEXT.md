@@ -1,5 +1,12 @@
 ### Recent (November 2026)
 
+**v3.387.0 — Performance: Daily active members** (MW): new slide for the selected month.
+Cards: average daily active, busiest day, share of daily actives who signed up that same
+day. Charts: daily actives stacked new (joined that day) / existing; members per day doing
+check-in, reward article, quiz (overlapping). `daily` block now carries check_in,
+reward_read, quiz, new_users. Replaces the old 120-day "Active members per day" line.
+Oct 2026 live: 36.4 a day, peak 44 on 4 Oct, 90 of 1,129 member-days were same-day joiners.
+
 **v3.386.0 — Performance: "Does earning points lead to a visit?"** (MW: on Performance,
 not Rev Attribution). Roster members (Members tab: Has HN, First paid month) joined by
 User ID to their B-point months (BigQuery `user_months` block) and revenue
