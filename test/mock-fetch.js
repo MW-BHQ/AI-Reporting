@@ -1974,6 +1974,8 @@ global.fetch = async (url, opts = {}) => {
     }
     if (bodyStr.includes("GBP_THEMES_V1")) {
       if (process.env.MOCK_FAIL_THEMES === "1") return jsonRes({ error: "simulated" }, 500);
+      // MOCK_THEMES_DELAY=ms: a slow Claude, for the print-waits test.
+      if (process.env.MOCK_THEMES_DELAY) await new Promise((r) => setTimeout(r, +process.env.MOCK_THEMES_DELAY));
       const prompt = JSON.parse(bodyStr).messages[0].content;
       const items = [...prompt.matchAll(/^\[(\d+)\] \(\d?\u2605\) (.*)$/gm)];
       return jsonRes({ stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(items.map((m) => ({

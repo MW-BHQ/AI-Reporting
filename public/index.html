@@ -829,7 +829,7 @@
   body.gbp-measure .slide.gs-auto td,body.gbp-measure .slide.gs-auto th{padding:9px 14px 9px 0!important;font-size:14px!important;}
   body.gbp-measure .slide.gs-auto .tscroll{margin:0!important;padding:0!important;}
   body.gbp-measure .slide.gs-auto .no-print{display:none!important;}
-  .gbp-stars{font-size:.55em;color:var(--violet);letter-spacing:.06em;vertical-align:.2em;}
+  .gbp-stars{font-size:.55em;color:#F2A93B;letter-spacing:.06em;vertical-align:.2em;}
   .gbp-rv12{display:grid;grid-template-columns:2fr 1fr;gap:24px;align-items:end;}
   /* min-width:0 — a grid column's min-content is the canvas's drawn width, so
      without it the grid blew out at print width and the slide zoomed to ~50%. */
@@ -12194,7 +12194,11 @@ const gbpThemesKey = (key) => `${key}|${$('from').value}|${$('to').value}`;
 async function loadGbpThemes(key) {
   S.gbpThemes = S.gbpThemes || {};
   const k = gbpThemesKey(key);
-  if (S.gbpThemes[k]) return;
+  if (S.gbpThemes[k]) return S.gbpThemesWait;
+  // Kept so the PDF can wait for Claude to finish (gbpThemesSettled).
+  return (S.gbpThemesWait = loadGbpThemesNow(key, k));
+}
+async function loadGbpThemesNow(key, k) {
   S.gbpThemes[k] = { loading: true };
   FAV.themes++; favTick();
   try {
@@ -12319,8 +12323,8 @@ function renderGbp() {
 
     <div class="grid g-4">
       <div class="stat card"><div class="lab">All-time rating</div>
-        <!-- Stars moved here from the removed All time block (MW), in lavender. -->
-        <div class="val" style="color:${L.allTimeRating>=4.5?'var(--green)':(L.allTimeRating>=4?'var(--amber)':'var(--rose)')}">${L.allTimeRating!=null?L.allTimeRating.toFixed(1):'—'}${L.allTimeRating!=null
+        <!-- Number lavender, stars gold (MW, v3.400.0). -->
+        <div class="val" style="color:var(--violet)">${L.allTimeRating!=null?L.allTimeRating.toFixed(1):'—'}${L.allTimeRating!=null
           ? ` <span class="gbp-stars">${'\u2605'.repeat(Math.round(L.allTimeRating))}${'\u2606'.repeat(5-Math.round(L.allTimeRating))}</span>` : ''}</div>
         <div class="sub">${L.allTimeCount!=null?'across '+num(L.allTimeCount)+' reviews':''}</div></div>
       <!-- All-time reviews, its own card (MW). It was a sub-line under the
@@ -12471,7 +12475,8 @@ function renderGbp() {
     });
     drawChart('gbpRvMonth', series.map(m => ({ d: m.month, count: m.count || 0, avg: avgOf(m) })), [
       { label:'Reviews', key:'count', color:'#6C5CE7', axis:'y' },
-      { label:'Average rating', key:'avg', color:HOUSE.good, axis:'y1' },
+      // Bars, not a line (MW): the average reads per month, the count as a trend.
+      { label:'Average rating', key:'avg', color:HOUSE.good, axis:'y1', type:'bar' },
     ]);
   } catch (e) {
     console.error('gbp chart failed:', e);
@@ -12908,6 +12913,9 @@ function drawChart(canvasId, rows, series, opts = {}) {
           label: s.label, data: rows.map(r => r[s.key]),
           borderColor: s.color, backgroundColor: s.color + '22',
           tension: .35, fill: s.axis === 'y', yAxisID: s.axis, pointRadius: 0, borderWidth: 2,
+          // `type: 'bar'` on a series (v3.400.0): a bar series under the lines.
+          ...(s.type === 'bar' ? { type: 'bar', backgroundColor: s.color + 'B3', borderWidth: 0,
+            borderRadius: 3, fill: false, order: 2, maxBarThickness: 46 } : { order: 1 }),
         })),
       },
       options: {
@@ -13057,6 +13065,19 @@ $('printBtn').addEventListener('click', () => {
     const range = dpRangeLabel($('from').value, $('to').value).replace(/\s*\u2013\s*/g, '-');
     PRINT_DOC_TITLE.prev = document.title;
     document.title = `BHQ Google Review - ${range}`;
+  }
+  /**
+   * THE PDF WAITS FOR CLAUDE (MW, v3.400.0): printing while the review themes
+   * were still loading put "Claude is reading the reviews" on two blank pages.
+   * Wait for the read (capped at 3 min), then print the filled pages.
+   */
+  if (S.view === 'gbp' && S.gbpThemesWait) {
+    if (Object.values(S.gbpThemes || {}).some((t) => t && t.loading)) {
+      setStatus('busy', 'Waiting for Claude to finish reading the reviews\u2026');
+      const cap = new Promise((r) => setTimeout(r, 180000));
+      Promise.race([S.gbpThemesWait, cap]).then(() => { setStatus('ok', 'Ready to print'); printWhenImagesReady(); });
+      return;
+    }
   }
   printWhenImagesReady();
 });
@@ -14061,7 +14082,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.399.0';
+const CLIENT_BUILD = '3.400.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

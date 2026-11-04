@@ -1,5 +1,14 @@
 ### Recent (November 2026)
 
+**v3.400.0 — Google reviews tweaks; PDF waits for Claude** (MW).
+- All-time rating card: number lavender, stars gold.
+- Reviews by month: Average rating as green bars under the Reviews line (`drawChart`
+  series now accept `type:'bar'`).
+- Print on Google Profile waits for the review themes read (`S.gbpThemesWait`, capped at
+  3 min) with "Waiting for Claude…" in the status bar; printing mid-read gave two pages
+  saying "Claude is reading the reviews". Tested with MOCK_THEMES_DELAY=6000: print fired
+  after the read, pages filled.
+
 **v3.399.0 — Google reviews PDF page: header gap = row gap** (MW: "thinner"). Header
 to first row was 32 px vs 8 px between rows; `.slide-title` margin-bottom -6px on that
 page (print + prep) makes them equal. The 24 px freed went to the charts (256/216 px),
