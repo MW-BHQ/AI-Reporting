@@ -1,14 +1,15 @@
-# BHQ War Room — handover at v3.376.0
+# BHQ War Room — handover at v3.387.0
 
-Written for a fresh session. MW is bringing a NEW source of Shopee data, so the
-Shopee section matters most — read it before touching anything there.
+Written for a fresh session. NEXT JOB: enhance the **Google Profile** tab (view id
+`gbp`). Read "Google Profile — starting point" and "Better Club" below first; the
+Shopee/LINE sections are unchanged reference.
 
 ## Where things are
 
 - Repo `MW-BHQ/AI-Reporting`, branch `main`, working dir `/home/claude/bkh/`.
 - Auto-deploys to Cloud Run `ai-reporting-git`, `asia-southeast1`,
   project `ai-reporting-503911`. Live at `w.bkhos.co`.
-- Current version **3.376.0**. Bump BOTH `package.json` and `CLIENT_BUILD` in
+- Current version **3.387.0**. Bump BOTH `package.json` and `CLIENT_BUILD` in
   `public/index.html`, and add a CONTEXT.md entry.
 - MW supplies a session-scoped GitHub PAT. Ask for it; do not look for one.
 
@@ -25,6 +26,47 @@ WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ECOM_SHEET_ID=mock \
 ADMIN_EMAILS=admin@bkh.test ACCESS_BUCKET=mock-bucket PORT=8412 \
 node --require ./test/mock-fetch.js server.js
 ```
+
+## Google Profile — starting point (next job)
+
+- Source: Windsor `google_my_business` (the most-used connector, 11 calls). Server
+  jobs in `server.js` around `jobs.gbp`, `gbpDaily`/`gbpDailyPrev`, `gbpKeywords`,
+  `gbpReviews`, `gbpLifetime` (~line 2410). Location names per hospital in the
+  BRAND map (`gbp: [...]`, ~line 900; BGH incl. Dental Center, JMS listed separately).
+- **Call `get_fields` on `google_my_business` before writing any new pull.**
+- Client view id `gbp` (`S.charts.gbpChart`). Confirm the goal with MW before coding;
+  he will say what the team needs from the tab.
+
+## Better Club (v3.377 → v3.387) — BigQuery, complete
+
+- Dataset `ai-reporting-503911.better_club` (asia-southeast1). Code `bq/better_club/`
+  (README there). `build.js` generates setup/ingest/views/import SQL from one TABS
+  config; `40_import_dev.sql` is hand-written (dev DB exports). MCP BigQuery calls must
+  start `SET @@location = 'asia-southeast1';` and cannot read Sheets (no Drive scope).
+- Daily: scheduled query `better_club_daily` = `CALL better_club.ingest()`, **00:00 UTC
+  = 07:00 Bangkok**, runs as the compute SA. raw_* append-only (row hash), views dedupe
+  on the business key, `_ingest_log` per tab per run, `_customer_seen` for removed members.
+- Backfilled Sep 2024 → now from the dev: all_event 218k, read_post +148k, click_cta +30k,
+  quiz +19.8k (questions joined from his quiz list). Imports logged `import:<tab>:<label>`.
+  Known small gaps (MW: leave them): 2 quiz ids missing; clicks dip late Jun–mid Aug 2026
+  in the dev's own data.
+- **MAU = the team's definition**: earned B points at least once in the month — all_event
+  DAILY_LOGIN (= the daily CHECK-IN claim, not a login log), READ_POST (reward reads),
+  ANSWER_QUIZ. Logins come only from customers.last_login changes, from 2 Nov 2026.
+- Tabs (nav order): **Performance** (`bcengage`), **Quiz Insight** (`bcquiz`),
+  **Rev Attribution** (`bclub`). Performance = freshness strip, MAU growth accounting
+  (new / retained / reactivated / lost, identity asserted in smoke), What to do next
+  (sized plays + CSV target export, logged), group table (counts), cohorts (6-month
+  window), daily actives (new vs existing, by activity), topics, buttons, points &
+  rewards, badges vs last month, sign-up channel / campaign activation, reward articles,
+  hour of day, streaks, points → patients (months of points BEFORE first visit vs
+  Has HN, revenue). Footnotes everywhere on Performance — MW asked; exception to the
+  no-footnotes rule for this tab only.
+- Rev Attribution: registrations, member total and mix from BigQuery; HN-based figures
+  stay on the roster sheet; roster fallback if BigQuery is down.
+- Parked for later: "logged in, didn't check in" card (needs 2–3 weeks of logins).
+- Test notes: visual.py takes ~3 min — run detached (`setsid`) or the 300 s tool limit
+  kills it. `pkill -f mock-fetch.js` inside a bash command kills that command itself.
 
 ## How MW works
 
