@@ -1,5 +1,16 @@
 ### Recent (November 2026)
 
+**v3.398.0 — Google Profile PDF: pages 3+ no longer split; file name** (MW's real PDF).
+- Cause: `gbpAutoPages` measured at SCREEN width/styles (1400 px) but the sheet lays out at
+  1280 px with print rules: 2197 measured vs 2410 printed → overflow → split. Now measured
+  under `body.gbp-measure` (sheet width + the `.slide.pn` print declarations + the print
+  slide box), the Campaign tab's `pp-measure` idea. Verified at 1400 and 1920 px windows:
+  page 2635 px vs 2529 printed, 5 pages, nothing split. Keep `gbp-measure` in step with the
+  `.slide.pn` print rules.
+- File name "BHQ Google Review - 1-31 Oct 2026" (document.title during print).
+- Print column padding on pages 3+; "<1%" instead of "0%" for a non-zero share.
+- Watch-list cache from before v3.391 re-derived on read (no "(Translated by Google)").
+
 **v3.397.0 — Google Profile PDF polish** (MW).
 - "All time" block removed; its stars moved into the All-time rating card, lavender
   (`.gbp-stars`). Charts taller (240/200 px print), scorecards and mix rows tighter on that

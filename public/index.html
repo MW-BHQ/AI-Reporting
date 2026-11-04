@@ -813,6 +813,22 @@
   /* Google Profile review marks and watch-list sticky header (v3.389.0). */
   mark.hl-good{background:rgba(46,158,111,.16);color:inherit;border-radius:3px;padding:0 2px;}
   mark.hl-bad{background:rgba(217,83,79,.16);color:inherit;border-radius:3px;padding:0 2px;}
+  /* gbpAutoPages measuring state: the printed box and the `.slide.pn` print
+     declarations, at sheet width. Keep in step with those print rules. */
+  body.gbp-measure .slide.gs-auto{width:13.333in!important;max-width:none!important;box-sizing:border-box;
+    padding:0.34in 0.42in 0.3in!important;display:flex;flex-direction:column;font-size:16px;
+    height:auto!important;max-height:none!important;overflow:visible!important;}
+  body.gbp-measure .slide.gs-auto .slide-title{font-size:16px;min-height:64px;margin-bottom:24px;
+    border-bottom:1px solid #C9D4EC;padding-bottom:6px;}
+  body.gbp-measure .slide.gs-auto .stat,body.gbp-measure .slide.gs-auto .card{padding:18px 20px;}
+  body.gbp-measure .slide.gs-auto .stat .val{font-size:30px!important;}
+  body.gbp-measure .slide.gs-auto .stat .lab,body.gbp-measure .slide.gs-auto .stat .sub2,
+  body.gbp-measure .slide.gs-auto .note{font-size:12px!important;}
+  body.gbp-measure .slide.gs-auto .card-title{font-size:18px;margin-bottom:16px;}
+  body.gbp-measure .slide.gs-auto .grid{gap:16px 14px;}
+  body.gbp-measure .slide.gs-auto td,body.gbp-measure .slide.gs-auto th{padding:9px 14px 9px 0!important;font-size:14px!important;}
+  body.gbp-measure .slide.gs-auto .tscroll{margin:0!important;padding:0!important;}
+  body.gbp-measure .slide.gs-auto .no-print{display:none!important;}
   .gbp-stars{font-size:.55em;color:var(--violet);letter-spacing:.06em;vertical-align:.2em;}
   .gbp-rv12{display:grid;grid-template-columns:2fr 1fr;gap:24px;align-items:end;}
   /* min-width:0 — a grid column's min-content is the canvas's drawn width, so
@@ -844,6 +860,9 @@
     /* Customers Voices carries its own page break for the old layout; on an
        auto-height page it split the header from the table. */
     .slide.gs-auto .gbp-voices{break-before:auto!important;}
+    /* `.slide.pn td{padding:9px 0}` strips side padding, so adjacent columns
+       ran together in print ("1Other", "PraiseComplaint"). */
+    .slide.pn.gs-auto td,.slide.pn.gs-auto th{padding-right:14px!important;}
     /* Page 3+ of the GBP PDF: own page size (gbpAutoPages), so no fixed box. */
     .slide.gs-auto{height:auto!important;max-height:none!important;overflow:visible!important;}
     .gbp-rv12 td, .gbp-rvm td{padding-top:3px!important;padding-bottom:3px!important;}
@@ -12215,7 +12234,8 @@ function gbpThemesBody(T, part = 1) {
       <td style="font-size:var(--text-xs);color:var(--muted)">${esc(humanDate(r.at) || r.at)}</td></tr>`).join('')}
     </tbody></table>` : `<div class="note" style="margin-top:0">Every complaint in this period has a reply.</div>`;
   const S_ = T.sentiment || { positive: 0, mixed: 0, negative: 0, disagree: 0 };
-  const sp = (v) => T.tagged ? Math.round(v / T.tagged * 100) + '%' : '\u2014';
+  // "<1%" rather than "0%" when there is at least one (MW's PDF: Mixed 0%, 1 of 606).
+  const sp = (v) => !T.tagged ? '\u2014' : (v > 0 && v / T.tagged < 0.005 ? '<1%' : Math.round(v / T.tagged * 100) + '%');
   const sentCard = (lab, v, col) => `<div class="stat card"><div class="lab">${lab}</div>
       <div class="val" style="color:${col}">${sp(v)}</div><div class="sub">${num(v)} of ${num(T.tagged)} reviews</div></div>`;
   const sentiment = `<div class="grid g-4" style="margin-bottom:12px">
@@ -13028,6 +13048,12 @@ $('printBtn').addEventListener('click', () => {
     const range = dpRangeLabel($('from').value, $('to').value).replace(/\s*\u2013\s*/g, ' - ');
     PRINT_DOC_TITLE.prev = document.title;
     document.title = `${code} - ${range}`;
+  }
+  // Google Profile (v3.398.0, MW): "BHQ Google Review - 1-31 Oct 2026".
+  if (S.view === 'gbp') {
+    const range = dpRangeLabel($('from').value, $('to').value).replace(/\s*\u2013\s*/g, '-');
+    PRINT_DOC_TITLE.prev = document.title;
+    document.title = `BHQ Google Review - ${range}`;
   }
   printWhenImagesReady();
 });
@@ -13883,13 +13909,23 @@ function gbpAutoPages(on) {
     return;
   }
   if (!st) { st = document.createElement('style'); st.id = 'gbpAutoPages'; document.head.appendChild(st); }
+  /**
+   * MEASURE AT THE PRINTED LAYOUT, NOT THE SCREEN (v3.398.0). v3.397 read the
+   * screen height: 1400 px wide and screen styles, while the sheet is 1280 px
+   * with the print rules — 2197 measured vs 2410 printed on a long watch list,
+   * so the content ran off its sheet and split (MW's PDF). `gbp-measure` puts
+   * these slides at the sheet width with the same print declarations
+   * (`.slide.pn` rules + the slide box), the Campaign tab's `pp-measure` idea.
+   */
+  document.body.classList.add('gbp-measure');
   const rules = [];
   document.querySelectorAll('.slide.gs-auto').forEach((el, i) => {
     if (!el.offsetParent) return;
-    const h = Math.max(7.5, (el.scrollHeight * 1.04) / 96);
+    const h = Math.max(7.5, (Math.ceil(el.scrollHeight * 1.02) + 24) / 96);
     el.style.page = `gbpauto${i}`;
     rules.push(`@page gbpauto${i}{size:13.333in ${h.toFixed(2)}in;margin:0;}`);
   });
+  document.body.classList.remove('gbp-measure');
   /* The deck caps printed tables at 10 rows (`.slide table:not(.nocap)`);
      these pages exist to show every row, so lift it here. In this late
      <style> so it wins over the cap on equal specificity. */
@@ -14022,7 +14058,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.397.0';
+const CLIENT_BUILD = '3.398.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

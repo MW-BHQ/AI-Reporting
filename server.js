@@ -7828,7 +7828,9 @@ const GOOGLE_TR_RE = /^\s*\((?:Translated by Google|แปลโดย Google)\)
 function reviewOriginal(comment) {
   const c = String(comment || "");
   const m = c.match(GOOGLE_TR_RE);
-  return (m ? m[2] : c).trim();
+  if (m) return m[2].trim();
+  // A bundle cut before "(Original)" (old caches): drop the label at least.
+  return c.replace(/^\s*\((?:Translated by Google|แปลโดย Google)\)\s*/, "").trim();
 }
 /** Cut at a word boundary with an ellipsis — never mid-word ("more wat"). */
 function clipText(t, n) {
@@ -8051,7 +8053,12 @@ async function buildGbpWatch(key, from, to, tagged, store, persisted) {
   if (persisted) {
     try { saved = (await gcsRead(obj, ACCESS_BUCKET)) || {}; } catch (_) { saved = {}; }
     const hit = saved[`${from}|${to}`];
-    if (hit && hit.sig === sig && Array.isArray(hit.items)) return { items: hit.items, reason: null };
+    // Lists saved before v3.391 hold the example with Google's "(Translated by
+    // Google) … (Original)" bundle and a mid-word cut; re-derive on read.
+    if (hit && hit.sig === sig && Array.isArray(hit.items)) {
+      for (const it of hit.items) if (it && it.example) it.example.comment = clipText(reviewOriginal(it.example.comment), 400);
+      return { items: hit.items, reason: null };
+    }
   }
   const prompt = `GBP_WATCH_V1
 These are a hospital's negative and mixed Google reviews from ${from} to ${to}.
