@@ -8028,7 +8028,12 @@ const stackTotalLabels = {
         x = el.x;
       }
       if (!total || x == null) continue;
-      ctx.fillText(total.toLocaleString(), x, topY - 4);
+      // `bottom` (v3.405.0, MW): inside the bar at its foot, white, clear of the line.
+      const bot = chart.options.plugins && chart.options.plugins.stackTotalLabels
+        && chart.options.plugins.stackTotalLabels.bottom;
+      if (bot) { ctx.save(); ctx.fillStyle = '#FFFFFF';
+        ctx.fillText(total.toLocaleString(), x, chart.scales.y.getPixelForValue(0) - 5); ctx.restore(); }
+      else ctx.fillText(total.toLocaleString(), x, topY - 4);
     }
     ctx.restore();
   },
@@ -10714,13 +10719,19 @@ const bcPointLabels = {
         const txt = chartLabelTxt(v, { money: isMoney, short: cfg.short });
         const w = ctx.measureText(txt).width;
         let y = el.y - 6;
-        for (let g = 0; g < 6 && placed.some((q) => Math.abs(q.x - el.x) < w
-             && Math.abs(q.y - y) < 13); g++) y -= 13;
-        if (y < chartArea.top + 9) y = el.y + 14;
-        placed.push({ x: el.x, y: y });
-        ctx.fillStyle = 'rgba(255,255,255,.82)';
-        ctx.fillRect(el.x - w / 2 - 3, y - 9, w + 6, 12);
-        ctx.fillStyle = meta.type === 'bar' ? '#4C5878' : (ds.borderColor || '#4C5878');
+        // The base is the pixel for 0, which sits below a tight axis: clamp to the floor.
+        const foot = el.base != null ? Math.min(el.base, chartArea.bottom) : chartArea.bottom;
+        const atFoot = cfg.barBottom && meta.type === 'bar' && (foot - el.y) >= 18;
+        if (atFoot) y = foot - 6;
+        if (!atFoot) {
+          for (let g = 0; g < 6 && placed.some((q) => Math.abs(q.x - el.x) < w
+               && Math.abs(q.y - y) < 13); g++) y -= 13;
+          if (y < chartArea.top + 9) y = el.y + 14;
+          placed.push({ x: el.x, y: y });
+          ctx.fillStyle = 'rgba(255,255,255,.82)';
+          ctx.fillRect(el.x - w / 2 - 3, y - 9, w + 6, 12);
+        }
+        ctx.fillStyle = atFoot ? '#FFFFFF' : meta.type === 'bar' ? '#4C5878' : (ds.borderColor || '#4C5878');
         ctx.textAlign = 'center';
         ctx.fillText(txt, el.x, y);
       });
@@ -12492,7 +12503,7 @@ function renderGbp() {
     const band = (k, color, lab) => ({ type:'bar', label:lab, data: series.map(m => m[k] || 0),
       backgroundColor: color, stack:'s', borderRadius:2, order:2 });
     S.charts.gbpChart = new Chart(el.getContext('2d'), {
-      plugins: [ratingDotLabels],   // rating labels on the line (MW)
+      plugins: [ratingDotLabels, stackTotalLabels],   // rating on the line, totals at the bar foot (MW)
       data:{ labels: series.map(m => humanDate(m.month) || m.month), datasets:[
         { type:'line', label:'Average rating', data: series.map(avgOf), yAxisID:'y1', spanGaps:true,
           borderColor:'#6C5CE7', backgroundColor:'#6C5CE7', tension:.3, order:1, pointRadius:3,
@@ -12506,14 +12517,14 @@ function renderGbp() {
                      ticks:{color:'#8A94AD',font:cvFont(9),autoSkipPadding:8, precision:0, callback:(v)=>axisNum(v)} },
                  y1:{ position:'right', grid:{display:false}, suggestedMin:3.5, suggestedMax:5,
                       ticks:{color:'#8A94AD',font:cvFont(9),autoSkipPadding:8, callback:(v)=>axisNum(v)} } },
-        plugins:{ legend:{ labels:{color:'#4C5878',font:cvFont(10),usePointStyle:true,boxWidth:cvBox(7)} } } },
+        plugins:{ stackTotalLabels:{ bottom:true }, legend:{ labels:{color:'#4C5878',font:cvFont(10),usePointStyle:true,boxWidth:cvBox(7)} } } },
     });
     drawChart('gbpRvMonth', series.map(m => ({ d: m.month, count: m.count || 0, avg: avgOf(m) })), [
       // No shade under the line (MW).
-      { label:'Reviews', key:'count', color:'#6C5CE7', axis:'y', fill:false },
+      { label:'Reviews', key:'count', color:'#6C5CE7', axis:'y', fill:false, points:true },
       // Bars, not a line (MW): the average reads per month, the count as a trend.
       { label:'Average rating', key:'avg', color:HOUSE.good, axis:'y1', type:'bar' },
-    ], { labels: true, short: true,
+    ], { labels: true, short: true, barBottom: true,
       // Tight rating axis (MW: "whole numbers don't help"): 0.05 under the
       // lowest month, so 4.84 vs 4.96 reads as a difference, not equal bars.
       y1Min: (() => { const v = series.map(avgOf).filter(x => x != null); return v.length ? Math.max(0, Math.floor((Math.min(...v) - 0.05) * 20) / 20) : null; })(),
@@ -12952,7 +12963,9 @@ function drawChart(canvasId, rows, series, opts = {}) {
         datasets: series.map(s => ({
           label: s.label, data: rows.map(r => r[s.key]),
           borderColor: s.color, backgroundColor: s.color + '22',
-          tension: .35, fill: s.fill === false ? false : s.axis === 'y', yAxisID: s.axis, pointRadius: 0, borderWidth: 2,
+          tension: .35, fill: s.fill === false ? false : s.axis === 'y', yAxisID: s.axis, borderWidth: 2,
+          // `points` (v3.405.0): nodes on the line, white-ringed.
+          pointRadius: s.points ? 3 : 0, pointBackgroundColor: s.color, pointBorderColor: '#fff', pointBorderWidth: 1,
           // `type: 'bar'` on a series (v3.400.0): a bar series under the lines.
           ...(s.type === 'bar' ? { type: 'bar', backgroundColor: s.color + 'B3', borderWidth: 0,
             borderRadius: 3, fill: false, order: 2, maxBarThickness: 46 } : { order: 1 }),
@@ -12976,7 +12989,7 @@ function drawChart(canvasId, rows, series, opts = {}) {
             const wd = new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' });
             return `${d} \u00b7 ${wd}`;
           } } },
-          ...(opts.labels ? { lastPointLabels: { enabled: true, all: true, money: opts.money || [], short: !!opts.short } } : {}),
+          ...(opts.labels ? { lastPointLabels: { enabled: true, all: true, money: opts.money || [], short: !!opts.short, barBottom: !!opts.barBottom } } : {}),
         },
         scales: {
           x: { ticks:{ color:'#A7B0C7', font:cvFont(10), maxRotation:0, autoSkip:true, autoSkipPadding:12, maxTicksLimit:8 }, grid:{ color:'rgba(90,110,160,.09)' } },
@@ -13570,11 +13583,9 @@ function chartToSvg(chart, W, H) {
     const labY = lab ? (lab.data || []).map((v) => (v == null ? null : yOf(lab.yAxisID || 'y')(v) - 8)) : [];
     stackBase.forEach((tot, i) => {
       if (!(tot > 0)) return;
-      let ty = f0(tot) - 6, fill = '#4C5878';
-      if (labY[i] != null && Math.abs(labY[i] - ty) < 14) {
-        // Collides: put the total inside the bar, near its foot, in white.
-        ty = Math.max(f0(tot) + 14, f0(0) - 8); fill = '#FFFFFF';
-      }
+      // At the bar's foot, white (MW, v3.405.0): never collides with the line labels.
+      let ty = f0(0) - 6, fill = '#FFFFFF';
+      if (f0(0) - f0(tot) < 16) { ty = f0(tot) - 6; fill = '#4C5878'; }   // too short to hold it
       out.push('<text x="' + xAt(i).toFixed(1) + '" y="' + ty.toFixed(1)
         + '" text-anchor="middle" font-size="10" font-weight="700" fill="' + fill + '">'
         + svgEsc(String(Math.round(tot))) + '</text>');
@@ -13735,12 +13746,21 @@ function chartToSvg(chart, W, H) {
       const txt = chartLabelTxt(data[i], { money: money.indexOf(axis) > -1, short: !!lpl.short });
       const w = 6 + String(txt).length * (FS * 0.58);
       const right = x + 8 + w < padL + pw;
-      let ty = y - 6;
+      const sAxF = sc[axis]; const floorV = sAxF && sAxF.min > 0 ? sAxF.min : 0;
+      // At the foot only when the bar can hold it; a short bar keeps it on top.
+      const foot = !!lpl.barBottom && isBar && (yOf(axis)(floorV) - y) >= FS + 8;
+      let ty = foot ? yOf(axis)(floorV) - 6 : y - 6;
       /**
        * Collisions are checked PER X POSITION. With every point labelled, a
        * global check pushes a label up because something else sits at the same
        * height four months away, and the column drifts off the top of the plot.
        */
+      if (foot) {   // centred in the bar's foot, white, no box
+        out.push('<text x="' + x.toFixed(1) + '" y="' + ty.toFixed(1)
+          + '" text-anchor="middle" font-family="Poppins,sans-serif" font-size="' + FS
+          + '" font-weight="700" fill="#FFFFFF">' + svgEsc(txt) + '</text>');
+        return;
+      }
       for (let g = 0; g < 6 && placed.some((q) => Math.abs(q.x - x) < w
            && Math.abs(q.y - ty) < FS + 3); g++) ty -= FS + 4;
       if (ty < padT + FS) ty = y + FS + 6;
@@ -14143,7 +14163,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.404.0';
+const CLIENT_BUILD = '3.405.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

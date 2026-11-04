@@ -1,5 +1,13 @@
 ### Recent (November 2026)
 
+**v3.405.0 — Bar labels at the bar foot, nodes on lines** (MW).
+- Google reviews charts (screen + PDF twin): bar values sit inside the bar at its foot in
+  white (stack totals and the rating bars), clear of the line labels. A bar too short to
+  hold its label keeps it on top in dark. `drawChart` opts `barBottom`; series `points`
+  (nodes on the line); `stackTotalLabels` option `bottom`.
+- Trap: a bar's `base` is the pixel for 0, BELOW a tight axis (y1 from 2.95) — clamp to
+  `chartArea.bottom` or the label draws off the canvas.
+
 **v3.404.0 — GBP PDF file name corrected** (MW): "BGH Google Review - 1-31 Oct 2026" —
 the listing key replaces "BHQ" (v3.403 had put it after). Falls back to BHQ if no pill.
 
