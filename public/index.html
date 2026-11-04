@@ -13108,14 +13108,15 @@ $('printBtn').addEventListener('click', () => {
     PRINT_DOC_TITLE.prev = document.title;
     document.title = `${code} - ${range}`;
   }
-  // Google Profile (v3.398.0, MW): "BHQ Google Review - 1-31 Oct 2026".
+  // Google Profile PDF name (v3.404.0, MW): "<listing> Google Review - <range>".
   if (S.view === 'gbp') {
     const range = dpRangeLabel($('from').value, $('to').value).replace(/\s*\u2013\s*/g, '-');
     PRINT_DOC_TITLE.prev = document.title;
     // The listing shown, read from its pill, so the default tab names right too.
     const pill = document.querySelector('.slide.gs-reviews .all-four');
     const key = (pill && pill.textContent.trim()) || S.gbpTab || '';
-    document.title = `BHQ Google Review${key ? ' - ' + key : ''} - ${range}`;
+    // MW: "BGH Google Review - 1-31 Oct 2026" — the listing replaces BHQ.
+    document.title = `${key || 'BHQ'} Google Review - ${range}`;
   }
   /**
    * THE PDF WAITS FOR CLAUDE (MW, v3.400.0): printing while the review themes
@@ -14142,7 +14143,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.403.0';
+const CLIENT_BUILD = '3.404.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

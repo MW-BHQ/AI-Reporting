@@ -1,5 +1,8 @@
 ### Recent (November 2026)
 
+**v3.404.0 — GBP PDF file name corrected** (MW): "BGH Google Review - 1-31 Oct 2026" —
+the listing key replaces "BHQ" (v3.403 had put it after). Falls back to BHQ if no pill.
+
 **v3.403.0 — Monthly Report ratings cut too; GBP PDF names the listing** (MW agreed).
 - Server: review `avg` (range and monthly) sent unrounded (was `toFixed(2)`, a round).
   Monthly Report shows `rateTxt`/`rateAuto`, stars via `starsHtml` (exact fill).
