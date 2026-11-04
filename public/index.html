@@ -840,12 +840,13 @@
      the same 2fr/1fr as the 12-month card above it. */
   /* Print sizes (prep and print share them, so the twins are measured at the
      printed size): shorter charts and tighter mix rows fit the page at ~1:1. */
-  body.print-prep .gbp-rv12 .chart-wrap{height:240px!important;}
-  body.print-prep .gbp-rvm .chart-wrap{height:200px!important;}
+  body.print-prep .gbp-rv12 .chart-wrap{height:256px!important;}
+  body.print-prep .gbp-rvm .chart-wrap{height:216px!important;}
   body.print-prep .gbp-rv12 td, body.print-prep .gbp-rvm td{padding-top:3px!important;padding-bottom:3px!important;}
   body.print-prep .gs-reviews .stat{padding:12px 18px!important;}
   body.print-prep .gs-reviews .card{padding:14px 20px!important;}
   body.print-prep .gs-reviews .card-title{margin-bottom:6px!important;}
+  body.print-prep .slide.pn.gs-reviews .slide-title{margin-bottom:-6px!important;}
   body.print-prep .gbp-rvrow{grid-template-columns:1fr!important;}
   /* All listings is no-print; prep measures on SCREEN, so hide it here too or
      the slide is fitted to a page that still holds it (zoomed to 0.48). */
@@ -855,8 +856,8 @@
     .gbp-rvrow{grid-template-columns:1fr!important;}
     .gbp-rvm{display:grid!important;grid-template-columns:2fr 1fr;gap:24px;align-items:end;}
     .gbp-rv12{grid-template-columns:2fr 1fr!important;}
-    .gbp-rv12 .chart-wrap{height:240px!important;}
-    .gbp-rvm .chart-wrap{height:200px!important;}
+    .gbp-rv12 .chart-wrap{height:256px!important;}
+    .gbp-rvm .chart-wrap{height:216px!important;}
     /* Customers Voices carries its own page break for the old layout; on an
        auto-height page it split the header from the table. */
     .slide.gs-auto .gbp-voices{break-before:auto!important;}
@@ -869,6 +870,8 @@
     .gs-reviews .stat{padding:12px 18px!important;}
     .gs-reviews .card{padding:14px 20px!important;}
     .gs-reviews .card-title{margin-bottom:6px!important;}
+    /* Header-to-first-row gap = the gap between rows (MW: "thinner"). */
+    .slide.pn.gs-reviews .slide-title{margin-bottom:-6px!important;}
   }
   .tr-tag{font-size:var(--text-2xs);color:var(--faint);white-space:nowrap;}
   .tr-orig{font-size:var(--text-xs);color:var(--muted);margin-top:4px;}
@@ -14058,7 +14061,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.398.0';
+const CLIENT_BUILD = '3.399.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

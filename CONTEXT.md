@@ -1,5 +1,10 @@
 ### Recent (November 2026)
 
+**v3.399.0 — Google reviews PDF page: header gap = row gap** (MW: "thinner"). Header
+to first row was 32 px vs 8 px between rows; `.slide-title` margin-bottom -6px on that
+page (print + prep) makes them equal. The 24 px freed went to the charts (256/216 px),
+zoom unchanged (0.814).
+
 **v3.398.0 — Google Profile PDF: pages 3+ no longer split; file name** (MW's real PDF).
 - Cause: `gbpAutoPages` measured at SCREEN width/styles (1400 px) but the sheet lays out at
   1280 px with print rules: 2197 measured vs 2410 printed → overflow → split. Now measured
