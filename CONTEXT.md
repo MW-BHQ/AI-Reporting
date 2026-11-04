@@ -1,5 +1,10 @@
 ### Recent (November 2026)
 
+**v3.396.0 — Google Profile PDF order** (MW): Google reviews page prints first, the
+performance page after (they swap places); screen keeps performance first. `gbpPrintOrder`
+swaps the two slides in `sizeForPrint` and back in `clearPrintPrep`; `slide-break` follows
+the position.
+
 **v3.395.0 — Google Profile reviews blocks + 16:9 PDF** (MW, two screenshots from the
 Monthly Report).
 - "Reviews by month · stars stacked" → the Monthly Report's All time block (rvStack) on

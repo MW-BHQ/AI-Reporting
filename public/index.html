@@ -12389,10 +12389,10 @@ function renderGbp() {
   const sopt = (more) => ({ scope: L.key, cls: 'quiet pn', logo: GBP_LOGO[L.key], ...more });
   $('viewRoot').innerHTML = tabStrip
     /* Performance first, reviews below (MW, v3.388.0). */
-    + slideShell(`Google Business Profile \u00b7 ${L.title}`, perf.main, sopt({ first: true }))
+    + slideShell(`Google Business Profile \u00b7 ${L.title}`, perf.main, sopt({ first: true, cls: 'quiet pn gs-perf' }))
     /* Screen only (MW): not printed. */
     + slideShell('What people searched', perf.search, sopt({ cls: 'quiet pn no-print' }))
-    + slideShell('Google reviews', gbpPage1, sopt())
+    + slideShell('Google reviews', gbpPage1, sopt({ cls: 'quiet pn gs-reviews' }))
     + slideShell('Customers Voices', gbpVoices, sopt())
     /* Right under Customers Voices (MW, v3.389.0). Two slides so each prints
        as one readable 16:9 page. */
@@ -13837,9 +13837,28 @@ function onePageIfAsked() {
   st.textContent = '@media print{@page{size:13.333in ' + (tall / 96).toFixed(2) + 'in;margin:0;}}';
 }
 
+/**
+ * GOOGLE PROFILE PDF ORDER (MW, v3.396.0): reviews page first, performance
+ * after — screen keeps performance first. The two slides swap places in the
+ * DOM for the print and swap back after; the first slide is the one without
+ * `slide-break`, so that class moves with the position.
+ */
+function gbpPrintOrder(on) {
+  if (S.view !== 'gbp') return;
+  const perf = document.querySelector('.slide.gs-perf'), rev = document.querySelector('.slide.gs-reviews');
+  if (!perf || !rev) return;
+  const revFirst = Boolean(perf.compareDocumentPosition(rev) & Node.DOCUMENT_POSITION_PRECEDING);
+  if (on === revFirst) return;
+  const t = document.createComment('');
+  perf.replaceWith(t); rev.replaceWith(perf); t.replaceWith(rev);
+  const [first, other] = on ? [rev, perf] : [perf, rev];
+  first.classList.remove('slide-break'); other.classList.add('slide-break');
+}
+
 function sizeForPrint() {
   const body = document.body;
   if (!body) return Promise.resolve();
+  gbpPrintOrder(true);
   body.classList.add('print-prep');
   return new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)))
     /**
@@ -13856,6 +13875,7 @@ function sizeForPrint() {
                   return new Promise((r) => setTimeout(r, 150)); });
 }
 function clearPrintPrep() {
+  gbpPrintOrder(false);
   document.body.classList.remove('print-prep');
   document.body.classList.remove('pp-onepage');
   /**
@@ -13959,7 +13979,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.395.0';
+const CLIENT_BUILD = '3.396.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
