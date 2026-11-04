@@ -1,8 +1,18 @@
-# BHQ War Room — handover at v3.387.0
+# BHQ War Room — handover at v3.406.0
 
-Written for a fresh session. NEXT JOB: enhance the **Google Profile** tab (view id
-`gbp`). Read "Google Profile — starting point" and "Better Club" below first; the
-Shopee/LINE sections are unchanged reference.
+Google Profile tab (`gbp`) rebuilt this session (v3.388 → v3.406); full notes in
+CONTEXT.md. In short: per listing (6, incl. Dental/JMS) — performance (views, actions,
+MoM/YoY only on full windows), search terms (Windsor monthly keywords; latest PUBLISHED
+month, Google lags 1–2 weeks), reviews (12-month stack + Reviews by month), Customers
+Voices, AI Review sentiment + watch list + themes (Claude, tags kept in GCS by review id;
+originals shown, non-Thai/English translated). PDF: reviews page first, 16:9 pages 1–2,
+pages 3+ auto height (`gbpAutoPages` + `gbp-measure` — keep in step with `.slide.pn`
+print rules), waits for Claude, file "<listing> Google Review - <range>". Ratings are CUT,
+never rounded (`rateTxt`/`rateAuto`/`starsHtml`), Monthly Report too.
+
+Open: visual.py fails 5 table screens by font drift in the sandbox (same on untouched
+v3.387) — re-baseline in MW's environment if they persist. Keyword-rankings sheet still
+read by the Monthly Report until MW retires it.
 
 ## Where things are
 

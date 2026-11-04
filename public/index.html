@@ -12524,7 +12524,7 @@ function renderGbp() {
       { label:'Reviews', key:'count', color:'#6C5CE7', axis:'y', fill:false, points:true },
       // Bars, not a line (MW): the average reads per month, the count as a trend.
       { label:'Average rating', key:'avg', color:HOUSE.good, axis:'y1', type:'bar' },
-    ], { labels: true, short: true, barBottom: true,
+    ], { labels: true, short: true, barBottom: true, allTicks: true,
       // Tight rating axis (MW: "whole numbers don't help"): 0.05 under the
       // lowest month, so 4.84 vs 4.96 reads as a difference, not equal bars.
       y1Min: (() => { const v = series.map(avgOf).filter(x => x != null); return v.length ? Math.max(0, Math.floor((Math.min(...v) - 0.05) * 20) / 20) : null; })(),
@@ -12992,7 +12992,9 @@ function drawChart(canvasId, rows, series, opts = {}) {
           ...(opts.labels ? { lastPointLabels: { enabled: true, all: true, money: opts.money || [], short: !!opts.short, barBottom: !!opts.barBottom } } : {}),
         },
         scales: {
-          x: { ticks:{ color:'#A7B0C7', font:cvFont(10), maxRotation:0, autoSkip:true, autoSkipPadding:12, maxTicksLimit:8 }, grid:{ color:'rgba(90,110,160,.09)' } },
+          // opts.allTicks (v3.406.0): every label, for a 12-month axis that skipped months.
+          x: { ticks:{ color:'#A7B0C7', font:cvFont(10), maxRotation:0,
+            ...(opts.allTicks ? { autoSkip:false } : { autoSkip:true, autoSkipPadding:12, maxTicksLimit:8 }) }, grid:{ color:'rgba(90,110,160,.09)' } },
           y: { position:'left', ticks:{ color:'#A7B0C7', font:cvFont(10), autoSkipPadding:6, callback:(v)=>axisNum(v) }, grid:{ color:'rgba(90,110,160,.09)' } },
           /**
            * THE RIGHT-HAND AXIS ONLY EXISTS WHEN A SERIES ASKS FOR IT.
@@ -14163,7 +14165,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.405.0';
+const CLIENT_BUILD = '3.406.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

@@ -1,5 +1,9 @@
 ### Recent (November 2026)
 
+**v3.406.0 — Reviews by month shows every month** (MW): `drawChart` capped x labels at 8
+(autoSkip), so the 12-month axis skipped months. `opts.allTicks` turns that off; the twin
+reads the chart's ticks, so the PDF follows.
+
 **v3.405.0 — Bar labels at the bar foot, nodes on lines** (MW).
 - Google reviews charts (screen + PDF twin): bar values sit inside the bar at its foot in
   white (stack totals and the rating bars), clear of the line labels. A bar too short to
