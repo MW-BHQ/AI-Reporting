@@ -1,5 +1,17 @@
 ### Recent (November 2026)
 
+**v3.402.0 — Ratings cut, never rounded; PDF chart twins match the screen** (MW).
+- `rateTxt` (cut to 2 decimals), `rateAuto` (1 decimal when that is all the value has,
+  e.g. Google's 4.8), `starsHtml` (stars filled to the exact rating, overlay not rounding).
+  Used on the Google Profile tab, chart labels, tooltips and the SVG twins. avgOf no
+  longer rounds. Monthly Report ratings not touched yet.
+- `chartLabelTxt` shared by the canvas label plugin and `chartToSvg`: the twin now prints
+  compact numbers (`short`) like the screen.
+- Twin bars on a tight axis start at the axis floor (they ran below the chart, over the
+  month names). Stack totals that collide with a labelled line move inside the bar, white.
+- Reviews by month: no shade under the line (`fill:false` on a series). Last 12 months:
+  rating labels on the line (`_showPointLabels` + `ratingDotLabels` on screen).
+
 **v3.401.0 — Google Profile chart labels, tight rating axis, AI chip** (MW).
 - Reviews by month: rating axis starts 0.05 under the lowest month (`y1Min`), not 0 —
   equal-looking bars hid 4.84 vs 4.96. Data labels on (ratings keep 2 decimals).

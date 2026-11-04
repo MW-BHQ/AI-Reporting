@@ -831,7 +831,9 @@
   body.gbp-measure .slide.gs-auto td,body.gbp-measure .slide.gs-auto th{padding:9px 14px 9px 0!important;font-size:14px!important;}
   body.gbp-measure .slide.gs-auto .tscroll{margin:0!important;padding:0!important;}
   body.gbp-measure .slide.gs-auto .no-print{display:none!important;}
-  .gbp-stars{font-size:.55em;color:#F2A93B;letter-spacing:.06em;vertical-align:.2em;}
+  .gbp-stars{font-size:.55em;letter-spacing:.06em;vertical-align:.2em;position:relative;display:inline-block;white-space:nowrap;}
+  .gbp-stars .gs-base{color:#DCE0EA;}
+  .gbp-stars .gs-fill{position:absolute;left:0;top:0;overflow:hidden;color:#F2A93B;}
   .gbp-rv12{display:grid;grid-template-columns:2fr 1fr;gap:24px;align-items:end;}
   /* min-width:0 — a grid column's min-content is the canvas's drawn width, so
      without it the grid blew out at print width and the slide zoomed to ~50%. */
@@ -7933,6 +7935,35 @@ const RATING_LINE = '#5B57E8';   // purple-blue: reads clearly over the greens
  * Labels are skipped when bars get too narrow to hold a number without
  * colliding — better absent than overlapping.
  */
+/**
+ * RATINGS ARE CUT, NEVER ROUNDED (MW, v3.402.0: "don't round any rating up or
+ * down, it misleads"). 4.79 reads 4.79 and a 4.995 month reads 4.99, not 5.
+ * One helper for the screen, the chart labels and the printed twins.
+ */
+function rateTxt(v, d = 2) {
+  if (v === null || v === undefined || !isFinite(Number(v))) return '\u2014';
+  const k = Math.pow(10, d);
+  return (Math.floor(Number(v) * k + 1e-9) / k).toFixed(d);
+}
+/** Chart value label, shared by the canvas plugin and the SVG twin. */
+/** A rating as stored: one decimal when that is all it has (Google's 4.8), else two, cut. */
+function rateAuto(v) {
+  if (v === null || v === undefined || !isFinite(Number(v))) return '\u2014';
+  const x = Number(v);
+  return Math.abs(x * 10 - Math.round(x * 10)) < 1e-9 ? x.toFixed(1) : rateTxt(x, 2);
+}
+/** Five stars filled to the exact rating (4.8 = 96%), not rounded to whole stars. */
+function starsHtml(v) {
+  const pct = Math.max(0, Math.min(100, Number(v) / 5 * 100));
+  return `<span class="gbp-stars"><span class="gs-base">\u2605\u2605\u2605\u2605\u2605</span><span class="gs-fill" style="width:${pct.toFixed(1)}%">\u2605\u2605\u2605\u2605\u2605</span></span>`;
+}
+function chartLabelTxt(v, { money, short } = {}) {
+  const x = Number(v);
+  if (Math.abs(x) < 10 && !Number.isInteger(x)) return rateTxt(x);
+  const n = Math.round(x);
+  return money ? bcShortMoney(n) : short ? axisNum(n) : n.toLocaleString();
+}
+
 const ratingDotLabels = {
   id: 'ratingDotLabels',
   afterDatasetsDraw(chart) {
@@ -7955,7 +7986,7 @@ const ratingDotLabels = {
       if (i % every !== 0 && i !== pts.length - 1) return;
       const v = chart.data.datasets[idx].data[i];
       if (v == null) return;
-      const txt = Number(v).toFixed(2);
+      const txt = rateTxt(v);
       // Halo first so the number stays legible wherever it lands.
       ctx.strokeText(txt, pt.x, pt.y - 7);
       ctx.fillStyle = RATING_LINE;
@@ -10680,11 +10711,7 @@ const bcPointLabels = {
         if (!cfg.all && i !== ds.data.length - 1) return;
         const el = meta.data[i];
         if (!el) return;
-        const n = Math.round(Number(v));
-        // Ratings (4.92) keep two decimals; 12,500 reads 12.5K when cfg.short.
-        const txt = isMoney ? bcShortMoney(n)
-          : (Math.abs(+v) < 10 && !Number.isInteger(+v)) ? (+v).toFixed(2)
-          : cfg.short ? axisNum(n) : n.toLocaleString();
+        const txt = chartLabelTxt(v, { money: isMoney, short: cfg.short });
         const w = ctx.measureText(txt).width;
         let y = el.y - 6;
         for (let g = 0; g < 6 && placed.some((q) => Math.abs(q.x - el.x) < w
@@ -12300,7 +12327,7 @@ function renderGbp() {
 
   const tabStrip = `<div class="acct-tabs">${list.map(l=>`
     <button class="acct-tab ${l.key===S.gbpTab?'active':''}" data-gtab="${esc(l.key)}" title="${esc(l.title)}">
-      ${esc(l.key)}<small>${l.allTimeRating!=null?l.allTimeRating.toFixed(1)+'★':''} ${num(l.allTimeCount)}</small>
+      ${esc(l.key)}<small>${l.allTimeRating!=null?rateAuto(l.allTimeRating)+'★':''} ${num(l.allTimeCount)}</small>
     </button>`).join('')}</div>`;
 
   const totalStars = ['s1','s2','s3','s4','s5'].reduce((a,k)=>a+L.stars[k],0);
@@ -12331,8 +12358,7 @@ function renderGbp() {
     <div class="grid g-4">
       <div class="stat card"><div class="lab">All-time rating</div>
         <!-- Number lavender, stars gold (MW, v3.400.0). -->
-        <div class="val" style="color:var(--violet)">${L.allTimeRating!=null?L.allTimeRating.toFixed(1):'—'}${L.allTimeRating!=null
-          ? ` <span class="gbp-stars">${'\u2605'.repeat(Math.round(L.allTimeRating))}${'\u2606'.repeat(5-Math.round(L.allTimeRating))}</span>` : ''}</div>
+        <div class="val" style="color:var(--violet)">${rateAuto(L.allTimeRating)}${L.allTimeRating!=null ? ' ' + starsHtml(L.allTimeRating) : ''}</div>
         <div class="sub">${L.allTimeCount!=null?'across '+num(L.allTimeCount)+' reviews':''}</div></div>
       <!-- All-time reviews, its own card (MW). It was a sub-line under the
            rating, where a 9,000-review base read as a footnote to a 4.7. -->
@@ -12343,7 +12369,7 @@ function renderGbp() {
         <div class="val">${num(L.periodCount)}</div>
         <div class="sub">${esc(humanDate(d.range.from))} → ${esc(humanDate(d.range.to))}</div></div>
       <div class="stat card"><div class="lab">Rating in period</div>
-        <div class="val">${L.periodRating!=null?L.periodRating.toFixed(2)+' ★':'—'}</div>
+        <div class="val">${L.periodRating!=null?rateTxt(L.periodRating)+' ★':'—'}</div>
         <div class="sub">${L.allTimeRating!=null&&L.periodRating!=null?(L.periodRating>=L.allTimeRating?'at or above':'below')+' all-time':''}</div></div>
     </div>
 
@@ -12384,7 +12410,7 @@ function renderGbp() {
         <table><thead><tr><th>Listing</th><th class="num">Rating</th><th class="num">Total</th></tr></thead><tbody>
         ${list.map(l=>`<tr style="${l.key===S.gbpTab?'background:rgba(124,107,245,.05)':''}">
           <td class="strong" style="cursor:pointer" data-gtab2="${esc(l.key)}">${esc(l.key)}<div style="font-size:var(--text-3xs);color:var(--faint);font-weight:400;">${esc(l.title.slice(0,32))}</div></td>
-          <td class="num" style="color:${l.allTimeRating>=4.5?'var(--green)':(l.allTimeRating>=4?'var(--amber)':'var(--rose)')};font-weight:600;">${l.allTimeRating!=null?l.allTimeRating.toFixed(1):'—'}</td>
+          <td class="num" style="color:${l.allTimeRating>=4.5?'var(--green)':(l.allTimeRating>=4?'var(--amber)':'var(--rose)')};font-weight:600;">${rateAuto(l.allTimeRating)}</td>
           <td class="num">${num(l.allTimeCount)}</td></tr>`).join('')}
         </tbody></table>
       </div>
@@ -12459,16 +12485,18 @@ function renderGbp() {
    * by month (rvMonth). A month with no reviews has no average — a gap, not 0.
    */
   const series = L.series || [];
-  const avgOf = (m) => m.count ? Math.round(m.ratingSum / m.count * 100) / 100 : null;
+  const avgOf = (m) => m.count ? m.ratingSum / m.count : null;   // cut at display, never rounded
   const el = document.getElementById('gbpChart');
   try {
     if (typeof Chart === 'undefined') throw new Error('chart library unavailable');
     const band = (k, color, lab) => ({ type:'bar', label:lab, data: series.map(m => m[k] || 0),
       backgroundColor: color, stack:'s', borderRadius:2, order:2 });
     S.charts.gbpChart = new Chart(el.getContext('2d'), {
+      plugins: [ratingDotLabels],   // rating labels on the line (MW)
       data:{ labels: series.map(m => humanDate(m.month) || m.month), datasets:[
         { type:'line', label:'Average rating', data: series.map(avgOf), yAxisID:'y1', spanGaps:true,
-          borderColor:'#6C5CE7', backgroundColor:'#6C5CE7', tension:.3, order:1, pointRadius:3 },
+          borderColor:'#6C5CE7', backgroundColor:'#6C5CE7', tension:.3, order:1, pointRadius:3,
+          _showPointLabels: true },
         band('s5',HOUSE.good,'5\u2605'), band('s4','#8ED0A9','4\u2605'),
         band('s3','#F2A93B','3\u2605'), band('s2','#EE8A5B','2\u2605'), band('s1',HOUSE.bad,'1\u2605'),
       ]},
@@ -12481,7 +12509,8 @@ function renderGbp() {
         plugins:{ legend:{ labels:{color:'#4C5878',font:cvFont(10),usePointStyle:true,boxWidth:cvBox(7)} } } },
     });
     drawChart('gbpRvMonth', series.map(m => ({ d: m.month, count: m.count || 0, avg: avgOf(m) })), [
-      { label:'Reviews', key:'count', color:'#6C5CE7', axis:'y' },
+      // No shade under the line (MW).
+      { label:'Reviews', key:'count', color:'#6C5CE7', axis:'y', fill:false },
       // Bars, not a line (MW): the average reads per month, the count as a trend.
       { label:'Average rating', key:'avg', color:HOUSE.good, axis:'y1', type:'bar' },
     ], { labels: true, short: true,
@@ -12923,7 +12952,7 @@ function drawChart(canvasId, rows, series, opts = {}) {
         datasets: series.map(s => ({
           label: s.label, data: rows.map(r => r[s.key]),
           borderColor: s.color, backgroundColor: s.color + '22',
-          tension: .35, fill: s.axis === 'y', yAxisID: s.axis, pointRadius: 0, borderWidth: 2,
+          tension: .35, fill: s.fill === false ? false : s.axis === 'y', yAxisID: s.axis, pointRadius: 0, borderWidth: 2,
           // `type: 'bar'` on a series (v3.400.0): a bar series under the lines.
           ...(s.type === 'bar' ? { type: 'bar', backgroundColor: s.color + 'B3', borderWidth: 0,
             borderRadius: 3, fill: false, order: 2, maxBarThickness: 46 } : { order: 1 }),
@@ -12936,7 +12965,11 @@ function drawChart(canvasId, rows, series, opts = {}) {
         interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: { labels: { color:'#4C5878', font:cvFont(11), usePointStyle:true, boxWidth:cvBox(7) } },
-          tooltip: { callbacks: { title: (items) => {
+          tooltip: { callbacks: {
+            // Ratings cut, not rounded (rateTxt); everything else as Chart.js shows it.
+            label: (c) => { const v = c.parsed && c.parsed.y; return `${c.dataset.label}: ${
+              v != null && Math.abs(v) < 10 && !Number.isInteger(v) ? rateTxt(v) : (v != null ? v.toLocaleString() : '\u2014')}`; },
+            title: (items) => {
             const d = items && items[0] && items[0].label;
             if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return d || '';
             // Parsed as UTC so the weekday cannot shift by a day in +07.
@@ -13488,9 +13521,11 @@ function chartToSvg(chart, W, H) {
     const off = stacked ? 0 : (bi - (barN - 1) / 2) * bw;
     (d.data || []).forEach((v, i) => {
       if (v === null || v === undefined) return;   // absent, not zero
-      const base = stacked ? stackBase[i] : 0;
-      const y0 = f(base), y1p = f(base + (Number(v) || 0));
-      stackBase[i] = base + (Number(v) || 0);
+      const sAx = sc[d.yAxisID || 'y'];
+      const floor = sAx && sAx.min > 0 ? sAx.min : 0;   // a tight axis: bar from its floor
+      const base = stacked ? stackBase[i] : floor;
+      const y0 = f(base), y1p = f(stacked ? base + (Number(v) || 0) : (Number(v) || 0));
+      if (stacked) stackBase[i] = base + (Number(v) || 0);
       const top = Math.min(y0, y1p), hh = Math.abs(y0 - y1p);
       if (!(hh > 0)) return;
       /* SQUARE. v3.169 rounded every segment from the dataset's `borderRadius`
@@ -13526,10 +13561,18 @@ function chartToSvg(chart, W, H) {
    */
   if (stacked && bars.length) {
     const f0 = yOf(bars[0].yAxisID || 'y');
+    // Where the labelled line's label sits per month, to dodge it (MW).
+    const lab = ds.find((d) => (d.type || chart.config.type) !== 'bar' && d._showPointLabels);
+    const labY = lab ? (lab.data || []).map((v) => (v == null ? null : yOf(lab.yAxisID || 'y')(v) - 8)) : [];
     stackBase.forEach((tot, i) => {
       if (!(tot > 0)) return;
-      out.push('<text x="' + xAt(i).toFixed(1) + '" y="' + (f0(tot) - 6).toFixed(1)
-        + '" text-anchor="middle" font-size="10" font-weight="700" fill="#4C5878">'
+      let ty = f0(tot) - 6, fill = '#4C5878';
+      if (labY[i] != null && Math.abs(labY[i] - ty) < 14) {
+        // Collides: put the total inside the bar, near its foot, in white.
+        ty = Math.max(f0(tot) + 14, f0(0) - 8); fill = '#FFFFFF';
+      }
+      out.push('<text x="' + xAt(i).toFixed(1) + '" y="' + ty.toFixed(1)
+        + '" text-anchor="middle" font-size="10" font-weight="700" fill="' + fill + '">'
         + svgEsc(String(Math.round(tot))) + '</text>');
     });
   }
@@ -13572,7 +13615,7 @@ function chartToSvg(chart, W, H) {
         out.push('<text x="' + xAt(i2).toFixed(1) + '" y="' + (y - 8).toFixed(1)
           + '" text-anchor="middle" font-size="9.5" font-weight="700" fill="'
           + svgEsc(d.borderColor || '#6C5CE7') + '">'
-          + svgEsc(Number(v).toFixed(2)) + '</text>');
+          + svgEsc(rateTxt(v)) + '</text>');
       });
     }
 
@@ -13685,8 +13728,7 @@ function chartToSvg(chart, W, H) {
        * the work the ฿ was doing: it tells money apart from a member count
        * without a symbol that renders badly at this size.
        */
-      const raw = Math.round(Number(data[i]));
-      const txt = (money.indexOf(axis) > -1) ? bcShortMoney(raw) : raw.toLocaleString();
+      const txt = chartLabelTxt(data[i], { money: money.indexOf(axis) > -1, short: !!lpl.short });
       const w = 6 + String(txt).length * (FS * 0.58);
       const right = x + 8 + w < padL + pw;
       let ty = y - 6;
@@ -14097,7 +14139,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.401.0';
+const CLIENT_BUILD = '3.402.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
