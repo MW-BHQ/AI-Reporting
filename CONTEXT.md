@@ -1,5 +1,20 @@
 ### Recent (November 2026)
 
+**Better Club dev backfill: read_post, click_cta, quiz_result LOADED (4 Nov 2026)**:
+- Dev files are DATABASE tables (own columns, UTC/+07:00 times), loaded via
+  `import_dev_<tab>` + `import_dev_<tab>_run` (bq/better_club/40_import_dev.sql): times →
+  Bangkok, columns mapped, only rows before the sheet's first day. Verified on 10-20 Aug
+  2026 overlap: reads 3,570/3,570 and clicks 186/186 match the sheet to the second.
+- Added: clicks 30,295, reads 148,628, quiz answers 1,382. Seam clean (dev to 2 Aug,
+  sheet from 3 Aug). 0 null keys in every view, so the daily ASSERTs pass.
+- Procedures use CREATE OR REPLACE TEMP TABLE: three CALLs in one script share temp names.
+- QUIZ GAP: from Feb 2025 the dev's quiz_title is the quiz CODE, and the question text is
+  not in the export. 18,412 answers (Feb 2025 – 1 Aug 2026) are HELD in
+  import_dev_quiz_result. Upload the dev's quiz list (quiz_id, question) to
+  import_dev_quiz_questions and re-run import_dev_quiz_result_run; only held rows go in.
+- Clicks fall to 1-10/day from late June to mid-Aug 2026 in the dev's own data: an app
+  tracking change, not a load gap.
+
 **v3.385.1** — Better Club daily load moved to 07:00 Bangkok (MW); freshness footnote updated.
 
 **Better Club backfill LOADED (4 Nov 2026, no code change)**: MW uploaded the dev's

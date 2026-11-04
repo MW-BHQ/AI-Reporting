@@ -30,7 +30,7 @@ DECLARE run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP();
 DECLARE cutoff DATE DEFAULT (SELECT MIN(DATE(`ai-reporting-503911.better_club.parse_dt`(date)))
   FROM `ai-reporting-503911.better_club.raw_click_cta` WHERE _source = 'sheet');
 DECLARE n INT64;
-CREATE TEMP TABLE m AS
+CREATE OR REPLACE TEMP TABLE m AS
 SELECT NULLIF(TRIM(user_id), '') AS user_id, `ai-reporting-503911.better_club.bkk`(date_created) AS date,
   NULLIF(TRIM(cta_desc_1), '') AS event, CAST(NULL AS STRING) AS email, CAST(NULL AS STRING) AS phone,
   CAST(NULL AS STRING) AS gender, CAST(NULL AS STRING) AS dob, NULLIF(TRIM(referer_url), '') AS url
@@ -50,36 +50,54 @@ WHEN NOT MATCHED THEN INSERT (user_id, date, event, email, phone, gender, dob, u
 INSERT `ai-reporting-503911.better_club._ingest_log` VALUES (run_at, CONCAT('import:click_cta:', label), n, @@row_count);
 END;
 
--- The dev's quiz_title is the QUESTION; a quiz is identified by quiz_id. A
--- multi-select answer may arrive as a JSON array; it is stored "a|b|c" like the sheet.
+-- QUIZ. The dev's quiz_title is the question text only until Jan 2025; from Feb
+-- 2025 it is the quiz code (main-2025-02-02, sometimes "main-2026-03-18 - 31"),
+-- and the question text is not in the export at all. So:
+--   quiz_title = the code when there is one, else 'quiz-<quiz_id>'
+--   question   = import_dev_quiz_questions (quiz_id -> question) when supplied,
+--                else the old-format title, else NULL
+-- Rows still without a question are HELD (not loaded): a blank question would
+-- show in Quiz Insight, and re-adding the row with its question later would
+-- count it twice. Upload the dev's quiz list and re-run; only the held rows go in.
+-- Multi-select answers already arrive "a|b|c", the sheet's format.
+CREATE TABLE IF NOT EXISTS `ai-reporting-503911.better_club.import_dev_quiz_questions` (quiz_id STRING, question STRING);
 CREATE OR REPLACE PROCEDURE `ai-reporting-503911.better_club.import_dev_quiz_result_run`(label STRING)
 BEGIN
 DECLARE run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP();
 DECLARE cutoff DATE DEFAULT (SELECT MIN(DATE(`ai-reporting-503911.better_club.parse_dt`(date_created)))
   FROM `ai-reporting-503911.better_club.raw_quiz_result` WHERE _source = 'sheet');
 DECLARE n INT64;
-CREATE TEMP TABLE m AS
+DECLARE held INT64;
+CREATE OR REPLACE TEMP TABLE m AS
+WITH d AS (
+  SELECT q.*, REGEXP_EXTRACT(TRIM(q.quiz_title), r'^([a-z]+-\d{4}-\d{2}-\d{2})') AS code, l.question AS listed
+  FROM `ai-reporting-503911.better_club.import_dev_quiz_result` q
+  LEFT JOIN (SELECT TRIM(quiz_id) AS quiz_id, ANY_VALUE(NULLIF(TRIM(question), '')) AS question
+             FROM `ai-reporting-503911.better_club.import_dev_quiz_questions` GROUP BY 1) l
+    ON l.quiz_id = TRIM(q.quiz_id)
+  WHERE NULLIF(TRIM(q.user_id), '') IS NOT NULL)
 SELECT NULLIF(TRIM(user_id), '') AS user_id, `ai-reporting-503911.better_club.bkk`(date_created) AS date_created,
   CAST(NULL AS STRING) AS email, CAST(NULL AS STRING) AS phone, CAST(NULL AS STRING) AS gender, CAST(NULL AS STRING) AS dob,
-  CAST(NULL AS STRING) AS quiz_type, NULLIF(TRIM(website_url), '') AS url,
-  CONCAT('quiz-', TRIM(quiz_id)) AS quiz_title, NULLIF(TRIM(quiz_title), '') AS question,
-  IF(STARTS_WITH(TRIM(answer), '['),
-     ARRAY_TO_STRING(ARRAY(SELECT JSON_VALUE(x) FROM UNNEST(JSON_QUERY_ARRAY(SAFE.PARSE_JSON(TRIM(answer)))) x), '|'),
-     NULLIF(TRIM(answer), '')) AS answer
-FROM `ai-reporting-503911.better_club.import_dev_quiz_result`
-WHERE NULLIF(TRIM(user_id), '') IS NOT NULL;
+  IF(code IS NOT NULL, 'main', NULL) AS quiz_type, NULLIF(TRIM(website_url), '') AS url,
+  COALESCE(code, CONCAT('quiz-', TRIM(quiz_id))) AS quiz_title,
+  COALESCE(listed, IF(code IS NULL, NULLIF(TRIM(quiz_title), ''), NULL)) AS question,
+  NULLIF(TRIM(answer), '') AS answer
+FROM d;
 SET n = (SELECT COUNT(*) FROM m);
+SET held = (SELECT COUNTIF(question IS NULL) FROM m WHERE cutoff IS NULL OR DATE(`ai-reporting-503911.better_club.parse_dt`(date_created)) < cutoff);
 ASSERT (SELECT COUNTIF(date_created IS NULL) FROM m) = 0 AS 'quiz_result: a dev time did not parse';
 MERGE `ai-reporting-503911.better_club.raw_quiz_result` r
 USING (
   SELECT *, TO_HEX(SHA256(TO_JSON_STRING(STRUCT(user_id, date_created, email, phone, gender, dob, quiz_type, url, quiz_title, question, answer)))) AS _h
-  FROM m WHERE cutoff IS NULL OR DATE(`ai-reporting-503911.better_club.parse_dt`(date_created)) < cutoff
+  FROM m WHERE question IS NOT NULL
+    AND (cutoff IS NULL OR DATE(`ai-reporting-503911.better_club.parse_dt`(date_created)) < cutoff)
   QUALIFY ROW_NUMBER() OVER (PARTITION BY _h) = 1
 ) s
 ON r._row_hash = s._h
 WHEN NOT MATCHED THEN INSERT (user_id, date_created, email, phone, gender, dob, quiz_type, url, quiz_title, question, answer, _row_hash, _source, _loaded_at)
   VALUES (s.user_id, s.date_created, s.email, s.phone, s.gender, s.dob, s.quiz_type, s.url, s.quiz_title, s.question, s.answer, s._h, CONCAT('import:', label), run_at);
 INSERT `ai-reporting-503911.better_club._ingest_log` VALUES (run_at, CONCAT('import:quiz_result:', label), n, @@row_count);
+INSERT `ai-reporting-503911.better_club._ingest_log` VALUES (run_at, CONCAT('import:quiz_result:', label, ':held_no_question'), held, 0);
 END;
 
 -- fpd_tags is a JSON array of tag names; the sheet spreads them over tag_1..tag_10.
@@ -89,7 +107,7 @@ DECLARE run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP();
 DECLARE cutoff DATE DEFAULT (SELECT MIN(DATE(`ai-reporting-503911.better_club.parse_dt`(date)))
   FROM `ai-reporting-503911.better_club.raw_read_post` WHERE _source = 'sheet');
 DECLARE n INT64;
-CREATE TEMP TABLE m AS
+CREATE OR REPLACE TEMP TABLE m AS
 WITH s AS (
   SELECT *, ARRAY(SELECT TRIM(JSON_VALUE(x)) FROM UNNEST(JSON_QUERY_ARRAY(SAFE.PARSE_JSON(fpd_tags))) x) AS t
   FROM `ai-reporting-503911.better_club.import_dev_read_post` WHERE NULLIF(TRIM(user_id), '') IS NOT NULL)
