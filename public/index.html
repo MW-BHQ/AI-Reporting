@@ -4978,8 +4978,8 @@ function renderReport() {
       <div class="stat card"><div class="lab">Reviews this period</div>
         <div class="val">${num(RVB.count)}</div></div>
       <div class="stat card"><div class="lab">Average this period</div>
-        <div class="val">${RVB.avg ?? '\u2014'}</div>
-        <div class="sub2">${RVB.lifetime && RVB.lifetime.avg ? `lifetime ${RVB.lifetime.avg}` : ''}</div></div>
+        <div class="val">${rateTxt(RVB.avg)}</div>
+        <div class="sub2">${RVB.lifetime && RVB.lifetime.avg ? `lifetime ${rateAuto(RVB.lifetime.avg)}` : ''}</div></div>
       <div class="stat card"><div class="lab">Lifetime reviews</div>
         <div class="val">${RVB.lifetime ? num(RVB.lifetime.total) : '\u2014'}</div></div>
     </div>
@@ -5005,9 +5005,9 @@ function renderReport() {
         <div class="card-title">All time</div>
         <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:2px">
           <div style="font-size:var(--text-4xl);font-weight:700;color:var(--violet);line-height:1">
-            ${RVB.lifetime && RVB.lifetime.avg ? RVB.lifetime.avg : '\u2014'}</div>
-          <div style="font-size:var(--text-sm);color:#F2A93B">${RVB.lifetime && RVB.lifetime.avg
-            ? stars5(Math.round(RVB.lifetime.avg)) : ''}</div>
+            ${RVB.lifetime && RVB.lifetime.avg ? rateAuto(RVB.lifetime.avg) : '\u2014'}</div>
+          <div style="font-size:var(--text-sm)">${RVB.lifetime && RVB.lifetime.avg
+            ? starsHtml(RVB.lifetime.avg) : ''}</div>
         </div>
         <div class="lab" style="margin-bottom:12px">lifetime average across
           ${RVB.lifetime ? num(RVB.lifetime.total) : '\u2014'} reviews</div>
@@ -13112,7 +13112,10 @@ $('printBtn').addEventListener('click', () => {
   if (S.view === 'gbp') {
     const range = dpRangeLabel($('from').value, $('to').value).replace(/\s*\u2013\s*/g, '-');
     PRINT_DOC_TITLE.prev = document.title;
-    document.title = `BHQ Google Review - ${range}`;
+    // The listing shown, read from its pill, so the default tab names right too.
+    const pill = document.querySelector('.slide.gs-reviews .all-four');
+    const key = (pill && pill.textContent.trim()) || S.gbpTab || '';
+    document.title = `BHQ Google Review${key ? ' - ' + key : ''} - ${range}`;
   }
   /**
    * THE PDF WAITS FOR CLAUDE (MW, v3.400.0): printing while the review themes
@@ -14139,7 +14142,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.402.0';
+const CLIENT_BUILD = '3.403.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

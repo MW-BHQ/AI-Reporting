@@ -1,5 +1,11 @@
 ### Recent (November 2026)
 
+**v3.403.0 — Monthly Report ratings cut too; GBP PDF names the listing** (MW agreed).
+- Server: review `avg` (range and monthly) sent unrounded (was `toFixed(2)`, a round).
+  Monthly Report shows `rateTxt`/`rateAuto`, stars via `starsHtml` (exact fill).
+- GBP PDF file name: "BHQ Google Review - BGH - 1-31 Oct 2026" (listing read from the
+  reviews page pill).
+
 **v3.402.0 — Ratings cut, never rounded; PDF chart twins match the screen** (MW).
 - `rateTxt` (cut to 2 decimals), `rateAuto` (1 decimal when that is all the value has,
   e.g. Google's 4.8), `starsHtml` (stars filled to the exact rating, overlay not rounding).

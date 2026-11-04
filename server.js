@@ -2846,7 +2846,8 @@ async function buildReport(from, to) {
       const sum = Object.entries(a.stars).reduce((x, [k, v]) => x + Number(k) * v, 0);
       return {
         key: b.key, label: b.label,
-        count: a.count, avg: a.count ? +(sum / a.count).toFixed(2) : null,
+        // Unrounded (MW: never round a rating); the client cuts at display (rateTxt).
+        count: a.count, avg: a.count ? sum / a.count : null,
         stars: a.stars,
         replyRate: a.count ? a.replied / a.count : null,
         replied: a.replied,
@@ -2861,7 +2862,7 @@ async function buildReport(from, to) {
         samples: [5, 4, 3, 2, 1].map((st) => a.samples[st]
           || (a.stars[st] > 0 ? { stars: st, count: a.stars[st], comment: null } : null)),
         monthly: [...a.months.values()].sort((x, y) => x.month.localeCompare(y.month))
-          .map((m) => ({ month: m.month, count: m.count, avg: +(m.sum / m.count).toFixed(2),
+          .map((m) => ({ month: m.month, count: m.count, avg: m.sum / m.count,
             s1: m.s1, s2: m.s2, s3: m.s3, s4: m.s4, s5: m.s5 })),
       };
     });
