@@ -1,5 +1,8 @@
 ### Recent (November 2026)
 
+**v3.393.0 — Thinking dots** (MW): three pulsing dots beside "Claude is reading the
+reviews" while themes load. CSS only; static under reduced motion; never animated in print.
+
 **v3.392.0 — Google Profile: search terms restored** (MW). The v3.390.0 "Windsor sends
 nothing" was Google's publishing delay: a month's keywords appear 1–2 weeks after it ends
 (4 Nov: Sep present, Oct empty). Restored v3.389's block (git revert of f449a8c). Rule now:

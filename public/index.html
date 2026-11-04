@@ -850,6 +850,17 @@
   mark.hl-good{background:rgba(46,158,111,.16);color:inherit;border-radius:3px;padding:0 2px;}
   mark.hl-bad{background:rgba(217,83,79,.16);color:inherit;border-radius:3px;padding:0 2px;}
   .tr-tag{font-size:var(--text-2xs);color:var(--faint);white-space:nowrap;}
+  /* "Thinking" dots while Claude reads reviews (MW, v3.393.0). Static dots when
+     motion is reduced; never animated in print. */
+  .think{display:flex;align-items:center;gap:8px;}
+  .think-dots{display:inline-flex;gap:4px;}
+  .think-dots i{width:6px;height:6px;border-radius:50%;background:var(--violet, #6C5CE7);opacity:.35;}
+  @media screen and (prefers-reduced-motion: no-preference){
+    .think-dots i{animation:thinkDot 1.2s ease-in-out infinite;}
+    .think-dots i:nth-child(2){animation-delay:.2s;}
+    .think-dots i:nth-child(3){animation-delay:.4s;}
+  }
+  @keyframes thinkDot{0%,80%,100%{opacity:.25;transform:scale(.8);}40%{opacity:1;transform:scale(1);}}
   .tr-orig{font-size:var(--text-xs);color:var(--muted);margin-top:4px;}
   .ev{font-size:var(--text-2xs);color:var(--faint);margin-top:4px;}
   .ev-link{color:var(--blue);text-decoration:none;white-space:nowrap;}
@@ -12139,7 +12150,8 @@ async function loadGbpThemes(key) {
 }
 
 function gbpThemesBody(T) {
-  if (!T || T.loading) return `<div class="card"><div class="note" style="margin-top:0">Claude is reading the reviews\u2026</div></div>`;
+  if (!T || T.loading) return `<div class="card"><div class="note think" style="margin-top:0">Claude is reading the reviews
+    <span class="think-dots" aria-hidden="true"><i></i><i></i><i></i></span></div></div>`;
   if (T.error) return `<div class="card"><div class="note" style="margin-top:0">\u2014 Review themes did not load: ${esc(T.error)}</div></div>`;
   if (!T.withComment) return `<div class="card"><div class="note" style="margin-top:0">\u2014 No review with a comment in this period.</div></div>`;
   const label = Object.fromEntries(T.themes.map(t => [t.key, t.label]));
@@ -13919,7 +13931,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.392.0';
+const CLIENT_BUILD = '3.393.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
