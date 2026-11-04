@@ -1,5 +1,14 @@
 ### Recent (November 2026)
 
+**Better Club quiz backfill COMPLETE (4 Nov 2026)**: dev sent bhq-quiz-questions.csv
+(802 quizzes: quiz_id, question_th/en, answer_type, choices). The 547 quiz_ids the held
+answers needed were inserted into import_dev_quiz_questions (question_th, else _en);
+re-run added 18,410. quiz_answers = 22,726 and matches the ANSWER_QUIZ ledger month by month
+(Sep 2024 – Oct 2026) except Apr 2025 (-2: quiz_ids 108082, 116017 are not in the dev's
+list) and the 1 Aug 2026 hand-over day. Import tables truncated; the questions table is kept
+(small) in case those two ids arrive. DAILY_LOGIN = the daily CHECK-IN claim (max 1/member/day,
+always points), not a login log: on 1 Nov 218 members logged in, 38 checked in.
+
 **Better Club dev backfill: read_post, click_cta, quiz_result LOADED (4 Nov 2026)**:
 - Dev files are DATABASE tables (own columns, UTC/+07:00 times), loaded via
   `import_dev_<tab>` + `import_dev_<tab>_run` (bq/better_club/40_import_dev.sql): times →
