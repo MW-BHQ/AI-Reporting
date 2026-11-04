@@ -2203,33 +2203,9 @@
 ],
 [
 "div.slide.slide-break",
-"What people searched Some Other Cli01 Ju",
-0,
-756,
-1104,
-468
-],
-[
-"div.card",
-"What people searched to find the profile",
-0,
-886,
-1104,
-273
-],
-[
-"table.sortable",
-"",
-21,
-948,
-1062,
-147
-],
-[
-"div.slide.slide-break",
 "Google reviews Some Other Cli01 Jul 2026",
 0,
-1223,
+756,
 1104,
 1285
 ],
@@ -2237,7 +2213,7 @@
 "div.grid.g-4",
 "All-time rating",
 0,
-1410,
+942,
 1104,
 130
 ],
@@ -2245,7 +2221,7 @@
 "div.stat.card",
 "All-time rating",
 0,
-1410,
+942,
 266,
 130
 ],
@@ -2253,7 +2229,7 @@
 "div.stat.card",
 "All-time reviews",
 280,
-1410,
+942,
 266,
 130
 ],
@@ -2261,7 +2237,7 @@
 "div.stat.card",
 "Reviews in period",
 559,
-1410,
+942,
 266,
 130
 ],
@@ -2269,7 +2245,7 @@
 "div.stat.card",
 "Rating in period",
 839,
-1410,
+942,
 266,
 130
 ],
@@ -2277,7 +2253,7 @@
 "div.card.mt",
 "Reviews by month · stars stacked, rating",
 0,
-1554,
+1086,
 1104,
 379
 ],
@@ -2285,7 +2261,7 @@
 "canvas.",
 "",
 21,
-1614,
+1146,
 1062,
 300
 ],
@@ -2293,7 +2269,7 @@
 "div.grid.g-2-1",
 "Star distribution · 01 Jul 2026 – 31 Jul",
 0,
-1947,
+1479,
 1104,
 497
 ],
@@ -2301,7 +2277,7 @@
 "div.card",
 "Star distribution · 01 Jul 2026 – 31 Jul",
 0,
-1947,
+1479,
 671,
 497
 ],
@@ -2309,7 +2285,7 @@
 "table.",
 "",
 21,
-2007,
+1539,
 629,
 199
 ],
@@ -2317,7 +2293,7 @@
 "div.card.no-print",
 "All listings",
 685,
-1947,
+1479,
 419,
 497
 ],
@@ -2325,7 +2301,7 @@
 "table.",
 "",
 706,
-2007,
+1539,
 377,
 418
 ],
@@ -2333,7 +2309,7 @@
 "div.slide.slide-break",
 "Customers Voices Some Other Cli01 Jul 20",
 0,
-2508,
+2040,
 1104,
 540
 ],
@@ -2341,7 +2317,7 @@
 "div.card.mt",
 "Customers Voices",
 0,
-2638,
+2171,
 1104,
 345
 ],
@@ -2349,7 +2325,7 @@
 "table.",
 "",
 21,
-2698,
+2231,
 1062,
 266
 ],
@@ -2357,7 +2333,7 @@
 "div.slide.slide-break",
 "Review sentiment & themes Some Other Cli",
 0,
-3047,
+2580,
 1104,
 266
 ],
@@ -2365,7 +2341,7 @@
 "div.card",
 "",
 0,
-3178,
+2710,
 1104,
 71
 ]

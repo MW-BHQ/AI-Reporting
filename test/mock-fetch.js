@@ -744,14 +744,6 @@ global.fetch = async (url, opts = {}) => {
       impressions_desktop_search: 15 * (i + 1), impressions_desktop_maps: 5 * (i + 1),
       call_clicks: 2 * (i + 1), website_clicks: 1 + i, direction_requests: 3 * (i + 1),
       business_bookings: (i === 0 && j === 1) ? 4 : 0 });
-    if (dFrom && want.includes("year_month") && want.includes("search_keyword")) {
-      return jsonRes({ data: LOCS.flatMap((location_title, i) => yms().flatMap((year_month, j) =>
-        // keyword "new clinic" only from the second month: exercises isNew.
-        ["hospital near me", "bangkok hospital soi phetchaburi", "chest pain treatment", ...(j > 0 ? ["new clinic"] : [])]
-          .map((search_keyword, k) => k === 2
-            ? { location_title, year_month, search_keyword, search_keyword_value: null, search_keyword_threshold: 15 }
-            : { location_title, year_month, search_keyword, search_keyword_value: 300 - k * 50 + j * 10 + i }))) });
-    }
     if (dFrom && want.includes("year_month") && want.includes("business_bookings") && want.includes("impressions_mobile_search")) {
       return jsonRes({ data: LOCS.flatMap((l, i) => yms().map((year_month, j) => ({ year_month, ...perfRow(l, i, j) }))) });
     }

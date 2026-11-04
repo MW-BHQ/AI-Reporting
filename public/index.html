@@ -3412,7 +3412,7 @@ const TITLES = {
   audit: ['Tagging audit', 'How much traffic and spend the campaign view cannot attribute'],
   benchmark: ['Benchmarks', 'Latest complete month against trailing 3, 6 and 12-month norms'],
   gadsbench: ['Google Ads Benchmarks', 'Latest complete month against trailing norms, and the impressions we did not win'],
-  gbp: ['Google Business Profile', 'Performance, searches and reviews by listing'],
+  gbp: ['Google Business Profile', 'Performance and reviews by listing'],
   pages: ['Pages', 'How one page performs — paste the URL you want to look at'],
   gads: ['Google Ads', 'Spend, campaigns and accounts — newly connected, so start by looking'],
   audiences: ['Audiences', 'Meta audience sets ranked by cost per first-degree result'],
@@ -12042,7 +12042,7 @@ function gbpPerfPages(L, d) {
   if (!P) {
     const why = (d.errors && (d.errors.perfCur || d.errors.perfMonthly)) || 'Google Business Profile performance did not load';
     const msg = `<div class="card"><div class="note" style="margin-top:0">\u2014 ${esc(why)}</div></div>`;
-    return { main: msg, search: msg, draw: () => {} };
+    return { main: msg, draw: () => {} };
   }
   const cmpNote = [P.momReason, P.yoyReason].filter(Boolean);
   const card = (lab, m) => `<div class="stat card"><div class="lab">${lab}</div>
@@ -12068,28 +12068,6 @@ function gbpPerfPages(L, d) {
           \u00b7 Mobile ${share(sf.mobileSearch + sf.mobileMaps)} \u00b7 Desktop ${share(sf.desktopSearch + sf.desktopMaps)}</div></div>
     </div>`;
 
-  const K = P.keywords;
-  const kwCell = (u, below) => u > 0 ? num(u) : (below ? `&lt;${num(below)}` : '\u2014');
-  const kwChange = (r) => {
-    if (!K.comparable) return '<span class="dlt none">\u2014</span>';
-    if (r.isNew) return '<span class="pill">new</span>';
-    if (!(r.users > 0) || !(r.prevUsers > 0)) return '<span class="dlt none">\u2014</span>';
-    return gbpChange((r.users - r.prevUsers) / r.prevUsers);
-  };
-  const kwTable = !K.months.length || !K.rows.length
-    ? `<div class="note" style="margin-top:0">\u2014 ${esc(K.reason || 'No searches reported for this listing')}</div>`
-    : `<table class="sortable"><thead><tr><th>Search (not the hospital's name)</th>
-        <th class="num">Searchers</th><th class="num">vs month before</th></tr></thead><tbody>
-       ${K.rows.map(r => `<tr><td class="strong i18n">${esc(r.keyword)}</td>
-         <td class="num">${kwCell(r.users, r.below)}</td><td class="num">${kwChange(r)}</td></tr>`).join('')}
-       </tbody></table>
-       <div class="note">${esc(K.months.map(m => humanDate(m) || m).join(', '))}
-         \u00b7 name and address searches: ${K.brandShare === null ? '\u2014' : (K.brandShare * 100).toFixed(0) + '%'} of searchers, left out
-         ${K.reason ? ' \u00b7 ' + esc(K.reason) : ''}</div>`;
-  /* Keyword rankings card retired with its Google Sheet (MW, v3.389.0):
-     Business Profile reports what was searched, never where the listing
-     placed, and no connected source has local rank. */
-  const search = `<div class="card"><div class="card-title">What people searched to find the profile</div>${kwTable}</div>`;
 
   const draw = () => {
     const rows = P.trend.map(t => t.measured ? { d: t.month, ...t } : { d: t.month });
@@ -12104,7 +12082,7 @@ function gbpPerfPages(L, d) {
       { label: 'Maps', key: 'maps', color: '#2FB6A8', axis: 'y' },
     ]);
   };
-  return { main, search, draw };
+  return { main, draw };
 }
 
 const gbpThemesKey = (key) => `${key}|${$('from').value}|${$('to').value}`;
@@ -12297,7 +12275,6 @@ function renderGbp() {
        LISTING the page is about, not the group. */
     + slideShell(`Google Business Profile \u00b7 ${L.title}`, perf.main,
         { first: true, scope: L.key, cls: 'quiet pn' })
-    + slideShell('What people searched', perf.search, { scope: L.key, cls: 'quiet pn' })
     + slideShell('Google reviews', gbpPage1, { scope: L.key, cls: 'quiet pn' })
     + slideShell('Customers Voices', gbpVoices, { scope: L.key, cls: 'quiet pn' })
     /* Right under Customers Voices (MW, v3.389.0). */
@@ -13896,7 +13873,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.389.0';
+const CLIENT_BUILD = '3.390.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

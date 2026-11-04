@@ -1,5 +1,11 @@
 ### Recent (November 2026)
 
+**v3.390.0 — Google Profile: search-terms block removed** (MW: "Windsor also send us
+nothing"). GSC is not a workaround: it reports searches that led to the WEBSITE, not
+searches that surfaced the Google profile on Maps/Search. Removed the page, the Windsor
+`search_keyword` pull in buildGbp, its smoke checks and mock. The Monthly Report's own
+gbpDetail keyword list is untouched.
+
 **v3.389.0 — Google Profile review text** (MW, 6 points).
 - Review sentiment & themes page moved right under Customers Voices.
 - Watch-list header sticks on scroll (`table.gbp-sticky`).

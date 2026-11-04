@@ -7261,8 +7261,9 @@ function monthsBetween(fromISO, toISO) {
 
 /**
  * GBP PERFORMANCE PER LISTING (v3.388.0) — the Google Profile tab used to show
- * reviews only; the GBP team asked for actions, where people saw the profile,
- * and what they searched. All six listings (Dental and JMS included), not the
+ * reviews only; the GBP team asked for actions and where people saw the
+ * profile. (Search terms were tried and removed in v3.390.0: Windsor returned
+ * nothing usable live, and GSC reports website searches, not profile ones.) All six listings (Dental and JMS included), not the
  * four hospitals the Monthly Report covers.
  *
  * Views = the four impression surfaces summed. Google counts a unique user once
@@ -7306,21 +7307,6 @@ function gbpYm(v) {
  */
 const monthKeyOf = (m) => (typeof m === "string" ? m : (m && m.key) || String(m));
 
-/** Calendar months lying wholly inside [from, to], as `YYYY-MM`. */
-function wholeMonthsIn(from, to) {
-  return monthsBetween(from, to).map(monthKeyOf).filter((k) => {
-    const [y, mo] = k.split("-").map(Number);
-    const first = `${k}-01`;
-    const last = new Date(Date.UTC(y, mo, 0)).toISOString().slice(0, 10);
-    return first >= from && last <= to;
-  });
-}
-const prevMonthKey = (k) => {
-  const [y, m] = k.split("-").map(Number);
-  const d = new Date(Date.UTC(y, m - 2, 1));
-  return d.toISOString().slice(0, 7);
-};
-
 function buildGbpPerf({ from, to, chartFrom, cwr, data, listings }) {
   const windowDays = cwr.days;
   const sumBy = (rows) => {
@@ -7338,27 +7324,6 @@ function buildGbpPerf({ from, to, chartFrom, cwr, data, listings }) {
     if (!mm || !k || !mm.has(k)) continue;
     const t = mm.get(k) || gbpPerfBlank();
     gbpPerfAdd(t, r); mm.set(k, t);
-  }
-
-  // Keywords: whole months only, because Google reports them per month.
-  const kwMonths = wholeMonthsIn(from, to);
-  const kwPrevMonths = kwMonths.map(prevMonthKey).filter((k) => !kwMonths.includes(k));
-  const kwCur = new Map(), kwPrev = new Map(), kwSeen = new Set();
-  for (const r of data.kw || []) {
-    const k = gbpYm(r.year_month); if (!k) continue;
-    const q = String(r.search_keyword || "").trim(); if (!q || q.length > 120) continue;
-    const bucket = kwMonths.includes(k) ? kwCur : (kwPrevMonths.includes(k) ? kwPrev : null);
-    if (!bucket) continue;
-    kwSeen.add(`${r.location_title}|${k}`);
-    const key = `${r.location_title}|${q}`;
-    const e = bucket.get(key) || { keyword: q, users: 0, below: null };
-    const v = n(r.search_keyword_value);
-    if (v > 0) e.users += v;
-    else if (r.search_keyword_threshold) {
-      const th = n(r.search_keyword_threshold);
-      e.below = e.below === null ? th : Math.min(e.below, th);
-    }
-    bucket.set(key, e);
   }
 
   const chg = (a, b) => (b > 0 ? (a - b) / b : null);
@@ -7392,21 +7357,6 @@ function buildGbpPerf({ from, to, chartFrom, cwr, data, listings }) {
     // window (MW: hide it, rather than a row of zeros on listings without it).
     const bookingsOn = trend.some((t) => t.measured && t.bookings > 0) || c.bookings > 0;
 
-    const brandKey = (BRANDS.find((b) => b.gbp.some((g) => norm(g) === norm(l.title))) || {}).key;
-    const kwRows = [...kwCur.entries()].filter(([k]) => k.startsWith(`${l.title}|`)).map(([k, e]) => {
-      const pe = kwPrev.get(k);
-      return { ...e, brand: isBrandKeyword(e.keyword, brandKey),
-        prevUsers: pe ? (pe.users || null) : null, prevBelow: pe ? pe.below : null, isNew: !pe };
-    }).sort((a, b) => (b.users - a.users) || ((b.below || 0) - (a.below || 0)));
-    const publishedCur = kwMonths.filter((k) => kwSeen.has(`${l.title}|${k}`));
-    const publishedPrev = kwPrevMonths.filter((k) => kwSeen.has(`${l.title}|${k}`));
-    const kwReason = !kwMonths.length ? "Range holds no whole month; Google reports keywords by month"
-      : publishedCur.length < kwMonths.length
-        ? `Google has not published ${kwMonths.filter((k) => !publishedCur.includes(k)).join(", ")} keywords yet`
-        : null;
-    const totalUsers = kwRows.reduce((a, x) => a + x.users, 0);
-    const brandUsers = kwRows.filter((x) => x.brand).reduce((a, x) => a + x.users, 0);
-
     return {
       days: c.days.size, windowDays,
       momReason: mom.ok ? null : mom.reason, yoyReason: yo.ok ? null : yo.reason,
@@ -7417,15 +7367,6 @@ function buildGbpPerf({ from, to, chartFrom, cwr, data, listings }) {
       surface: { mobileSearch: c.mobileSearch, mobileMaps: c.mobileMaps,
         desktopSearch: c.desktopSearch, desktopMaps: c.desktopMaps },
       trend,
-      keywords: {
-        months: publishedCur, reason: kwReason,
-        // MoM per keyword only when the month before was published too.
-        comparable: publishedCur.length > 0 && publishedPrev.length === kwPrevMonths.length && kwPrevMonths.length > 0,
-        totalUsers, brandUsers,
-        brandShare: totalUsers > 0 ? brandUsers / totalUsers : null,
-        rows: kwRows.filter((x) => !x.brand).slice(0, 20),
-        count: kwRows.length,
-      },
     };
   };
 }
@@ -7489,9 +7430,6 @@ async function buildGbp(from, to) {
     perfPrev: windsor("google_my_business", ["date", "location_title", ...GBP_PERF_METRICS], cwr.prev.from, cwr.prev.to),
     perfYoy: windsor("google_my_business", ["date", "location_title", ...GBP_PERF_METRICS], cwr.yoy.from, cwr.yoy.to),
     perfMonthly: windsor("google_my_business", ["year_month", "location_title", ...GBP_PERF_METRICS], chartFrom, to),
-    kw: windsor("google_my_business",
-      ["year_month", "location_title", "search_keyword", "search_keyword_value", "search_keyword_threshold"],
-      `${prevMonthKey(from.slice(0, 7))}-01`, to),
   });
 
   if (data.reviews === null) {
