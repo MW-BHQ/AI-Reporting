@@ -44,3 +44,9 @@ Backfill from the dev (any tab, same columns as the sheet):
 2. `CALL better_club.import_<tab>_run('<label>');` — merges into raw_<tab>, logged as
    `import:<tab>:<label>` in `_ingest_log`. Safe to run twice.
 3. `TRUNCATE TABLE better_club.import_<tab>;` when done.
+
+Dev DATABASE exports (read_post, click_cta, quiz_result) have the app's own columns and
+UTC/+07:00 times, not the sheet's. They use `import_dev_<tab>` + `CALL import_dev_<tab>_run('<label>')`
+from 40_import_dev.sql (hand-written): times → Bangkok wall clock, columns mapped onto the
+sheet's, and only rows BEFORE the sheet's first day for that tab are taken (the dev's ids,
+URLs and quiz titles differ from the sheet's, so the overlap would double-count).
