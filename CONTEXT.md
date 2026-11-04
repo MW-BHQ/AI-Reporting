@@ -1,5 +1,12 @@
 ### Recent (November 2026)
 
+**v3.401.0 — Google Profile chart labels, tight rating axis, AI chip** (MW).
+- Reviews by month: rating axis starts 0.05 under the lowest month (`y1Min`), not 0 —
+  equal-looking bars hid 4.84 vs 4.96. Data labels on (ratings keep 2 decimals).
+- Actions by month / Where people saw the profile: data labels, short form (12.5K).
+  `drawChart` opts: `labels`, `short`, `y1Min`, `y1Max`; label charts get right padding.
+- AI chip (solid violet) beside the branch pill on Review sentiment and Review themes.
+
 **v3.400.0 — Google reviews tweaks; PDF waits for Claude** (MW).
 - All-time rating card: number lavender, stars gold.
 - Reviews by month: Average rating as green bars under the Reviews line (`drawChart`

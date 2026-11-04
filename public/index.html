@@ -174,6 +174,8 @@
     background:var(--violet-soft);color:var(--violet);
   }
   .nav-item.active .ai-badge{background:var(--violet);color:#fff;}
+  .slide-title .ai-badge{margin-left:6px;vertical-align:middle;font-size:var(--text-3xs);letter-spacing:.04em;
+    background:var(--violet);color:#fff;padding:2px 8px;}
 
   .rail-foot{flex:none;margin-top:18px;padding:12px;border-radius:var(--r-sm);background:var(--glass-2);border:1px solid var(--line);}
   .rail-foot .k{font-size:var(--text-3xs);text-transform:uppercase;letter-spacing:.08em;color:var(--faint);}
@@ -2980,16 +2982,18 @@ function humanDate(v) {
  *             break is acceptable; an anonymous continuation page is not, so a
  *             flowed section must carry its own header.
  */
-function slideShell(title, body, { first, scope, fill, flow, logo, cls, icon } = {}) {
+function slideShell(title, body, { first, scope, fill, flow, logo, cls, icon, ai } = {}) {
   if (!body) return '';
   const pill = scope ? ` <span class="all-four">${esc(scope)}</span>` : '';
+  // `ai`: the AI chip beside the scope pill — the page is Claude's reading (MW).
+  const aiChip = ai ? ` <span class="ai-badge" title="Read and tagged by Claude">AI</span>` : '';
   // `icon`: a platform mark before the title, the Monthly Report's section header.
   const mark = icon ? `<img class="plogo" src="/brand/${esc(icon)}" alt="" onerror="this.remove()">` : '';
   const right = `<span class="slide-right"><span class="slide-range">${esc(humanRange())}</span><img
     class="slide-logo" src="/brand/${esc(logo || 'bh-wordmark.png')}" alt=""
     onerror="this.style.display='none'"></span>`;
   return `<div class="slide${first ? '' : ' slide-break'}${fill ? ' slide-fill' : ''}${flow ? ' slide-flow' : ''}${cls ? ' ' + cls : ''}">
-    <div class="slide-title${/\bquiet\b/.test(cls || '') ? ' quiet' : ''}"><span>${mark}${esc(title)}${pill}</span>${right}</div>
+    <div class="slide-title${/\bquiet\b/.test(cls || '') ? ' quiet' : ''}"><span>${mark}${esc(title)}${pill}${aiChip}</span>${right}</div>
     ${body}</div>`;
 }
 
@@ -10677,7 +10681,10 @@ const bcPointLabels = {
         const el = meta.data[i];
         if (!el) return;
         const n = Math.round(Number(v));
-        const txt = isMoney ? bcShortMoney(n) : n.toLocaleString();
+        // Ratings (4.92) keep two decimals; 12,500 reads 12.5K when cfg.short.
+        const txt = isMoney ? bcShortMoney(n)
+          : (Math.abs(+v) < 10 && !Number.isInteger(+v)) ? (+v).toFixed(2)
+          : cfg.short ? axisNum(n) : n.toLocaleString();
         const w = ctx.measureText(txt).width;
         let y = el.y - 6;
         for (let g = 0; g < 6 && placed.some((q) => Math.abs(q.x - el.x) < w
@@ -12180,11 +12187,11 @@ function gbpPerfPages(L, d) {
       { label: 'Directions', key: 'directions', color: '#E8607A', axis: 'y' },
       { label: 'Website', key: 'website', color: '#2FB6A8', axis: 'y' },
       ...(P.bookings ? [{ label: 'Bookings', key: 'bookings', color: '#F2A93B', axis: 'y' }] : []),
-    ]);
+    ], { labels: true, short: true });
     drawChart('gbpSurfTrend', rows, [
       { label: 'Search', key: 'search', color: '#4B8DF8', axis: 'y' },
       { label: 'Maps', key: 'maps', color: '#2FB6A8', axis: 'y' },
-    ]);
+    ], { labels: true, short: true });
   };
   return { main, search, draw };
 }
@@ -12437,9 +12444,9 @@ function renderGbp() {
        as one readable 16:9 page. */
     + slideShell('Review sentiment', `<div id="gbpThemes">${L.unlisted
         ? '<div class="card"><div class="note" style="margin-top:0">\u2014 Themes cover the six configured listings only.</div></div>'
-        : gbpThemesBody(S.gbpThemes && S.gbpThemes[gbpThemesKey(L.key)], 1)}</div>`, sopt({ cls: 'quiet pn gs-auto' }))
+        : gbpThemesBody(S.gbpThemes && S.gbpThemes[gbpThemesKey(L.key)], 1)}</div>`, sopt({ cls: 'quiet pn gs-auto', ai: true }))
     + (L.unlisted ? '' : slideShell('Review themes', `<div id="gbpThemes2">${
-        gbpThemesBody(S.gbpThemes && S.gbpThemes[gbpThemesKey(L.key)], 2)}</div>`, sopt({ cls: 'quiet pn gs-auto' })));
+        gbpThemesBody(S.gbpThemes && S.gbpThemes[gbpThemesKey(L.key)], 2)}</div>`, sopt({ cls: 'quiet pn gs-auto', ai: true })));
   perf.draw();
   if (!L.unlisted) loadGbpThemes(L.key);
 
@@ -12477,7 +12484,11 @@ function renderGbp() {
       { label:'Reviews', key:'count', color:'#6C5CE7', axis:'y' },
       // Bars, not a line (MW): the average reads per month, the count as a trend.
       { label:'Average rating', key:'avg', color:HOUSE.good, axis:'y1', type:'bar' },
-    ]);
+    ], { labels: true, short: true,
+      // Tight rating axis (MW: "whole numbers don't help"): 0.05 under the
+      // lowest month, so 4.84 vs 4.96 reads as a difference, not equal bars.
+      y1Min: (() => { const v = series.map(avgOf).filter(x => x != null); return v.length ? Math.max(0, Math.floor((Math.min(...v) - 0.05) * 20) / 20) : null; })(),
+      y1Max: 5 });
   } catch (e) {
     console.error('gbp chart failed:', e);
     const box = el && el.parentElement;
@@ -12920,6 +12931,8 @@ function drawChart(canvasId, rows, series, opts = {}) {
       },
       options: {
         responsive: true, maintainAspectRatio: false,
+        // Room for the last data label, which otherwise clips at the edge.
+        ...(opts.labels ? { layout: { padding: { right: 14, top: 6 } } } : {}),
         interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: { labels: { color:'#4C5878', font:cvFont(11), usePointStyle:true, boxWidth:cvBox(7) } },
@@ -12930,7 +12943,7 @@ function drawChart(canvasId, rows, series, opts = {}) {
             const wd = new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' });
             return `${d} \u00b7 ${wd}`;
           } } },
-          ...(opts.labels ? { lastPointLabels: { enabled: true, all: true, money: opts.money || [] } } : {}),
+          ...(opts.labels ? { lastPointLabels: { enabled: true, all: true, money: opts.money || [], short: !!opts.short } } : {}),
         },
         scales: {
           x: { ticks:{ color:'#A7B0C7', font:cvFont(10), maxRotation:0, autoSkip:true, autoSkipPadding:12, maxTicksLimit:8 }, grid:{ color:'rgba(90,110,160,.09)' } },
@@ -12949,7 +12962,9 @@ function drawChart(canvasId, rows, series, opts = {}) {
            * visibly wrong, rather than onto a phantom scale where it is not.
            */
           ...(series.some((s) => s.axis === 'y1')
-            ? { y1: { position:'right', ticks:{ color:'#A7B0C7', font:cvFont(10), autoSkipPadding:6, callback:(v)=>axisNum(v) }, grid:{ display:false } } }
+            ? { y1: { position:'right', ticks:{ color:'#A7B0C7', font:cvFont(10), autoSkipPadding:6, callback:(v)=>axisNum(v) }, grid:{ display:false },
+                // opts.y1Min/y1Max: a tight right axis (v3.401.0) so small moves show.
+                ...(opts.y1Min != null ? { min: opts.y1Min } : {}), ...(opts.y1Max != null ? { max: opts.y1Max } : {}) } }
             : {}),
         },
       },
@@ -14082,7 +14097,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.400.0';
+const CLIENT_BUILD = '3.401.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
