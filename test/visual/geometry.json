@@ -2231,7 +2231,7 @@
 0,
 1223,
 1104,
-1285
+1413
 ],
 [
 "div.grid.g-4",
@@ -2275,41 +2275,57 @@
 ],
 [
 "div.card.mt",
-"Reviews by month · stars stacked, rating",
+"All time",
 0,
 1554,
 1104,
-379
+451
 ],
 [
 "canvas.",
 "",
 21,
-1614,
-1062,
-300
+1726,
+692,
+260
+],
+[
+"table.",
+"",
+737,
+1787,
+346,
+199
 ],
 [
 "div.grid.g-2-1",
-"Star distribution · 01 Jul 2026 – 31 Jul",
+"Reviews by month",
 0,
-1947,
+2019,
 1104,
-497
+553
 ],
 [
-"div.card",
-"Star distribution · 01 Jul 2026 – 31 Jul",
+"div.card.gbp-rvm",
+"Reviews by month",
 0,
-1947,
+2019,
 671,
-497
+553
+],
+[
+"canvas.",
+"",
+21,
+2081,
+628,
+230
 ],
 [
 "table.",
 "",
 21,
-2007,
+2354,
 629,
 199
 ],
@@ -2317,15 +2333,15 @@
 "div.card.no-print",
 "All listings",
 685,
-1947,
+2019,
 419,
-497
+553
 ],
 [
 "table.",
 "",
 706,
-2007,
+2079,
 377,
 418
 ],
@@ -2333,7 +2349,7 @@
 "div.slide.slide-break",
 "Customers Voices Some Other Cli01 Jul 20",
 0,
-2508,
+2636,
 1104,
 542
 ],
@@ -2341,7 +2357,7 @@
 "div.card.mt",
 "Customers Voices",
 0,
-2638,
+2766,
 1104,
 347
 ],
@@ -2349,15 +2365,15 @@
 "table.",
 "",
 21,
-2698,
+2826,
 1062,
 268
 ],
 [
 "div.slide.slide-break",
-"Review sentiment & themes Some Other Cli",
+"Review sentiment Some Other Cli01 Jul 20",
 0,
-3049,
+3177,
 1104,
 266
 ],
@@ -2365,7 +2381,7 @@
 "div.card",
 "",
 0,
-3180,
+3308,
 1104,
 71
 ]

@@ -602,15 +602,6 @@
     body.pp-onepage .funnel-wrap{
       flex:1 1 0;height:0!important;max-height:none!important;min-height:200px;}
     body.pp-onepage .slide::before,body.pp-onepage .slide::after{display:none!important;}
-    /* All listings is screen-only, so its column would leave the distribution
-       at half width on a blank half page. One column when it is gone. */
-    /* SCOPED TO THE GBP ROW. Unscoped, this collapsed EVERY g-2-1 grid on every
-       pn slide to one column — which is why the campaign funnel and its key
-       events list kept printing stacked no matter what I set for them. The
-       single column is only right where All listings is hidden beside it. */
-    .slide.pn .gbp-row .grid.g-2-1{grid-template-columns:1fr!important;}
-    /* Chart left, star distribution right: side by side halves the slide's
-       height, which is what was forcing the 0.549 zoom. Screen stays stacked. */
     /* Campaign: the funnel and its key-events list are a pair, and the detail
        table must not split. */
     body.pp-onepage .grid.g-2-1{grid-template-columns:2fr 1fr!important;}
@@ -618,33 +609,6 @@
        Chrome reserve a page boundary before the detail table and left a sheet's
        worth of blank in the middle of the export. There are no page breaks to
        avoid on a one-page document. */
-    .slide.pn .gbp-row{display:grid;grid-template-columns:3.5fr 1.5fr;gap:12px;
-      align-items:stretch;flex:1 1 auto;min-height:0;}
-    /* Both columns take the height the row was given, and the chart grows into
-       it — otherwise the row stretches and its contents sit at the top. */
-    .slide.pn .gbp-row > *,
-    .slide.pn .gbp-row .card{display:flex;flex-direction:column;min-height:0;}
-    /**
-     * A DEFINITE HEIGHT, NOT `flex:1` (v3.237.0).
-     *
-     * `buildPrintSvgs` measures the wrapper and bakes that size into the twin.
-     * With `height:auto` the wrapper's height came from its content — the twin
-     * itself — so it could never grow: card stretches, chart floats in the
-     * middle. And the measurement happens on SCREEN during `print-prep`, where
-     * `@media print` is not active, so a print-only rule cannot influence it
-     * either.
-     *
-     * One number in both places is what makes the measured box and the printed
-     * box the same box.
-     */
-    .slide.pn .gbp-row .gbp-chart{height:560px!important;min-height:0;}
-    /* The five star rows spread down the card instead of bunching at the top,
-       and the bar column keeps a fixed gutter from the figures beside it. */
-    .slide.pn .gbp-row > :last-child .card,
-    .slide.pn .gbp-row > :last-child{justify-content:flex-start;}
-    .slide.pn .gbp-row > :last-child table{height:520px;}
-    .slide.pn .gbp-row > :last-child tbody{height:100%;}
-    .slide.pn .gbp-row > :last-child tbody tr{height:20%;}
     .mr{border:0;border-radius:0;}
     /* Tints can vanish on a mono printer, so the ghost bars keep their outline
        and the panels lose their fill. */
@@ -849,6 +813,32 @@
   /* Google Profile review marks and watch-list sticky header (v3.389.0). */
   mark.hl-good{background:rgba(46,158,111,.16);color:inherit;border-radius:3px;padding:0 2px;}
   mark.hl-bad{background:rgba(217,83,79,.16);color:inherit;border-radius:3px;padding:0 2px;}
+  .gbp-rv12{display:grid;grid-template-columns:2fr 1fr;gap:24px;align-items:end;}
+  /* min-width:0 — a grid column's min-content is the canvas's drawn width, so
+     without it the grid blew out at print width and the slide zoomed to ~50%. */
+  .gbp-rv12 > *, .gbp-rvm > *{min-width:0;}
+  @media screen and (max-width:1080px){body:not(.print-prep) .gbp-rv12{grid-template-columns:1fr;}}
+  /* PRINT (and print-prep, where the chart twins are measured): All listings is
+     hidden, so Reviews by month takes the full row with its mix on the right —
+     the same 2fr/1fr as the 12-month card above it. */
+  /* Print sizes (prep and print share them, so the twins are measured at the
+     printed size): shorter charts and tighter mix rows fit the page at ~1:1. */
+  body.print-prep .gbp-rv12 .chart-wrap{height:190px!important;}
+  body.print-prep .gbp-rvm .chart-wrap{height:150px!important;}
+  body.print-prep .gbp-rv12 td, body.print-prep .gbp-rvm td{padding-top:5px!important;padding-bottom:5px!important;}
+  body.print-prep .gbp-rvrow{grid-template-columns:1fr!important;}
+  /* All listings is no-print; prep measures on SCREEN, so hide it here too or
+     the slide is fitted to a page that still holds it (zoomed to 0.48). */
+  body.print-prep .gbp-rvrow > .no-print{display:none!important;}
+  body.print-prep .gbp-rvm{display:grid;grid-template-columns:2fr 1fr;gap:24px;align-items:end;}
+  @media print{
+    .gbp-rvrow{grid-template-columns:1fr!important;}
+    .gbp-rvm{display:grid!important;grid-template-columns:2fr 1fr;gap:24px;align-items:end;}
+    .gbp-rv12{grid-template-columns:2fr 1fr!important;}
+    .gbp-rv12 .chart-wrap{height:190px!important;}
+    .gbp-rvm .chart-wrap{height:150px!important;}
+    .gbp-rv12 td, .gbp-rvm td{padding-top:5px!important;padding-bottom:5px!important;}
+  }
   .tr-tag{font-size:var(--text-2xs);color:var(--faint);white-space:nowrap;}
   .tr-orig{font-size:var(--text-xs);color:var(--muted);margin-top:4px;}
   .ev{font-size:var(--text-2xs);color:var(--faint);margin-top:4px;}
@@ -1843,9 +1833,6 @@
        SCREEN measure like a page, never to constrain the page itself. */
     body.print-prep .rail{display:none!important;}
     body.print-prep .main{width:12.493in!important;max-width:none!important;padding:0!important;}
-    /* Same height the print rule uses, so the SVG twin is measured at the size
-       it will actually be printed at. See `.slide.pn .gbp-row .gbp-chart`. */
-    body.print-prep .gbp-chart{height:560px!important;}
     /**
      * THE FUNNEL FILLS ITS CARD, THE WAY THE REPORT DECK'S CHARTS DO.
      *
@@ -12180,10 +12167,16 @@ async function loadGbpThemes(key) {
   } catch (e) { S.gbpThemes[k] = { error: String(e.message || e) }; }
   FAV.themes = Math.max(0, FAV.themes - 1); favTick();
   const el = document.getElementById('gbpThemes');
-  if (el && S.view === 'gbp' && S.gbpTab === key) el.innerHTML = gbpThemesBody(S.gbpThemes[k]);
+  if (el && S.view === 'gbp' && S.gbpTab === key) {
+    el.innerHTML = gbpThemesBody(S.gbpThemes[k], 1);
+    const el2 = document.getElementById('gbpThemes2');
+    if (el2) el2.innerHTML = gbpThemesBody(S.gbpThemes[k], 2);
+  }
 }
 
-function gbpThemesBody(T) {
+function gbpThemesBody(T, part = 1) {
+  // Part 2 says nothing while loading or on error: part 1 already does.
+  if (part === 2 && (!T || T.loading || T.error || !T.withComment)) return '';
   if (!T || T.loading) return `<div class="card"><div class="note" style="margin-top:0">Claude is reading the reviews\u2026</div></div>`;
   if (T.error) return `<div class="card"><div class="note" style="margin-top:0">\u2014 Review themes did not load: ${esc(T.error)}</div></div>`;
   if (!T.withComment) return `<div class="card"><div class="note" style="margin-top:0">\u2014 No review with a comment in this period.</div></div>`;
@@ -12235,7 +12228,8 @@ function gbpThemesBody(T) {
         <td style="white-space:normal;font-size:var(--text-sm)">${esc(w.action)}</td></tr>`).join('')}
       </tbody></table>`
       : `<div class="note" style="margin-top:0">\u2014 ${esc(W.reason || 'No watch list')}</div>`}</div>`;
-  return `${sentiment}${disagree}${watch}<div class="card mt"><div class="card-title">What reviewers praise and complain about</div>${themeTable}
+  if (part === 1) return `${sentiment}${disagree}${watch}`;
+  return `<div class="card"><div class="card-title">What reviewers praise and complain about</div>${themeTable}
       <div class="note">${num(T.tagged)} of ${num(T.withComment)} reviews with a comment read by Claude${T.untagged
         ? ` \u00b7 ${num(T.untagged)} not read yet${T.failedBatches ? ' (AI call failed)' : ''} \u2014 press Load again` : ''}
         \u00b7 ${num(T.ratingOnly)} rating-only reviews have no theme</div></div>
@@ -12262,15 +12256,6 @@ function renderGbp() {
     </button>`).join('')}</div>`;
 
   const totalStars = ['s1','s2','s3','s4','s5'].reduce((a,k)=>a+L.stars[k],0);
-  const starRow = (k, n_) => {
-    const pct = totalStars ? (n_/totalStars)*100 : 0;
-    return `<tr>
-      <td class="strong" style="width:46px;white-space:nowrap;">${k.slice(1)} \u2605</td>
-      <td style="width:100%"><div style="background:rgba(140,155,190,.13);border-radius:5px;height:9px;overflow:hidden;">
-        <div style="width:${pct}%;height:100%;background:${STAR_COLORS[k]};"></div></div></td>
-      <td class="num" style="white-space:nowrap;">${num(n_)}<span style="display:inline-block;width:26px;"></span><span style="color:var(--muted);display:inline-block;width:52px;text-align:right;">${totalStars?pct.toFixed(1)+'%':'\u2014'}</span></td>
-    </tr>`;
-  };
 
   /**
    * PRINTS AS MONTHLY-REPORT SLIDES (MW: "when I say do the PDF version, I mean
@@ -12280,6 +12265,17 @@ function renderGbp() {
    * logo — so this tab inherits the header rather than growing its own copy.
    * Two sheets: the listing's numbers, then Customers Voices.
    */
+  /* Rating-mix rows, the monthly report's markup (bar + count). */
+  const mixTable = (mix, tot) => `<table><tbody>${[5,4,3,2,1].map(st => {
+      const v = mix[st] || 0, pct = tot ? (v / tot) * 100 : 0;
+      return `<tr><td class="strong" style="width:52px">${st}\u2605</td>
+        <td><div style="background:var(--line);border-radius:6px;height:9px">
+          <div style="width:${pct}%;background:${st>=4?'var(--good)':(st===3?'#F2A93B':'var(--bad)')};height:9px;border-radius:6px"></div>
+        </div></td><td class="num" style="width:52px">${num(v)}</td></tr>`;
+    }).join('')}</tbody></table>`;
+  const mix12 = (L.series || []).reduce((acc, m) => { for (const st of [1,2,3,4,5]) acc[st] += m['s'+st] || 0; return acc; },
+    {1:0,2:0,3:0,4:0,5:0});
+  const mix12Total = [1,2,3,4,5].reduce((a2, k) => a2 + mix12[k], 0);
   const gbpPage1 = `
     ${d.unparsedStars?`<div class="warnbox">${d.unparsedStars} review(s) had a star rating this build couldn't read, so they're excluded from the breakdown.</div>`:''}
     ${L.unlisted?`<div class="warnbox">This listing wasn't in the five you specified, but the account returns it — showing it rather than dropping data.</div>`:''}
@@ -12301,18 +12297,46 @@ function renderGbp() {
         <div class="sub">${L.allTimeRating!=null&&L.periodRating!=null?(L.periodRating>=L.allTimeRating?'at or above':'below')+' all-time':''}</div></div>
     </div>
 
-      <div class="gbp-row">
+    <!--
+      REVIEWS, SAME BLOCKS AS THE MONTHLY REPORT (MW, v3.395.0).
+      1) All time + twelve months of stars stacked with the monthly average,
+         rating mix for the same twelve months on the RIGHT so the card keeps
+         the chart's height. 2) Reviews by month (count + average) with the
+         rating mix of the selected period, beside All listings.
+      The 12-month mix sums the same L.series the bars draw, so the two can
+      never disagree.
+    -->
     <div class="card mt">
-      <h2>Reviews by month &middot; stars stacked, rating overlaid</h2>
-      <div class="gbp-chart chart-wrap" style="height:300px;"><canvas id="gbpChart"></canvas></div>
-      <!-- Footnote removed (MW). It ran to six lines under a chart whose
-           axis now labels itself. -->
+      <div class="gbp-rv12">
+        <div>
+          <div class="card-title">All time</div>
+          <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:2px">
+            <div style="font-size:var(--text-4xl);font-weight:700;color:var(--violet);line-height:1">
+              ${L.allTimeRating != null ? L.allTimeRating.toFixed(1) : '\u2014'}</div>
+            <div style="font-size:var(--text-sm);color:#F2A93B">${L.allTimeRating != null
+              ? '\u2605'.repeat(Math.round(L.allTimeRating)) + '\u2606'.repeat(5 - Math.round(L.allTimeRating)) : ''}</div>
+          </div>
+          <div class="lab" style="margin-bottom:12px">lifetime average across ${num(L.allTimeCount)} reviews</div>
+          <div class="card-title tight">Last 12 months</div>
+          <div class="chart-wrap" style="height:260px"><canvas id="gbpChart"></canvas></div>
+        </div>
+        <div>
+          <div class="card-title tight">Rating mix &middot; last 12 months${mix12Total ? ` &middot; ${num(mix12Total)} reviews` : ''}</div>
+          ${mixTable(mix12, mix12Total)}
+        </div>
+      </div>
     </div>
 
-    <div class="grid g-2-1 mt">
-      <div class="card"><h2>Star distribution &middot; ${esc(humanDate(d.range.from))} &ndash; ${esc(humanDate(d.range.to))}</h2>
-        <table><tbody>${['s5','s4','s3','s2','s1'].map(k=>starRow(k,L.stars[k])).join('')}</tbody></table>
-        <div class="note">${num(totalStars)} reviews in the selected range.</div>
+    <div class="grid g-2-1 mt gbp-rvrow">
+      <div class="card gbp-rvm">
+        <div>
+          <div class="card-title">Reviews by month</div>
+          <div class="chart-wrap" style="height:230px"><canvas id="gbpRvMonth"></canvas></div>
+        </div>
+        <div>
+          <div class="card-title tight">Rating mix this period</div>
+          ${mixTable({ 5: L.stars.s5, 4: L.stars.s4, 3: L.stars.s3, 2: L.stars.s2, 1: L.stars.s1 }, totalStars)}
+        </div>
       </div>
       <div class="card no-print"><h2>All listings</h2>
         <table><thead><tr><th>Listing</th><th class="num">Rating</th><th class="num">Total</th></tr></thead><tbody>
@@ -12323,8 +12347,6 @@ function renderGbp() {
         </tbody></table>
       </div>
     </div>
-      </div>
-
   `;
   const gbpVoices = (L.recent||[]).length ? `<div class="card mt gbp-voices">
       <!--
@@ -12360,94 +12382,66 @@ function renderGbp() {
       </tbody></table>
       </div>` : '';
   const perf = gbpPerfPages(L, d);
+  /* Header logo = the listing's hospital (MW). Dental is BGH's; JMS has no
+     logo file, so it keeps the group wordmark. */
+  const GBP_LOGO = { BGH: 'hosp-bgh.svg', Dental: 'hosp-bgh.svg', BIH: 'hosp-bih.svg',
+    BHT: 'hosp-bht.svg', WSH: 'hosp-wsh.svg' };
+  const sopt = (more) => ({ scope: L.key, cls: 'quiet pn', logo: GBP_LOGO[L.key], ...more });
   $('viewRoot').innerHTML = tabStrip
-    /* Performance first, reviews below (MW, v3.388.0). The pill names the
-       LISTING the page is about, not the group. */
-    + slideShell(`Google Business Profile \u00b7 ${L.title}`, perf.main,
-        { first: true, scope: L.key, cls: 'quiet pn' })
-    + slideShell('What people searched', perf.search, { scope: L.key, cls: 'quiet pn' })
-    + slideShell('Google reviews', gbpPage1, { scope: L.key, cls: 'quiet pn' })
-    + slideShell('Customers Voices', gbpVoices, { scope: L.key, cls: 'quiet pn' })
-    /* Right under Customers Voices (MW, v3.389.0). */
-    + slideShell('Review sentiment & themes', `<div id="gbpThemes">${L.unlisted
+    /* Performance first, reviews below (MW, v3.388.0). */
+    + slideShell(`Google Business Profile \u00b7 ${L.title}`, perf.main, sopt({ first: true }))
+    /* Screen only (MW): not printed. */
+    + slideShell('What people searched', perf.search, sopt({ cls: 'quiet pn no-print' }))
+    + slideShell('Google reviews', gbpPage1, sopt())
+    + slideShell('Customers Voices', gbpVoices, sopt())
+    /* Right under Customers Voices (MW, v3.389.0). Two slides so each prints
+       as one readable 16:9 page. */
+    + slideShell('Review sentiment', `<div id="gbpThemes">${L.unlisted
         ? '<div class="card"><div class="note" style="margin-top:0">\u2014 Themes cover the six configured listings only.</div></div>'
-        : gbpThemesBody(S.gbpThemes && S.gbpThemes[gbpThemesKey(L.key)])}</div>`,
-        { scope: L.key, cls: 'quiet pn' });
+        : gbpThemesBody(S.gbpThemes && S.gbpThemes[gbpThemesKey(L.key)], 1)}</div>`, sopt())
+    + (L.unlisted ? '' : slideShell('Review themes', `<div id="gbpThemes2">${
+        gbpThemesBody(S.gbpThemes && S.gbpThemes[gbpThemesKey(L.key)], 2)}</div>`, sopt()));
   perf.draw();
   if (!L.unlisted) loadGbpThemes(L.key);
 
   document.querySelectorAll('[data-gtab]').forEach(b=>b.addEventListener('click',()=>{ S.gbpTab=b.dataset.gtab; renderGbp(); }));
   document.querySelectorAll('[data-gtab2]').forEach(b=>b.addEventListener('click',()=>{ S.gbpTab=b.dataset.gtab2; renderGbp(); }));
 
-  // stacked stars + rating line
+  /**
+   * The monthly report's two review charts, on twelve months (MW, v3.395.0):
+   * stars stacked with the MONTHLY average (rvStack), and reviews + average
+   * by month (rvMonth). A month with no reviews has no average — a gap, not 0.
+   */
+  const series = L.series || [];
+  const avgOf = (m) => m.count ? Math.round(m.ratingSum / m.count * 100) / 100 : null;
   const el = document.getElementById('gbpChart');
   try {
     if (typeof Chart === 'undefined') throw new Error('chart library unavailable');
-    const series = L.series || [];
-    S.charts.gbpChart = new Chart(el, {
-      plugins: [stackTotalLabels, ratingDotLabels],
-      data: {
-        // `.month`, not `.label` — the series rows have never carried a
-            // `label`, so every x tick was `undefined`. It read as an
-            // unlabelled axis rather than an error, which is why it survived.
-            labels: series.map(m=>humanDate(m.month) || m.month),
-        // 5★ first puts it at the base of the stack, so the low ratings sit on
-        // top where they're actually visible instead of buried under the green.
-        datasets: [
-          { type:'line', label:'All-time rating', yAxisID:'y1', _showPointLabels:true,
-            data: series.map(m=>m.cumRating),
-            borderColor:RATING_LINE, backgroundColor:RATING_LINE, borderWidth:2.5, tension:.35,
-            pointRadius:3, pointBackgroundColor:RATING_LINE, pointBorderColor:'#fff', pointBorderWidth:1.5,
-            spanGaps:true, order:0 },
-          ...['s5','s4','s3','s2','s1'].map(k=>({
-            type:'bar', label:`${k.slice(1)}★`, data:series.map(m=>m[k]),
-            backgroundColor:STAR_COLORS[k], stack:'stars',
-            borderWidth:0, borderColor:'transparent', borderRadius:0, borderSkipped:false,
-          })),
-        ],
-      },
-      options: {
-        responsive:true, maintainAspectRatio:false,
-        layout:{ padding:{ top:16 } },
-        interaction:{mode:'index', intersect:false},
-        plugins:{
-          legend:{ labels:{ color:'#4C5878', font:cvFont(10.5), usePointStyle:true, boxWidth:cvBox(8) } },
-          tooltip:{ callbacks:{
-            // The dot already carries the all-time figure, so the tooltip is
-            // free to answer the other question: how did THIS month do?
-            label:(c)=>{
-              if (c.dataset.type !== 'line') return ` ${c.dataset.label}: ${c.parsed.y}`;
-              const m = series[c.dataIndex];
-              if (!m || !m.count) return ' This month: no reviews';
-              return ` This month: ${(m.ratingSum/m.count).toFixed(2)} ★ from ${m.count} review${m.count>1?'s':''}`;
-            },
-            footer:(items)=>{
-              const m = series[items[0].dataIndex];
-              return m && m.cumRating != null ? `All-time after this month: ${m.cumRating.toFixed(2)} ★` : '';
-            },
-          } },
-        },
-        scales:{
-          x:{ stacked:true, ticks:{ color:'#A7B0C7', font:cvFont(10), autoSkipPadding:8 }, grid:{ display:false } },
-          y:{ stacked:true, beginAtZero:true, title:{display:true,text:'Reviews',color:'#A7B0C7',font:{size:10}},
-              ticks:{ color:'#A7B0C7', font:cvFont(10), autoSkipPadding:6, precision:0,
-                  callback:(v)=>axisNum(v) }, grid:{ color:'rgba(90,110,160,.09)' } },
-          y1:{ position:'right',
-               // The running all-time score moves in hundredths, so a full 1-5
-               // axis would flatten it into a straight line. Padded around the
-               // observed range instead, with the floor never above 4.
-               min: (()=>{ const v=series.map(m=>m.cumRating).filter(x=>x!=null); if(!v.length) return 1;
-                           return Math.max(1, Math.min(4, Math.floor((Math.min(...v)-0.15)*10)/10)); })(),
-               max: 5,
-               title:{display:true,text:'Rating (all-time)',color:'#A7B0C7',font:{size:10}},
-               ticks:{ color:'#A7B0C7', font:cvFont(10), autoSkipPadding:6 }, grid:{ display:false } },
-        },
-      },
+    const band = (k, color, lab) => ({ type:'bar', label:lab, data: series.map(m => m[k] || 0),
+      backgroundColor: color, stack:'s', borderRadius:2, order:2 });
+    S.charts.gbpChart = new Chart(el.getContext('2d'), {
+      data:{ labels: series.map(m => humanDate(m.month) || m.month), datasets:[
+        { type:'line', label:'Average rating', data: series.map(avgOf), yAxisID:'y1', spanGaps:true,
+          borderColor:'#6C5CE7', backgroundColor:'#6C5CE7', tension:.3, order:1, pointRadius:3 },
+        band('s5',HOUSE.good,'5\u2605'), band('s4','#8ED0A9','4\u2605'),
+        band('s3','#F2A93B','3\u2605'), band('s2','#EE8A5B','2\u2605'), band('s1',HOUSE.bad,'1\u2605'),
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false, animation:false,
+        scales:{ x:{ stacked:true, grid:{display:false}, ticks:{color:'#8A94AD',font:cvFont(9),autoSkipPadding:8} },
+                 y:{ stacked:true, beginAtZero:true, grid:{color:'#EEF1F8'},
+                     ticks:{color:'#8A94AD',font:cvFont(9),autoSkipPadding:8, precision:0, callback:(v)=>axisNum(v)} },
+                 y1:{ position:'right', grid:{display:false}, suggestedMin:3.5, suggestedMax:5,
+                      ticks:{color:'#8A94AD',font:cvFont(9),autoSkipPadding:8, callback:(v)=>axisNum(v)} } },
+        plugins:{ legend:{ labels:{color:'#4C5878',font:cvFont(10),usePointStyle:true,boxWidth:cvBox(7)} } } },
     });
+    drawChart('gbpRvMonth', series.map(m => ({ d: m.month, count: m.count || 0, avg: avgOf(m) })), [
+      { label:'Reviews', key:'count', color:'#6C5CE7', axis:'y' },
+      { label:'Average rating', key:'avg', color:HOUSE.good, axis:'y1' },
+    ]);
   } catch (e) {
     console.error('gbp chart failed:', e);
     const box = el && el.parentElement;
-    if (box) box.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:var(--text-xs);">Chart unavailable. The distribution table below still shows the breakdown.</div>`;
+    if (box) box.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:var(--text-xs);">Chart unavailable. The rating mix beside it still shows the breakdown.</div>`;
   }
 }
 
@@ -13750,7 +13744,8 @@ function clearNativeSlides() {
  * `ONE_PAGE_VIEWS` keeps it opt-in — the monthly deck is deliberately paginated
  * and must not inherit this.
  */
-const ONE_PAGE_VIEWS = new Set(['gbp', 'campaigns']);
+// 'gbp' left in v3.395.0: MW wants its PDF as 16:9 pages like the monthly report.
+const ONE_PAGE_VIEWS = new Set(['campaigns']);
 /**
  * TWO STEPS, AND THE ORDER OF EACH MATTERS (v3.252.0).
  *
@@ -13964,7 +13959,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.394.0';
+const CLIENT_BUILD = '3.395.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

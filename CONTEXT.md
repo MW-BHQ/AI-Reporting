@@ -1,5 +1,20 @@
 ### Recent (November 2026)
 
+**v3.395.0 — Google Profile reviews blocks + 16:9 PDF** (MW, two screenshots from the
+Monthly Report).
+- "Reviews by month · stars stacked" → the Monthly Report's All time block (rvStack) on
+  12 months: lifetime average, stars stacked with the MONTHLY average line, and "Rating
+  mix · last 12 months" on the RIGHT (`.gbp-rv12`, 2fr/1fr) so the card keeps its height.
+  The mix sums the same L.series the bars draw.
+- "Star distribution" → the rvMonth block: Reviews by month (count + average, 12 months)
+  with "Rating mix this period". Months with no reviews: no average (gap), never 0.
+- PDF: 16:9 pages like the Monthly Report (`gbp` out of ONE_PAGE_VIEWS); every page keeps
+  the slide header; "What people searched" is screen-only; header logo = the listing's
+  hospital (Dental → BGH, JMS → group wordmark). Sentiment and themes split into two slides
+  ("Review sentiment", "Review themes") so each fits one page. Old `.gbp-row` print rules
+  removed (they made the chart print over Customers Voices).
+- Trap hit again: a backtick in an HTML comment inside a template literal.
+
 **v3.394.0 — Blinking favicon dot** (MW: "in the favicon, one dot, blinking"). While the
 status bar is busy or review themes are being read, the tab icon blinks a violet dot
 (drawn once on a canvas from the real favicon; 550 ms swap). The v3.393.0 in-card dots
