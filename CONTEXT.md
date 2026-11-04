@@ -1,5 +1,13 @@
 ### Recent (November 2026)
 
+**v3.392.0 — Google Profile: search terms restored** (MW). The v3.390.0 "Windsor sends
+nothing" was Google's publishing delay: a month's keywords appear 1–2 weeks after it ends
+(4 Nov: Sep present, Oct empty). Restored v3.389's block (git revert of f449a8c). Rule now:
+whole months of the range that are published; if none yet, the LATEST published month
+before the range end, titled "(latest out)" with the reason. Pull reaches 4 months back.
+Sub-month ranges still say "no whole month". Smoke: in-range month, MOCK_GBP_KW_LAG
+fallback.
+
 **v3.391.0 — Google Profile: original text, disagree list, evidence links** (MW).
 - Google bundles "(Translated by Google) <EN> (Original) <text>" in `review_comment`; we
   showed it whole and cut at 280, so the original never showed. `reviewOriginal` strips it;

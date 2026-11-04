@@ -1513,11 +1513,16 @@ expect_field "gbp actions sum" "$G" "(p=>p.actions.value===p.calls.value+p.websi
 expect_field "gbp full window MoM" "$G" "(p=>p.momReason===null&&p.views.mom!==null?'ok':undefined)($BGH)"
 expect_field "gbp bookings shown BGH" "$G" "$BGH.bookings&&$BGH.bookings.value>0?'ok':undefined"
 expect_field "gbp bookings hidden BHT" "$G" "d.listings.find(l=>l.key==='BHT').perf.bookings===null?'ok':undefined"
+expect_field "gbp kw brand excluded" "$G" "(p=>p.keywords.rows.length>0&&p.keywords.rows.every(r=>!r.brand)&&p.keywords.brandUsers>0?'ok':undefined)($BGH)"
+expect_field "gbp kw withheld kept" "$G" "$BGH.keywords.rows.some(r=>r.below===15&&r.users===0)?'ok':undefined"
+expect_field "gbp kw new flagged" "$G" "$BGH.keywords.rows.some(r=>r.keyword==='new clinic'&&r.isNew)?'ok':undefined"
 expect_field "gbp trend 12 months" "$G" "$BGH.trend.length===12&&$BGH.trend.slice(-1)[0].measured?'ok':undefined"
-expect_field "gbp no search block" "$G" "d.listings.every(l=>!('ranks' in l)&&!(l.perf&&'keywords' in l.perf))&&!('rankMonths' in d)?'ok':undefined"
+expect_field "gbp rank sheet gone" "$G" "d.listings.every(l=>!('ranks' in l))&&!('rankMonths' in d)?'ok':undefined"
 expect_field "voices translated" "$G" "(s=>s&&s.ann&&s.ann.en==='A great hospital'&&s.ann.lang==='Japanese'&&s.ann.good.join()==='great hospital'?'ok':undefined)(d.listings.find(l=>l.key==='BGH').samples.find(x=>x.comment==='great'))"
 expect_field "google bundle stripped" "$G" "d.listings.find(l=>l.key==='BGH').samples.find(x=>x.star===4).comment==='\u0e14\u0e35\u0e21\u0e32\u0e01'&&d.listings.find(l=>l.key==='BGH').reviewsUrl?'ok':undefined"
 expect_field "en not translated" "$G" "(s=>s&&s.ann&&s.ann.en===null&&s.ann.bad.join()==='long wait'?'ok':undefined)(d.listings.find(l=>l.key==='BGH').samples.find(x=>/wait/.test(x.comment||'')))"
+expect_field "gbp kw in range" "$G" "(k=>k.latest===false&&k.months.join()==='2026-07'&&k.reason===null?'ok':undefined)($BGH.keywords)"
+expect_field "gbp kw no whole month" "/api/gbp?from=2026-07-05&to=2026-07-20" "(p=>p.keywords.months.length===0&&/no whole month/.test(p.keywords.reason)?'ok':undefined)($BGH)"
 T="/api/gbp/themes?key=BGH&from=$FROM&to=$TO"
 check "gbp themes" GET "$T"
 expect_field "themes tagged all" "$T" "d.withComment>0&&d.tagged===d.withComment&&d.untagged===0?'ok':undefined"
@@ -1535,9 +1540,10 @@ expect_field "themes bad key 400" "/api/gbp/themes?key=nope&from=$FROM&to=$TO" "
 # NEGATIVE: 3 days missing -> no MoM/YoY, a reason instead of a fake change.
 kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
 WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ADMIN_EMAILS=admin@bkh.test ECOM_SHEET_ID=mock \
-MOCK_GBP_SHORT=1 MOCK_FAIL_THEMES=1 PORT=$PORT node --require ./test/mock-fetch.js server.js >>/tmp/smoke.log 2>&1 &
+MOCK_GBP_SHORT=1 MOCK_FAIL_THEMES=1 MOCK_GBP_KW_LAG=1 PORT=$PORT node --require ./test/mock-fetch.js server.js >>/tmp/smoke.log 2>&1 &
 SRV=$!
 sleep 2.5
+expect_field "gbp kw latest out" "$G" "(k=>k.latest===true&&k.months[0]==='2026-06'&&/Jul 2026 not published/.test(k.reason)&&k.rows.length>0?'ok':undefined)($BGH.keywords)"
 expect_field "gbp short no MoM" "$G" "(p=>p.views.mom===null&&p.views.yoy===null&&/28 of 31/.test(p.momReason)?'ok':undefined)($BGH)"
 expect_field "themes fail = untagged" "$T" "d.tagged===0&&d.untagged===d.withComment&&d.failedBatches>0&&d.watch.items.length===0&&/No negative/.test(d.watch.reason)?'ok':undefined"
 
