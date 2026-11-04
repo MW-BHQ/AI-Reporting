@@ -1200,6 +1200,10 @@ if printf '%s' "$TCSV" | head -1 | grep -q "user_id,name,email,phone_no" && prin
 TBAD=$(curl -s -o /dev/null -w '%{http_code}' -H "$ADMIN" "http://localhost:$PORT/api/better-club/targets.csv?month=2026-10-01%27")
 if [ "$TBAD" = "400" ]; then printf '  ok   %-22s %s\n' "target bad month" 400; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "target bad month" "$TBAD"; fi
 expect_field "eng freshness"      "$ENG" "d.freshness&&d.freshness.last_run&&d.freshness.latest.length===5?'ok':undefined"
+# Points → patients: only months BEFORE the first paid month count (u1 earned in
+# May and June, first paid June -> 1 month); never-paid members use all months.
+expect_field "eng ptp bins"       "$ENG" "(r=>r['0'].members===11&&r['0'].patients===4&&r['1'].members===2&&r['1'].patients===1&&r['2-3'].patients===1&&r['4+'].members===1&&r['4+'].patients===0)(Object.fromEntries(d.pointsToPatients.rows.map(x=>[x.bin,x])))?'ok':undefined"
+expect_field "eng ptp revenue"    "$ENG" "d.pointsToPatients.rows.find(x=>x.bin==='1').revenue===80000?'ok':undefined"
 expect_field "eng identity"       "$ENG" "d.months.slice(1).every((m,i)=>m.mau-d.months[i].mau===m.new_users+m.reactivated-m.churned)?'ok':undefined"
 
 # ---- Better Club -----------------------------------------------------------

@@ -5752,9 +5752,65 @@
 ],
 [
 "div.slide.slide-break",
-"Campaigns: who joins, and who earns poin",
+"Does earning points lead to a visit? Bet",
 0,
 5770,
+1104,
+721
+],
+[
+"div.grid.g-3",
+"Became patients, never earned points",
+0,
+5900,
+1104,
+170
+],
+[
+"div.stat",
+"Became patients, never earned points",
+0,
+5900,
+359,
+170
+],
+[
+"div.stat",
+"Became patients, earned points 4+ months",
+373,
+5900,
+359,
+170
+],
+[
+"div.stat",
+"How many times as likely",
+745,
+5900,
+359,
+170
+],
+[
+"div.card.mt",
+"Months of earning points before the firs",
+0,
+6084,
+1104,
+343
+],
+[
+"table.roomy",
+"",
+21,
+6146,
+1062,
+202
+],
+[
+"div.slide.slide-break",
+"Campaigns: who joins, and who earns poin",
+0,
+6491,
 1104,
 907
 ],
@@ -5762,7 +5818,7 @@
 "div.grid.g-2",
 "Joiners in October 2026, by sign-up chan",
 0,
-5900,
+6621,
 1104,
 431
 ],
@@ -5770,7 +5826,7 @@
 "div.card",
 "Joiners in October 2026, by sign-up chan",
 0,
-5900,
+6621,
 545,
 431
 ],
@@ -5778,7 +5834,7 @@
 "table.roomy",
 "",
 21,
-5962,
+6683,
 503,
 290
 ],
@@ -5786,7 +5842,7 @@
 "div.card",
 "Joiners in October 2026, by campaign",
 559,
-5900,
+6621,
 545,
 431
 ],
@@ -5794,7 +5850,7 @@
 "table.roomy",
 "",
 580,
-5962,
+6683,
 503,
 244
 ],
@@ -5802,7 +5858,7 @@
 "div.card.mt",
 "Reward articles members read most in Oct",
 0,
-6345,
+7066,
 1104,
 268
 ],
@@ -5810,7 +5866,7 @@
 "table.roomy",
 "",
 21,
-6407,
+7128,
 1062,
 160
 ],
@@ -5818,7 +5874,7 @@
 "div.slide.slide-break",
 "Habit and timing · October 2026 Better C",
 0,
-6676,
+7397,
 1104,
 569
 ],
@@ -5826,7 +5882,7 @@
 "div.grid.g-2-1",
 "When members earn points, by hour",
 0,
-6807,
+7528,
 1104,
 374
 ],
@@ -5834,7 +5890,7 @@
 "div.card",
 "When members earn points, by hour",
 0,
-6807,
+7528,
 671,
 374
 ],
@@ -5842,7 +5898,7 @@
 "canvas.",
 "",
 21,
-6869,
+7590,
 628,
 250
 ],
@@ -5850,7 +5906,7 @@
 "div.card",
 "Longest check-in streak in October 2026",
 685,
-6807,
+7528,
 419,
 374
 ]

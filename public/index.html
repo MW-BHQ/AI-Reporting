@@ -10411,6 +10411,36 @@ function renderBcengage() {
       <div class="bce-fresh-list">${fr ? fr.latest.map(r => `<span><span class="bce-fresh-k">${esc(r.what)}</span> ${esc(r.latest || '\u2014')}</span>`).join('') : ''}</div>
       ${foot('Last load = when BigQuery last read the Better Club sheet (daily, 07:00 Bangkok). The times after it are the newest row in each source, so they show how far the data reaches. “New rows” counts rows not already stored; 0 with rows in the sheet means nothing changed, 0 of 0 means the sheet was empty.')}
     </div>`;
+  /**
+   * POINTS → PATIENTS (v3.386.0). Members grouped by how many months they earned
+   * B points before their first hospital visit; does more points activity go with
+   * more visits? Built server-side from BigQuery + the roster + Rev_Attribution.
+   */
+  const ptp = d.pointsToPatients;
+  const ptpBody = (() => {
+    if (!ptp || !ptp.rows) return '';
+    const never = ptp.rows.find(r => r.bin === '0'), most = ptp.rows.find(r => r.bin === '4+');
+    const rate = (r) => share(r.patients, r.members);
+    const lift = never && most && rate(never) > 0 && most.members >= 30 ? rate(most) / rate(never) : null;
+    return `
+    <div class="grid g-3">
+      ${stat('Became patients, never earned points', never ? pct(rate(never)) : '\u2014', never ? `${cnt(never.patients)} of ${cnt(never.members)}` : '', null, null,
+        'Roster members who never earned B points before their first visit.')}
+      ${stat('Became patients, earned points 4+ months', most ? pct(rate(most)) : '\u2014', most ? `${cnt(most.patients)} of ${cnt(most.members)}` : '', BCE_COL.retained, null,
+        'Earned B points in at least four different months before their first visit.')}
+      ${stat('How many times as likely', lift ? `${lift.toFixed(1)}×` : '\u2014', lift ? '4+ months vs never' : 'needs 30+ members in the 4+ group', null, null,
+        'Share who became patients in the 4+ group divided by the share in the never group.')}
+    </div>
+    <div class="card mt">
+      <div class="card-title">Months of earning points before the first visit, and who became a patient</div>
+      <table class="roomy"><thead><tr><th>Earned points in…</th><th class="num">Members</th><th class="num">Became patients</th><th class="num">Share</th><th class="num">Revenue</th><th class="num">Revenue per member</th></tr></thead><tbody>
+      ${ptp.rows.map(r => `<tr><td class="strong">${esc(r.label)}</td><td class="num">${cnt(r.members)}</td><td class="num"><b>${cnt(r.patients)}</b></td>
+        <td class="num">${pct(rate(r))}</td><td class="num">฿${cnt(r.revenue)}</td><td class="num">${r.members ? '฿' + cnt(r.revenue / r.members) : '\u2014'}</td></tr>`).join('')}
+      </tbody></table>
+      ${foot(`Every roster member (${cnt(ptp.members)}), grouped by how many different months they earned B points <b>before their first paid month</b>; members who never became patients are grouped by all their months. <b>Became patients</b> = Has HN in the roster; <b>Revenue</b> = all their spend in Rev_Attribution. This shows the two go together, not that points cause visits: members who planned to visit may also be the ones who check in. The roster is updated by hand, so newer members may be missing.`)}
+    </div>`;
+  })();
+
   $('viewRoot').innerHTML = `
     ${coverSlide('Better Club\nPerformance')}
     ${slideShell(`Monthly active members \u00b7 ${label}`, freshStrip + `<div class="mt">${cards}</div><div class="mt">${growth}</div>`, { first: true, scope: 'Better Club' })}
@@ -10420,6 +10450,7 @@ function renderBcengage() {
     ${slideShell('Do new members stay?', cohort + `<div class="mt">${daily}</div>`, { scope: 'Better Club', cls: 'quiet' })}
     ${slideShell(`What active members care about \u00b7 ${label}`, interest, { scope: 'Better Club', cls: 'quiet' })}
     ${slideShell(`Points and rewards \u00b7 ${label}`, rewardsBody, { scope: 'Better Club', cls: 'quiet' })}
+    ${ptpBody ? slideShell('Does earning points lead to a visit?', ptpBody, { scope: 'Better Club', cls: 'quiet' }) : ''}
     ${slideShell(`Campaigns: who joins, and who earns points \u00b7 ${label}`, campaignBody, { scope: 'Better Club', cls: 'quiet' })}
     ${slideShell(`Habit and timing \u00b7 ${label}`, habitBody, { scope: 'Better Club', cls: 'quiet' })}`;
 
@@ -13643,7 +13674,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.385.1';
+const CLIENT_BUILD = '3.386.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

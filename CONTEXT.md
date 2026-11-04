@@ -1,5 +1,15 @@
 ### Recent (November 2026)
 
+**v3.386.0 — Performance: "Does earning points lead to a visit?"** (MW: on Performance,
+not Rev Attribution). Roster members (Members tab: Has HN, First paid month) joined by
+User ID to their B-point months (BigQuery `user_months` block) and revenue
+(Rev_Attribution). Grouped by months of earning points BEFORE the first paid month
+(never / 1 / 2-3 / 4+); never-paid members by all months. Cards: share who became patients
+in the never and 4+ groups, and the ratio (only when the 4+ group has 30+ members).
+Footnote says correlation, not cause, and that the roster is refreshed by hand. Roster
+missing → section left out. Smoke pins the bins and revenue; removing the before-first-
+visit rule makes it fail (checked).
+
 **Better Club quiz backfill COMPLETE (4 Nov 2026)**: dev sent bhq-quiz-questions.csv
 (802 quizzes: quiz_id, question_th/en, answer_type, choices). The 547 quiz_ids the held
 answers needed were inserted into import_dev_quiz_questions (question_th, else _en);

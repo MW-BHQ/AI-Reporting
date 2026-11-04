@@ -11833,6 +11833,9 @@ SELECT TO_JSON_STRING(STRUCT(
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, bin, users FROM streak ORDER BY month, bin) AS streaks,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, hour, actions, users FROM hours ORDER BY month, hour) AS hours,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%Y-%m', month) AS month, dormant.* EXCEPT (month) FROM dormant ORDER BY month) AS dormant,
+  -- Each member's B-point months, for the points-to-patients join in Node.
+  ARRAY(SELECT AS STRUCT CAST(user_id AS STRING) AS u, ARRAY_AGG(FORMAT_DATE('%Y-%m', month) ORDER BY month) AS m
+        FROM um GROUP BY user_id) AS user_months,
   (SELECT AS STRUCT FORMAT_TIMESTAMP('%FT%T%Ez', t, 'Asia/Bangkok') AS last_run,
      (SELECT SUM(rows_in_source) FROM fresh) AS rows_in_source,
      (SELECT SUM(rows_inserted) FROM fresh) AS rows_inserted,
@@ -11847,10 +11850,67 @@ function bcLastDay(key) {
   return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
 }
 
+/**
+ * DOES EARNING POINTS LEAD TO A VISIT? (v3.386.0, MW: on Performance.)
+ *
+ * Joins each roster member (Members tab: Has HN, First paid month) to the months
+ * they earned B points (BigQuery) and their revenue (Rev_Attribution), by User ID.
+ * Members are grouped by how many months they earned points BEFORE their first
+ * paid month — activity after the first visit cannot have caused it — and for
+ * members who never paid, by all their months. Correlation, not proof: members
+ * who would visit anyway may also be the ones who check in.
+ *
+ * Returns null when the roster is missing, so the card is left out, not zeroed.
+ */
+const BC_PTP_BINS = [["0", "Never earned points"], ["1", "1 month"], ["2-3", "2–3 months"], ["4+", "4 months or more"]];
+function bclubPointsToPatients(roster, detail, userMonths) {
+  if (!roster || roster.length < 2) return null;
+  const head = roster[0].map((h) => String(h == null ? "" : h).trim());
+  const iId = head.indexOf("User ID"), iHn = head.indexOf("Has HN"), iFirst = head.indexOf("First paid month");
+  if (iId === -1 || iHn === -1) return null;
+  const months = new Map((userMonths || []).map((r) => [String(r.u), r.m || []]));
+  const revenue = new Map();
+  if (detail && detail.length > 1) {
+    const dh = detail[0].map((h) => String(h == null ? "" : h).trim());
+    const uCol = dh.indexOf("User ID"), rCol = dh.indexOf("Revenue");
+    if (uCol > -1 && rCol > -1) {
+      for (let r = 1; r < detail.length; r++) {
+        const uid = String((detail[r] || [])[uCol] == null ? "" : detail[r][uCol]).trim();
+        if (uid) revenue.set(uid, (revenue.get(uid) || 0) + bnum(detail[r][rCol]));
+      }
+    }
+  }
+  const bin = (n) => (n === 0 ? "0" : n === 1 ? "1" : n <= 3 ? "2-3" : "4+");
+  const agg = new Map(BC_PTP_BINS.map(([k]) => [k, { members: 0, patients: 0, revenue: 0 }]));
+  let members = 0, matched = 0;
+  for (let r = 1; r < roster.length; r++) {
+    const row = roster[r] || [];
+    const id = String(row[iId] == null ? "" : row[iId]).trim();
+    if (!id) continue;
+    members++;
+    const paid = String(row[iHn] || "").trim().toUpperCase() === "Y";
+    const first = iFirst > -1 ? monthKeyCell(row[iFirst]) : null;
+    const m = months.get(id) || [];
+    if (m.length) matched++;
+    const n = paid && first ? m.filter((k) => k < first).length : m.length;
+    const a = agg.get(bin(n));
+    a.members++;
+    if (paid) { a.patients++; a.revenue += revenue.get(id) || 0; }
+  }
+  return { members, matched, rows: BC_PTP_BINS.map(([k, label]) => ({ bin: k, label, ...agg.get(k) })) };
+}
+
 async function buildBclubEngagement(from, to) {
   let d;
+  const rosterP = sheetBatchGet(BCLUB_SHEET_ID, [`'${BCLUB_MEMBER_TAB}'!A1:G`], { unformatted: true })
+    .then((r) => (r[0] && r[0].values) || []).catch(() => null);
+  // Summary rides along only because the mock (and a single batch) serves both.
+  const detailP = sheetBatchGet(BCLUB_SHEET_ID, [`'${BCLUB_SUMMARY_TAB}'!A1:B2`, `'${BCLUB_DETAIL_TAB}'!A1:I`], { unformatted: true })
+    .then((r) => (r[1] && r[1].values) || []).catch(() => null);
   try { d = await bqJson(bcSql("engagement", BC_ENGAGE_SQL)); }
   catch (e) { return { available: false, error: String((e && e.message) || e) }; }
+  const [roster, detail] = await Promise.all([rosterP, detailP]);
+  const pointsToPatients = bclubPointsToPatients(roster, detail, d.user_months);
   const cov = d.coverage || {};
   const months = (d.months || []).map((m) => {
     const key = m.month;
@@ -11886,6 +11946,7 @@ async function buildBclubEngagement(from, to) {
     rewards: d.rewards || [], points: d.points || [], channels: d.channels || [], campaigns: d.campaigns || [],
     rewardArticles: d.reward_articles || [], streaks: d.streaks || [], hours: d.hours || [],
     dormant: d.dormant || [], badges: d.badges || [], freshness: d.freshness || null,
+    pointsToPatients,
     source: `BigQuery ${BC_DATASET}`,
   };
 }

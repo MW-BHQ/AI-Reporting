@@ -81,6 +81,10 @@ const engagement = {
   dormant: [["2026-09", 50817, 8681, 20134, 22002, 38904, 34695, 32100, 12500], ["2026-10", 53665, 8941, 20707, 24017, 41199, 36473, 33972, 12882]]
     .map(([month, dormant, d_1_3, d_4_12, d_12, with_points, consented, reachable, reachable_4_12]) =>
       ({ month, dormant, d_1_3, d_4_12, d_12, with_points, consented, reachable, reachable_4_12, guide_points: 15 })),
+  // Roster ids are u1..u15 in the mock. u1 earned points in 2026-05 and 2026-06 and
+  // first paid 2026-06, so only the May month counts for u1. u3 never paid.
+  user_months: [["u1", ["2026-05", "2026-06"]], ["u2", ["2026-05", "2026-06", "2026-07"]], ["u3", ["2026-05", "2026-06", "2026-07", "2026-08"]],
+                ["u4", ["2026-07"]], ["u8", ["2026-07"]]].map(([u, m]) => ({ u, m })),
   freshness: { last_run: "2026-11-03T18:14:23+07:00", rows_in_source: 154215, rows_inserted: 154215,
     latest: [["Activity (check-ins, reads, quizzes)", "2026-11-02 18:21"], ["Articles read", "2026-11-02 18:17"],
              ["Buttons clicked", "2026-11-02 18:15"], ["Quiz answers", "2026-11-02 18:08"], ["Member list exported", "2026-11-02 02:12"]]
