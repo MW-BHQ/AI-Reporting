@@ -1,5 +1,10 @@
 ### Recent (November 2026)
 
+**v3.394.0 — Blinking favicon dot** (MW: "in the favicon, one dot, blinking"). While the
+status bar is busy or review themes are being read, the tab icon blinks a violet dot
+(drawn once on a canvas from the real favicon; 550 ms swap). The v3.393.0 in-card dots
+were the wrong place and are removed. `window.FAV_STATE` guards the declaration order.
+
 **v3.393.0 — Thinking dots** (MW): three pulsing dots beside "Claude is reading the
 reviews" while themes load. CSS only; static under reduced motion; never animated in print.
 

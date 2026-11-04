@@ -850,17 +850,6 @@
   mark.hl-good{background:rgba(46,158,111,.16);color:inherit;border-radius:3px;padding:0 2px;}
   mark.hl-bad{background:rgba(217,83,79,.16);color:inherit;border-radius:3px;padding:0 2px;}
   .tr-tag{font-size:var(--text-2xs);color:var(--faint);white-space:nowrap;}
-  /* "Thinking" dots while Claude reads reviews (MW, v3.393.0). Static dots when
-     motion is reduced; never animated in print. */
-  .think{display:flex;align-items:center;gap:8px;}
-  .think-dots{display:inline-flex;gap:4px;}
-  .think-dots i{width:6px;height:6px;border-radius:50%;background:var(--violet, #6C5CE7);opacity:.35;}
-  @media screen and (prefers-reduced-motion: no-preference){
-    .think-dots i{animation:thinkDot 1.2s ease-in-out infinite;}
-    .think-dots i:nth-child(2){animation-delay:.2s;}
-    .think-dots i:nth-child(3){animation-delay:.4s;}
-  }
-  @keyframes thinkDot{0%,80%,100%{opacity:.25;transform:scale(.8);}40%{opacity:1;transform:scale(1);}}
   .tr-orig{font-size:var(--text-xs);color:var(--muted);margin-top:4px;}
   .ev{font-size:var(--text-2xs);color:var(--faint);margin-top:4px;}
   .ev-link{color:var(--blue);text-decoration:none;white-space:nowrap;}
@@ -3180,6 +3169,49 @@ function setStatus(kind, text) {
   if (kind === 'ok' && window.MOTION_STATE) window.MOTION_STATE.loadedAt = Date.now();
   $('statusDot').className = 'dot ' + (kind === 'ok' ? '' : kind);
   $('statusText').textContent = text;
+  // window.FAV_STATE, not FAV: setStatus can run before the const below.
+  if (window.FAV_STATE) { window.FAV_STATE.status = kind === 'busy'; favTick(); }
+}
+
+/**
+ * BLINKING FAVICON DOT while anything loads (MW, v3.394.0) — the tab shows one
+ * pulsing dot, like Claude thinking, so a slow pull is visible from another
+ * tab. Busy = the status bar says busy OR review themes are still being read.
+ * The dotted icon is drawn once from the real favicon; the blink swaps hrefs.
+ */
+const FAV = window.FAV_STATE = { status: false, themes: 0, timer: null, on: false, plain: null, dotted: null };
+function favTick() {
+  const link = document.querySelector('link[rel="icon"]');
+  if (!link) return;
+  if (!FAV.plain) FAV.plain = link.href;
+  const busy = FAV.status || FAV.themes > 0;
+  if (!busy) {
+    clearInterval(FAV.timer); FAV.timer = null; FAV.on = false;
+    link.href = FAV.plain; return;
+  }
+  if (FAV.timer) return;
+  const start = () => {
+    FAV.timer = setInterval(() => {
+      FAV.on = !FAV.on;
+      link.href = FAV.on ? FAV.dotted : FAV.plain;
+    }, 550);
+  };
+  if (FAV.dotted) return start();
+  const img = new Image();
+  img.onload = img.onerror = () => {
+    try {
+      const c = document.createElement('canvas'); c.width = c.height = 32;
+      const g = c.getContext('2d');
+      if (img.naturalWidth) g.drawImage(img, 0, 0, 32, 32);
+      g.beginPath(); g.arc(24, 24, 7, 0, Math.PI * 2);
+      g.fillStyle = '#FFFFFF'; g.fill();
+      g.beginPath(); g.arc(24, 24, 5, 0, Math.PI * 2);
+      g.fillStyle = '#7C6BF5'; g.fill();
+      FAV.dotted = c.toDataURL('image/png');
+    } catch (_) { FAV.dotted = FAV.plain; }
+    if ((FAV.status || FAV.themes > 0) && !FAV.timer) start();
+  };
+  img.src = FAV.plain;
 }
 
 // ============================================================ date controls
@@ -12141,17 +12173,18 @@ async function loadGbpThemes(key) {
   const k = gbpThemesKey(key);
   if (S.gbpThemes[k]) return;
   S.gbpThemes[k] = { loading: true };
+  FAV.themes++; favTick();
   try {
     const res = await fetch(`/api/gbp/themes?key=${encodeURIComponent(key)}&from=${$('from').value}&to=${$('to').value}`);
     S.gbpThemes[k] = res.ok ? await res.json() : { error: `Server ${res.status}` };
   } catch (e) { S.gbpThemes[k] = { error: String(e.message || e) }; }
+  FAV.themes = Math.max(0, FAV.themes - 1); favTick();
   const el = document.getElementById('gbpThemes');
   if (el && S.view === 'gbp' && S.gbpTab === key) el.innerHTML = gbpThemesBody(S.gbpThemes[k]);
 }
 
 function gbpThemesBody(T) {
-  if (!T || T.loading) return `<div class="card"><div class="note think" style="margin-top:0">Claude is reading the reviews
-    <span class="think-dots" aria-hidden="true"><i></i><i></i><i></i></span></div></div>`;
+  if (!T || T.loading) return `<div class="card"><div class="note" style="margin-top:0">Claude is reading the reviews\u2026</div></div>`;
   if (T.error) return `<div class="card"><div class="note" style="margin-top:0">\u2014 Review themes did not load: ${esc(T.error)}</div></div>`;
   if (!T.withComment) return `<div class="card"><div class="note" style="margin-top:0">\u2014 No review with a comment in this period.</div></div>`;
   const label = Object.fromEntries(T.themes.map(t => [t.key, t.label]));
@@ -13931,7 +13964,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.393.0';
+const CLIENT_BUILD = '3.394.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
