@@ -28,6 +28,21 @@ const realFetch = global.fetch;
   if (gal.GoogleAuth !== MockGoogleAuth) throw new Error("mock-fetch: failed to stub GoogleAuth");
 }
 
+/**
+ * MOCK_IAP_TOKENS=1 (v3.407.0): "mock.<email>" is a valid signed IAP assertion
+ * for <email>, so the smoke test can replay one user's token with another
+ * user's header and prove it is refused.
+ */
+if (process.env.MOCK_IAP_TOKENS === "1") {
+  const { OAuth2Client } = require("google-auth-library");
+  OAuth2Client.prototype.getIapPublicKeys = async () => ({ pubkeys: { k: "mock" } });
+  OAuth2Client.prototype.verifySignedJwtWithCertsAsync = async (tok) => {
+    const m = /^mock\.(.+)$/.exec(String(tok));
+    if (!m) throw new Error("bad signature");
+    return { getPayload: () => ({ email: m[1] }) };
+  };
+}
+
 const qp = (url, k) => { try { return new URL(url).searchParams.get(k); } catch { return null; } };
 const jsonRes = (body, status = 200) => ({
   ok: status >= 200 && status < 300,

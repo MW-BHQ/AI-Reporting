@@ -1,5 +1,20 @@
 ### Recent (November 2026)
 
+**v3.407.0 — Security pass** (MW: "act like a real hacker").
+- CRITICAL: the IAP token cache stored the verdict by token alone. A signed-in user could
+  replay their own valid assertion with another email in X-Goog-Authenticated-User-Email
+  and be taken for that person (admin included). The cache now holds the token's signed
+  email and compares it with the header on every request. Smoke: own token 200, replay
+  with the admin header 401 (MOCK_IAP_TOKENS mock).
+- Optional `IAP_AUDIENCE` env: when set, tokens minted for other IAP apps are refused.
+- `DEV_USER` ignored on Cloud Run (it would sign in header-less requests).
+- `isoDate` checks a real calendar date (2026-02-30 passed before). Every /api call with
+  from/to: real dates, in order, ≤ 6 years. Themes ≤ 400 days (Claude cost lever).
+- Error text sent to the browser is scrubbed of keys/tokens and capped (res.json wrap).
+- HSTS + Permissions-Policy headers. Watch-list why/action lose links and e-mail
+  addresses (review text is untrusted input to Claude).
+- Not done: a Content-Security-Policy (inline scripts + CDN need a nonce plan first).
+
 **v3.406.0 — Reviews by month shows every month** (MW): `drawChart` capped x labels at 8
 (autoSkip), so the 12-month axis skipped months. `opts.allTicks` turns that off; the twin
 reads the chart's ticks, so the PDF follows.

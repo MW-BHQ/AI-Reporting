@@ -92,8 +92,8 @@ echo "--- IAP signed header (v3.374.0) ---"
 expect_field "jwt missing reported" "/api/me" "d.jwt==='missing'&&d.jwtEnforced===false?'ok':undefined"
 FORGED=$(curl -s -H "$ADMIN" -H "x-goog-iap-jwt-assertion: abc.def.ghi" "$BASE/api/me" | node -e "let r='';process.stdin.on('data',c=>r+=c).on('end',()=>console.log(/^invalid/.test(JSON.parse(r).jwt)?'ok':JSON.parse(r).jwt))")
 if [ "$FORGED" = "ok" ]; then printf '  ok   %-22s %s\n' "forged jwt invalid" ok; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "forged jwt invalid" "$FORGED"; fi
-HDRS=$(curl -sI -H "$ADMIN" "$BASE/api/me" | tr -d '\r' | grep -ci "x-frame-options: deny\|x-content-type-options: nosniff\|referrer-policy")
-if [ "$HDRS" = "3" ]; then printf '  ok   %-22s %s\n' "security headers" 3; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "security headers" "$HDRS"; fi
+HDRS=$(curl -sI -H "$ADMIN" "$BASE/api/me" | tr -d '\r' | grep -ci "x-frame-options: deny\|x-content-type-options: nosniff\|referrer-policy\|strict-transport-security\|permissions-policy")
+if [ "$HDRS" = "5" ]; then printf '  ok   %-22s %s\n' "security headers" 5; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "security headers" "$HDRS"; fi
 # Enforce mode: a header without a signed assertion is refused.
 EPORT=$((PORT+7))
 WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ECOM_SHEET_ID=mock ADMIN_EMAILS=admin@bkh.test ACCESS_BUCKET=mock-bucket IAP_ENFORCE_JWT=1 PORT=$EPORT node --require ./test/mock-fetch.js server.js >/tmp/smoke-enforce.log 2>&1 &
@@ -102,6 +102,16 @@ sleep 2.5
 ECODE=$(curl -s -o /dev/null -w '%{http_code}' -H "$ADMIN" "http://localhost:$EPORT/api/me")
 kill $ESRV 2>/dev/null
 if [ "$ECODE" = "401" ]; then printf '  ok   %-22s %s\n' "enforce refuses" 401; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "enforce refuses" "$ECODE"; fi
+# REPLAY (v3.407.0): user's own valid token + the ADMIN's email header must be refused,
+# also AFTER the token was verified once for its owner (the old cache said "verified").
+MOCK_IAP_TOKENS=1 WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ECOM_SHEET_ID=mock ADMIN_EMAILS=admin@bkh.test ACCESS_BUCKET=mock-bucket IAP_ENFORCE_JWT=1 PORT=$EPORT node --require ./test/mock-fetch.js server.js >/tmp/smoke-enforce.log 2>&1 &
+ESRV=$!; sleep 2.5
+UH="X-Goog-Authenticated-User-Email: accounts.google.com:user@bkh.test"
+OWN=$(curl -s -o /dev/null -w '%{http_code}' -H "$UH" -H "x-goog-iap-jwt-assertion: mock.user@bkh.test" "http://localhost:$EPORT/api/me")
+REPLAY=$(curl -s -o /dev/null -w '%{http_code}' -H "$ADMIN" -H "x-goog-iap-jwt-assertion: mock.user@bkh.test" "http://localhost:$EPORT/api/admin/access")
+RADM=$(curl -s -o /dev/null -w '%{http_code}' -H "$ADMIN" -H "x-goog-iap-jwt-assertion: mock.admin@bkh.test" "http://localhost:$EPORT/api/me")
+kill $ESRV 2>/dev/null; sleep 0.5
+if [ "$OWN" = "200" ] && [ "$REPLAY" = "401" ] && [ "$RADM" = "200" ]; then printf '  ok   %-22s %s\n' "token replay refused" "$OWN/$REPLAY/$RADM"; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "token replay refused" "$OWN/$REPLAY/$RADM"; fi
 # On Cloud Run (K_SERVICE set) it is ON by default; IAP_ENFORCE_JWT=0 turns it off.
 K_SERVICE=ai-reporting-git WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ECOM_SHEET_ID=mock ADMIN_EMAILS=admin@bkh.test ACCESS_BUCKET=mock-bucket PORT=$EPORT node --require ./test/mock-fetch.js server.js >/tmp/smoke-enforce.log 2>&1 &
 ESRV=$!; sleep 2.5
@@ -1535,6 +1545,10 @@ expect_field "disagree listed" "$T" "d.sentiment.disagree===1&&d.disagreeReviews
 expect_field "reviews link" "$T" "d.reviewsUrl==='https://search.google.com/local/reviews?placeid=ChIJmock0'?'ok':undefined"
 expect_field "themes quote marked" "$T" "(q=>q&&q.ann&&q.ann.bad.join()==='long wait'?'ok':undefined)(d.themes.find(t=>t.key==='wait').complaintQuote)"
 expect_field "watch verbatim only" "$T" "d.watch.items.length===1&&d.watch.items[0].phrase==='Long wait'&&d.watch.items[0].reviews===1?'ok':undefined"
+expect_field "range: fake date 400" "/api/gbp?from=2026-02-30&to=2026-03-31" "/real dates/.test(d.error)?'ok':undefined"
+expect_field "range: reversed 400" "/api/gbp?from=2026-07-31&to=2026-07-01" "/must not be after/.test(d.error)?'ok':undefined"
+expect_field "range: 7 years 400" "/api/gbp?from=2019-01-01&to=2026-07-01" "/too long/.test(d.error)?'ok':undefined"
+expect_field "themes span cap" "/api/gbp/themes?key=BGH&from=2025-01-01&to=2026-07-31" "/400 days/.test(d.error)?'ok':undefined"
 expect_field "themes bad key 400" "/api/gbp/themes?key=nope&from=$FROM&to=$TO" "d.error==='unknown listing'?'ok':undefined"
 
 # NEGATIVE: 3 days missing -> no MoM/YoY, a reason instead of a fake change.

@@ -47,7 +47,49 @@ app.use((req, res, next) => (req.path === "/api/callout" ? jsonLarge : jsonSmall
 // full URL (campaign codes) in the Referer sent to other sites.
 app.use((req, res, next) => {
   res.set({ "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY",
-    "Referrer-Policy": "strict-origin-when-cross-origin" });
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    // v3.407.0: HTTPS only from first visit on; no camera/mic/geo for any page.
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()" });
+  next();
+});
+
+/**
+ * RANGE GUARD ON EVERY /api CALL (v3.407.0). Any `from`/`to` must be a real
+ * date, in order, and at most 6 years apart: an open range is a free lever on
+ * Windsor, Sheets and Claude cost. Routes keep their own checks too.
+ */
+app.use("/api", (req, res, next) => {
+  const { from, to } = req.query;
+  if (from === undefined && to === undefined) return next();
+  if ((from !== undefined && !isoDate(from)) || (to !== undefined && !isoDate(to))) {
+    return res.status(400).json({ error: "from and to must be real dates (YYYY-MM-DD)" });
+  }
+  if (from && to) {
+    if (from > to) return res.status(400).json({ error: "from must not be after to" });
+    if ((Date.parse(to) - Date.parse(from)) / 86400000 > 6 * 366) {
+      return res.status(400).json({ error: "range too long (6 years max)" });
+    }
+  }
+  next();
+});
+
+/**
+ * ERRORS SENT TO THE BROWSER ARE SCRUBBED (v3.407.0). Upstream messages carry
+ * response bodies (Windsor, Google, Anthropic); anything shaped like a key or
+ * token is masked before it leaves, and the text is capped.
+ */
+const scrubSecret = (t) => String(t)
+  .replace(/(api[_-]?key|key|token|access_token|secret|password)=([^&\s"']+)/gi, "$1=***")
+  .replace(/\b(sk-ant-[A-Za-z0-9_-]+|AIza[0-9A-Za-z_-]{20,}|ya29\.[0-9A-Za-z._-]+|github_pat_[A-Za-z0-9_]+)/g, "***")
+  .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer ***")
+  .slice(0, 300);
+app.use("/api", (req, res, next) => {
+  const json = res.json.bind(res);
+  res.json = (body) => {
+    if (body && typeof body === "object" && typeof body.error === "string") body = { ...body, error: scrubSecret(body.error) };
+    return json(body);
+  };
   next();
 });
 const zlib = require("zlib");
@@ -1040,7 +1082,9 @@ const DEFAULT_TABS = String(process.env.DEFAULT_TABS || "overview")
   .split(",").map((t) => t.trim()).filter((t) => TAB_IDS.includes(t));
 const ACCESS_BUCKET = process.env.ACCESS_BUCKET || process.env.BENCHMARK_BUCKET || "";
 const ACCESS_OBJECT = "access/users.json";
-const DEV_USER = process.env.DEV_USER || "";
+// Never on Cloud Run (v3.407.0): a stray DEV_USER there would sign in every
+// header-less request as that person.
+const DEV_USER = process.env.K_SERVICE ? "" : (process.env.DEV_USER || "");
 
 function callerEmail(req) {
   const raw = req.header("X-Goog-Authenticated-User-Email") || "";
@@ -1120,9 +1164,18 @@ async function iapJwtStatus(req) {
   if (!hdr) return "no-iap-header";
   const tok = req.header("x-goog-iap-jwt-assertion");
   if (!tok) return "missing";
+  /**
+   * THE CACHE HOLDS THE TOKEN'S OWN EMAIL, NOT A VERDICT (v3.407.0, security).
+   * It used to cache "verified" by token alone, so a signed-in user could replay
+   * their own valid token with ANOTHER email in X-Goog-Authenticated-User-Email
+   * and be taken for that person (admin included). Now the signed email is
+   * cached and compared with the header on every request.
+   */
   const hit = _iapSeen.get(tok);
-  if (hit && Date.now() - hit.at < 5 * 60 * 1000) return hit.result;
-  let result, cacheIt = true;
+  if (hit && Date.now() - hit.at < 5 * 60 * 1000) {
+    return hit.email ? (hit.email === callerEmail(req) ? "verified" : "mismatch") : hit.result;
+  }
+  let result, cacheIt = true, jwtEmailSeen = null;
   try {
     // Keys cached 1h; a failed refresh keeps the last good set, and a result
     // caused by a key outage is NOT cached, so the next request retries.
@@ -1131,14 +1184,18 @@ async function iapJwtStatus(req) {
       catch (e) { if (!_iapKeys.pubkeys) { cacheIt = false; throw e; } }
     }
     const keys = { pubkeys: _iapKeys.pubkeys };
-    const ticket = await iapClient.verifySignedJwtWithCertsAsync(tok, keys.pubkeys, undefined, ["https://cloud.google.com/iap"]);
+    // IAP_AUDIENCE (optional): the backend's audience string; when set, a token
+    // minted for any other IAP-protected app is refused.
+    const ticket = await iapClient.verifySignedJwtWithCertsAsync(tok, keys.pubkeys,
+      process.env.IAP_AUDIENCE || undefined, ["https://cloud.google.com/iap"]);
     const jwtEmail = String((ticket.getPayload() || {}).email || "").toLowerCase();
+    jwtEmailSeen = jwtEmail || null;
     result = jwtEmail && jwtEmail === callerEmail(req) ? "verified" : "mismatch";
   } catch (e) {
     result = `invalid: ${String(e.message || e).slice(0, 80)}`;
   }
   if (_iapSeen.size > 500) _iapSeen.clear();
-  if (cacheIt) _iapSeen.set(tok, { at: Date.now(), result });
+  if (cacheIt) _iapSeen.set(tok, { at: Date.now(), result, email: jwtEmailSeen });
   return result;
 }
 app.use("/api", async (req, res, next) => {
@@ -1184,7 +1241,12 @@ const n = (v) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
 const num0 = (v) => Number(v || 0).toLocaleString("en-US");
 const totals0Spend = (byPlatform) => byPlatform.reduce((a, p) => a + n(p.spend), 0);
 const norm = (s) => String(s || "").toLowerCase().trim();
-const isoDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+// A REAL calendar date (v3.407.0): the shape alone let 2026-99-99 through.
+const isoDate = (s) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(s || ""))) return false;
+  const d = new Date(s + "T00:00:00Z");
+  return !isNaN(d) && d.toISOString().slice(0, 10) === s;
+};
 
 function logJson(severity, message, extra = {}) {
   process.stdout.write(JSON.stringify({ severity, message, ...extra }) + "\n");
@@ -8042,6 +8104,8 @@ async function buildGbpThemes(key, from, to) {
  * Kept in GCS per listing and range, rebuilt only when the set of tagged
  * reviews changes (signature = count + newest id).
  */
+const noLinks = (t) => String(t || "").replace(/\b(?:https?:\/\/|www\.)\S+/gi, "[link removed]")
+  .replace(/\b[\w.+-]+@[\w-]+\.[\w.-]+\b/g, "[address removed]");
 const normText = (t) => String(t || "").toLowerCase().replace(/\s+/g, " ").trim();
 
 async function buildGbpWatch(key, from, to, tagged, store, persisted) {
@@ -8088,7 +8152,9 @@ ${pool.map((r, i) => `[${i}] (${r.star}★) ${r.comment.replace(/\s+/g, " ").sli
     const ex = hits.map((x) => x.r).sort((a, b) => b.at.localeCompare(a.at))[0];
     items.push({ phrase, theme: GBP_THEME_KEYS.has(String(it.k)) ? String(it.k) : "other",
       reviews: hits.length, negative: neg,
-      why: String(it.why || "").slice(0, 200), action: String(it.action || "").slice(0, 200),
+      // Review text is untrusted input to Claude: no links or addresses survive into
+      // the advice lines, whatever a review tried to inject.
+      why: noLinks(it.why).slice(0, 200), action: noLinks(it.action).slice(0, 200),
       example: { id: ex.id, comment: clipText(reviewOriginal(ex.comment), 400), star: ex.star, at: ex.at,
         reviewer: ex.reviewer || null } });
   }
@@ -8104,6 +8170,8 @@ app.get("/api/gbp/themes", requireTab("gbp"), async (req, res) => {
   const { from, to, key } = req.query;
   if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
   if (!GBP_LISTINGS.some((l) => l.key === key)) return res.status(400).json({ error: "unknown listing" });
+  // Claude reads every review in the range once: cap it so range-cycling can't run up cost.
+  if ((Date.parse(to) - Date.parse(from)) / 86400000 > 400) return res.status(400).json({ error: "themes cover at most 400 days" });
   try {
     const out = await withCache(`gbpthemes:${key}:${from}:${to}`, req.query.refresh === "1",
       // 60 s, not the default: tags live in GCS, so a rebuild is cheap, and a
