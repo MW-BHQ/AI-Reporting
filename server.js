@@ -14657,6 +14657,49 @@ app.use((req, res, next) => {
   }
   next();
 });
+/**
+ * CONTENT-SECURITY-POLICY (v3.409.0). The browser runs only scripts from this
+ * server plus the one inline script, allowed by its SHA-256 (computed below at
+ * boot from the exact bytes, so the page stays precompressed and cacheable).
+ * Inline event handlers are gone (data attributes + listeners). Images may
+ * come from any https host (ad creatives, thumbnails); data/fetch go to this
+ * origin only. Fonts: Google Fonts. No framing, plugins or <base> games.
+ * CSP_MODE: "enforce" (default) | "report" (log only) | "off". Violations are
+ * posted to /csp-report and logged as `csp_violation`.
+ */
+const CSP_MODE = (process.env.CSP_MODE || "enforce").toLowerCase();
+function buildCsp(html) {
+  const crypto = require("crypto");
+  const hashes = [];
+  const re = /<script>([\s\S]*?)<\/script>/g;
+  let m;
+  while ((m = re.exec(html))) hashes.push(`'sha256-${crypto.createHash("sha256").update(m[1], "utf8").digest("base64")}'`);
+  return [
+    "default-src 'self'",
+    `script-src 'self' ${hashes.join(" ")}`,
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "img-src 'self' data: blob: https:",
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "report-uri /csp-report",
+  ].join("; ");
+}
+app.post("/csp-report", express.json({ type: ["application/csp-report", "application/json", "application/reports+json"], limit: "20kb" }), (req, res) => {
+  const r = (req.body && (req.body["csp-report"] || req.body)) || {};
+  const _cspSeen = (global._cspSeen = global._cspSeen || new Map());
+  const k = `${r["violated-directive"] || r.effectiveDirective}|${r["blocked-uri"] || r.blockedURL}`;
+  if (!(_cspSeen.get(k) > Date.now() - 10 * 60 * 1000)) {   // once per kind per 10 min
+    _cspSeen.set(k, Date.now()); if (_cspSeen.size > 500) _cspSeen.clear();
+    logJson("WARNING", "csp_violation", { mode: CSP_MODE, directive: r["violated-directive"] || r.effectiveDirective,
+      blocked: String(r["blocked-uri"] || r.blockedURL || "").slice(0, 200),
+      source: String(r["source-file"] || r.sourceFile || "").slice(0, 200), line: r["line-number"] || r.lineNumber });
+  }
+  res.status(204).end();
+});
 const INDEX = (() => {
   try {
     const raw = fs.readFileSync(path.join(__dirname, "public", "index.html"));
@@ -14664,12 +14707,15 @@ const INDEX = (() => {
       raw, etag: `"${require("crypto").createHash("sha1").update(raw).digest("hex").slice(0, 16)}"`,
       br: zlib.brotliCompressSync(raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 } }),
       gzip: zlib.gzipSync(raw, { level: 9 }),
+      csp: buildCsp(raw.toString("utf8")),
     };
   } catch (e) { return null; }
 })();
 app.get(["/", "/index.html"], (req, res, next) => {
   if (!INDEX) return next();
   res.set({ "Content-Type": "text/html; charset=utf-8", ETag: INDEX.etag, Vary: "Accept-Encoding" });
+  if (CSP_MODE === "enforce") res.set("Content-Security-Policy", INDEX.csp);
+  else if (CSP_MODE === "report") res.set("Content-Security-Policy-Report-Only", INDEX.csp);
   if (req.headers["if-none-match"] === INDEX.etag) return res.status(304).end();
   const enc = pickEncoding(req);
   if (enc) res.set("Content-Encoding", enc);

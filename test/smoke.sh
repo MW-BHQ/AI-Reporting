@@ -94,6 +94,18 @@ FORGED=$(curl -s -H "$ADMIN" -H "x-goog-iap-jwt-assertion: abc.def.ghi" "$BASE/a
 if [ "$FORGED" = "ok" ]; then printf '  ok   %-22s %s\n' "forged jwt invalid" ok; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "forged jwt invalid" "$FORGED"; fi
 HDRS=$(curl -sI -H "$ADMIN" "$BASE/api/me" | tr -d '\r' | grep -ci "x-frame-options: deny\|x-content-type-options: nosniff\|referrer-policy\|strict-transport-security\|permissions-policy")
 if [ "$HDRS" = "5" ]; then printf '  ok   %-22s %s\n' "security headers" 5; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "security headers" "$HDRS"; fi
+# CSP (v3.409.0): enforced on the page, scripts by hash only, and the hash matches the
+# inline script actually served (a stale hash = a blank app). No inline handlers.
+CSPCHK=$(curl -s -D /tmp/csp-h.txt -H "$ADMIN" "$BASE/" -o /tmp/csp-body.html; node -e "
+const fs=require('fs'),c=require('crypto');
+const h=fs.readFileSync('/tmp/csp-h.txt','utf8').match(/content-security-policy: (.*)/i);
+const html=fs.readFileSync('/tmp/csp-body.html','utf8');
+if(!h){console.log('no header');process.exit()}
+const pol=h[1]; const sc=(pol.match(/script-src ([^;]*)/)||[])[1]||'';
+const want=[...html.matchAll(/<script>([\\s\\S]*?)<\\/script>/g)].map(m=>\"'sha256-\"+c.createHash('sha256').update(m[1],'utf8').digest('base64')+\"'\");
+const ok=want.length>0&&want.every(w=>sc.includes(w))&&!/unsafe-inline|unsafe-eval/.test(sc)&&/frame-ancestors 'none'/.test(pol)&&!/ on(click|error|load|change|input)=/.test(html);
+console.log(ok?'ok':'bad '+sc.slice(0,120));")
+if [ "$CSPCHK" = "ok" ]; then printf '  ok   %-22s %s\n' "csp enforced+hash" ok; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "csp enforced+hash" "$CSPCHK"; fi
 # Enforce mode: a header without a signed assertion is refused.
 EPORT=$((PORT+7))
 WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ECOM_SHEET_ID=mock ADMIN_EMAILS=admin@bkh.test ACCESS_BUCKET=mock-bucket IAP_ENFORCE_JWT=1 PORT=$EPORT node --require ./test/mock-fetch.js server.js >/tmp/smoke-enforce.log 2>&1 &

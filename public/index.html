@@ -2583,6 +2583,32 @@
 </div>
 
 <script>
+/**
+ * NO INLINE HANDLERS (v3.409.0, CSP). The Content-Security-Policy refuses
+ * inline `onerror=`/`onclick=` attributes, so markup carries data attributes
+ * and these two listeners do the work. `error` does not bubble: capture phase.
+ *   data-onerr="remove" | "hide" | "alt" (try data-alt, then data-fallback text)
+ *   data-act="pk-toggle" (Show all / Show top 20 on package cards)
+ */
+document.addEventListener('error', (e) => {
+  const t = e.target;
+  if (!t || t.tagName !== 'IMG' || !t.dataset || !t.dataset.onerr) return;
+  const how = t.dataset.onerr;
+  if (how === 'remove') t.remove();
+  else if (how === 'hide') t.style.display = 'none';
+  else if (how === 'alt') {
+    if (t.dataset.alt) { const a = t.dataset.alt; t.dataset.alt = ''; t.src = a; }
+    else t.replaceWith(document.createTextNode(t.dataset.fallback || ''));
+  }
+}, true);
+document.addEventListener('click', (e) => {
+  const b = e.target && e.target.closest && e.target.closest('[data-act="pk-toggle"]');
+  if (!b) return;
+  const card = b.closest('.card'); if (!card) return;
+  if (!b.dataset.more) b.dataset.more = b.textContent;   // "Show all N packages"
+  card.classList.toggle('pk-all');
+  b.textContent = card.classList.contains('pk-all') ? 'Show top 20' : b.dataset.more;
+});
 // =================================================================== thresholds
 /**
  * EVERY NUMBER THAT DECIDES A COLOUR, IN ONE PLACE (MW: "what is the threshold
@@ -2990,10 +3016,10 @@ function slideShell(title, body, { first, scope, fill, flow, logo, cls, icon, ai
   // `ai`: the AI chip beside the scope pill — the page is Claude's reading (MW).
   const aiChip = ai ? ` <span class="ai-badge" title="Read and tagged by Claude">AI</span>` : '';
   // `icon`: a platform mark before the title, the Monthly Report's section header.
-  const mark = icon ? `<img class="plogo" src="/brand/${esc(icon)}" alt="" onerror="this.remove()">` : '';
+  const mark = icon ? `<img class="plogo" src="/brand/${esc(icon)}" alt="" data-onerr="remove">` : '';
   const right = `<span class="slide-right"><span class="slide-range">${esc(humanRange())}</span><img
     class="slide-logo" src="/brand/${esc(logo || 'bh-wordmark.png')}" alt=""
-    onerror="this.style.display='none'"></span>`;
+    data-onerr="hide"></span>`;
   return `<div class="slide${first ? '' : ' slide-break'}${fill ? ' slide-fill' : ''}${flow ? ' slide-flow' : ''}${cls ? ' ' + cls : ''}">
     <div class="slide-title${/\bquiet\b/.test(cls || '') ? ' quiet' : ''}"><span>${mark}${esc(title)}${pill}${aiChip}</span>${right}</div>
     ${body}</div>`;
@@ -3018,7 +3044,7 @@ function coverSlide(title) {
   if (!title) return '';
   const lines = String(title).split('\n');
   return `<div class="slide cover">
-    <img class="cover-bg" src="/brand/cover-bg.jpg" alt="" onerror="this.style.display='none'">
+    <img class="cover-bg" src="/brand/cover-bg.jpg" alt="" data-onerr="hide">
     <div class="cover-text">
       <h1 class="cover-title">${lines.map(esc).join('<br>')}</h1>
       <div class="cover-sub">Digital Marketing</div>
@@ -4064,7 +4090,7 @@ function renderReport() {
     return `<span class="hlogo" style="--hh:${h || 34}px">
       <img src="/brand/${esc(p.file)}" alt="${esc(key)}" title="${esc(key)}"
         data-alt="${esc(p.url)}"
-        onerror="if(this.dataset.alt){this.src=this.dataset.alt;this.dataset.alt='';}else{this.replaceWith(document.createTextNode('${esc(key)}'));}">
+        data-onerr="alt" data-fallback="${esc(key)}">
     </span>`;
   };
   /**
@@ -4098,7 +4124,7 @@ function renderReport() {
     esc(RANGE_LABEL)}</span><img
     class="slide-logo" src="/brand/${
     (HOSPITAL[sel] || HOSPITAL.BGH).file}" alt="${esc(sel)}"
-    onerror="this.style.display='none'"></span>`;
+    data-onerr="hide"></span>`;
 
   /**
    * `allFour` marks a block that deliberately shows every hospital — a
@@ -4168,7 +4194,7 @@ function renderReport() {
     const p = PLATFORM[id]; if (!p) return '';
     const sz = size ? ` style="width:${size}px;height:${size}px"` : '';
     return `<img class="plogo"${sz} src="/brand/${esc(p.file)}" alt="${esc(p.label)}"
-      title="${esc(p.label)}" onerror="this.remove()">`;
+      title="${esc(p.label)}" data-onerr="remove">`;
   };
   /**
    * Assistant source -> platform mark, for the AI table rows.
@@ -5439,7 +5465,7 @@ function renderReport() {
     const thumb = (v) => v && v.thumb
       ? `<img src="${esc(v.thumb)}" alt=""
               style="width:74px;height:98px;object-fit:cover;border-radius:6px;background:var(--line)"
-              onerror="this.style.display='none'">`
+              data-onerr="hide">`
       : `<div style="width:74px;height:98px;border-radius:6px;background:var(--line)"></div>`;
     const cell = (title, v, big) => `
       <div class="card" style="display:flex;gap:10px;align-items:flex-start">
@@ -5747,7 +5773,7 @@ function renderReport() {
     const anyPub = YT.videosHavePublished && vids.some(v => v.published);
     const thumb = (v) => v.thumb
       ? `<img class="yt-thumb" src="https://i.ytimg.com/vi/${esc(v.thumb)}/mqdefault.jpg"
-           alt="" loading="eager" onerror="this.remove()">`
+           alt="" loading="eager" data-onerr="remove">`
       : '<span class="yt-thumb yt-thumb-none"></span>';
     return `<div class="card">
       <div class="card-title">Top videos</div>
@@ -9239,7 +9265,7 @@ function renderShopee() {
       <tbody>${pk.list.slice(0, 20).map(pkRow).join('')}</tbody>
       ${pk.list.length > 20 ? `<tbody class="pk-more">${pk.list.slice(20).map(pkRow).join('')}</tbody>` : ''}
     </table>
-    ${pk.list.length > 20 ? `<button type="button" class="btn btn-ghost mt" onclick="this.closest('.card').classList.toggle('pk-all');this.textContent=this.closest('.card').classList.contains('pk-all')?'Show top 20':'Show all ${pk.list.length} packages'">Show all ${pk.list.length} packages</button>` : ''}
+    ${pk.list.length > 20 ? `<button type="button" class="btn btn-ghost mt" data-act="pk-toggle">Show all ${pk.list.length} packages</button>` : ''}
   </div>`;
 
   /**
@@ -9553,7 +9579,7 @@ function renderLazada() {
         <th class="num">Added to cart</th><th class="num">Orders</th><th class="num">Conversion</th><th class="num">Revenue (THB)</th></tr></thead>
         <tbody>${p.list.slice(0, 20).map(prow).join('')}</tbody>
         ${p.list.length > 20 ? `<tbody class="pk-more">${p.list.slice(20).map(prow).join('')}</tbody>` : ''}</table>
-      ${p.list.length > 20 ? `<button type="button" class="btn btn-ghost mt" onclick="this.closest('.card').classList.toggle('pk-all');this.textContent=this.closest('.card').classList.contains('pk-all')?'Show top 20':'Show all ${p.list.length} packages'">Show all ${p.list.length} packages</button>` : ''}
+      ${p.list.length > 20 ? `<button type="button" class="btn btn-ghost mt" data-act="pk-toggle">Show all ${p.list.length} packages</button>` : ''}
     </div>
     ${lk ? `<div class="card mt"><div class="card-title">Where each package leaks <span class="muted">\u00b7 50+ visitors, against the shop's own rates</span></div>
       <div class="grid g-2" style="gap:12px;">
@@ -11115,7 +11141,7 @@ function renderEcomMonthly() {
         <div class="mr-brand">
           <span class="mr-range">${esc(humanRange())}</span>
           <img class="mr-logo" src="/brand/bh-wordmark.png" alt="Bangkok Hospital"
-               onerror="this.style.display='none'">
+               data-onerr="hide">
         </div>
       </div>
 
@@ -14165,7 +14191,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.408.0';
+const CLIENT_BUILD = '3.409.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

@@ -35,7 +35,10 @@ def main():
         b = p.chromium.launch()
         ctx = b.new_context(viewport={"width": 1400, "height": 900}, reduced_motion="reduce",
                             extra_http_headers={"X-Goog-Authenticated-User-Email": IAP})
-        ctx.add_init_script("window.print = () => {}; window.open = () => null;")
+        ctx.add_init_script("window.print = () => {}; window.open = () => null;"
+            # v3.409.0: any CSP block is a problem, named plainly.
+            " document.addEventListener('securitypolicyviolation', (e) => console.error("
+            "'CSP violation: ' + e.violatedDirective + ' ' + e.blockedURI));")
         pg = ctx.new_page()
         current = {"where": "boot"}
         pg.on("pageerror", lambda e: problems.append(f"{current['where']}: THROW {e}"))

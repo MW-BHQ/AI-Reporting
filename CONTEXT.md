@@ -1,5 +1,18 @@
 ### Recent (November 2026)
 
+**v3.409.0 — Content-Security-Policy, enforced** (MW: "let's do it").
+- Policy on index.html: scripts 'self' + the inline script by SHA-256 (computed at boot from
+  the served bytes, so precompression/ETag stay); styles self + inline + Google Fonts; fonts
+  gstatic; images self/data/blob/any https; connect self; object none; base-uri/form-action
+  self; frame-ancestors none; report-uri /csp-report (logged `csp_violation`, deduped).
+- The 11 inline handlers (`onerror=` x9, `onclick=` x2) replaced by data attributes and two
+  document listeners (error in capture phase; `data-act="pk-toggle"`).
+- `CSP_MODE` env: enforce (default) | report | off — the kill switch.
+- Tests: smoke checks the header, that the hash matches the served inline script, no
+  unsafe-inline/eval, no inline handlers; clickpath reports any CSP violation.
+- Rule from now: NO inline event handlers and NO new inline <script> without a hash. A
+  second inline <script> is fine — buildCsp hashes every one.
+
 **v3.408.0 — /api/me shows the IAP token's audience** (`jwtAudience`, plus
 `audienceChecked`), so IAP_AUDIENCE is copied from what IAP really sends rather than
 guessed — a wrong value would 401 everyone. Steps in DEPLOY.md "IAP audience".
