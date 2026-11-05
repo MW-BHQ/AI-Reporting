@@ -110,8 +110,9 @@ UH="X-Goog-Authenticated-User-Email: accounts.google.com:user@bkh.test"
 OWN=$(curl -s -o /dev/null -w '%{http_code}' -H "$UH" -H "x-goog-iap-jwt-assertion: mock.user@bkh.test" "http://localhost:$EPORT/api/me")
 REPLAY=$(curl -s -o /dev/null -w '%{http_code}' -H "$ADMIN" -H "x-goog-iap-jwt-assertion: mock.user@bkh.test" "http://localhost:$EPORT/api/admin/access")
 RADM=$(curl -s -o /dev/null -w '%{http_code}' -H "$ADMIN" -H "x-goog-iap-jwt-assertion: mock.admin@bkh.test" "http://localhost:$EPORT/api/me")
+AUDV=$(curl -s -H "$ADMIN" -H "x-goog-iap-jwt-assertion: mock.admin@bkh.test" "http://localhost:$EPORT/api/me" | node -e "let r='';process.stdin.on('data',c=>r+=c).on('end',()=>console.log(JSON.parse(r).jwtAudience))")
 kill $ESRV 2>/dev/null; sleep 0.5
-if [ "$OWN" = "200" ] && [ "$REPLAY" = "401" ] && [ "$RADM" = "200" ]; then printf '  ok   %-22s %s\n' "token replay refused" "$OWN/$REPLAY/$RADM"; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "token replay refused" "$OWN/$REPLAY/$RADM"; fi
+if [ "$OWN" = "200" ] && [ "$REPLAY" = "401" ] && [ "$RADM" = "200" ] && [ "$AUDV" = "/projects/123/locations/asia-southeast1/services/ai-reporting-git" ]; then printf '  ok   %-22s %s\n' "token replay refused" "$OWN/$REPLAY/$RADM"; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "token replay refused" "$OWN/$REPLAY/$RADM"; fi
 # On Cloud Run (K_SERVICE set) it is ON by default; IAP_ENFORCE_JWT=0 turns it off.
 K_SERVICE=ai-reporting-git WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ECOM_SHEET_ID=mock ADMIN_EMAILS=admin@bkh.test ACCESS_BUCKET=mock-bucket PORT=$EPORT node --require ./test/mock-fetch.js server.js >/tmp/smoke-enforce.log 2>&1 &
 ESRV=$!; sleep 2.5

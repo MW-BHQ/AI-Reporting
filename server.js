@@ -1173,9 +1173,10 @@ async function iapJwtStatus(req) {
    */
   const hit = _iapSeen.get(tok);
   if (hit && Date.now() - hit.at < 5 * 60 * 1000) {
+    req.iapAud = hit.aud || null;
     return hit.email ? (hit.email === callerEmail(req) ? "verified" : "mismatch") : hit.result;
   }
-  let result, cacheIt = true, jwtEmailSeen = null;
+  let result, cacheIt = true, jwtEmailSeen = null, audSeen = null;
   try {
     // Keys cached 1h; a failed refresh keeps the last good set, and a result
     // caused by a key outage is NOT cached, so the next request retries.
@@ -1190,12 +1191,16 @@ async function iapJwtStatus(req) {
       process.env.IAP_AUDIENCE || undefined, ["https://cloud.google.com/iap"]);
     const jwtEmail = String((ticket.getPayload() || {}).email || "").toLowerCase();
     jwtEmailSeen = jwtEmail || null;
+    // The audience this token was minted for: /api/me shows it, so IAP_AUDIENCE
+    // can be set to exactly what IAP sends (not guessed).
+    const aud = (ticket.getPayload() || {}).aud;
+    audSeen = aud ? String(aud) : null; req.iapAud = audSeen;
     result = jwtEmail && jwtEmail === callerEmail(req) ? "verified" : "mismatch";
   } catch (e) {
     result = `invalid: ${String(e.message || e).slice(0, 80)}`;
   }
   if (_iapSeen.size > 500) _iapSeen.clear();
-  if (cacheIt) _iapSeen.set(tok, { at: Date.now(), result, email: jwtEmailSeen });
+  if (cacheIt) _iapSeen.set(tok, { at: Date.now(), result, email: jwtEmailSeen, aud: audSeen });
   return result;
 }
 app.use("/api", async (req, res, next) => {
@@ -14547,6 +14552,7 @@ app.get("/api/me", async (req, res) => {
     configured: email ? (admin || (users || await readAccess()).some((u) => String(u.email||"").toLowerCase() === email)) : false,
     identitySource: req.header("X-Goog-Authenticated-User-Email") ? "iap" : (DEV_USER ? "dev" : "none"),
     jwt: req.iapJwt || null, jwtEnforced: IAP_ENFORCE,
+    jwtAudience: req.iapAud || null, audienceChecked: Boolean(process.env.IAP_AUDIENCE),
     persistence: ACCESS_BUCKET ? "gcs" : "memory-only",
   });
 });

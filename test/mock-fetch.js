@@ -39,7 +39,7 @@ if (process.env.MOCK_IAP_TOKENS === "1") {
   OAuth2Client.prototype.verifySignedJwtWithCertsAsync = async (tok) => {
     const m = /^mock\.(.+)$/.exec(String(tok));
     if (!m) throw new Error("bad signature");
-    return { getPayload: () => ({ email: m[1] }) };
+    return { getPayload: () => ({ email: m[1], aud: "/projects/123/locations/asia-southeast1/services/ai-reporting-git" }) };
   };
 }
 

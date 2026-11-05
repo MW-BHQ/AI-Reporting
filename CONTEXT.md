@@ -1,5 +1,9 @@
 ### Recent (November 2026)
 
+**v3.408.0 — /api/me shows the IAP token's audience** (`jwtAudience`, plus
+`audienceChecked`), so IAP_AUDIENCE is copied from what IAP really sends rather than
+guessed — a wrong value would 401 everyone. Steps in DEPLOY.md "IAP audience".
+
 **v3.407.0 — Security pass** (MW: "act like a real hacker").
 - CRITICAL: the IAP token cache stored the verdict by token alone. A signed-in user could
   replay their own valid assertion with another email in X-Goog-Authenticated-User-Email

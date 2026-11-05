@@ -283,3 +283,16 @@ This exists because `node -c` only proves the file parses. It cannot catch a
 variable used before its declaration, a mistyped field name, or a null deref —
 all of which reach the browser as a 500. A v3.12.1 change shipped exactly that
 bug; the smoke test reproduces it in two seconds.
+
+
+## IAP audience (v3.408.0, optional hardening)
+
+Refuses sign-in tokens minted for other IAP-protected apps.
+
+1. Open `https://w.bkhos.co/api/me`. Copy `jwtAudience` (needs `"jwt":"verified"`).
+2. Cloud Run > ai-reporting-git > Edit & deploy new revision > Variables & secrets >
+   Add `IAP_AUDIENCE` = the copied value > Deploy. Or:
+   `gcloud run services update ai-reporting-git --region asia-southeast1 --update-env-vars IAP_AUDIENCE=<value>`
+3. Reload `/api/me`: expect `"jwt":"verified"` and `"audienceChecked":true`.
+4. If anything reads `invalid` / everyone gets 401: remove it at once —
+   `gcloud run services update ai-reporting-git --region asia-southeast1 --remove-env-vars IAP_AUDIENCE`
