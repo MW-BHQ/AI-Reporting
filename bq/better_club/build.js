@@ -163,7 +163,10 @@ function ingest(src = (tab) => T('ext_' + tab), source = 'sheet') {
 CREATE OR REPLACE PROCEDURE ${T('ingest')}()
 BEGIN
 DECLARE run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP();
-DECLARE n INT64;`];
+DECLARE n INT64;
+-- Biggest customers load of the past week, read BEFORE this run logs its own.
+DECLARE cust_week_max INT64 DEFAULT (SELECT IFNULL(MAX(rows_in_source), 0) FROM ${T('_ingest_log')}
+  WHERE tab = 'customers' AND run_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY));`];
   for (const t of TABS) {
     const c = cols(t);
     const first = c[0].raw;
@@ -191,9 +194,10 @@ WHEN NOT MATCHED THEN INSERT (${c.map((x) => x.raw).join(', ')}, _row_hash, _sou
 
 INSERT ${T('_ingest_log')} VALUES (run_at, '${t.tab}', n, @@row_count);${t.tab === 'customers' ? `
 
--- Who is in today's export. Skipped on an empty sheet so a missed refresh
--- does not mark every member as gone.
-IF n > 0 THEN
+-- Who is in today's export. Skipped on an empty sheet, and when the tab is more
+-- than 5% smaller than the biggest load of the past week: a half-written export
+-- (5 Nov 2026: 49,999 of 57,135 rows) must not mark the missing members as gone.
+IF n > 0 AND n >= 0.95 * cust_week_max THEN
   MERGE ${T('_customer_seen')} t
   USING (SELECT DISTINCT TRIM(${first}) AS user_id FROM ${src(t.tab)}
          WHERE NULLIF(TRIM(${first}), '') IS NOT NULL AND ${first} != '${c[0].h}') s

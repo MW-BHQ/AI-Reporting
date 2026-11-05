@@ -6,6 +6,9 @@ CREATE OR REPLACE PROCEDURE `ai-reporting-503911.better_club.ingest`()
 BEGIN
 DECLARE run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP();
 DECLARE n INT64;
+-- Biggest customers load of the past week, read BEFORE this run logs its own.
+DECLARE cust_week_max INT64 DEFAULT (SELECT IFNULL(MAX(rows_in_source), 0) FROM `ai-reporting-503911.better_club._ingest_log`
+  WHERE tab = 'customers' AND run_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY));
 
 -- customers: stop if the columns moved. Positional schema would load them silently wrong.
 ASSERT (SELECT COUNT(*) FROM `ai-reporting-503911.better_club.ext_customers`
@@ -29,9 +32,10 @@ WHEN NOT MATCHED THEN INSERT (user_id, register_channel, username, name, gender,
 
 INSERT `ai-reporting-503911.better_club._ingest_log` VALUES (run_at, 'customers', n, @@row_count);
 
--- Who is in today's export. Skipped on an empty sheet so a missed refresh
--- does not mark every member as gone.
-IF n > 0 THEN
+-- Who is in today's export. Skipped on an empty sheet, and when the tab is more
+-- than 5% smaller than the biggest load of the past week: a half-written export
+-- (5 Nov 2026: 49,999 of 57,135 rows) must not mark the missing members as gone.
+IF n > 0 AND n >= 0.95 * cust_week_max THEN
   MERGE `ai-reporting-503911.better_club._customer_seen` t
   USING (SELECT DISTINCT TRIM(user_id) AS user_id FROM `ai-reporting-503911.better_club.ext_customers`
          WHERE NULLIF(TRIM(user_id), '') IS NOT NULL AND user_id != 'User ID') s

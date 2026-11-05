@@ -35,6 +35,11 @@ function setupBetterClubWatchdog() {
     .filter(t => t.getHandlerFunction() === 'ensureBetterClubFresh')
     .forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('ensureBetterClubFresh').timeBased().everyDays(1).atHour(6).nearMinute(30).create();
+  // Seed the customers row-count check with the last full export (5 Nov 2026).
+  const props = PropertiesService.getScriptProperties();
+  if (!props.getProperty('bcCustRows')) {
+    props.setProperty('bcCustRows', JSON.stringify({ [Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd')]: 57135 }));
+  }
   console.log('Watchdog set: daily at ~06:30 Bangkok');
 }
 
@@ -81,16 +86,38 @@ function bcRetry_(stale) {
   bcRemember_(ScriptApp.newTrigger('bcAfterBackup').timeBased().after(20 * 60 * 1000).create());
 }
 
-/** Tabs whose newest row is older than the start of yesterday (Bangkok). */
+/**
+ * Tabs that look broken: newest row older than the start of yesterday (Bangkok),
+ * or — for customers, a full member list every day — more than 5% fewer rows than
+ * the biggest count of the past 7 days (5 Nov 2026: the export stopped at 49,999
+ * of 57,135 members and still reported success).
+ */
 function bcStaleTabs_() {
   const ss = SpreadsheetApp.openById(BC_SHEET_ID);
   const cut = new Date(); cut.setHours(0, 0, 0, 0); cut.setDate(cut.getDate() - 1);
   return Object.keys(BC_TABS).filter(tab => {
     const sh = ss.getSheetByName(tab);
     const newest = sh ? bcNewest_(sh, BC_TABS[tab]) : null;
-    console.log(tab + ': newest ' + (newest ? newest.toISOString() : 'none'));
-    return !newest || newest < cut;
+    console.log(tab + ': newest ' + (newest ? newest.toISOString() : 'none') + (sh ? ', rows ' + (sh.getLastRow() - 1) : ''));
+    if (!newest || newest < cut) return true;
+    if (tab === 'customers' && bcShrunk_(sh.getLastRow() - 1)) return true;
+    return false;
   });
+}
+
+/** Keeps the last 7 days of customers row counts; true if today's is >5% below the best. */
+function bcShrunk_(rows) {
+  const props = PropertiesService.getScriptProperties();
+  const today = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd');
+  const hist = JSON.parse(props.getProperty('bcCustRows') || '{}');
+  const weekAgo = Utilities.formatDate(new Date(Date.now() - 7 * 864e5), 'Asia/Bangkok', 'yyyy-MM-dd');
+  Object.keys(hist).forEach(d => { if (d < weekAgo) delete hist[d]; });
+  const best = Math.max(0, ...Object.values(hist));
+  const shrunk = best > 0 && rows < 0.95 * best;
+  if (shrunk) console.warn('customers has ' + rows + ' rows, best this week ' + best + ': export looks cut short');
+  else hist[today] = Math.max(hist[today] || 0, rows);   // only a healthy count can raise the bar
+  props.setProperty('bcCustRows', JSON.stringify(hist));
+  return shrunk;
 }
 
 function bcNewest_(sh, header) {

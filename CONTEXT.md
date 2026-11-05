@@ -1,5 +1,18 @@
 ### Recent (November 2026)
 
+**Better Club daily load, 5 Nov 2026 incident (no app version)**: the Apps Script export
+`backupAllSheets` finishes "successfully" but sometimes stops a tab short (overnight:
+all_event cut at 27,000 rows; MW's re-run: customers cut at 49,999 of 57,135). Fixes:
+- `apps-script/better-club-watchdog.gs` (in MW's Apps Script project, ~06:30): stale tab
+  (nothing from yesterday) or customers >5% below the week's best → re-run
+  backupAllSheets in its own execution, re-check after 20 min, load BigQuery itself
+  (needs DriveApp touched so the token has Drive scope), email after 2 failures.
+- ingest(): `_customer_seen` is updated only when customers is >= 95% of the week's
+  biggest load (`cust_week_max`, read before this run logs). The short 12:37 load had
+  marked 7,240 members as gone; restored by setting their last_seen to that run.
+- A full ingest takes ~5-6 min (each step reads the sheet live); check the job state
+  (INFORMATION_SCHEMA.JOBS_BY_PROJECT) before calling a load "stopped".
+
 **v3.409.0 — Content-Security-Policy, enforced** (MW: "let's do it").
 - Policy on index.html: scripts 'self' + the inline script by SHA-256 (computed at boot from
   the served bytes, so precompression/ETag stay); styles self + inline + Google Fonts; fonts
