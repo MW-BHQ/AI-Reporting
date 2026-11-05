@@ -1,7 +1,7 @@
 /**
  * BETTER CLUB WATCHDOG — paste into the same Apps Script project as backupAllSheets.
  *
- * Every morning at ~06:00 it checks the "Better Club - Raw Data" sheet. If any tab's
+ * Every morning at ~06:30 it checks the "Better Club - Raw Data" sheet. If any tab's
  * newest row is older than the start of YESTERDAY (Bangkok), the export missed data:
  *   1. it re-runs backupAllSheets in a separate execution (its own 6-minute budget),
  *   2. 20 minutes later it checks again; if the sheet is now fresh it loads BigQuery
@@ -13,6 +13,7 @@
  *   - Project Settings → Time zone: (GMT+07:00) Bangkok.
  *   - Services (+) → add "BigQuery API" (identifier: BigQuery).
  *   - Set ALERT_TO below, Save, then run setupBetterClubWatchdog() once and allow access.
+ *     (Apps Script fires within ~15 minutes of 06:30.)
  */
 const BC_SHEET_ID = '18jH1m3dpq5SsSIyPyc49374vuo6CPkJ0RElLAIG3FRo';
 const BC_PROJECT = 'ai-reporting-503911';
@@ -28,13 +29,13 @@ const BC_TABS = {
   customers: 'Exported at',
 };
 
-/** Run once: creates the 06:00 daily check. Safe to run again. */
+/** Run once: creates the 06:30 daily check. Safe to run again. */
 function setupBetterClubWatchdog() {
   ScriptApp.getProjectTriggers()
     .filter(t => t.getHandlerFunction() === 'ensureBetterClubFresh')
     .forEach(t => ScriptApp.deleteTrigger(t));
-  ScriptApp.newTrigger('ensureBetterClubFresh').timeBased().everyDays(1).atHour(6).create();
-  console.log('Watchdog set: daily at ~06:00 Bangkok');
+  ScriptApp.newTrigger('ensureBetterClubFresh').timeBased().everyDays(1).atHour(6).nearMinute(30).create();
+  console.log('Watchdog set: daily at ~06:30 Bangkok');
 }
 
 /** The daily check. */
