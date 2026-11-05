@@ -52,6 +52,10 @@ function bcAfterBackup() {
   bcCleanupOneOffs_();
   const stale = bcStaleTabs_();
   if (stale.length) { console.warn('Still stale after re-run: ' + stale.join(', ')); bcRetry_(stale); return; }
+  // BigQuery reads the sheet through Drive, so this script's token needs Drive
+  // access. Apps Script only asks for it when the code touches Drive: this line
+  // is that touch (it also confirms the sheet is reachable).
+  DriveApp.getFileById(BC_SHEET_ID).getName();
   BigQuery.Jobs.query({
     query: 'CALL `' + BC_PROJECT + '.better_club.ingest`()',
     useLegacySql: false, location: 'asia-southeast1', timeoutMs: 300000,
