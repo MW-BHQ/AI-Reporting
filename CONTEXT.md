@@ -1,5 +1,10 @@
 ### Recent (November 2026)
 
+**v3.410.0 — Meta "B+ x ADA" mapped as a shared (group) account.** MW: 261001-05 Breast
+Cancer's Meta ads run there; Windsor had 15 Meta accounts and not this one, so the
+campaign showed Meta spend 0 (Oct Google 89.4K + TikTok 13.0K = the 102.4K shown).
+Needs MW to connect the account in Windsor (OAuth, select it). Until then nothing changes.
+
 **Better Club daily load, 5 Nov 2026 incident (no app version)**: the Apps Script export
 `backupAllSheets` finishes "successfully" but sometimes stops a tab short (overnight:
 all_event cut at 27,000 rows; MW's re-run: customers cut at 49,999 of 57,135). Fixes:

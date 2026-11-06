@@ -964,7 +964,9 @@ const BRAND_SEGMENT = Object.fromEntries(BRANDS.map((b) => [b.key, b.segment]));
 const SHARED_ASSETS = {
   // "BHQ Inter x EGG" is INFERRED from the ADA equivalent and needs confirming;
   // until then it lands in the unmapped bucket, which is visible in the UI.
-  meta: ["BHQ x AIQ", "BHQ Inter x ADA"],
+  // "B+ x ADA" (v3.410.0, MW): the Better (B+) brand's Meta account, group-wide.
+  // Carries campaigns such as 261001-05 Breast Cancer. Connect it in Windsor.
+  meta: ["BHQ x AIQ", "BHQ Inter x ADA", "B+ x ADA"],
   gbp: ["Japanese Medical Services (JMS) \u30d0\u30f3\u30b3\u30af\u75c5\u9662\u65e5\u672c\u4eba\u5c02\u9580\u30af\u30ea\u30cb\u30c3\u30af"],
   facebookPage: true,   // one page for all four
 };
