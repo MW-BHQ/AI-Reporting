@@ -1,5 +1,9 @@
 ### Recent (November 2026)
 
+**v3.413.0 — Seller-Voucher: one short explanation under each block** (MW: internal
+analysis, so the team gets the sense of each block). Same exception as Better Club
+Performance: notes allowed on this tab. Plain words, what to read and what good looks like.
+
 **v3.412.0 — Seller-Voucher tab (E-commerce, after Shopee)** (MW). Source: the `Voucher` tab
 of the Shopee sheet = Seller Centre > Orders > Export, one row per LINE ITEM. Endpoint
 `/api/shopee/voucher`, tab id `voucher` (admins must grant it to non-admin users).

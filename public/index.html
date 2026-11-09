@@ -9486,7 +9486,8 @@ function renderVoucher() {
       <div class="sub">without: THB ${nn(sm.aovNone, true)}${lift != null ? ` \u00b7 <span style="color:${lift >= 0 ? 'var(--good)' : 'var(--bad)'}">${lift >= 0 ? '+' : ''}${pc(lift, 0)}</span>` : ''}</div></div>
     <div class="stat card"><div class="lab">Cancelled \u00b7 with voucher</div><div class="val">${pc(sm.cancelVoucher)}</div>
       <div class="sub">without: ${pc(sm.cancelNone)} \u00b7 of orders placed</div></div>
-  </div>`;
+  </div>
+  <div class="note">How much of the shop runs on vouchers and what it costs. A higher average order with a voucher means codes go with bigger baskets; a higher cancel rate means codes attract orders that do not complete.</div>`;
 
   const codeRows = D.codes.map(c => `<tr>
       <td class="i18n">${c.codes.map(esc).join('<br>')}</td><td style="white-space:nowrap">${kindPill(c.kind)}</td>
@@ -9497,13 +9498,15 @@ function renderVoucher() {
     <div style="overflow-x:auto;"><table class="roomy sortable"><thead><tr><th>Code</th><th>Type</th><th class="num">Placed</th><th class="num">Completed</th>
       <th class="num">Cancelled</th><th class="num">Discount (THB)</th><th class="num">Discount %</th>
       <th class="num">Avg order (THB)</th><th class="num">Discount / order</th></tr></thead>
-      <tbody>${codeRows || '<tr><td colspan="9" class="num">no voucher orders in this range</td></tr>'}</tbody></table></div></div>`;
+      <tbody>${codeRows || '<tr><td colspan="9" class="num">no voucher orders in this range</td></tr>'}</tbody></table></div>
+    <div class="note">One row per code, or per set of codes used on the same order. Discount % is what the code cost against the sales it came with: lower is cheaper sales. A high cancel rate marks a code that brings orders that do not finish.</div></div>`;
 
   const ladder = D.ladder.length ? `<div class="card mt"><div class="card-title">BHQ codes used alone \u00b7 discount vs basket</div>
     <table class="roomy"><thead><tr><th>Code</th><th class="num">Orders</th><th class="num">Discount / order (THB)</th>
       <th class="num">Avg order (THB)</th><th class="num">Discount as % of order</th></tr></thead><tbody>
       ${D.ladder.map(l => `<tr><td>${esc(l.code)}</td><td class="num">${nn(l.orders)}</td><td class="num">${nn(l.discountPerOrder, true)}</td>
-        <td class="num">${nn(l.aov, true)}</td><td class="num">${pc(l.share)}</td></tr>`).join('')}</tbody></table></div>` : '';
+        <td class="num">${nn(l.aov, true)}</td><td class="num">${pc(l.share)}</td></tr>`).join('')}</tbody></table>
+    <div class="note">Do bigger vouchers bring bigger orders? If discount as % of order stays flat while the voucher grows, the larger tier is paying for itself. Minimum-spend tiers pick large orders by design, so read this as a link, not proof.</div></div>` : '';
 
   const mo = D.monthly.length > 1 ? `<div class="card mt"><div class="card-title">By month \u00b7 completed orders</div>
     <table class="roomy"><thead><tr><th>Month</th><th class="num">Orders</th><th class="num">With voucher</th><th class="num">Share</th>
@@ -9513,12 +9516,14 @@ function renderVoucher() {
         <td class="num">${pc(m.discountRate)}</td></tr>`).join('')}</tbody></table>
     ${labelledBars(D.monthly.map(m => ({ value: m.discount })), 'value', '#EE4D2D', 90)}
     <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
-      <span>${esc(lMon(D.monthly[0].month))}</span><span>${esc(lMon(D.monthly[D.monthly.length - 1].month))}</span></div></div>` : '';
+      <span>${esc(lMon(D.monthly[0].month))}</span><span>${esc(lMon(D.monthly[D.monthly.length - 1].month))}</span></div>
+    <div class="note">Is voucher use growing, and is its cost holding? Share rising with discount % flat is healthy; discount % rising means each baht of sales costs more.</div></div>` : '';
 
   const pk = D.packages.length ? `<div class="card mt"><div class="card-title">Packages bought with a voucher</div>
     <table class="roomy"><thead><tr><th>Package</th><th class="num">Orders</th><th class="num">Sales (THB)</th></tr></thead><tbody>
       ${D.packages.map(p => `<tr><td class="i18n trunc" style="max-width:0;" data-tip="${esc(p.name)}">${esc(p.name)}</td>
-        <td class="num">${nn(p.orders)}</td><td class="num">${nn(p.gmv, true)}</td></tr>`).join('')}</tbody></table></div>` : '';
+        <td class="num">${nn(p.orders)}</td><td class="num">${nn(p.gmv, true)}</td></tr>`).join('')}</tbody></table>
+    <div class="note">What voucher buyers actually bought. Use it to pick which packages the next code should promote.</div></div>` : '';
 
   $('viewRoot').innerHTML = `
     <div class="search"><div>
@@ -14290,7 +14295,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.412.0';
+const CLIENT_BUILD = '3.413.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
