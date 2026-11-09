@@ -1,18 +1,37 @@
-# BHQ War Room — handover at v3.406.0
+# BHQ War Room — handover at v3.410.0
 
-Google Profile tab (`gbp`) rebuilt this session (v3.388 → v3.406); full notes in
-CONTEXT.md. In short: per listing (6, incl. Dental/JMS) — performance (views, actions,
-MoM/YoY only on full windows), search terms (Windsor monthly keywords; latest PUBLISHED
-month, Google lags 1–2 weeks), reviews (12-month stack + Reviews by month), Customers
-Voices, AI Review sentiment + watch list + themes (Claude, tags kept in GCS by review id;
-originals shown, non-Thai/English translated). PDF: reviews page first, 16:9 pages 1–2,
-pages 3+ auto height (`gbpAutoPages` + `gbp-measure` — keep in step with `.slide.pn`
-print rules), waits for Claude, file "<listing> Google Review - <range>". Ratings are CUT,
-never rounded (`rateTxt`/`rateAuto`/`starsHtml`), Monthly Report too.
+NEXT JOB (open): Campaign detail table under-counts — its rows add to ~68.8K while the
+header says 102.4K for 261001-05 (Oct), and the SEM ad-campaign sub-list shows ~8 of 16
+with old names ("THB 10,798.71"). Header total is correct. Trace the row spend split
+(the "~" visit-share split) and the ad-campaign sub-list cap. Re-check now that Meta
+(B+ x ADA, ~345K to 6 Nov) is in.
 
-Open: visual.py fails 5 table screens by font drift in the sandbox (same on untouched
-v3.387) — re-baseline in MW's environment if they persist. Keyword-rankings sheet still
-read by the Monthly Report until MW retires it.
+## This session in one screen (v3.388 → v3.410)
+- Google Profile tab (`gbp`) rebuilt — details in CONTEXT.md v3.388–v3.406. Per listing
+  (6 incl. Dental/JMS): performance, search terms (latest PUBLISHED month; Google lags
+  1–2 weeks), reviews (12-month stack + Reviews by month, bar labels at the foot, nodes),
+  Customers Voices, AI Review sentiment / watch list / themes (Claude; tags in GCS by
+  review id; Thai/English shown as written, others translated with original beneath;
+  evidence = reviewer + date + listing reviews link — Google has no per-review link).
+- PDF (gbp): reviews page first, pages 1–2 16:9, pages 3+ auto height (`gbpAutoPages` +
+  `gbp-measure`, keep in step with `.slide.pn` print rules), waits for Claude, file name
+  "<listing> Google Review - <range>". Twin (`chartToSvg`) shares `chartLabelTxt`.
+- Ratings are CUT, never rounded (`rateTxt`/`rateAuto`/`starsHtml`), Monthly Report too.
+- Security v3.407–v3.409: IAP token cache bound to the signed email (closed a replay →
+  admin escalation); IAP_AUDIENCE set live (audienceChecked:true); range guard on every
+  /api (real dates, in order, ≤6 years; themes ≤400 days); error scrubbing; HSTS;
+  CSP ENFORCED (inline script by SHA-256, no inline handlers — a test fails if one
+  appears; kill switch CSP_MODE=report|off; violations logged `csp_violation`).
+- Meta "B+ x ADA" connected in Windsor (MW, 6 Nov) and mapped as a SHARED account.
+- Another session works on Better Club (apps-script/, bq/) — always `git fetch` and
+  rebase before pushing.
+
+## Open
+1. Campaign detail under-count (above).
+2. L01 BHQ Meta Traffic (261001-05) spent 24.2K vs 14,725 in its name — MW asking ADA.
+3. Monthly Report keyword-rankings card still reads the sheet MW is retiring.
+4. visual.py: 5 table screens fail by sandbox font drift (same on untouched v3.387).
+5. Check Cloud Logging for `csp_violation` once.
 
 ## Where things are
 
