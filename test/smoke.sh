@@ -807,6 +807,16 @@ expect_field "voucher stacked"      "$VCH" "(()=>{const c=d.codes.find(x=>x.comb
 expect_field "voucher cancelled"    "$VCH" "(()=>{const c=d.codes.find(x=>x.combo==='BHQ26OCT2');return c&&c.placed===2&&c.completed===1&&c.cancelled===1&&c.discount===500?'ok':undefined})()"
 expect_field "voucher window"       "$VCH" "!d.codes.some(x=>x.combo.includes('SEP'))?'ok':undefined"
 expect_field "voucher ladder"       "$VCH" "d.ladder.map(l=>l.code).join()==='BHQ26OCT2,BHQ26OCT3'?'ok':undefined"
+# All-in cost: voucher 3,770 + commission 3x100 + fee 3x50 = 4,220 on 95,000; none: 150 on 10,000.
+expect_field "voucher all-in cost"  "$VCH" "Math.abs(d.summary.costRateVoucher-4220/95000)<1e-9&&Math.abs(d.summary.costRateNone-0.015)<1e-9?'ok':undefined"
+# Package split: Mineral = C with code (500 of the order's 500), E without; F cancelled without.
+expect_field "voucher pkg split"    "$VCH" "(()=>{const p=d.packages.find(x=>x.name==='Mineral Package');return p&&p.ordersWith===1&&p.ordersWithout===1&&p.codeShare===0.5&&p.discount===500&&p.cancelWith===0&&p.cancelWithout===0.5?'ok':undefined})()"
+# A's 2,500 shared by sales: 31,000 of 59,500 to Longevity Female.
+expect_field "voucher pkg alloc"    "$VCH" "(()=>{const p=d.packages.find(x=>x.name==='Longevity Female');return p&&Math.abs(p.discount-2500*31000/59500)<1e-6?'ok':undefined})()"
+# Under 5 orders: not judged.
+expect_field "voucher pileup thin"  "$VCH" "d.thresholds.every(t=>t.pileUp===null)?'ok':undefined"
+VNOV="/api/shopee/voucher?from=2026-11-01&to=2026-11-30"
+expect_field "voucher pileup"       "$VNOV" "(()=>{const t=d.thresholds.find(x=>x.code==='BHQ26NOV2');return t&&t.floor===5000&&t.bandShare===0.8&&t.baseline===5&&t.baseShare===0.2&&Math.abs(t.pileUp-4)<1e-9?'ok':undefined})()"
 expect_field "voucher no PII"       "$VCH" "!/buyer_|Recipient|Secret Road|\\+66/.test(JSON.stringify(d))?'ok':undefined"
 
 echo "--- campaign: TikTok Ads + TikTok organic (v3.367.0) ---"

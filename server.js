@@ -14333,6 +14333,13 @@ async function buildVoucher(from, to) {
     discountPerOrder: div(sum(withV, "voucher"), withV.length),
     cancelVoucher: cancelRate(placedV), cancelNone: cancelRate(placedN),
     refunded: done.filter((o) => o.refund).length,
+    /**
+     * ALL-IN COST (v3.414.0): voucher + Shopee commission + transaction fee,
+     * over sales. The fees are paid on every order; the comparison with
+     * no-code orders shows what the code adds on top of selling at all.
+     */
+    costRateVoucher: div(sum(withV, "voucher") + sum(withV, "commission") + sum(withV, "fee"), sum(withV, "gmv")),
+    costRateNone: div(sum(noV, "commission") + sum(noV, "fee"), sum(noV, "gmv")),
     // Discount with no code beside it, or a code with no money: shown, not hidden.
     zeroValueCoded: withV.filter((o) => !o.voucher).length,
   };
@@ -14341,15 +14348,16 @@ async function buildVoucher(from, to) {
   const combos = new Map();
   for (const o of placedV) {
     if (!combos.has(o.combo)) combos.set(o.combo, { combo: o.combo, codes: o.codeList, kind: o.kind,
-      placed: 0, completed: 0, cancelled: 0, discount: 0, gmv: 0 });
+      placed: 0, completed: 0, cancelled: 0, discount: 0, gmv: 0, fees: 0 });
     const c = combos.get(o.combo);
     c.placed++;
     if (o.state === "cancelled") c.cancelled++;
-    if (o.state === "done") { c.completed++; c.discount += o.voucher; c.gmv += o.gmv; }
+    if (o.state === "done") { c.completed++; c.discount += o.voucher; c.gmv += o.gmv; c.fees += o.commission + o.fee; }
   }
   const codes = [...combos.values()].map((c) => ({ ...c,
     cancelRate: div(c.cancelled, c.placed), aov: div(c.gmv, c.completed),
     discountPerOrder: div(c.discount, c.completed), discountRate: div(c.discount, c.gmv),
+    costRate: div(c.discount + c.fees, c.gmv),
   })).sort((a, b) => b.discount - a.discount || b.placed - a.placed);
 
   /**
@@ -14373,16 +14381,62 @@ async function buildVoucher(from, to) {
   const monthly = [...months.values()].sort((a, b) => a.month.localeCompare(b.month))
     .map((x) => ({ ...x, share: div(x.voucherOrders, x.orders), discountRate: div(x.discount, x.gmv) }));
 
+  /**
+   * SAME PACKAGE, WITH AND WITHOUT A CODE (v3.414.0). The voucher is one
+   * figure per order, so it is shared across the order's packages by their
+   * sales. A package that sells mostly without a code does not need one.
+   */
   const prod = new Map();
-  for (const o of withV) for (const [p, v] of o.products) {
-    if (!prod.has(p)) prod.set(p, { name: p, orders: 0, gmv: 0 });
-    const x = prod.get(p); x.orders++; x.gmv += v;
+  for (const o of inR) for (const [p, v] of o.products) {
+    if (!prod.has(p)) prod.set(p, { name: p, placedWith: 0, cancelledWith: 0, placedWithout: 0, cancelledWithout: 0,
+      ordersWith: 0, ordersWithout: 0, gmvWith: 0, gmvWithout: 0, discount: 0 });
+    const x = prod.get(p), coded = o.codeList.length > 0;
+    if (coded) { x.placedWith++; if (o.state === "cancelled") x.cancelledWith++; }
+    else { x.placedWithout++; if (o.state === "cancelled") x.cancelledWithout++; }
+    if (o.state !== "done") continue;
+    if (coded) { x.ordersWith++; x.gmvWith += v; x.discount += o.gmv ? o.voucher * v / o.gmv : 0; }
+    else { x.ordersWithout++; x.gmvWithout += v; }
   }
-  const packages = [...prod.values()].sort((a, b) => b.gmv - a.gmv).slice(0, 10);
+  const packages = [...prod.values()].filter((x) => x.ordersWith + x.ordersWithout)
+    .map((x) => ({ name: x.name, ordersWith: x.ordersWith, ordersWithout: x.ordersWithout,
+      codeShare: div(x.ordersWith, x.ordersWith + x.ordersWithout),
+      discount: x.discount, discountRate: div(x.discount, x.gmvWith),
+      gmv: x.gmvWith + x.gmvWithout,
+      cancelWith: div(x.cancelledWith, x.placedWith), cancelWithout: div(x.cancelledWithout, x.placedWithout) }))
+    .sort((a, b) => (b.ordersWith + b.ordersWithout) - (a.ordersWith + a.ordersWithout) || b.gmv - a.gmv)
+    .slice(0, 15);
+
+  /**
+   * DOES THE MINIMUM SPEND PULL ORDERS UP? (v3.414.0, MW: the team cannot
+   * type each code's minimum in.) The minimum is INFERRED: the lowest
+   * completed order that used the code (5th percentile from 20 orders, so one
+   * odd order cannot set it). Then: what share of the code's orders sit just
+   * above it (floor to +20%), against the share of NO-CODE orders at or above
+   * the same floor that sit in that band. Pile-up well over 1 = buyers topped
+   * up to reach the minimum; near 1 = the code mostly discounts orders that
+   * were that size anyway. Under 5 orders on either side: not judged.
+   */
+  const BAND = 1.2;
+  const pctl = (xs, q) => { const a = [...xs].sort((x, y) => x - y); return a[Math.min(a.length - 1, Math.floor(q * (a.length - 1)))]; };
+  const tokens = new Map();
+  for (const o of withV) for (const t of o.codeList) if (voucherKind(t) === "seller") {
+    if (!tokens.has(t)) tokens.set(t, []);
+    tokens.get(t).push(o.gmv);
+  }
+  const thresholds = [...tokens.entries()].map(([code, vals]) => {
+    const floor = vals.length >= 20 ? pctl(vals, 0.05) : Math.min(...vals);
+    const inBand = (v) => v >= floor && v < floor * BAND;
+    const base = noV.map((o) => o.gmv).filter((v) => v >= floor);
+    const bandShare = div(vals.filter(inBand).length, vals.length);
+    const baseShare = div(base.filter(inBand).length, base.length);
+    const judged = vals.length >= 5 && base.length >= 5;
+    return { code, orders: vals.length, floor, median: pctl(vals, 0.5), bandShare,
+      baseline: base.length, baseShare, pileUp: judged && baseShare ? bandShare / baseShare : null };
+  }).sort((a, b) => a.floor - b.floor);
 
   return { available: true, range: { from, to }, coverage,
     inSheet: from >= coverage.first && to <= coverage.last,
-    summary, codes, ladder, monthly, packages };
+    summary, codes, ladder, monthly, packages, thresholds };
 }
 const cachedVoucher = (from, to, refresh) => withCache(`voucher:${from}:${to}`, refresh, () => buildVoucher(from, to));
 

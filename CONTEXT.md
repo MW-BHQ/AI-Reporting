@@ -1,5 +1,17 @@
 ### Recent (November 2026)
 
+**v3.414.0 — Seller-Voucher: minimum-spend pile-up, all-in cost, packages with/without a
+code** (MW: help the team design a better discount scheme; minimums cannot be typed in).
+- Minimum spend is INFERRED per BHQ code: lowest completed order using it (5th percentile
+  from 20 orders). Pile-up = share of code orders in floor..+20% ÷ share of no-code orders
+  (at or above the floor) in the same band. >=1.5 green (buyers top up), <1.1 red (code
+  discounts orders that were that size anyway). Under 5 orders either side: dash.
+- All-in cost = voucher + commission + transaction fee over sales, per code and in the KPI,
+  against no-code orders' fees alone.
+- Packages: completed orders with vs without a code, share, discount (order voucher shared
+  by line sales), cancel rate each side. Replaces "Packages bought with a voucher".
+- Not possible from this export: conversion lift (no visits per code).
+
 **v3.413.0 — Seller-Voucher: one short explanation under each block** (MW: internal
 analysis, so the team gets the sense of each block). Same exception as Better Club
 Performance: notes allowed on this tab. Plain words, what to read and what good looks like.

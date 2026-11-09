@@ -9481,7 +9481,8 @@ function renderVoucher() {
     <div class="stat card"><div class="lab">Orders with a voucher</div><div class="val">${nn(sm.voucherOrders)}</div>
       <div class="sub">${pc(sm.voucherShare, 0)} of ${nn(sm.completed)} completed orders</div></div>
     <div class="stat card"><div class="lab">Voucher discount (THB)</div><div class="val">${nn(sm.discount, true)}</div>
-      <div class="sub">${pc(sm.discountRate)} of those orders\u2019 sales \u00b7 THB ${nn(sm.discountPerOrder, true)} per order</div></div>
+      <div class="sub">${pc(sm.discountRate)} of those orders\u2019 sales \u00b7 THB ${nn(sm.discountPerOrder, true)} per order</div>
+      <div class="sub">all-in with Shopee fees: ${pc(sm.costRateVoucher)} \u00b7 no code: ${pc(sm.costRateNone)}</div></div>
     <div class="stat card"><div class="lab">Average order \u00b7 with voucher (THB)</div><div class="val">${nn(sm.aovVoucher, true)}</div>
       <div class="sub">without: THB ${nn(sm.aovNone, true)}${lift != null ? ` \u00b7 <span style="color:${lift >= 0 ? 'var(--good)' : 'var(--bad)'}">${lift >= 0 ? '+' : ''}${pc(lift, 0)}</span>` : ''}</div></div>
     <div class="stat card"><div class="lab">Cancelled \u00b7 with voucher</div><div class="val">${pc(sm.cancelVoucher)}</div>
@@ -9493,13 +9494,13 @@ function renderVoucher() {
       <td class="i18n">${c.codes.map(esc).join('<br>')}</td><td style="white-space:nowrap">${kindPill(c.kind)}</td>
       <td class="num">${nn(c.placed)}</td><td class="num">${nn(c.completed)}</td><td class="num">${pc(c.cancelRate, 0)}</td>
       <td class="num">${nn(c.discount, true)}</td>
-      <td class="num">${pc(c.discountRate)}</td><td class="num">${nn(c.aov, true)}</td><td class="num">${nn(c.discountPerOrder, true)}</td></tr>`).join('');
+      <td class="num">${pc(c.discountRate)}</td><td class="num">${pc(c.costRate)}</td><td class="num">${nn(c.aov, true)}</td></tr>`).join('');
   const codes = `<div class="card mt"><div class="card-title">By code <span class="muted">\u00b7 stacked codes stay together: Shopee records one discount per order</span></div>
     <div style="overflow-x:auto;"><table class="roomy sortable"><thead><tr><th>Code</th><th>Type</th><th class="num">Placed</th><th class="num">Completed</th>
-      <th class="num">Cancelled</th><th class="num">Discount (THB)</th><th class="num">Discount %</th>
-      <th class="num">Avg order (THB)</th><th class="num">Discount / order</th></tr></thead>
+      <th class="num">Cancelled</th><th class="num">Discount (THB)</th><th class="num">Discount %</th><th class="num">All-in cost %</th>
+      <th class="num">Avg order (THB)</th></tr></thead>
       <tbody>${codeRows || '<tr><td colspan="9" class="num">no voucher orders in this range</td></tr>'}</tbody></table></div>
-    <div class="note">One row per code, or per set of codes used on the same order. Discount % is what the code cost against the sales it came with: lower is cheaper sales. A high cancel rate marks a code that brings orders that do not finish.</div></div>`;
+    <div class="note">One row per code, or per set of codes used on the same order. Discount % is what the code cost against the sales it came with: lower is cheaper sales. All-in adds Shopee commission and transaction fee. A high cancel rate marks a code that brings orders that do not finish.</div></div>`;
 
   const ladder = D.ladder.length ? `<div class="card mt"><div class="card-title">BHQ codes used alone \u00b7 discount vs basket</div>
     <table class="roomy"><thead><tr><th>Code</th><th class="num">Orders</th><th class="num">Discount / order (THB)</th>
@@ -9507,6 +9508,16 @@ function renderVoucher() {
       ${D.ladder.map(l => `<tr><td>${esc(l.code)}</td><td class="num">${nn(l.orders)}</td><td class="num">${nn(l.discountPerOrder, true)}</td>
         <td class="num">${nn(l.aov, true)}</td><td class="num">${pc(l.share)}</td></tr>`).join('')}</tbody></table>
     <div class="note">Do bigger vouchers bring bigger orders? If discount as % of order stays flat while the voucher grows, the larger tier is paying for itself. Minimum-spend tiers pick large orders by design, so read this as a link, not proof.</div></div>` : '';
+
+  const th = (D.thresholds || []).length ? `<div class="card mt"><div class="card-title">Does the minimum spend pull orders up? \u00b7 BHQ codes</div>
+    <table class="roomy"><thead><tr><th>Code</th><th class="num">Orders</th><th class="num">Lowest order (THB)</th>
+      <th class="num">Near floor \u00b7 code</th><th class="num">Near floor \u00b7 no code</th><th class="num">Pile-up</th></tr></thead><tbody>
+      ${D.thresholds.map(t => `<tr><td>${esc(t.code)}</td><td class="num">${nn(t.orders)}</td><td class="num">${nn(t.floor, true)}</td>
+        <td class="num">${pc(t.bandShare, 0)}</td><td class="num">${t.baseline ? pc(t.baseShare, 0) : '\u2014'}</td>
+        <td class="num">${t.pileUp == null ? '<span class="dim" data-tip="Fewer than 5 orders with or without the code">\u2014</span>'
+          : `<b style="color:${t.pileUp >= 1.5 ? 'var(--good)' : t.pileUp < 1.1 ? 'var(--bad)' : 'inherit'}">${num(t.pileUp, { dp: 1 })}\u00d7</b>`}</td></tr>`).join('')}
+    </tbody></table>
+    <div class="note">The lowest order that used a code shows its minimum spend. If many code orders sit just above it (up to 20% more) compared with orders without a code, buyers topped up to reach the minimum: the code grows baskets (green, 1.5\u00d7 or more). Near 1\u00d7 (red) the code mostly discounts orders that were that size anyway: raise the minimum or cut the value. Needs 5 orders each side.</div></div>` : '';
 
   const mo = D.monthly.length > 1 ? `<div class="card mt"><div class="card-title">By month \u00b7 completed orders</div>
     <table class="roomy"><thead><tr><th>Month</th><th class="num">Orders</th><th class="num">With voucher</th><th class="num">Share</th>
@@ -9519,11 +9530,15 @@ function renderVoucher() {
       <span>${esc(lMon(D.monthly[0].month))}</span><span>${esc(lMon(D.monthly[D.monthly.length - 1].month))}</span></div>
     <div class="note">Is voucher use growing, and is its cost holding? Share rising with discount % flat is healthy; discount % rising means each baht of sales costs more.</div></div>` : '';
 
-  const pk = D.packages.length ? `<div class="card mt"><div class="card-title">Packages bought with a voucher</div>
-    <table class="roomy"><thead><tr><th>Package</th><th class="num">Orders</th><th class="num">Sales (THB)</th></tr></thead><tbody>
-      ${D.packages.map(p => `<tr><td class="i18n trunc" style="max-width:0;" data-tip="${esc(p.name)}">${esc(p.name)}</td>
-        <td class="num">${nn(p.orders)}</td><td class="num">${nn(p.gmv, true)}</td></tr>`).join('')}</tbody></table>
-    <div class="note">What voucher buyers actually bought. Use it to pick which packages the next code should promote.</div></div>` : '';
+  const pk = D.packages.length ? `<div class="card mt"><div class="card-title">Packages \u00b7 with and without a code</div>
+    <div style="overflow-x:auto;"><table class="roomy"><thead><tr><th>Package</th><th class="num">Orders \u00b7 code</th><th class="num">Orders \u00b7 no code</th>
+      <th class="num">Share with code</th><th class="num">Discount (THB)</th><th class="num">Discount %</th>
+      <th class="num">Cancelled \u00b7 code</th><th class="num">Cancelled \u00b7 no code</th></tr></thead><tbody>
+      ${D.packages.map(p => `<tr><td class="i18n trunc" style="max-width:0;width:34%;" data-tip="${esc(p.name)}">${esc(p.name)}</td>
+        <td class="num">${nn(p.ordersWith)}</td><td class="num">${nn(p.ordersWithout)}</td><td class="num">${pc(p.codeShare, 0)}</td>
+        <td class="num">${p.ordersWith ? nn(p.discount, true) : '\u2014'}</td><td class="num">${pc(p.discountRate)}</td>
+        <td class="num">${pc(p.cancelWith, 0)}</td><td class="num">${pc(p.cancelWithout, 0)}</td></tr>`).join('')}</tbody></table></div>
+    <div class="note">Top packages by completed orders. A package that sells mostly without a code does not need one: keep it full price. A package that only moves with a code is where vouchers earn their cost. Discount is the order\u2019s voucher shared across its packages by sales.</div></div>` : '';
 
   $('viewRoot').innerHTML = `
     <div class="search"><div>
@@ -9531,7 +9546,7 @@ function renderVoucher() {
       <div class="hint">Shopee order export \u00b7 ${nn(sm.placed)} orders placed \u00b7 ${nn(sm.completed)} completed \u00b7 ${nn(sm.cancelled)} cancelled${sm.open ? ` \u00b7 ${nn(sm.open)} in progress` : ''}</div>
     </div></div>
     <div class="sec-h">Vouchers</div>${kpis}
-    ${codes}${ladder}${mo}${pk}`;
+    ${codes}${th}${ladder}${pk}${mo}`;
 }
 
 function renderLazada() {
@@ -14295,7 +14310,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.413.0';
+const CLIENT_BUILD = '3.414.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

@@ -1424,7 +1424,16 @@ global.fetch = async (url, opts = {}) => {
         L("D", "ยกเลิกแล้ว", "2026-10-05", "DNA Package", 25200, 0, "BHQ26OCT2", 25200),
         L("E", "สำเร็จแล้ว", "2026-10-06", "Mineral Package", 10000, 0, "", 10000),
         L("F", "ยกเลิกแล้ว", "2026-10-07", "Mineral Package", 8000, 0, "", 8000),
-        L("G", "สำเร็จแล้ว", "2026-09-15", "Mineral Package", 9000, 100, "BHQ26SEP1", 8900)];
+        L("G", "สำเร็จแล้ว", "2026-09-15", "Mineral Package", 9000, 100, "BHQ26SEP1", 8900),
+        /**
+         * NOVEMBER (v3.414.0): the minimum-spend pile-up. BHQ26NOV2 orders
+         * 5,000 / 5,100 / 5,200 / 5,900 / 9,000: inferred floor 5,000, band
+         * 5,000-5,999 holds 4 of 5 (0.8). No-code orders at or above 5,000:
+         * 5,500 / 7,000 / 8,000 / 12,000 / 15,000, one in the band (0.2). Pile-up 4.
+         * The 4,000 no-code order is under the floor and must not count.
+         */
+        ...[5000, 5100, 5200, 5900, 9000].map((v, i) => L(`N${i}`, "สำเร็จแล้ว", "2026-11-02", "Flu Vaccine", v, 200, "BHQ26NOV2", v - 200)),
+        ...[4000, 5500, 7000, 8000, 12000, 15000].map((v, i) => L(`M${i}`, "สำเร็จแล้ว", "2026-11-03", "Flu Vaccine", v, 0, "", v))];
       const letterIdx = (l) => [...l].reduce((a, c) => a * 26 + c.charCodeAt(0) - 64, 0) - 1;
       const ranges = new URL(u).searchParams.getAll("ranges");
       const out = [];
