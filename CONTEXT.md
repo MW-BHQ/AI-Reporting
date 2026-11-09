@@ -1,5 +1,22 @@
 ### Recent (November 2026)
 
+**v3.411.0 — Campaign detail: ad campaigns keyed by ID; sub-lists add up** (MW: 261001-05
+rows ~68.8K vs header 102.4K; SEM sub-list ~8 of 16 with old names "THB 10,798.71").
+- Server already conserved spend (rows + orphans = header). The short figure was the ad
+  sub-list holding a stale, pre-rename pull. Windsor now: 18 Google campaigns, current
+  names, 89,435.71 THB = the header's Google share.
+- Ad campaigns are aggregated by `campaign_id` (checked with get_fields on facebook,
+  google_ads, tiktok), name = the one carrying most spend. Keyed by name, a rename split
+  one campaign into two half-rows.
+- `adNames` is no longer wiped on a row that is first for an EARLIER platform (its list
+  vanished; the UI opens the sub-list on adNames). adNames now mirrors adRows.
+- Each sub-list has a Total row (exact per-ad figures).
+- Tests: rows = header, sub-lists = header, each ad once, adNames = adRows, a renamed
+  campaign_id is ONE campaign (fixture fires on the pull's fields, not on campaign_id, so
+  it fails on v3.410 — checked).
+- Data, not code: Google `260501-05_L01_..._BHQ_..._THB 20000.02` (12,770 THB in Oct)
+  carries a mistyped code; it belongs to 261001-05 and is not counted there.
+
 **v3.410.0 — Meta "B+ x ADA" mapped as a shared (group) account.** MW: 261001-05 Breast
 Cancer's Meta ads run there; Windsor had 15 Meta accounts and not this one, so the
 campaign showed Meta spend 0 (Oct Google 89.4K + TikTok 13.0K = the 102.4K shown).

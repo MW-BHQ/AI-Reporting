@@ -781,6 +781,18 @@ expect_field "ad row message goal"  "$CAMP1" "(()=>{const a=$AR.find(x=>x.name.i
 # Google: no objective, so traffic, counted from GA4 and flagged as such.
 expect_field "ad row google traffic" "$CAMP1" "(()=>{const a=$AR.find(x=>x.name.includes('BGH_Search'));return a&&a.goal==='traffic'&&a.resultFromGa4&&a.costPerResult===25?'ok':undefined})()"
 
+echo "--- campaign detail: rows and ad lists add up to the header (v3.411.0) ---"
+# Every baht in the header is on exactly one traffic row or one orphan row.
+expect_field "rows sum to header"   "$CAMP1" "(()=>{const r=d.variants.reduce((a,v)=>a+(v.spend||0),0)+(d.orphanAdCampaigns||[]).reduce((a,c)=>a+c.spend,0);return Math.abs(r-d.totals.spend)<0.01?'ok':undefined})()"
+# Every ad campaign listed exactly once across the sub-lists (or as an orphan),
+# and the sub-lists' exact spend adds to the header too.
+expect_field "ad lists once each"   "$CAMP1" "(()=>{const a=$AR.map(x=>x.name).concat((d.orphanAdCampaigns||[]).map(c=>c.name));return a.length===d.adCampaigns.length&&new Set(a).size===a.length?'ok':undefined})()"
+expect_field "ad lists sum header"  "$CAMP1" "(()=>{const s=$AR.reduce((a,x)=>a+x.spend,0)+(d.orphanAdCampaigns||[]).reduce((a,c)=>a+c.spend,0);return Math.abs(s-d.totals.spend)<0.01?'ok':undefined})()"
+# The UI opens a sub-list on adNames: it must mirror adRows on every row.
+expect_field "adNames = adRows"     "$CAMP1" "d.variants.every(v=>(v.adNames||[]).length===(v.adRows||[]).length)?'ok':undefined"
+# Same campaign_id under two names (a rename): ONE Meta ad campaign, current name.
+expect_field "rename one campaign"  "$CAMP1" "(()=>{const p=d.byPlatform.find(x=>x.platform==='Meta Ads');const m=d.adCampaigns.filter(c=>c.platform==='Meta Ads');return p&&p.matched===1&&m.length===1&&m[0].name.endsWith('THB8344')?'ok':undefined})()"
+
 echo "--- campaign: TikTok Ads + TikTok organic (v3.367.0) ---"
 expect_field "tiktok ads platform"  "$CAMP1" "(()=>{const p=d.byPlatform.find(x=>x.platform==='TikTok Ads');return p&&p.connected&&p.matched===1&&p.spend===600&&p.landingPageViews===null?'ok':undefined})()"
 # Name leads with "TT01_" and must still match the code. `results` is 0 live,

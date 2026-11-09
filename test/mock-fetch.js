@@ -954,6 +954,21 @@ global.fetch = async (url, opts = {}) => {
   if (u.includes("connectors.windsor.ai/facebook?") || /connectors\.windsor\.ai\/facebook[?&]/.test(u)) {
     if (process.env.MOCK_FAIL_CONNECTOR === "facebook") return jsonRes({ error: "simulated failure" }, 500);
     const want = (new URL(u)).searchParams.get("fields") || "";
+    /**
+     * RENAMED MID-RANGE (v3.411.0). The campaign pull asks for campaign_id; the
+     * same ID comes back under an old name too (the agency edits the THB budget
+     * in the name). Zero metrics, so every other figure in the suite holds:
+     * keyed by name this is a SECOND ad campaign (matched 2); keyed by ID, one.
+     */
+    // Keyed on the campaign pull's own field, NOT on campaign_id: code that
+    // never asks for the ID must still get the renamed row, or this cannot fail.
+    if (want.includes("adsset_optimization_goal") && want.includes("actions_landing_page_view") && !want.includes("quality_ranking")) {
+      const [row] = windsorRows("facebook", want);
+      row.campaign_id = "c-bht";
+      const old = { ...row, campaign: "260701-08_BHT_test_2JUL2026_31JUL2026_Traffic_THB9999", campaign_id: "c-bht" };
+      for (const k of Object.keys(old)) if (typeof old[k] === "number") old[k] = 0;
+      return jsonRes({ data: [row, old] });
+    }
     if (want.includes("account_name") && !want.includes("campaign")) {
       // Brand-owned, shared, and e-commerce-only accounts, so the registry split
       // in buildReport is verifiable end to end.

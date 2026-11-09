@@ -4820,7 +4820,13 @@ async function buildCampaign(code, from, to) {
      * the only fair comparison against GA4 sessions, and the gap between them is
      * what exposes a missing utm tag.
      */
-    jobs[`ad_${p.id}`] = windsor(p.id, [p.campaignKey, ...AD_METRIC_FIELDS, ...(p.extra || [])], from, to);
+    /**
+     * `campaign_id` (v3.411.0): checked with `get_fields` on facebook,
+     * google_ads and tiktok. Ad campaigns are keyed by ID below, so a campaign
+     * renamed mid-range (the agency edits the THB budget in the name) stays
+     * ONE row with all of its spend instead of two half-rows.
+     */
+    jobs[`ad_${p.id}`] = windsor(p.id, [p.campaignKey, "campaign_id", ...AD_METRIC_FIELDS, ...(p.extra || [])], from, to);
   }
   const { data, errors } = await runJobs(jobs);
   const EMPTY_KE = { total: 0, byKey: new Map(), byName: new Map(), byKeyEvent: new Map(), rows: [], failed: true };
@@ -4896,11 +4902,23 @@ async function buildCampaign(code, from, to) {
       continue;
     }
     const agg = new Map();
+    /**
+     * KEYED BY campaign_id, NOT NAME (v3.411.0, MW: the SEM sub-list showed
+     * old names — "THB 10,798.71" — next to the 102.4K header). One
+     * campaign can arrive under more than one name in a range; keyed by name
+     * it split into rows that each looked like a different campaign. The name
+     * kept is the one carrying the most spend. No ID (older fixtures, a
+     * connector without it): the name is the key, as before.
+     */
+    const nameSpend = new Map();
     for (const r of rows) {
       const name = r[p.campaignKey];
       const camp = norm(name);
       if (!camp || !adNameMatchesCode(camp, needle)) continue;
-      if (!agg.has(name)) agg.set(name, {
+      const key = (r.campaign_id != null && r.campaign_id !== "") ? `id:${r.campaign_id}` : `nm:${name}`;
+      if (!nameSpend.has(key)) nameSpend.set(key, new Map());
+      nameSpend.get(key).set(name, (nameSpend.get(key).get(name) || 0) + n(r.spend) + n(r.impressions) / 1e9);
+      if (!agg.has(key)) agg.set(key, {
         name, platform: p.label, objective: r.campaign_objective || r.objective_type || null,
         goal: goalOf(r.campaign_objective || r.objective_type, name),
         // TikTok's own result count; null on platforms that do not report one.
@@ -4918,7 +4936,7 @@ async function buildCampaign(code, from, to) {
         impressions: 0, clicks: 0, linkClicks: 0, landingPageViews: null, spend: 0, leads: 0, messages: 0,
         optGoals: new Map(),
       });
-      const a = agg.get(name);
+      const a = agg.get(key);
       if (r.adsset_optimization_goal) a.optGoals.set(String(r.adsset_optimization_goal).toUpperCase(),
         (a.optGoals.get(String(r.adsset_optimization_goal).toUpperCase()) || 0) + n(r.spend) + n(r.impressions) / 1e6);
       a.impressions += n(r.impressions);
@@ -4940,7 +4958,8 @@ async function buildCampaign(code, from, to) {
      * already documents. Spend-weighted dominant ad-set goal first, then the
      * campaign objective, then the name.
      */
-    for (const a of agg.values()) {
+    for (const [key, a] of agg) {
+      a.name = [...nameSpend.get(key).entries()].sort((x, y) => y[1] - x[1])[0][0];
       const top = [...a.optGoals.entries()].sort((x, y) => y[1] - x[1])[0];
       const cls = top ? OPT_GOAL_TO_GOAL[GOAL_CLASS[top[0]]] : null;
       if (cls) { a.goal = cls; a.optimizationGoal = top[0]; }
@@ -5155,7 +5174,6 @@ async function buildCampaign(code, from, to) {
     const unclaimed = variants.filter((v) => !others.some((re) => re.test(v.source)));
     const owned = bySource.length ? bySource : unclaimed;
     const mine = adCampaigns.filter((c) => c.platform === p.platform);
-    const names = mine.map((c) => c.name);
     if (!owned.length) {
       // Nothing in GA4 carries this platform's source, so the media can't fold
       // into a traffic row. Keep it visible rather than silently dropping spend.
@@ -5168,7 +5186,6 @@ async function buildCampaign(code, from, to) {
       v.spend = n(v.spend) + p.spend * share;
       v.impressions = n(v.impressions) + p.impressions * share;
       v.clicks = n(v.clicks) + p.clicks * share;
-      v.adNames = [...v.adNames, ...names];
       /**
        * THE AD CAMPAIGNS WITH THEIR NUMBERS, not just their names (MW: the
        * reveal "didn't tell anything"). Spend, impressions and link clicks are
@@ -5185,8 +5202,15 @@ async function buildCampaign(code, from, to) {
        * attaches to the row carrying the largest share, which is the one a
        * reader opens.
        */
+      /**
+       * NOTHING IS WIPED (v3.411.0). This used to reset `adNames` to [] on any
+       * row that was not first for THIS platform — including a row that was
+       * first for an EARLIER platform, whose list then vanished (the UI opens
+       * the sub-list only when `adNames` has entries). `adNames` now mirrors
+       * `adRows` exactly, so the two cannot drift.
+       */
       v.adRows = (v !== owned[0]) ? (v.adRows || []) : [...(v.adRows || []), ...mine.map(adResultRow)];
-      v.adNames = (v !== owned[0]) ? [] : v.adNames;
+      v.adNames = v.adRows.map((a) => a.name);
       v.platform = p.platform;
       if (owned.length > 1) v.spendEstimated = true;
     }
