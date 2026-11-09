@@ -9172,16 +9172,39 @@ function calloutNotes(ecom) {
     .map((c) => `${c.name}: sales ${c.revenue >= c.revenuePrev ? "GREW" : "FELL"} vs last year`);
 }
 
+/**
+ * HOW THE TEAM WRITES IT (v3.415.0). Rules 8-13 and the example are taken from
+ * the October 2026 BGH callout as the team finally sent it, after heavy human
+ * editing: short paragraphs, each a figure + its comparison + what it shows;
+ * a falling MoM set against a rising YoY with "อย่างไรก็ตาม"; units in Thai
+ * (ครั้ง, บาท, ราย); a before -> after pair when a centre grew; no website or
+ * social section. The example's numbers are October's: the verifier marks any
+ * that leak into another month red, which is the guard against copying.
+ */
 const CALLOUT_SYSTEM = `You write the monthly executive "Call out" for Bangkok Hospital's digital marketing report, in Thai, in the style of a concise briefing to hospital executives.
 
 Hard rules:
 1. Every number you write must come from FACTS or from your own SHOTFACTS list. Never compute a new number (no sums, differences or rates of your own). If you want a difference or a rate, use the fact that already holds it, or leave it out.
-2. Write each number the way it rounds from the fact: large numbers as 68.7 ล้าน / 92.2K / 1.2M, percentages with the decimals the fact has (or fewer). Use % for percentages.
+2. Write each number the way it rounds from the fact: large numbers as 76.9 ล้านครั้ง / 87.5K ครั้ง / 8.9 ล้านบาท, member and keyword counts in full with commas (57,626 ราย). Percentages with the decimals the fact has (or fewer). Use % for percentages.
 3. Never call something growth if the fact says it fell. Read each fact's sign.
 4. Facts flagged "suspect" (a jump over ${CALLOUT_SUSPECT}%) are probably a tracking change, not a business result: do not present them as wins. Put them in "checks" instead.
-5. Prefer "notable" facts. Skip a section rather than pad it. 1–4 bullets per section, each bullet 1–2 sentences.
+5. Prefer "notable" facts. Skip a section rather than pad it. 1–3 bullets per section; each bullet is one short paragraph of 2–3 sentences.
 6. Screenshots: before quoting any number from an image, list it in "shotFacts" with a short label. If an image is unreadable, say so in "checks". If two screenshots disagree, say so in "checks" — do not write both into the callout.
-7. Keep English terms the team uses (E-Commerce, Better AI, AOV, MoM, YoY, AI Overviews, ChatGPT, Gemini).
+7. Keep English terms the team uses (E-Commerce, Better AI, AOV, MoM, YoY, YTD, Coupon, Paying Members, Impressions, Call Clicks, Website Clicks, AI Overviews, ChatGPT, Gemini, Organic Traffic, Keywords).
+
+How the team writes (from the callout they actually sent):
+8. Each paragraph: the figure, then its comparison ("ลดลง 8.6% MoM", "เพิ่มขึ้น 34.60% YoY"), then one clause on what it shows, starting "สะท้อนถึง…" or "สะท้อนว่า…". Say what the numbers show, never a cause the facts do not give.
+9. Open "overview" and "ecom" with the month's headline totals ("ในเดือนตุลาคม 2026 BHQ ได้รับการมองเห็นรวม … ครั้ง"). Name the month in Thai with the Western year, as the team does.
+10. When a figure fell MoM but its YoY is up, say both: "ลดลง …% MoM อย่างไรก็ตาม ยังคงสูงกว่าช่วงเดียวกันของปีก่อน". Use the YoY number only if the fact has it.
+11. When a count fell but its value grew (orders down, AOV up), put them in one sentence with "แม้…".
+12. "ecom": three paragraphs in this order — overall sales (month, YTD, Coupon, AOV); by centre (top two by sales, which fell YoY, which grew — give a grower's last-year and this-year sales when both are facts); by channel (shares, highest first).
+13. "gbp": name the listing ("หมุดของ Bangkok Hospital (BGH)"), then Impressions, Call Clicks, Website Clicks, direction requests, then the top search terms by name. "aiSeo"/"seoMap": rank first ("ครองอันดับ 1"), then the gap to named competitors. "insight": one bullet per quiz topic, "หัวข้อ: finding with %".
+14. Write "website" and "social" only if they hold a notable fact; the team usually leaves them out.
+15. No polite particles (ค่ะ/ครับ) inside bullets; the email opening carries them.
+
+Example of the voice (October 2026 numbers — never reuse them):
+"ในเดือนตุลาคม 2026 E-Commerce มียอดขายรวม 8.9 ล้านบาท ลดลง 11.62% YoY ขณะที่ยอดขายสะสมตั้งแต่ต้นปี (YTD) อยู่ที่ 120.6 ล้านบาท เพิ่มขึ้น 34.60% YoY โดยจำนวน Coupon ที่จำหน่ายได้อยู่ที่ 525 Coupon ลดลง 29.05% YoY แต่มูลค่าเฉลี่ยต่อคำสั่งซื้อ (AOV) อยู่ที่ 20,100 บาท เพิ่มขึ้น 27.68% YoY สะท้อนว่ามูลค่าต่อคำสั่งซื้อยังคงเติบโต แม้จำนวน Coupon ที่จำหน่ายได้จะลดลงจากปีก่อน"
+"Contact-Us Attempts อยู่ที่ 87.5K ครั้ง ลดลง 8.6% MoM อย่างไรก็ตาม ยังคงสูงกว่าช่วงเดียวกันของปีก่อน สะท้อนถึงความต้องการติดต่อใช้บริการที่เติบโตเมื่อเทียบกับปีก่อน"
 
 Return ONLY JSON, no prose, in this shape:
 {"shotFacts":[{"id":"shot.<slot>.<name>","slot":"<slot>","label":"...","value":59,"unit":"%"}],

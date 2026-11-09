@@ -1,5 +1,16 @@
 ### Recent (November 2026)
 
+**v3.415.0 — Call out writes like the team's sent version** (MW pasted the October BGH
+callout as finally sent, "heavily edited by a human"). `CALLOUT_SYSTEM` rules 8-15 + a
+two-paragraph example from it: paragraph = figure + comparison + "สะท้อนถึง/สะท้อนว่า" (what it
+shows, never an invented cause); MoM down vs YoY up with "อย่างไรก็ตาม"; count down / value up
+with "แม้"; Thai units (ครั้ง/บาท/ราย), full counts for members and keywords; ecom in three
+paragraphs (overall, by centre with a grower's before -> after, by channel); GBP names the
+listing and top search terms; website/social only when notable (the team dropped them);
+no ค่ะ inside bullets. Example numbers are October's: the verifier marks them red elsewhere.
+Email opening: "อ." with a dot, "ดังนี้ค่ะ". Sub-headings inside E-Commerce ("Sales
+Performance by Center", "by Channel") not built: bullets have no heading field yet.
+
 **v3.414.0 — Seller-Voucher: minimum-spend pile-up, all-in cost, packages with/without a
 code** (MW: help the team design a better discount scheme; minimums cannot be typed in).
 - Minimum spend is INFERRED per BHQ code: lowest completed order using it (5th percentile

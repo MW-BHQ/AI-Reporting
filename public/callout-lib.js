@@ -335,13 +335,13 @@
   const CC_TAIL = ["Siwattraporn.sr@bangkokhospital.com", "BHQ-Hospital-Marketing-Group@bangkokhospital.com",
     "BHQ-Digital-Marketing@bangkokhospital.com", "panruetai.ko@bangkokhospital.com"];
   const EMAIL_PRESETS = {
-    BGH: { to: ["boonthida.ja@bangkokhospital.com"], salutation: "เรียน อ บุญธิดา ที่เคารพ",
+    BGH: { to: ["boonthida.ja@bangkokhospital.com"], salutation: "เรียน อ. บุญธิดา ที่เคารพ",
       cc: [...CC_COMMON, "ekkit.su@bangkokhospital.com", "paweena.ri@bangkokhospital.com", ...CC_TAIL] },
     BIH: { to: ["ratapong.am@bangkokhospital.com"], salutation: "เรียน คุณรัฐพงษ์ ที่เคารพ",
       cc: [...CC_COMMON, "nutthinee.ba@bangkokhospital.com", ...CC_TAIL] },
-    BHT: { to: ["Kriengkrai.He@bangkokhospital.com"], salutation: "เรียน อ เกรียงไกร ที่เคารพ",
+    BHT: { to: ["Kriengkrai.He@bangkokhospital.com"], salutation: "เรียน อ. เกรียงไกร ที่เคารพ",
       cc: [...CC_COMMON, "kunyada.pa@bangkokhospital.com", ...CC_TAIL] },
-    WSH: { to: ["Thiravud.Kh@Bangkokhospital.com", "Yongyut.Si@bangkokhospital.com"], salutation: "เรียน อ ธีรวุฒิ, อ ยงยุทธ ที่เคารพ",
+    WSH: { to: ["Thiravud.Kh@Bangkokhospital.com", "Yongyut.Si@bangkokhospital.com"], salutation: "เรียน อ. ธีรวุฒิ, อ. ยงยุทธ ที่เคารพ",
       cc: [...CC_COMMON, "PARANEE.PH@bangkokhospital.com", ...CC_TAIL] },
   };
   const MON_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -360,7 +360,7 @@
       to: p.to.join("; "),
       cc: p.cc.join("; "),
       subject: `DMKT: Monthly Report ${brand} (${en})`,
-      intro: `${p.salutation}\n\nขอนำส่งรายงานจาก Digital Marketing ประจำเดือน ${th} ดังไฟล์แนบ\nโดยมี Key Highlights ดังนี้`,
+      intro: `${p.salutation}\n\nขอนำส่งรายงานจาก Digital Marketing ประจำเดือน ${th} ดังไฟล์แนบ\nโดยมี Key Highlights ดังนี้ค่ะ`,
     };
   }
 

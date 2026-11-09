@@ -129,7 +129,7 @@ expect("email: plain text fallback", em.text.includes("• ยอดขาย <1
 
 const pre = L.emailPreset("BGH", "2026-09-30");
 expect("preset: subject month in English", pre.subject === "DMKT: Monthly Report BGH (Sep 2026)", pre.subject);
-expect("preset: body month in Thai BE", pre.intro.startsWith("เรียน อ บุญธิดา ที่เคารพ\n\n") && pre.intro.includes("ประจำเดือน กันยายน 2569 ดังไฟล์แนบ\nโดยมี Key Highlights ดังนี้"), pre.intro);
+expect("preset: body month in Thai BE", pre.intro.startsWith("เรียน อ. บุญธิดา ที่เคารพ\n\n") && pre.intro.includes("ประจำเดือน กันยายน 2569 ดังไฟล์แนบ\nโดยมี Key Highlights ดังนี้ค่ะ"), pre.intro);
 expect("preset: rolls with the month", L.emailPreset("WSH", "2027-01-31").subject === "DMKT: Monthly Report WSH (Jan 2027)"
   && L.emailPreset("WSH", "2027-01-31").intro.includes("มกราคม 2570"), "");
 const counts = Object.fromEntries(["BGH", "BIH", "BHT", "WSH"].map((b) => {
@@ -139,7 +139,7 @@ expect("preset: MW's lists, all valid", JSON.stringify(counts) === '{"BGH":"1/8"
 const bad = ["BGH", "BIH", "BHT", "WSH"].flatMap((b) => { const x = L.emailPreset(b, "2026-09-30"); return [...L.parseRecipients(x.to).bad, ...L.parseRecipients(x.cc).bad]; });
 expect("preset: no malformed address", bad.length === 0, bad.join(","));
 const intro = L.buildEmail({ sections: [] }, { intro: pre.intro }).html;
-expect("email: opening keeps paragraphs", intro.includes("<p>เรียน อ บุญธิดา ที่เคารพ</p><p>ขอนำส่ง") && intro.includes("ดังไฟล์แนบ<br>โดยมี"), "");
+expect("email: opening keeps paragraphs", intro.includes("<p>เรียน อ. บุญธิดา ที่เคารพ</p><p>ขอนำส่ง") && intro.includes("ดังไฟล์แนบ<br>โดยมี"), "");
 
 // ---------------------------------------------------------------- 4. client
 const { JSDOM } = require("jsdom");
@@ -258,7 +258,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const lmTh = lmD.toLocaleString("th-TH", { month: "long", year: "numeric" });
   const to = d.getElementById("coTo"), cc = d.getElementById("coCc"), subj = d.getElementById("coSubject");
   expect("email: preset for the hospital", to && /Kriengkrai.He@/.test(to.value) && /kunyada.pa@/.test(cc.value)
-    && subj.value === `DMKT: Monthly Report BHT (${lmEn})` && /เรียน อ เกรียงไกร/.test(d.getElementById("coIntro").value), subj && subj.value);
+    && subj.value === `DMKT: Monthly Report BHT (${lmEn})` && /เรียน อ\. เกรียงไกร/.test(d.getElementById("coIntro").value), subj && subj.value);
   const docCard = [...d.querySelectorAll("#coBody .card")];
   expect("layout: Export sits above Email", docCard.findIndex((c) => c.querySelector("#coExport")) === docCard.findIndex((c) => c.classList.contains("co-mail")) - 1, "");
   to.value = "ceo@bangkokhospital.com; oops"; to.dispatchEvent(new dom.window.Event("input")); to.dispatchEvent(new dom.window.Event("change"));
