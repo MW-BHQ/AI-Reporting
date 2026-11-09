@@ -1381,6 +1381,65 @@ global.fetch = async (url, opts = {}) => {
   if (u.includes("17T21LhWM")) {
     if (process.env.MOCK_FAIL_CONNECTOR === "shopee-sheet") return jsonRes({ error: { code: 403 } }, 403);
     /**
+     * VOUCHER TAB (v3.412.0): Seller Centre order export, one row per LINE.
+     * Header in the real export order, PII columns included. The traps:
+     *   - Order A has TWO lines that BOTH carry the order's 2,500 voucher (the
+     *     real 260403SKA8RJ5U shape). Per line it would read 5,000.
+     *   - The money sits in the "paid by Shopee" column; seller-paid is 0.
+     *   - B stacks a BHQ code with a Shopee code ("BHQ26OCT2;OCT26TVPLAT").
+     *   - D is cancelled with a code; F cancelled without one.
+     *   - G is September: outside an October window.
+     *   - A request for ANY personal-data column (buyer, recipient, phone,
+     *     address, tax details) is refused with a 500, so code that reads them
+     *     cannot pass.
+     * October: placed 6, completed 4, voucher orders 3, discount 3,770 on
+     * sales 95,000, avg order 31,666.67 with vs 10,000 without, cancelled 25%
+     * with a code vs 50% without.
+     */
+    if (/'Voucher'!|%27Voucher%27!/.test(u)) {
+      const H = ["หมายเลขคำสั่งซื้อ","สถานะการสั่งซื้อ","Hot Listing","สถานะการคืนเงินหรือคืนสินค้า","ชื่อผู้ใช้ (ผู้ซื้อ)",
+        "วันที่ทำการสั่งซื้อ","เวลาการชำระสินค้า","ช่องทางการชำระเงิน","ช่องทางการชำระเงิน (รายละเอียด)","แผนการผ่อนชำระ",
+        "ค่าธรรมเนียม (%)","ตัวเลือกการจัดส่ง","วิธีการจัดส่ง","*หมายเลขติดตามพัสดุ","วันที่คาดว่าจะทำการจัดส่งสินค้า","เวลาส่งสินค้า",
+        "เลขอ้างอิง Parent SKU","ชื่อสินค้า","เลขอ้างอิง SKU (SKU Reference No.)","ชื่อตัวเลือก","ราคาตั้งต้น","ราคาขาย","จำนวน",
+        "จำนวนที่ส่งคืน","ราคาขายสุทธิ","ส่วนลดจาก Shopee","โค้ดส่วนลดชำระโดยผู้ขาย","โค้ด Coins Cashback ชำระโดยผู้ขาย",
+        "โค้ดส่วนลดชำระโดย Shopee (เช่น โค้ดจากโปรแกรม ร้านโค้ดคุ้ม, โค้ดส่วนลด Shopee, โค้ดส่วนลด Shopee Mall)","โค้ดส่วนลด",
+        "เข้าร่วมแคมเปญ bundle deal หรือไม่","ส่วนลด bundle deal ชำระโดยผู้ขาย","ส่วนลด bundle deal ชำระโดย Shopee",
+        "ส่วนลดจากการใช้เหรียญ","โปรโมชั่นช่องทางชำระเงินทั้งหมด","ส่วนลดเครื่องเก่าแลกใหม่","โบนัสส่วนลดเครื่องเก่าแลกใหม่",
+        "ค่าคอมมิชชั่น","Transaction Fee","ราคาสินค้าที่ชำระโดยผู้ซื้อ (THB)","ค่าจัดส่งที่ชำระโดยผู้ซื้อ",
+        "ค่าจัดส่งที่ Shopee ออกให้โดยประมาณ","ค่าจัดส่งสินค้าคืน","ค่าบริการ","จำนวนเงินทั้งหมด","ค่าจัดส่งโดยประมาณ",
+        "โบนัสส่วนลดเครื่องเก่าแลกใหม่จากผู้ขาย","ชื่อผู้รับ","หมายเลขโทรศัพท์","หมายเหตุจากผู้ซื้อ","ที่อยู่ในการจัดส่ง"];
+      const PII = new Set([4, 47, 48, 49, 50]);
+      const L = (id, st, day, prod, net, shopeeV, code, paid) => {
+        const r = H.map(() => "0");
+        Object.assign(r, { 0: id, 1: st, 3: "", 4: "buyer_" + id, 5: `${day} 9:00`, 17: `${prod} - Bangkok Hospital [E-Coupon]`,
+          22: "1", 24: String(net), 26: "0", 27: "0", 28: String(shopeeV), 29: code, 37: "100", 38: "50", 39: String(paid),
+          47: "Recipient", 48: "(+66) 81 000 0000", 50: "1 Secret Road" });
+        return r;
+      };
+      const rows = [H,
+        L("A", "สำเร็จแล้ว", "2026-10-02", "Longevity Female", 31000, 2500, "BHQ26OCT3", 57000),
+        L("A", "สำเร็จแล้ว", "2026-10-02", "Longevity Male", 28500, 2500, "BHQ26OCT3", 57000),
+        L("B", "สำเร็จแล้ว", "2026-10-03", "Dental Implant", 22000, 770, "BHQ26OCT2;OCT26TVPLAT", 21230),
+        L("C", "สำเร็จแล้ว", "2026-10-04", "Mineral Package", 13500, 500, "BHQ26OCT2", 13000),
+        L("D", "ยกเลิกแล้ว", "2026-10-05", "DNA Package", 25200, 0, "BHQ26OCT2", 25200),
+        L("E", "สำเร็จแล้ว", "2026-10-06", "Mineral Package", 10000, 0, "", 10000),
+        L("F", "ยกเลิกแล้ว", "2026-10-07", "Mineral Package", 8000, 0, "", 8000),
+        L("G", "สำเร็จแล้ว", "2026-09-15", "Mineral Package", 9000, 100, "BHQ26SEP1", 8900)];
+      const letterIdx = (l) => [...l].reduce((a, c) => a * 26 + c.charCodeAt(0) - 64, 0) - 1;
+      const ranges = new URL(u).searchParams.getAll("ranges");
+      const out = [];
+      for (const rg of ranges) {
+        const a1 = rg.split("!")[1] || "";
+        if (a1 === "1:1") { out.push({ range: rg, values: [H] }); continue; }
+        const m = a1.match(/^([A-Z]+)(\d+):([A-Z]+)$/);
+        if (!m) return jsonRes({ error: { code: 400, message: "Unable to parse range" } }, 400);
+        const c = letterIdx(m[1]);
+        if (PII.has(c) || c !== letterIdx(m[3])) return jsonRes({ error: { code: 500, message: "mock: personal-data column requested" } }, 500);
+        out.push({ range: rg, values: rows.slice(+m[2] - 1).map((r) => [r[c]]) });
+      }
+      return jsonRes({ spreadsheetId: "mock-shopee", valueRanges: out });
+    }
+    /**
      * SHOPEE ADS TAB (v3.326.0): MW's paste of the Brand Portal "By Day"
      * sheet, with the Definitions text above it and every trap the export has.
      *   - EACH DAY TWICE, `All` and `TH`, same figures. Summing both gives

@@ -2473,6 +2473,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h16l-1.2 11.2a2 2 0 0 1-2 1.8H7.2a2 2 0 0 1-2-1.8L4 8z"/><path d="M8.5 8V6.2a3.5 3.5 0 1 1 7 0V8"/></svg>
         Shopee
       </div>
+      <div class="nav-item sub" data-view="voucher">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><path d="M14 6v12" stroke-dasharray="2 2"/></svg>
+        Seller-Voucher
+      </div>
       <div class="nav-item sub" data-view="lazada">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></svg>
         Lazada
@@ -2720,6 +2724,7 @@ const S = {
   line: null, lineKey: null, lineLoading: false, lineError: null,
   shopee: null, shopeeKey: null, shopeeLoading: false, shopeeError: null,
   lazada: null, lazadaKey: null, lazadaLoading: false, lazadaError: null,
+  voucher: null, voucherKey: null, voucherLoading: false, voucherError: null,
   ecomcampaigns: null, ecomcampaignsKey: null, ecomcampaignsLoading: false, ecomcampaignsError: null,
   page: null, pageKey: null, pageLoading: false, pageError: null, pageUrl: '',
   audiencesLoading: false, audiencesError: null,
@@ -3522,6 +3527,7 @@ const TITLES = {
   bcengage: ['Better Club · Performance', 'Members who earned B points this month — new, staying or coming back'],
   line: ['LINE OA', 'What we broadcast, who received it, and what it cost us in blocks'],
   shopee: ['Shopee', 'What the storefront sold, and where its visits came from'],
+  voucher: ['Seller-Voucher', 'Which voucher codes buyers used, what they cost, and what they bought'],
   lazada: ['Lazada', 'Where the storefront\u2019s visitors came from, inside Lazada and out'],
   ecomcampaigns: ['E-commerce Campaigns', 'One campaign code, every source that carries it \u2014 Shopee, Lazada, website, Meta'],
   ecom: ['E-commerce', 'Package sales across every online sales channel'],
@@ -3648,6 +3654,17 @@ async function loadShopee(refresh = false) {
   S.shopee = await res.json(); S.shopeeKey = key;
   setStatus('ok', S.shopee.cached ? `cached ${S.shopee.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
   return S.shopee;
+}
+
+async function loadVoucher(refresh = false) {
+  const key = `${$('from').value}|${$('to').value}`;
+  if (!refresh && S.voucherKey === key && S.voucher) return S.voucher;
+  setStatus('busy', 'reading Shopee orders\u2026');
+  const res = await fetch(`/api/shopee/voucher?from=${$('from').value}&to=${$('to').value}${refresh?'&refresh=1':''}`);
+  if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,220)}`);
+  S.voucher = await res.json(); S.voucherKey = key;
+  setStatus('ok', S.voucher.cached ? `cached ${S.voucher.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
+  return S.voucher;
 }
 
 async function loadLine(refresh = false) {
@@ -3902,6 +3919,7 @@ $('loadBtn').addEventListener('click', async () => {
     else if (S.view === 'bcquiz') { S.bcquizError = null; await loadBcquiz(true); }
     else if (S.view === 'line') { S.lineError = null; await loadLine(true); }
     else if (S.view === 'shopee') { S.shopeeError = null; await loadShopee(true); }
+    else if (S.view === 'voucher') { S.voucherError = null; await loadVoucher(true); }
     else if (S.view === 'lazada') { S.lazadaError = null; await loadLazada(true); }
     else if (S.view === 'ecomcampaigns') { S.ecomcampaignsError = null; await loadEcomCampaigns(true); }
     else if (S.view === 'pages') { S.pageError = null; await loadPage(true); }
@@ -3996,6 +4014,7 @@ function render() {
   else if (S.view === 'bcquiz') renderBcquiz();
   else if (S.view === 'line') renderLine();
   else if (S.view === 'shopee') renderShopee();
+  else if (S.view === 'voucher') renderVoucher();
   else if (S.view === 'lazada') renderLazada();
   else if (S.view === 'ecomcampaigns') renderEcomCampaigns();
   else if (S.view === 'report') renderReport();
@@ -7798,7 +7817,7 @@ function renderUsers() {
     { name: 'Google Ads', ids: ['gads'] },
     { name: 'Better Club', ids: ['bcengage', 'bcquiz', 'bclub'] },
     { name: 'LINE OA', ids: ['line'] },
-    { name: 'E-commerce', ids: ['ecom','ecommonthly','ecomcampaigns','ecomchannels','shopee','lazada',
+    { name: 'E-commerce', ids: ['ecom','ecommonthly','ecomcampaigns','ecomchannels','shopee','voucher','lazada',
       'ecomcentre','ecompackages','ecomroas','ecomchurn','ecommigration'] },
     { name: 'Tools', ids: ['topics'] },
   ];
@@ -8251,6 +8270,7 @@ const VIEW_LOADERS = {
   bcquiz:        { load: () => loadBcquiz(),        err: 'bcquizError',    busy: 'bcquizLoading',    what: 'Better Club quiz answers' },
   line:          { load: () => loadLine(),          err: 'lineError',      busy: 'lineLoading',      what: 'the LINE sheets' },
   shopee:        { load: () => loadShopee(),        err: 'shopeeError',    busy: 'shopeeLoading',    what: 'the Shopee storefront' },
+  voucher:       { load: () => loadVoucher(),       err: 'voucherError',   busy: 'voucherLoading',   what: 'Shopee vouchers' },
   lazada:        { load: () => loadLazada(),        err: 'lazadaError',    busy: 'lazadaLoading',    what: 'the Lazada storefront' },
   ecomcampaigns: { load: () => loadEcomCampaigns(), err: 'ecomcampaignsError', busy: 'ecomcampaignsLoading', what: 'campaigns across shops' },
   ecomroas:      { load: () => loadEcomRoas(),      err: 'ecomroasError',  busy: 'ecomroasLoading',  what: 'marketplace ad performance' },
@@ -9434,6 +9454,79 @@ function renderEcomCampaigns() {
         <th class="num">Per Meta baht</th><th style="width:18%;">Top packages</th></tr></thead>
         <tbody>${d.list.map(row).join('')}</tbody></table>
     </div>`;
+}
+
+/**
+ * SELLER-VOUCHER (v3.412.0, MW) — Shopee order export, `Voucher` tab. Orders,
+ * not lines: order-level money is taken once per order on the server. Voucher
+ * money is split by CODE, never by payer (the BHQ codes sit in Shopee's "paid by
+ * Shopee" column; who funds them is a contract question, not a data one).
+ */
+function renderVoucher() {
+  const D = S.voucher;
+  if (S.voucherError) { const m = S.voucherError; $('viewRoot').innerHTML = errorState(m); S.voucherError = null; return; }
+  if (!D) { $('viewRoot').innerHTML = loadPrompt('voucher', 'Reads the Voucher tab of the Shopee sheet (Seller Centre order export).'); return; }
+  if (!D.available) { $('viewRoot').innerHTML = errorState(`Seller-Voucher \u2014 ${esc(D.reason || 'unavailable')}`); return; }
+  const pc = (v, dp = 1) => v != null ? num(v * 100, { dp }) + '%' : '\u2014';
+  const nn = (v, money) => v == null ? '\u2014' : money ? num(v, { money: true, bare: true }) : num(v);
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const lMon = (m) => { const [y, mo] = String(m).split('-'); return `${MON[+mo - 1]} ${y}`; };
+  const sm = D.summary, C = D.coverage;
+  const kindPill = (k) => k === 'seller' ? '<span class="pill">BHQ code</span>'
+    : k === 'both' ? '<span class="pill">BHQ + Shopee</span>' : '<span class="pill grey">Shopee code</span>';
+  const cover = D.inSheet ? '' : ` <span class="pill">sheet covers ${esc(humanDate(C.first))} \u2013 ${esc(humanDate(C.last))}</span>`;
+  const lift = sm.aovVoucher != null && sm.aovNone ? sm.aovVoucher / sm.aovNone - 1 : null;
+
+  const kpis = `<div class="grid g-4">
+    <div class="stat card"><div class="lab">Orders with a voucher</div><div class="val">${nn(sm.voucherOrders)}</div>
+      <div class="sub">${pc(sm.voucherShare, 0)} of ${nn(sm.completed)} completed orders</div></div>
+    <div class="stat card"><div class="lab">Voucher discount (THB)</div><div class="val">${nn(sm.discount, true)}</div>
+      <div class="sub">${pc(sm.discountRate)} of those orders\u2019 sales \u00b7 THB ${nn(sm.discountPerOrder, true)} per order</div></div>
+    <div class="stat card"><div class="lab">Average order \u00b7 with voucher (THB)</div><div class="val">${nn(sm.aovVoucher, true)}</div>
+      <div class="sub">without: THB ${nn(sm.aovNone, true)}${lift != null ? ` \u00b7 <span style="color:${lift >= 0 ? 'var(--good)' : 'var(--bad)'}">${lift >= 0 ? '+' : ''}${pc(lift, 0)}</span>` : ''}</div></div>
+    <div class="stat card"><div class="lab">Cancelled \u00b7 with voucher</div><div class="val">${pc(sm.cancelVoucher)}</div>
+      <div class="sub">without: ${pc(sm.cancelNone)} \u00b7 of orders placed</div></div>
+  </div>`;
+
+  const codeRows = D.codes.map(c => `<tr>
+      <td class="i18n">${c.codes.map(esc).join('<br>')}</td><td style="white-space:nowrap">${kindPill(c.kind)}</td>
+      <td class="num">${nn(c.placed)}</td><td class="num">${nn(c.completed)}</td><td class="num">${pc(c.cancelRate, 0)}</td>
+      <td class="num">${nn(c.discount, true)}</td>
+      <td class="num">${pc(c.discountRate)}</td><td class="num">${nn(c.aov, true)}</td><td class="num">${nn(c.discountPerOrder, true)}</td></tr>`).join('');
+  const codes = `<div class="card mt"><div class="card-title">By code <span class="muted">\u00b7 stacked codes stay together: Shopee records one discount per order</span></div>
+    <div style="overflow-x:auto;"><table class="roomy sortable"><thead><tr><th>Code</th><th>Type</th><th class="num">Placed</th><th class="num">Completed</th>
+      <th class="num">Cancelled</th><th class="num">Discount (THB)</th><th class="num">Discount %</th>
+      <th class="num">Avg order (THB)</th><th class="num">Discount / order</th></tr></thead>
+      <tbody>${codeRows || '<tr><td colspan="9" class="num">no voucher orders in this range</td></tr>'}</tbody></table></div></div>`;
+
+  const ladder = D.ladder.length ? `<div class="card mt"><div class="card-title">BHQ codes used alone \u00b7 discount vs basket</div>
+    <table class="roomy"><thead><tr><th>Code</th><th class="num">Orders</th><th class="num">Discount / order (THB)</th>
+      <th class="num">Avg order (THB)</th><th class="num">Discount as % of order</th></tr></thead><tbody>
+      ${D.ladder.map(l => `<tr><td>${esc(l.code)}</td><td class="num">${nn(l.orders)}</td><td class="num">${nn(l.discountPerOrder, true)}</td>
+        <td class="num">${nn(l.aov, true)}</td><td class="num">${pc(l.share)}</td></tr>`).join('')}</tbody></table></div>` : '';
+
+  const mo = D.monthly.length > 1 ? `<div class="card mt"><div class="card-title">By month \u00b7 completed orders</div>
+    <table class="roomy"><thead><tr><th>Month</th><th class="num">Orders</th><th class="num">With voucher</th><th class="num">Share</th>
+      <th class="num">Discount (THB)</th><th class="num">Sales (THB)</th><th class="num">Discount %</th></tr></thead><tbody>
+      ${D.monthly.map(m => `<tr><td>${esc(lMon(m.month))}</td><td class="num">${nn(m.orders)}</td><td class="num">${nn(m.voucherOrders)}</td>
+        <td class="num">${pc(m.share, 0)}</td><td class="num">${nn(m.discount, true)}</td><td class="num">${nn(m.gmv, true)}</td>
+        <td class="num">${pc(m.discountRate)}</td></tr>`).join('')}</tbody></table>
+    ${labelledBars(D.monthly.map(m => ({ value: m.discount })), 'value', '#EE4D2D', 90)}
+    <div style="display:flex;justify-content:space-between;font-size:var(--text-3xs);color:var(--faint);margin-top:6px;">
+      <span>${esc(lMon(D.monthly[0].month))}</span><span>${esc(lMon(D.monthly[D.monthly.length - 1].month))}</span></div></div>` : '';
+
+  const pk = D.packages.length ? `<div class="card mt"><div class="card-title">Packages bought with a voucher</div>
+    <table class="roomy"><thead><tr><th>Package</th><th class="num">Orders</th><th class="num">Sales (THB)</th></tr></thead><tbody>
+      ${D.packages.map(p => `<tr><td class="i18n trunc" style="max-width:0;" data-tip="${esc(p.name)}">${esc(p.name)}</td>
+        <td class="num">${nn(p.orders)}</td><td class="num">${nn(p.gmv, true)}</td></tr>`).join('')}</tbody></table></div>` : '';
+
+  $('viewRoot').innerHTML = `
+    <div class="search"><div>
+      <div class="big">Seller-Voucher <span class="pill">BangkokHospital_Official</span>${cover}</div>
+      <div class="hint">Shopee order export \u00b7 ${nn(sm.placed)} orders placed \u00b7 ${nn(sm.completed)} completed \u00b7 ${nn(sm.cancelled)} cancelled${sm.open ? ` \u00b7 ${nn(sm.open)} in progress` : ''}</div>
+    </div></div>
+    <div class="sec-h">Vouchers</div>${kpis}
+    ${codes}${ladder}${mo}${pk}`;
 }
 
 function renderLazada() {
@@ -14197,7 +14290,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.411.0';
+const CLIENT_BUILD = '3.412.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

@@ -793,6 +793,22 @@ expect_field "adNames = adRows"     "$CAMP1" "d.variants.every(v=>(v.adNames||[]
 # Same campaign_id under two names (a rename): ONE Meta ad campaign, current name.
 expect_field "rename one campaign"  "$CAMP1" "(()=>{const p=d.byPlatform.find(x=>x.platform==='Meta Ads');const m=d.adCampaigns.filter(c=>c.platform==='Meta Ads');return p&&p.matched===1&&m.length===1&&m[0].name.endsWith('THB8344')?'ok':undefined})()"
 
+echo "--- Seller-Voucher: Shopee order export, orders not lines (v3.412.0) ---"
+VCH="/api/shopee/voucher?from=2026-10-01&to=2026-10-31"
+expect_field "voucher available"    "$VCH" "d.available===true?'ok':undefined"
+expect_field "voucher order counts" "$VCH" "(()=>{const s=d.summary;return s.placed===6&&s.completed===4&&s.cancelled===2&&s.voucherOrders===3?'ok':undefined})()"
+# A's 2,500 is on both its lines: per order it is 2,500, per line 5,000 (6,270 total).
+expect_field "voucher once/order"   "$VCH" "d.summary.discount===3770?'ok':undefined"
+expect_field "voucher sales"        "$VCH" "d.summary.voucherGmv===95000&&Math.abs(d.summary.discountRate-3770/95000)<1e-9?'ok':undefined"
+expect_field "voucher aov split"    "$VCH" "Math.abs(d.summary.aovVoucher-95000/3)<0.01&&d.summary.aovNone===10000?'ok':undefined"
+expect_field "voucher cancel split" "$VCH" "d.summary.cancelVoucher===0.25&&d.summary.cancelNone===0.5?'ok':undefined"
+# Stacked codes are one combination; kind 'both'. D (cancelled) counts in placed only.
+expect_field "voucher stacked"      "$VCH" "(()=>{const c=d.codes.find(x=>x.combo==='BHQ26OCT2 + OCT26TVPLAT');return c&&c.kind==='both'&&c.discount===770?'ok':undefined})()"
+expect_field "voucher cancelled"    "$VCH" "(()=>{const c=d.codes.find(x=>x.combo==='BHQ26OCT2');return c&&c.placed===2&&c.completed===1&&c.cancelled===1&&c.discount===500?'ok':undefined})()"
+expect_field "voucher window"       "$VCH" "!d.codes.some(x=>x.combo.includes('SEP'))?'ok':undefined"
+expect_field "voucher ladder"       "$VCH" "d.ladder.map(l=>l.code).join()==='BHQ26OCT2,BHQ26OCT3'?'ok':undefined"
+expect_field "voucher no PII"       "$VCH" "!/buyer_|Recipient|Secret Road|\\+66/.test(JSON.stringify(d))?'ok':undefined"
+
 echo "--- campaign: TikTok Ads + TikTok organic (v3.367.0) ---"
 expect_field "tiktok ads platform"  "$CAMP1" "(()=>{const p=d.byPlatform.find(x=>x.platform==='TikTok Ads');return p&&p.connected&&p.matched===1&&p.spend===600&&p.landingPageViews===null?'ok':undefined})()"
 # Name leads with "TT01_" and must still match the code. `results` is 0 live,

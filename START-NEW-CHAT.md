@@ -1,10 +1,14 @@
-# BHQ War Room — handover at v3.410.0
+# BHQ War Room — handover at v3.412.0
 
-NEXT JOB (open): Campaign detail table under-counts — its rows add to ~68.8K while the
-header says 102.4K for 261001-05 (Oct), and the SEM ad-campaign sub-list shows ~8 of 16
-with old names ("THB 10,798.71"). Header total is correct. Trace the row spend split
-(the "~" visit-share split) and the ad-campaign sub-list cap. Re-check now that Meta
-(B+ x ADA, ~345K to 6 Nov) is in.
+NEXT JOB (open): first real read of Seller-Voucher on October; MW to confirm who funds BHQ
+codes (they sit in Shopee's "paid by Shopee" column). Google `260501-05_L01_...BHQ` carries a
+mistyped code (should be 261001-05), 12,770 THB in Oct not counted there.
+
+## v3.411 → v3.412
+- v3.411.0 Campaign detail: ad campaigns keyed by campaign_id; adNames mirrors adRows;
+  sub-list Total row; invariant tests (rows = header, sub-lists = header).
+- v3.412.0 Seller-Voucher tab (`voucher`, after Shopee): Shopee sheet `Voucher` tab, order
+  export; orders not lines; PII columns never read. See CONTEXT.md.
 
 ## This session in one screen (v3.388 → v3.410)
 - Google Profile tab (`gbp`) rebuilt — details in CONTEXT.md v3.388–v3.406. Per listing

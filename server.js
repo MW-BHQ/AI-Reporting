@@ -1062,6 +1062,7 @@ const TABS = [
   { id: "bclub",     label: "Better Club · Rev Attribution" },
   { id: "line",      label: "LINE OA" },
   { id: "shopee",    label: "Shopee" },
+  { id: "voucher",   label: "Seller-Voucher" },
   { id: "lazada",    label: "Lazada" },
   { id: "ecom",      label: "E-commerce" },
   { id: "ecomcampaigns", label: "E-commerce · Campaigns" },
@@ -14196,6 +14197,204 @@ app.get("/api/shopee", requireTab("shopee"), async (req, res) => {
   } catch (err) {
     logJson("ERROR", "shopee_failed", { error: String(err.message || err) });
     res.status(err.status || 500).json({ error: err.message || "Shopee report failed" });
+  }
+});
+
+/**
+ * SELLER VOUCHER (v3.412.0, MW) — the `Voucher` tab of the Shopee sheet: Seller
+ * Centre > Orders > Export, pasted as-is. ONE ROW PER LINE ITEM; an order with
+ * three packages is three rows.
+ *
+ * ORDER-LEVEL MONEY REPEATS ON EVERY LINE. Checked on 260403SKA8RJ5U: two lines
+ * (31,000 + 28,500), each carrying voucher 2,500, commission 3,183 and buyer
+ * paid 57,000 = 59,500 - 2,500. Summed per line that order's voucher is 5,000.
+ * So vouchers, commission and buyer-paid are taken ONCE per order (the max
+ * across its lines); only the line's net price and quantity are summed.
+ *
+ * THE BHQ CODES SIT IN THE "PAID BY SHOPEE" COLUMN. `BHQ26OCT1/2/3` (100 / 500 /
+ * 1,000 off) land in โค้ดส่วนลดชำระโดย Shopee; the seller-paid column is 0 on
+ * every row checked. Who funds what is a contract question, so the UI says
+ * "voucher discount" and splits by CODE, never by payer. All three voucher
+ * columns are added: a code is a code whichever column Shopee files it under.
+ *
+ * PERSONAL DATA IS NEVER READ. The export carries buyer names, phones and
+ * addresses. Only the header row is read first; then just the columns below,
+ * found BY NAME (the export's order has changed before), are fetched.
+ */
+const SHOPEE_VOUCHER_TAB = process.env.SHOPEE_VOUCHER_TAB || "Voucher";
+const VOUCHER_COLS = {
+  order: (h) => h === "หมายเลขคำสั่งซื้อ",
+  status: (h) => h === "สถานะการสั่งซื้อ",
+  refund: (h) => h.startsWith("สถานะการคืนเงิน"),
+  date: (h) => h === "วันที่ทำการสั่งซื้อ",
+  product: (h) => h === "ชื่อสินค้า",
+  qty: (h) => h === "จำนวน",
+  net: (h) => h === "ราคาขายสุทธิ",
+  sellerV: (h) => h === "โค้ดส่วนลดชำระโดยผู้ขาย",
+  sellerCoinV: (h) => h.startsWith("โค้ด Coins Cashback ชำระโดยผู้ขาย"),
+  shopeeV: (h) => h.startsWith("โค้ดส่วนลดชำระโดย Shopee"),
+  code: (h) => h === "โค้ดส่วนลด",
+  commission: (h) => h === "ค่าคอมมิชชั่น",
+  fee: (h) => /^transaction fee$/i.test(h),
+  buyerPaid: (h) => h.startsWith("ราคาสินค้าที่ชำระโดยผู้ซื้อ"),
+};
+const colLetter = (i) => { let s = ""; for (i++; i > 0; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + ((i - 1) % 26)) + s; return s; };
+/** BHQ's own codes start with the shop prefix; everything else is Shopee's. */
+const voucherKind = (code) => /^bhq/i.test(code) ? "seller" : "shopee";
+
+async function readVoucherRows() {
+  const tab = `'${SHOPEE_VOUCHER_TAB}'`;
+  const [head] = await sheetBatchGet(SHOPEE_SHEET_ID, [`${tab}!1:1`]);
+  const H = ((head && head.values && head.values[0]) || []).map((x) => String(x || "").trim());
+  const idx = {};
+  for (const [k, test] of Object.entries(VOUCHER_COLS)) {
+    const i = H.findIndex((h) => test(h));
+    if (i >= 0) idx[k] = i;
+  }
+  const missing = ["order", "status", "date", "net", "code"].filter((k) => idx[k] == null);
+  if (missing.length) {
+    const e = new Error(`"${SHOPEE_VOUCHER_TAB}" tab is missing column(s): ${missing.join(", ")}`);
+    e.missing = true;
+    throw e;
+  }
+  const keys = Object.keys(idx);
+  const got = await sheetBatchGet(SHOPEE_SHEET_ID, keys.map((k) => `${tab}!${colLetter(idx[k])}2:${colLetter(idx[k])}`));
+  const cols = Object.fromEntries(keys.map((k, j) => [k, ((got[j] && got[j].values) || []).map((r) => r[0])]));
+  const len = Math.max(...keys.map((k) => cols[k].length));
+  const rows = [];
+  for (let i = 0; i < len; i++) {
+    const r = {};
+    for (const k of keys) r[k] = cols[k][i];
+    if (!String(r.order || "").trim()) continue;
+    rows.push(r);
+  }
+  return rows;
+}
+
+/** Line rows → one record per order. Order-level money: max across lines. */
+function voucherOrders(rows) {
+  const by = new Map();
+  for (const r of rows) {
+    const id = String(r.order).trim();
+    const day = String(r.date || "").trim().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+    if (!by.has(id)) by.set(id, { id, day, status: String(r.status || "").trim(), refund: false,
+      gmv: 0, units: 0, voucher: 0, commission: 0, fee: 0, buyerPaid: null, codes: new Set(), products: new Map() });
+    const o = by.get(id);
+    const net = spNum(r.net), qty = spNum(r.qty);
+    o.gmv += net; o.units += qty;
+    if (String(r.refund || "").trim()) o.refund = true;
+    o.voucher = Math.max(o.voucher, spNum(r.sellerV) + spNum(r.sellerCoinV) + spNum(r.shopeeV));
+    o.commission = Math.max(o.commission, spNum(r.commission));
+    o.fee = Math.max(o.fee, spNum(r.fee));
+    if (r.buyerPaid != null && String(r.buyerPaid).trim() !== "") o.buyerPaid = Math.max(o.buyerPaid || 0, spNum(r.buyerPaid));
+    for (const c of String(r.code || "").split(/[;,]/).map((x) => x.trim().toUpperCase()).filter(Boolean)) o.codes.add(c);
+    const p = String(r.product || "").replace(/\s*-\s*Bangkok Hospital\s*\[E-Coupon\]\s*$/i, "").trim();
+    if (p) o.products.set(p, (o.products.get(p) || 0) + net);
+  }
+  for (const o of by.values()) {
+    o.state = /สำเร็จ/.test(o.status) ? "done" : /ยกเลิก/.test(o.status) ? "cancelled" : "open";
+    o.codeList = [...o.codes].sort();
+    o.combo = o.codeList.join(" + ");
+    const kinds = new Set(o.codeList.map(voucherKind));
+    o.kind = !kinds.size ? null : kinds.size > 1 ? "both" : [...kinds][0];
+  }
+  return [...by.values()];
+}
+
+async function buildVoucher(from, to) {
+  let rows;
+  try { rows = await readVoucherRows(); }
+  catch (e) {
+    const reason = e.missing ? e.message : /Unable to parse range|400/.test(String(e.message))
+      ? `no "${SHOPEE_VOUCHER_TAB}" tab in the Shopee sheet` : String(e.message || e);
+    return { available: false, reason, range: { from, to } };
+  }
+  const all = voucherOrders(rows);
+  if (!all.length) return { available: false, reason: `the "${SHOPEE_VOUCHER_TAB}" tab has no orders`, range: { from, to } };
+  const days = all.map((o) => o.day).sort();
+  const coverage = { first: days[0], last: days[days.length - 1] };
+  const inR = all.filter((o) => o.day >= from && o.day <= to);
+  const done = inR.filter((o) => o.state === "done");
+  const sum = (xs, k) => xs.reduce((a, o) => a + o[k], 0);
+  const div = (a, b) => (b ? a / b : null);
+  const withV = done.filter((o) => o.codeList.length), noV = done.filter((o) => !o.codeList.length);
+  const placedV = inR.filter((o) => o.codeList.length), placedN = inR.filter((o) => !o.codeList.length);
+  const cancelRate = (xs) => div(xs.filter((o) => o.state === "cancelled").length, xs.length);
+
+  const summary = {
+    placed: inR.length, completed: done.length,
+    cancelled: inR.filter((o) => o.state === "cancelled").length,
+    open: inR.filter((o) => o.state === "open").length,
+    voucherOrders: withV.length, voucherShare: div(withV.length, done.length),
+    discount: sum(withV, "voucher"), voucherGmv: sum(withV, "gmv"), gmv: sum(done, "gmv"),
+    discountRate: div(sum(withV, "voucher"), sum(withV, "gmv")),
+    aovVoucher: div(sum(withV, "gmv"), withV.length), aovNone: div(sum(noV, "gmv"), noV.length),
+    discountPerOrder: div(sum(withV, "voucher"), withV.length),
+    cancelVoucher: cancelRate(placedV), cancelNone: cancelRate(placedN),
+    refunded: done.filter((o) => o.refund).length,
+    // Discount with no code beside it, or a code with no money: shown, not hidden.
+    zeroValueCoded: withV.filter((o) => !o.voucher).length,
+  };
+
+  /** One row per code COMBINATION as Shopee records it: stacked money cannot be split. */
+  const combos = new Map();
+  for (const o of placedV) {
+    if (!combos.has(o.combo)) combos.set(o.combo, { combo: o.combo, codes: o.codeList, kind: o.kind,
+      placed: 0, completed: 0, cancelled: 0, discount: 0, gmv: 0 });
+    const c = combos.get(o.combo);
+    c.placed++;
+    if (o.state === "cancelled") c.cancelled++;
+    if (o.state === "done") { c.completed++; c.discount += o.voucher; c.gmv += o.gmv; }
+  }
+  const codes = [...combos.values()].map((c) => ({ ...c,
+    cancelRate: div(c.cancelled, c.placed), aov: div(c.gmv, c.completed),
+    discountPerOrder: div(c.discount, c.completed), discountRate: div(c.discount, c.gmv),
+  })).sort((a, b) => b.discount - a.discount || b.placed - a.placed);
+
+  /**
+   * THE SELLER LADDER: BHQ codes used ALONE, completed orders, by typical
+   * discount. Does a bigger voucher go with a bigger basket? Association only:
+   * a minimum-spend tier selects the bigger baskets by construction.
+   */
+  const ladder = codes.filter((c) => c.kind === "seller" && c.codes.length === 1 && c.completed)
+    .map((c) => ({ code: c.combo, orders: c.completed, discountPerOrder: c.discountPerOrder, aov: c.aov,
+      share: div(c.discountPerOrder, c.aov) }))
+    .sort((a, b) => (a.discountPerOrder || 0) - (b.discountPerOrder || 0));
+
+  const months = new Map();
+  for (const o of done) {
+    const m = o.day.slice(0, 7);
+    if (!months.has(m)) months.set(m, { month: m, orders: 0, voucherOrders: 0, discount: 0, gmv: 0 });
+    const x = months.get(m);
+    x.orders++; x.gmv += o.gmv;
+    if (o.codeList.length) { x.voucherOrders++; x.discount += o.voucher; }
+  }
+  const monthly = [...months.values()].sort((a, b) => a.month.localeCompare(b.month))
+    .map((x) => ({ ...x, share: div(x.voucherOrders, x.orders), discountRate: div(x.discount, x.gmv) }));
+
+  const prod = new Map();
+  for (const o of withV) for (const [p, v] of o.products) {
+    if (!prod.has(p)) prod.set(p, { name: p, orders: 0, gmv: 0 });
+    const x = prod.get(p); x.orders++; x.gmv += v;
+  }
+  const packages = [...prod.values()].sort((a, b) => b.gmv - a.gmv).slice(0, 10);
+
+  return { available: true, range: { from, to }, coverage,
+    inSheet: from >= coverage.first && to <= coverage.last,
+    summary, codes, ladder, monthly, packages };
+}
+const cachedVoucher = (from, to, refresh) => withCache(`voucher:${from}:${to}`, refresh, () => buildVoucher(from, to));
+
+app.get("/api/shopee/voucher", requireTab("voucher"), async (req, res) => {
+  const { from, to } = req.query;
+  if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  try {
+    const out = await cachedVoucher(from, to, req.query.refresh === "1");
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "voucher_failed", { error: String(err.message || err) });
+    res.status(err.status || 500).json({ error: "Seller voucher report failed" });
   }
 });
 

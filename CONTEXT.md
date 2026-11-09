@@ -1,5 +1,24 @@
 ### Recent (November 2026)
 
+**v3.412.0 — Seller-Voucher tab (E-commerce, after Shopee)** (MW). Source: the `Voucher` tab
+of the Shopee sheet = Seller Centre > Orders > Export, one row per LINE ITEM. Endpoint
+`/api/shopee/voucher`, tab id `voucher` (admins must grant it to non-admin users).
+- Order-level money repeats on every line (260403SKA8RJ5U: two lines, both voucher 2,500,
+  buyer paid 57,000 = 59,500 - 2,500), so vouchers / commission / buyer-paid are taken
+  once per order (max across lines); net price and qty are summed.
+- BHQ codes (BHQ26OCT1/2/3 = 100/500/1,000) sit in the "paid by Shopee" column; seller-paid
+  is 0 everywhere checked. All three voucher columns are added and the UI splits by CODE
+  (BHQ = prefix `BHQ`, else Shopee), never by payer. Stacked codes ("BHQ26OCT2;OCT26TVPLAT")
+  stay one combination: Shopee records one discount per order, it cannot be split.
+- PERSONAL DATA IS NEVER READ: header row first, then only the needed columns by name
+  (`VOUCHER_COLS`). The mock refuses any PII column with a 500, and a test checks no PII
+  string reaches the response.
+- Views: KPIs (voucher orders + share, discount + % of sales + per order, avg order with vs
+  without, cancel rate with vs without), By code, BHQ codes used alone (discount vs basket
+  — association; a min-spend tier selects big baskets by construction), By month, packages.
+- States: สำเร็จ = completed, ยกเลิก = cancelled, else in progress. Money figures use
+  completed orders; cancel rates use orders placed.
+
 **v3.411.0 — Campaign detail: ad campaigns keyed by ID; sub-lists add up** (MW: 261001-05
 rows ~68.8K vs header 102.4K; SEM sub-list ~8 of 16 with old names "THB 10,798.71").
 - Server already conserved spend (rows + orphans = header). The short figure was the ad
