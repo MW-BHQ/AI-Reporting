@@ -8013,7 +8013,12 @@ ${batch.map((r, j) => `[${j}] ${String(r.comment).replace(/\s+/g, " ").slice(0, 
   for (const x of list) if (store[x.id]) x.ann = store[x.id];
 }
 
-async function buildGbpThemes(key, from, to) {
+/**
+ * Reviews with a comment in [from, to] for one listing, tagged by theme and
+ * sentiment (v3.416.0: shared by Themes and the complaint map). Tags live in
+ * GCS by review id, so a review is read by Claude once, whichever view asks.
+ */
+async function gbpTaggedReviews(key, from, to, max = GBP_THEME_MAX, par = 3) {
   const listing = GBP_LISTINGS.find((l) => l.key === key);
   if (!listing) { const e = new Error("unknown listing"); e.status = 400; throw e; }
   const rows = await windsor("google_my_business",
@@ -8043,11 +8048,11 @@ async function buildGbpThemes(key, from, to) {
     if (!store || typeof store !== "object" || Array.isArray(store)) store = {};
   }
   const isTag = (v) => v && typeof v === "object" && GBP_SENTIMENTS.includes(v.s) && Array.isArray(v.t);
-  const todo = reviews.filter((r) => !isTag(store[r.id])).slice(0, GBP_THEME_MAX);
+  const todo = reviews.filter((r) => !isTag(store[r.id])).slice(0, max);
   let failedBatches = 0;
-  for (let i = 0; i < todo.length; i += GBP_THEME_BATCH * 3) {
+  for (let i = 0; i < todo.length; i += GBP_THEME_BATCH * par) {
     const group = [];
-    for (let j = i; j < Math.min(todo.length, i + GBP_THEME_BATCH * 3); j += GBP_THEME_BATCH) {
+    for (let j = i; j < Math.min(todo.length, i + GBP_THEME_BATCH * par); j += GBP_THEME_BATCH) {
       group.push(todo.slice(j, j + GBP_THEME_BATCH));
     }
     const settled = await Promise.allSettled(group.map(tagReviewBatch));
@@ -8063,6 +8068,12 @@ async function buildGbpThemes(key, from, to) {
 
   const tagged = reviews.filter((r) => isTag(store[r.id]));
   const tagsOf = (r) => store[r.id].t;
+  return { listing, reviews, ratingOnly, reviewsUrl, store, persisted, failedBatches, tagged, tagsOf };
+}
+
+async function buildGbpThemes(key, from, to) {
+  const { listing, reviews, ratingOnly, reviewsUrl, store, persisted, failedBatches, tagged, tagsOf } =
+    await gbpTaggedReviews(key, from, to);
   const agg = new Map(GBP_THEMES.map((t) => [t.key, { ...t, praise: 0, complaint: 0,
     praiseQuote: null, complaintQuote: null, otherNames: new Map() }]));
   const newest = (a, b) => (!a || b.at > a.at ? b : a);
@@ -8197,6 +8208,68 @@ ${pool.map((r, i) => `[${i}] (${r.star}★) ${r.comment.replace(/\s+/g, " ").sli
   }
   return { items, reason: items.length ? null : "No phrase worth flagging this period" };
 }
+
+/**
+ * COMPLAINTS BY THEME × MONTH (v3.416.0, MW: "Reviews by month" drew the same
+ * two numbers as "Last 12 months" with bar and line swapped).
+ *
+ * Twelve whole months ending with `to`'s month — the same axis as the chart
+ * above it. A cell = reviews in that month whose words carry a COMPLAINT tag
+ * for that theme, at ANY star ("great doctor, waited two hours" is a 5★ early
+ * warning). `low` = the same, 1–3★ only (the toggle). Share = cell ÷ that
+ * month's tagged reviews, so a busy month does not look bad by volume.
+ *
+ * The first load reads a year of written reviews (cap GBP_COMPLAINT_MAX, 8
+ * batches at a time); tags are kept in GCS by review id and shared with
+ * Themes, so later loads cost nothing.
+ */
+const GBP_COMPLAINT_MAX = Number(process.env.GBP_COMPLAINT_MAX || 4000);
+async function buildGbpComplaintMap(key, to) {
+  const d = new Date(Date.UTC(+to.slice(0, 4), +to.slice(5, 7) - 1, 1));
+  d.setUTCMonth(d.getUTCMonth() - 11);
+  const from = d.toISOString().slice(0, 10);
+  const months = [];
+  for (let i = 0; i < 12; i++) { const m = new Date(d); m.setUTCMonth(d.getUTCMonth() + i); months.push(m.toISOString().slice(0, 7)); }
+  const { reviews, tagged, tagsOf, failedBatches, reviewsUrl } = await gbpTaggedReviews(key, from, to, GBP_COMPLAINT_MAX, 8);
+  const tagsOn = new Map(months.map((m) => [m, 0]));
+  const cell = () => ({ all: 0, low: 0, quote: null, lowQuote: null });
+  const grid = new Map(GBP_THEMES.map((t) => [t.key, new Map(months.map((m) => [m, cell()]))]));
+  const newest = (a, b) => (!a || b.at > a.at ? b : a);
+  for (const r of tagged) {
+    const m = r.at.slice(0, 7);
+    if (!tagsOn.has(m)) continue;
+    tagsOn.set(m, tagsOn.get(m) + 1);
+    const ks = new Set(tagsOf(r).filter((t) => t.p === "complaint").map((t) => t.k));
+    for (const k of ks) {
+      const c = grid.get(k) && grid.get(k).get(m);
+      if (!c) continue;
+      const q = { at: r.at, star: r.star, comment: clipText(r.shown, 220) };
+      c.all++; c.quote = newest(c.quote, q);
+      if (r.star && r.star <= 3) { c.low++; c.lowQuote = newest(c.lowQuote, q); }
+    }
+  }
+  const rows = GBP_THEMES.map((t) => ({ key: t.key, label: t.label,
+    cells: months.map((m) => { const c = grid.get(t.key).get(m); const n = tagsOn.get(m);
+      return { month: m, all: c.all, low: c.low, share: n ? c.all / n : null, lowShare: n ? c.low / n : null,
+        quote: c.quote, lowQuote: c.lowQuote }; }),
+  }));
+  return { key, months, rows, reviewsPerMonth: months.map((m) => tagsOn.get(m)),
+    withComment: reviews.length, tagged: tagged.length, untagged: reviews.length - tagged.length, failedBatches, reviewsUrl };
+}
+
+app.get("/api/gbp/complaints", requireTab("gbp"), async (req, res) => {
+  const { to, key } = req.query;
+  if (!isoDate(to)) return res.status(400).json({ error: "to must be YYYY-MM-DD" });
+  if (!GBP_LISTINGS.some((l) => l.key === key)) return res.status(400).json({ error: "unknown listing" });
+  try {
+    const out = await withCache(`gbpcomplaints:${key}:${to}`, req.query.refresh === "1",
+      () => buildGbpComplaintMap(key, to), 60 * 1000);
+    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+  } catch (err) {
+    logJson("ERROR", "gbp_complaints_failed", { error: String(err.message || err) });
+    res.status(err.status || 500).json({ error: err.message || "Complaint map failed" });
+  }
+});
 
 app.get("/api/gbp/themes", requireTab("gbp"), async (req, res) => {
   const { from, to, key } = req.query;

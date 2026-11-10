@@ -12379,6 +12379,61 @@ function gbpPerfPages(L, d) {
   return { main, search, draw };
 }
 
+/**
+ * COMPLAINTS BY THEME × MONTH (v3.416.0, MW). Replaces "Reviews by month",
+ * which drew the same two numbers as "Last 12 months" with bar and line
+ * swapped. Same card, same 230px. Bubble size = complaints that month (the
+ * number is printed in it); colour = complaints as a share of that month's
+ * written reviews (darker = worse), so a busy month is not dark by volume.
+ * Empty cell = no complaint, drawn as nothing. Toggle: all stars / 1–3★.
+ */
+const gbpCmpKey = (key) => `${key}|${$('to').value}`;
+async function loadGbpCmp(key) {
+  S.gbpCmp = S.gbpCmp || {};
+  const k = gbpCmpKey(key);
+  if (S.gbpCmp[k]) return S.gbpCmpWait;
+  return (S.gbpCmpWait = (async () => {
+    S.gbpCmp[k] = { loading: true };
+    FAV.themes++; favTick();
+    try {
+      const res = await fetch(`/api/gbp/complaints?key=${encodeURIComponent(key)}&to=${$('to').value}`);
+      S.gbpCmp[k] = res.ok ? await res.json() : { error: `Server ${res.status}` };
+    } catch (e) { S.gbpCmp[k] = { error: String(e.message || e) }; }
+    FAV.themes = Math.max(0, FAV.themes - 1); favTick();
+    const el = document.getElementById('gbpCmp');
+    if (el && S.view === 'gbp' && S.gbpTab === key) el.innerHTML = gbpCmpBody(S.gbpCmp[k]);
+  })());
+}
+function gbpCmpBody(C) {
+  const msg = (t) => `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:var(--text-xs);text-align:center;padding:0 12px">${t}</div>`;
+  if (!C || C.loading) return msg('Claude is reading twelve months of reviews\u2026 the first load can take a couple of minutes.');
+  if (C.error) return msg(`\u2014 Complaint map did not load: ${esc(C.error)}`);
+  if (!C.tagged) return msg('\u2014 No written review in the last twelve months.');
+  const low = !!S.gbpCmpLow, cnt = (c) => low ? c.low : c.all, shr = (c) => low ? c.lowShare : c.share;
+  const rows = C.rows;
+  const W = 640, H = 220, LX = 124, BY = 16, rowH = (H - BY) / rows.length, colW = (W - LX) / C.months.length;
+  const maxN = Math.max(1, ...rows.flatMap(r => r.cells.map(cnt)));
+  const maxS = Math.max(1e-9, ...rows.flatMap(r => r.cells.map(c => shr(c) || 0)));
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const ml = (m) => `${MON[+m.slice(5, 7) - 1]} ${m.slice(2, 4)}`;
+  let svg = '';
+  rows.forEach((r, i) => {
+    const y = i * rowH + rowH / 2;
+    svg += `<line x1="${LX}" x2="${W}" y1="${y}" y2="${y}" style="stroke:var(--line)" stroke-width="1"/>`;
+    svg += `<text x="${LX - 8}" y="${y + 3.5}" text-anchor="end" style="fill:var(--muted);font-size:var(--text-2xs)">${esc(r.label.length > 18 ? r.label.split(' & ')[0] : r.label)}</text>`;
+    r.cells.forEach((c, j) => {
+      const n = cnt(c); if (!n) return;
+      const x = LX + j * colW + colW / 2, rad = Math.min(rowH / 2 - 1, 5 + 7 * Math.sqrt(n / maxN));
+      const op = 0.22 + 0.78 * ((shr(c) || 0) / maxS), q = low ? c.lowQuote : c.quote;
+      const tip = `${r.label} \u00b7 ${ml(c.month)} \u00b7 ${n} complaint${n > 1 ? 's' : ''} (${((shr(c) || 0) * 100).toFixed(1)}% of written reviews)${q ? ` \u2014 ${q.star}\u2605 \u201c${q.comment}\u201d` : ''}`;
+      svg += `<g data-tip="${esc(tip)}" style="cursor:default"><circle cx="${x}" cy="${y}" r="${rad}" style="fill:var(--bad);fill-opacity:${op.toFixed(2)}"/>
+        <text x="${x}" y="${y + 3.2}" text-anchor="middle" style="font-size:var(--text-3xs);font-weight:600;fill:${op > 0.55 ? '#fff' : 'var(--ink)'}">${n}</text></g>`;
+    });
+  });
+  C.months.forEach((m, j) => { svg += `<text x="${LX + j * colW + colW / 2}" y="${H - 3}" text-anchor="middle" style="fill:var(--faint);font-size:var(--text-3xs)">${ml(m)}</text>`; });
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Complaints by theme and month">${svg}</svg>`;
+}
+
 const gbpThemesKey = (key) => `${key}|${$('from').value}|${$('to').value}`;
 
 async function loadGbpThemes(key) {
@@ -12554,8 +12609,11 @@ function renderGbp() {
     <div class="grid g-2-1 mt gbp-rvrow">
       <div class="card gbp-rvm">
         <div>
-          <div class="card-title">Reviews by month</div>
-          <div class="chart-wrap" style="height:230px"><canvas id="gbpRvMonth"></canvas></div>
+          <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px">Complaints by theme
+            <span class="seg no-print" style="font-size:var(--text-3xs)">
+              <button type="button" class="${S.gbpCmpLow ? '' : 'active'}" data-cmplow="0">All stars</button>
+              <button type="button" class="${S.gbpCmpLow ? 'active' : ''}" data-cmplow="1">1\u20133\u2605</button></span></div>
+          <div class="chart-wrap" style="height:230px" id="gbpCmp">${gbpCmpBody(S.gbpCmp && S.gbpCmp[gbpCmpKey(L.key)])}</div>
         </div>
         <div>
           <div class="card-title tight">Rating mix this period</div>
@@ -12630,7 +12688,12 @@ function renderGbp() {
     + (L.unlisted ? '' : slideShell('Review themes', `<div id="gbpThemes2">${
         gbpThemesBody(S.gbpThemes && S.gbpThemes[gbpThemesKey(L.key)], 2)}</div>`, sopt({ cls: 'quiet pn gs-auto', ai: true })));
   perf.draw();
-  if (!L.unlisted) loadGbpThemes(L.key);
+  if (!L.unlisted) { loadGbpThemes(L.key); loadGbpCmp(L.key); }
+  document.querySelectorAll('[data-cmplow]').forEach(b => b.addEventListener('click', () => {
+    S.gbpCmpLow = b.dataset.cmplow === '1';
+    document.querySelectorAll('[data-cmplow]').forEach(x => x.classList.toggle('active', x === b));
+    const el = document.getElementById('gbpCmp'); if (el) el.innerHTML = gbpCmpBody(S.gbpCmp && S.gbpCmp[gbpCmpKey(L.key)]);
+  }));
 
   document.querySelectorAll('[data-gtab]').forEach(b=>b.addEventListener('click',()=>{ S.gbpTab=b.dataset.gtab; renderGbp(); }));
   document.querySelectorAll('[data-gtab2]').forEach(b=>b.addEventListener('click',()=>{ S.gbpTab=b.dataset.gtab2; renderGbp(); }));
@@ -12664,16 +12727,6 @@ function renderGbp() {
                       ticks:{color:'#8A94AD',font:cvFont(9),autoSkipPadding:8, callback:(v)=>axisNum(v)} } },
         plugins:{ stackTotalLabels:{ bottom:true }, legend:{ labels:{color:'#4C5878',font:cvFont(10),usePointStyle:true,boxWidth:cvBox(7)} } } },
     });
-    drawChart('gbpRvMonth', series.map(m => ({ d: m.month, count: m.count || 0, avg: avgOf(m) })), [
-      // No shade under the line (MW).
-      { label:'Reviews', key:'count', color:'#6C5CE7', axis:'y', fill:false, points:true },
-      // Bars, not a line (MW): the average reads per month, the count as a trend.
-      { label:'Average rating', key:'avg', color:HOUSE.good, axis:'y1', type:'bar' },
-    ], { labels: true, short: true, barBottom: true, allTicks: true,
-      // Tight rating axis (MW: "whole numbers don't help"): 0.05 under the
-      // lowest month, so 4.84 vs 4.96 reads as a difference, not equal bars.
-      y1Min: (() => { const v = series.map(avgOf).filter(x => x != null); return v.length ? Math.max(0, Math.floor((Math.min(...v) - 0.05) * 20) / 20) : null; })(),
-      y1Max: 5 });
   } catch (e) {
     console.error('gbp chart failed:', e);
     const box = el && el.parentElement;
@@ -13283,11 +13336,11 @@ $('printBtn').addEventListener('click', () => {
    * were still loading put "Claude is reading the reviews" on two blank pages.
    * Wait for the read (capped at 3 min), then print the filled pages.
    */
-  if (S.view === 'gbp' && S.gbpThemesWait) {
-    if (Object.values(S.gbpThemes || {}).some((t) => t && t.loading)) {
+  if (S.view === 'gbp' && (S.gbpThemesWait || S.gbpCmpWait)) {
+    if ([...Object.values(S.gbpThemes || {}), ...Object.values(S.gbpCmp || {})].some((t) => t && t.loading)) {
       setStatus('busy', 'Waiting for Claude to finish reading the reviews\u2026');
       const cap = new Promise((r) => setTimeout(r, 180000));
-      Promise.race([S.gbpThemesWait, cap]).then(() => { setStatus('ok', 'Ready to print'); printWhenImagesReady(); });
+      Promise.race([Promise.all([S.gbpThemesWait, S.gbpCmpWait]), cap]).then(() => { setStatus('ok', 'Ready to print'); printWhenImagesReady(); });
       return;
     }
   }
@@ -14310,7 +14363,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.415.0';
+const CLIENT_BUILD = '3.416.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

@@ -1,5 +1,15 @@
 ### Recent (November 2026)
 
+**v3.416.0 — GBP: "Reviews by month" → Complaints by theme × month** (MW: it drew the same
+numbers as "Last 12 months" with bar and line swapped; "use the same space"). Same card,
+same 230px, rating mix kept beside it. SVG bubble matrix: 8 themes × 12 months ending with
+`to`'s month; size = complaints (number printed), colour = share of that month's written
+reviews; hover = month, share and newest quote. Counts complaint tags at ANY star (5★ "waited
+two hours" is an early warning); toggle 1–3★ only. `/api/gbp/complaints?key&to`.
+Tagging moved into `gbpTaggedReviews` (shared with Themes, same GCS store by review id);
+the map reads up to GBP_COMPLAINT_MAX (4,000) reviews, 8 batches at a time — first load is
+slow, later loads reuse tags. PDF waits for it as for Themes.
+
 **v3.415.0 — Call out writes like the team's sent version** (MW pasted the October BGH
 callout as finally sent, "heavily edited by a human"). `CALLOUT_SYSTEM` rules 8-15 + a
 two-paragraph example from it: paragraph = figure + comparison + "สะท้อนถึง/สะท้อนว่า" (what it
