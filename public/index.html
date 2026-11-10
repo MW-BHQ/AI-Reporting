@@ -838,6 +838,9 @@
   /* min-width:0 — a grid column's min-content is the canvas's drawn width, so
      without it the grid blew out at print width and the slide zoomed to ~50%. */
   .gbp-rv12 > *, .gbp-rvm > *{min-width:0;}
+  /* Each column fills its track (v3.417.0): a column that sized to its content
+     printed both charts at a fraction of the card, left-aligned (MW's PDF). */
+  .gbp-rv12 > :first-child, .gbp-rvm > :first-child, .gbp-rv12 .chart-wrap, .gbp-rvm .chart-wrap{width:100%;justify-self:stretch;}
   @media screen and (max-width:1080px){body:not(.print-prep) .gbp-rv12{grid-template-columns:1fr;}}
   /* PRINT (and print-prep, where the chart twins are measured): All listings is
      hidden, so Reviews by month takes the full row with its mix on the right —
@@ -12404,6 +12407,11 @@ async function loadGbpCmp(key) {
     if (el && S.view === 'gbp' && S.gbpTab === key) el.innerHTML = gbpCmpBody(S.gbpCmp[k]);
   })());
 }
+function gbpCmpRedraw() {
+  const el = document.getElementById('gbpCmp');
+  if (el && S.view === 'gbp' && S.gbpCmp) el.innerHTML = gbpCmpBody(S.gbpCmp[gbpCmpKey(S.gbpTab)]);
+}
+window.addEventListener('resize', () => { clearTimeout(S.gbpCmpRz); S.gbpCmpRz = setTimeout(gbpCmpRedraw, 150); });
 function gbpCmpBody(C) {
   const msg = (t) => `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint);font-size:var(--text-xs);text-align:center;padding:0 12px">${t}</div>`;
   if (!C || C.loading) return msg('Claude is reading twelve months of reviews\u2026 the first load can take a couple of minutes.');
@@ -12411,7 +12419,16 @@ function gbpCmpBody(C) {
   if (!C.tagged) return msg('\u2014 No written review in the last twelve months.');
   const low = !!S.gbpCmpLow, cnt = (c) => low ? c.low : c.all, shr = (c) => low ? c.lowShare : c.share;
   const rows = C.rows;
-  const W = 640, H = 220, LX = 124, BY = 16, rowH = (H - BY) / rows.length, colW = (W - LX) / C.months.length;
+  /**
+   * DRAWN AT THE BOX'S REAL SIZE (v3.417.0, MW: PDF showed it small and left).
+   * A fixed viewBox with `meet` shrinks to fit the shorter side, and an SVG at
+   * width:100% inside a box that sizes to its content falls back to 300x150.
+   * So the box is measured (screen, and again under print-prep by
+   * buildPrintSvgs) and the drawing is made to exactly that size.
+   */
+  const box = document.getElementById('gbpCmp');
+  const W = Math.max(320, Math.round((box && box.clientWidth) || 640)), H = Math.max(160, Math.round((box && box.clientHeight) || 220));
+  const LX = 124, BY = 16, rowH = (H - BY) / rows.length, colW = (W - LX) / C.months.length;
   const maxN = Math.max(1, ...rows.flatMap(r => r.cells.map(cnt)));
   const maxS = Math.max(1e-9, ...rows.flatMap(r => r.cells.map(c => shr(c) || 0)));
   const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -12431,7 +12448,7 @@ function gbpCmpBody(C) {
     });
   });
   C.months.forEach((m, j) => { svg += `<text x="${LX + j * colW + colW / 2}" y="${H - 3}" text-anchor="middle" style="fill:var(--faint);font-size:var(--text-3xs)">${ml(m)}</text>`; });
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Complaints by theme and month">${svg}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="display:block;width:100%;height:100%" preserveAspectRatio="none" role="img" aria-label="Complaints by theme and month">${svg}</svg>`;
 }
 
 const gbpThemesKey = (key) => `${key}|${$('from').value}|${$('to').value}`;
@@ -12688,7 +12705,7 @@ function renderGbp() {
     + (L.unlisted ? '' : slideShell('Review themes', `<div id="gbpThemes2">${
         gbpThemesBody(S.gbpThemes && S.gbpThemes[gbpThemesKey(L.key)], 2)}</div>`, sopt({ cls: 'quiet pn gs-auto', ai: true })));
   perf.draw();
-  if (!L.unlisted) { loadGbpThemes(L.key); loadGbpCmp(L.key); }
+  if (!L.unlisted) { loadGbpThemes(L.key); loadGbpCmp(L.key); gbpCmpRedraw(); }
   document.querySelectorAll('[data-cmplow]').forEach(b => b.addEventListener('click', () => {
     S.gbpCmpLow = b.dataset.cmplow === '1';
     document.querySelectorAll('[data-cmplow]').forEach(x => x.classList.toggle('active', x === b));
@@ -14008,6 +14025,7 @@ function chartToSvg(chart, W, H) {
 }
 /** Build (or rebuild) an SVG twin beside every canvas on the `pn` slides. */
 function buildPrintSvgs() {
+  gbpCmpRedraw();   // measured under print-prep, so it is drawn at the printed size
   document.querySelectorAll('.chart-wrap').forEach((wrap) => {
     const cv = wrap.querySelector('canvas');
     if (!cv) return;
@@ -14027,6 +14045,7 @@ function buildPrintSvgs() {
 }
 function clearPrintSvgs() {
   document.querySelectorAll('.chart-svg').forEach((el) => el.remove());
+  requestAnimationFrame(() => requestAnimationFrame(gbpCmpRedraw));   // back to the screen size
 }
 
 function fitNativeSlides() {
@@ -14363,7 +14382,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.416.0';
+const CLIENT_BUILD = '3.417.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

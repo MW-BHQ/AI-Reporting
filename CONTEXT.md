@@ -1,5 +1,13 @@
 ### Recent (November 2026)
 
+**v3.417.0 — GBP PDF: charts printed small and left-aligned** (MW screenshot: both review
+charts at about a third of their card). Complaint map is now drawn at its box's measured size
+(viewBox = box, redrawn on resize, under print-prep in buildPrintSvgs, and back after
+print); a fixed viewBox with `meet` shrank to the short side, and an SVG at width:100% in a
+content-sized box falls back to 300x150. Print/prep: the left column of `.gbp-rv12` and
+`.gbp-rvm` and their chart boxes are width:100%. Sandbox print could not reproduce the small
+TOP chart (fills here), so the fill rule is defensive — confirm on MW's next export.
+
 **v3.416.0 — GBP: "Reviews by month" → Complaints by theme × month** (MW: it drew the same
 numbers as "Last 12 months" with bar and line swapped; "use the same space"). Same card,
 same 230px, rating mix kept beside it. SVG bubble matrix: 8 themes × 12 months ending with
