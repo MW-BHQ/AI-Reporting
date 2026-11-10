@@ -12369,10 +12369,12 @@ function gbpPerfPages(L, d) {
   const draw = () => {
     const rows = P.trend.map(t => t.measured ? { d: t.month, ...t } : { d: t.month });
     drawChart('gbpActTrend', rows, [
+      // MW (v3.418.0): Calls blue, Directions green, Website GA4 orange. Bookings
+      // moves to violet so it is not a second orange beside Website.
       { label: 'Calls', key: 'calls', color: '#4B8DF8', axis: 'y' },
-      { label: 'Directions', key: 'directions', color: '#E8607A', axis: 'y' },
-      { label: 'Website', key: 'website', color: '#2FB6A8', axis: 'y' },
-      ...(P.bookings ? [{ label: 'Bookings', key: 'bookings', color: '#F2A93B', axis: 'y' }] : []),
+      { label: 'Directions', key: 'directions', color: HOUSE.good, axis: 'y' },
+      { label: 'Website', key: 'website', color: '#E37400', axis: 'y' },
+      ...(P.bookings ? [{ label: 'Bookings', key: 'bookings', color: '#7C6BF5', axis: 'y' }] : []),
     ], { labels: true, short: true });
     drawChart('gbpSurfTrend', rows, [
       { label: 'Search', key: 'search', color: '#4B8DF8', axis: 'y' },
@@ -14382,7 +14384,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.417.0';
+const CLIENT_BUILD = '3.418.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

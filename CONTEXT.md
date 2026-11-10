@@ -1,5 +1,8 @@
 ### Recent (November 2026)
 
+**v3.418.0 — GBP "Actions by month" colours** (MW): Calls blue #4B8DF8, Directions green
+(HOUSE.good), Website GA4 orange #E37400; Bookings violet #7C6BF5 (was orange).
+
 **v3.417.0 — GBP PDF: charts printed small and left-aligned** (MW screenshot: both review
 charts at about a third of their card). Complaint map is now drawn at its box's measured size
 (viewBox = box, redrawn on resize, under print-prep in buildPrintSvgs, and back after
