@@ -1426,6 +1426,15 @@ global.fetch = async (url, opts = {}) => {
         L("F", "ยกเลิกแล้ว", "2026-10-07", "Mineral Package", 8000, 0, "", 8000),
         L("G", "สำเร็จแล้ว", "2026-09-15", "Mineral Package", 9000, 100, "BHQ26SEP1", 8900),
         /**
+         * JULY (v3.419.0): one voucher order on a month the Shopee Sales and
+         * Package Sales fixtures cover. Shop July = 4 confirmed orders,
+         * 32,000 THB, 5 placed; Package Sales: Longevity Female 2 net orders,
+         * Prestige Male 1, Pap Smear 1. So: voucher share 1/4, rest of shop
+         * (32,000-18,000)/3, unconfirmed 1-4/5, Longevity Female 1 with a code
+         * and 1 without, Prestige Male 0 and 1.
+         */
+        L("J1", "สำเร็จแล้ว", "2026-07-01", "Longevity Female", 18000, 1000, "BHQ26JUL1", 17000),
+        /**
          * NOVEMBER (v3.414.0): the minimum-spend pile-up. BHQ26NOV2 orders
          * 5,000 / 5,100 / 5,200 / 5,900 / 9,000: inferred floor 5,000, band
          * 5,000-5,999 holds 4 of 5 (0.8). No-code orders at or above 5,000:

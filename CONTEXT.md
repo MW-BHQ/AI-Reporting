@@ -1,5 +1,15 @@
 ### Recent (November 2026)
 
+**v3.419.0 — Seller-Voucher compared with the whole shop** (MW: the Voucher tab holds only
+orders that used a code — October showed "100% of 109" and dashes for "without"). New
+`voucherVsShop`: Shopee Sales sheet (daily, same days) gives confirmed orders/sales and
+placed orders; KPIs now read voucher share of Shopee orders and sales, discount as % of all
+Shopee sales, average order vs REST OF SHOP (all confirmed minus non-cancelled voucher
+orders), cancel vs whole-shop unconfirmed rate. Packages table uses Package Sales net orders
+(whole months), joined by NAME (export has no product ID); without code = net orders minus
+completed voucher orders; unmatched names counted in the note. No Shopee days / partial
+month: falls back to the Voucher tab's own figures.
+
 **v3.418.0 — GBP "Actions by month" colours** (MW): Calls blue #4B8DF8, Directions green
 (HOUSE.good), Website GA4 orange #E37400; Bookings violet #7C6BF5 (was orange).
 

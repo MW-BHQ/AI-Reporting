@@ -9480,18 +9480,38 @@ function renderVoucher() {
   const cover = D.inSheet ? '' : ` <span class="pill">sheet covers ${esc(humanDate(C.first))} \u2013 ${esc(humanDate(C.last))}</span>`;
   const lift = sm.aovVoucher != null && sm.aovNone ? sm.aovVoucher / sm.aovNone - 1 : null;
 
-  const kpis = `<div class="grid g-4">
+  /**
+   * AGAINST THE WHOLE SHOP (v3.419.0, MW). The Voucher tab holds only orders
+   * that used a code, so "without" comes from the Shopee tab's Sales sheet for
+   * the same days (D.shop). No Shopee days in the range: the tab's own figures.
+   */
+  const SH = D.shop;
+  const up = (a, b) => (a != null && b) ? a / b - 1 : null;
+  const tag = (x) => x == null ? '' : ` \u00b7 <span style="color:${x >= 0 ? 'var(--good)' : 'var(--bad)'}">${x >= 0 ? '+' : ''}${pc(x, 0)}</span>`;
+  const kpis = SH ? `<div class="grid g-4">
     <div class="stat card"><div class="lab">Orders with a voucher</div><div class="val">${nn(sm.voucherOrders)}</div>
-      <div class="sub">${pc(sm.voucherShare, 0)} of ${nn(sm.completed)} completed orders</div></div>
+      <div class="sub">${pc(SH.voucherShare, 0)} of ${nn(SH.orders)} Shopee orders \u00b7 ${pc(SH.voucherSalesShare, 0)} of sales</div></div>
+    <div class="stat card"><div class="lab">Voucher discount (THB)</div><div class="val">${nn(sm.discount, true)}</div>
+      <div class="sub">${pc(SH.discountOfSales)} of all Shopee sales (THB ${nn(SH.sales, true)}) \u00b7 ${pc(sm.discountRate)} of voucher orders\u2019 sales</div>
+      <div class="sub">all-in with Shopee fees: ${pc(sm.costRateVoucher)} of voucher sales</div></div>
+    <div class="stat card"><div class="lab">Average order \u00b7 with voucher (THB)</div><div class="val">${nn(sm.aovVoucher, true)}</div>
+      <div class="sub">rest of shop: THB ${nn(SH.restAov, true)}${tag(up(sm.aovVoucher, SH.restAov))}</div></div>
+    <div class="stat card"><div class="lab">Cancelled \u00b7 with voucher</div><div class="val">${pc(sm.cancelVoucher)}</div>
+      <div class="sub">whole shop, placed but not confirmed: ${pc(SH.unconfirmed)}</div></div>
+  </div>
+  <div class="note">Voucher orders against every Shopee order in the same days (Shopee Sales sheet). Rest of shop = all confirmed orders minus the voucher orders. A higher average order with a voucher means codes go with bigger baskets; a cancel rate above the shop\u2019s means codes attract orders that do not complete.</div>`
+  : `<div class="grid g-4">
+    <div class="stat card"><div class="lab">Orders with a voucher</div><div class="val">${nn(sm.voucherOrders)}</div>
+      <div class="sub">${pc(sm.voucherShare, 0)} of ${nn(sm.completed)} completed orders in the Voucher tab</div></div>
     <div class="stat card"><div class="lab">Voucher discount (THB)</div><div class="val">${nn(sm.discount, true)}</div>
       <div class="sub">${pc(sm.discountRate)} of those orders\u2019 sales \u00b7 THB ${nn(sm.discountPerOrder, true)} per order</div>
-      <div class="sub">all-in with Shopee fees: ${pc(sm.costRateVoucher)} \u00b7 no code: ${pc(sm.costRateNone)}</div></div>
+      <div class="sub">all-in with Shopee fees: ${pc(sm.costRateVoucher)}</div></div>
     <div class="stat card"><div class="lab">Average order \u00b7 with voucher (THB)</div><div class="val">${nn(sm.aovVoucher, true)}</div>
-      <div class="sub">without: THB ${nn(sm.aovNone, true)}${lift != null ? ` \u00b7 <span style="color:${lift >= 0 ? 'var(--good)' : 'var(--bad)'}">${lift >= 0 ? '+' : ''}${pc(lift, 0)}</span>` : ''}</div></div>
+      <div class="sub">without: THB ${nn(sm.aovNone, true)}${tag(lift)}</div></div>
     <div class="stat card"><div class="lab">Cancelled \u00b7 with voucher</div><div class="val">${pc(sm.cancelVoucher)}</div>
       <div class="sub">without: ${pc(sm.cancelNone)} \u00b7 of orders placed</div></div>
   </div>
-  <div class="note">How much of the shop runs on vouchers and what it costs. A higher average order with a voucher means codes go with bigger baskets; a higher cancel rate means codes attract orders that do not complete.</div>`;
+  <div class="note">No Shopee Sales days in this range, so this compares inside the Voucher tab only. A higher average order with a voucher means codes go with bigger baskets; a higher cancel rate means codes attract orders that do not complete.</div>`;
 
   const codeRows = D.codes.map(c => `<tr>
       <td class="i18n">${c.codes.map(esc).join('<br>')}</td><td style="white-space:nowrap">${kindPill(c.kind)}</td>
@@ -9533,6 +9553,15 @@ function renderVoucher() {
       <span>${esc(lMon(D.monthly[0].month))}</span><span>${esc(lMon(D.monthly[D.monthly.length - 1].month))}</span></div>
     <div class="note">Is voucher use growing, and is its cost holding? Share rising with discount % flat is healthy; discount % rising means each baht of sales costs more.</div></div>` : '';
 
+  const PS = D.packagesShop;
+  const pkShop = PS && PS.rows.length ? `<div class="card mt"><div class="card-title">Packages \u00b7 with and without a code</div>
+    <div style="overflow-x:auto;"><table class="roomy"><thead><tr><th>Package</th><th class="num">Shopee orders</th><th class="num">With code</th>
+      <th class="num">Without code</th><th class="num">Share with code</th><th class="num">Discount (THB)</th><th class="num">Discount %</th></tr></thead><tbody>
+      ${PS.rows.map(p => `<tr><td class="i18n trunc" style="max-width:0;width:38%;" data-tip="${esc(p.name)}">${esc(p.name)}</td>
+        <td class="num">${nn(p.shopOrders)}</td><td class="num">${nn(p.ordersWith)}</td><td class="num">${nn(p.ordersWithout)}</td>
+        <td class="num">${pc(p.codeShare, 0)}</td><td class="num">${p.ordersWith ? nn(p.discount, true) : '\u2014'}</td>
+        <td class="num">${pc(p.discountRate)}</td></tr>`).join('')}</tbody></table></div>
+    <div class="note">Top packages by all Shopee orders (Package Sales sheet, whole months). A package that sells mostly without a code does not need one: keep it full price. A package that only moves with a code is where vouchers earn their cost.${PS.unmatched ? ` ${PS.unmatched} voucher package${PS.unmatched > 1 ? 's' : ''} did not match a Package Sales name and ${PS.unmatched > 1 ? 'are' : 'is'} left out.` : ''}</div></div>` : '';
   const pk = D.packages.length ? `<div class="card mt"><div class="card-title">Packages \u00b7 with and without a code</div>
     <div style="overflow-x:auto;"><table class="roomy"><thead><tr><th>Package</th><th class="num">Orders \u00b7 code</th><th class="num">Orders \u00b7 no code</th>
       <th class="num">Share with code</th><th class="num">Discount (THB)</th><th class="num">Discount %</th>
@@ -9549,7 +9578,7 @@ function renderVoucher() {
       <div class="hint">Shopee order export \u00b7 ${nn(sm.placed)} orders placed \u00b7 ${nn(sm.completed)} completed \u00b7 ${nn(sm.cancelled)} cancelled${sm.open ? ` \u00b7 ${nn(sm.open)} in progress` : ''}</div>
     </div></div>
     <div class="sec-h">Vouchers</div>${kpis}
-    ${codes}${th}${ladder}${pk}${mo}`;
+    ${codes}${th}${ladder}${pkShop || pk}${mo}`;
 }
 
 function renderLazada() {
@@ -14384,7 +14413,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.418.0';
+const CLIENT_BUILD = '3.419.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**

@@ -817,6 +817,11 @@ expect_field "voucher pkg alloc"    "$VCH" "(()=>{const p=d.packages.find(x=>x.n
 expect_field "voucher pileup thin"  "$VCH" "d.thresholds.every(t=>t.pileUp===null)?'ok':undefined"
 VNOV="/api/shopee/voucher?from=2026-11-01&to=2026-11-30"
 expect_field "voucher pileup"       "$VNOV" "(()=>{const t=d.thresholds.find(x=>x.code==='BHQ26NOV2');return t&&t.floor===5000&&t.bandShare===0.8&&t.baseline===5&&t.baseShare===0.2&&Math.abs(t.pileUp-4)<1e-9?'ok':undefined})()"
+# Against the whole shop (Shopee Sales + Package Sales), July.
+VJUL="/api/shopee/voucher?from=2026-07-01&to=2026-07-31"
+expect_field "voucher vs shop"      "$VJUL" "(s=>s&&s.orders===4&&s.sales===32000&&s.placed===5&&s.voucherShare===0.25&&Math.abs(s.restAov-14000/3)<1e-6&&Math.abs(s.unconfirmed-0.2)<1e-9&&Math.abs(s.discountOfSales-1000/32000)<1e-9?'ok':undefined)(d.shop)"
+expect_field "voucher pkg vs shop"  "$VJUL" "(p=>{const lf=p.rows.find(r=>/Longevity Female/.test(r.name)),pm=p.rows.find(r=>/Prestige Male/.test(r.name));return lf&&lf.shopOrders===2&&lf.ordersWith===1&&lf.ordersWithout===1&&pm&&pm.ordersWith===0&&pm.ordersWithout===1&&p.unmatched===0?'ok':undefined})(d.packagesShop)"
+expect_field "voucher no shop days" "$VCH" "d.shop===undefined?'ok':undefined"
 expect_field "voucher no PII"       "$VCH" "!/buyer_|Recipient|Secret Road|\\+66/.test(JSON.stringify(d))?'ok':undefined"
 
 echo "--- campaign: TikTok Ads + TikTok organic (v3.367.0) ---"

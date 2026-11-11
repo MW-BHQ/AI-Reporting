@@ -14532,8 +14532,74 @@ async function buildVoucher(from, to) {
 
   return { available: true, range: { from, to }, coverage,
     inSheet: from >= coverage.first && to <= coverage.last,
-    summary, codes, ladder, monthly, packages, thresholds };
+    summary, codes, ladder, monthly, packages, thresholds,
+    ...(await voucherVsShop(from, to, { inR, done, withV, prod })) };
 }
+/**
+ * AGAINST THE WHOLE SHOP (v3.419.0, MW: "these scorecards should compare to the
+ * overall sale in the same period"). The Voucher tab holds ONLY orders that used
+ * a code — every order in MW's October export carried one — so "without a
+ * code" cannot come from it. The Shopee tab's daily Sales sheet and monthly
+ * Package Sales sheet hold every order:
+ *   - shop: confirmed orders / sales and placed orders for the same days.
+ *     Rest of shop = shop minus the voucher orders that were not cancelled.
+ *     Unconfirmed = placed but never confirmed, Shopee's nearest thing to a
+ *     cancel rate for the whole shop.
+ *   - packagesShop: Package Sales net orders per package (whole months only,
+ *     as on the Shopee tab), joined by package NAME (the order export has no
+ *     product ID); orders without a code = net orders minus completed voucher
+ *     orders. Names that match nothing are counted, not hidden.
+ * Either side missing: the field is absent and the page keeps its own figures.
+ */
+const vNorm = (nm) => String(nm || "").replace(/\s*-\s*Bangkok Hospital.*$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
+async function voucherVsShop(from, to, { inR, done, withV, prod }) {
+  const out = {};
+  const raw = loadShopeeRaw();
+  try {
+    const got = await raw.main;
+    if (!got.err) {
+      const salesRows = spRows(got.res[0] && got.res[0].values);
+      const days = [...new Map(salesRows.filter((r) => r._day && r._day >= from && r._day <= to).map((r) => [r._day, r])).values()];
+      if (days.length) {
+        const sm = (k) => days.reduce((a, r) => a + spNum(r[k]), 0);
+        const orders = sm("ordersconfirmedorders"), sales = sm("salesconfirmedordersthb"), placed = sm("ordersplacedorders");
+        const vLive = inR.filter((o) => o.codeList.length && o.state !== "cancelled");
+        const vSales = vLive.reduce((a, o) => a + o.gmv, 0);
+        const restOrders = orders - vLive.length, restSales = sales - vSales;
+        const discount = withV.reduce((a, o) => a + o.voucher, 0);
+        out.shop = { days: days.length, orders, sales, placed,
+          aov: orders ? sales / orders : null,
+          voucherShare: orders ? vLive.length / orders : null,
+          voucherSalesShare: sales ? vSales / sales : null,
+          discountOfSales: sales ? discount / sales : null,
+          restAov: restOrders > 0 ? restSales / restOrders : null,
+          unconfirmed: placed ? 1 - orders / placed : null };
+      }
+    }
+  } catch (_) { /* the page keeps its own figures */ }
+  try {
+    const pk = await readShopeePackages(from, to, raw);
+    if (pk && pk.available && pk.list && pk.list.length) {
+      const byName = new Map();
+      for (const e of pk.list) { const k = vNorm(e.name); byName.set(k, (byName.get(k) || 0) + e.netOrders); }
+      const used = new Set();
+      const rows = [...byName.entries()].map(([k, all]) => {
+        const v = [...prod.values()].find((x) => vNorm(x.name) === k);
+        if (v) used.add(v.name);
+        const name = (pk.list.find((e) => vNorm(e.name) === k) || {}).name || k;
+        const withC = v ? v.ordersWith : 0;
+        return { name, shopOrders: all, ordersWith: withC, ordersWithout: Math.max(0, all - withC),
+          codeShare: all ? Math.min(1, withC / all) : null,
+          discount: v ? v.discount : 0, discountRate: v && v.gmvWith ? v.discount / v.gmvWith : null };
+      }).filter((r) => r.shopOrders || r.ordersWith)
+        .sort((a, b) => b.shopOrders - a.shopOrders || b.ordersWith - a.ordersWith).slice(0, 15);
+      out.packagesShop = { rows,
+        unmatched: [...prod.values()].filter((x) => x.ordersWith && !used.has(x.name)).length };
+    } else if (pk && pk.reason) out.packagesShopReason = pk.reason;
+  } catch (_) { /* keep the voucher-only table */ }
+  return out;
+}
+
 const cachedVoucher = (from, to, refresh) => withCache(`voucher:${from}:${to}`, refresh, () => buildVoucher(from, to));
 
 app.get("/api/shopee/voucher", requireTab("voucher"), async (req, res) => {
