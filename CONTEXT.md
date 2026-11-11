@@ -1,5 +1,22 @@
 ### Recent (November 2026)
 
+**v3.420.0 — E-commerce normaliser moved into the repo, v2.12.0** (MW: Shop_bede_oct_26.xlsx
+"wouldn't ingest campaign name and order time"). The Apps Script that turns the monthly
+`report_order-*.xlsx` into the Orders tab now lives at `apps-script/ecommerce-normalise.gs`;
+the copy in the Sheet is a deployment (paste over it). `test/ecom-normalise.js` runs it in a
+vm against the real file (`test/fixtures/ecom-bedee-oct26.json`, names/phones/emails replaced)
+and is part of `npm test`.
+- The file itself is clean: headers match exactly; v2.11.0 reads campaign from it. Blanks
+  came from paths around it: (1) campaign/time were OPTIONAL — "Continue anyway?" wrote the
+  whole month blank, for good; (2) re-importing to fix it did nothing — every coupon was a
+  duplicate and was skipped untouched; (3) time came from the 1899 Date Sheets hands over for
+  a time-only cell, in Bangkok LMT, which can shift the minutes.
+- v2.12.0: both columns REQUIRED (stop, nothing written); headers trimmed; time read from
+  getDisplayValues ("21:17"), Date / day-fraction as fallbacks; a duplicate whose existing row
+  has a BLANK campaign or time gets it filled (never overwritten), counted in the alert and
+  Load_Log; validateOrders reports rows with no campaign / time.
+- Negative-checked: 9 of 17 checks fail against v2.11.0 behaviour.
+
 **v3.419.0 — Seller-Voucher compared with the whole shop** (MW: the Voucher tab holds only
 orders that used a code — October showed "100% of 109" and dashes for "without"). New
 `voucherVsShop`: Shopee Sales sheet (daily, same days) gives confirmed orders/sales and

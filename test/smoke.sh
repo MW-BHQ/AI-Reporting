@@ -57,6 +57,7 @@ node "$(dirname "$0")/audit.js" || FAIL=$((FAIL+1))
 echo
 echo "--- call out (number check, PDF map, docx, client) ---"
 node "$(dirname "$0")/callout.js" || FAIL=$((FAIL+1))
+node "$(dirname "$0")/ecom-normalise.js" || FAIL=$((FAIL+1))
 echo
 echo "--- endpoints ---"
 check "version"    GET "/api/version"
