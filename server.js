@@ -206,6 +206,15 @@ async function sheetsToken() {
  * flipping them to raw values would turn their date columns into serials.
  */
 async function sheetBatchGet(spreadsheetId, ranges, opts = {}) {
+  /**
+   * SHOPEE + LAZADA FROM BIGQUERY (v3.423.0). Reads of the two marketplace
+   * Sheets are answered from BHQ Income's views instead — see marketBatchGet.
+   * Every parser downstream is unchanged.
+   */
+  if (!opts.sheetOnly && MARKET_SOURCE !== "sheet" &&
+      (spreadsheetId === SHOPEE_SHEET_ID || spreadsheetId === LAZADA_SHEET_ID)) {
+    return marketBatchGet(spreadsheetId, ranges, opts);
+  }
   const token = await sheetsToken();
   const qs = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join("&");
   const render = opts.unformatted ? "&valueRenderOption=UNFORMATTED_VALUE" : "";
@@ -14407,7 +14416,7 @@ app.get("/api/shopee", requireTab("shopee"), async (req, res) => {
   if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
   try {
     const out = await cachedShopee(from, to, req.query.refresh === "1");
-    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+    res.json({ ...out.value, source: MARKET_SOURCE === "sheet" ? "sheet" : marketSourceUsed, cached: out.cached, cacheAgeSec: out.ageSec });
   } catch (err) {
     logJson("ERROR", "shopee_failed", { error: String(err.message || err) });
     res.status(err.status || 500).json({ error: err.message || "Shopee report failed" });
@@ -14725,7 +14734,7 @@ app.get("/api/shopee/voucher", requireTab("voucher"), async (req, res) => {
   if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
   try {
     const out = await cachedVoucher(from, to, req.query.refresh === "1");
-    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+    res.json({ ...out.value, source: MARKET_SOURCE === "sheet" ? "sheet" : marketSourceUsed, cached: out.cached, cacheAgeSec: out.ageSec });
   } catch (err) {
     logJson("ERROR", "voucher_failed", { error: String(err.message || err) });
     res.status(err.status || 500).json({ error: "Seller voucher report failed" });
@@ -14783,6 +14792,145 @@ const LAZADA_PRODUCT_TAB = process.env.LAZADA_PRODUCT_TAB || "Product";
  */
 const LAZADA_EXT_TABS = { daily: "External Daily", links: "External Links", sold: "External Sold" };
 const LAZADA_CUSTOMER_TABS = (process.env.LAZADA_CUSTOMER_TAB || "Customer Insight,Customer").split(",");
+
+/**
+ * SHOPEE + LAZADA FROM BIGQUERY (v3.423.0, BHQ Income handover
+ * `WAR-ROOM-read-from-BigQuery.md`). The data team now uploads the Seller
+ * Centre / Lazada exports in BHQ Income, which publishes them as views in
+ * `bhq-income.marketplace` (latest published upload per day / month, so no
+ * de-duplication here). The War Room's account has dataViewer on it.
+ *
+ * HOW: every Shopee and Lazada parser reads "a tab of the Sheet". Rather than
+ * rewrite eleven parsers, each tab is rebuilt from its view in the Sheet's own
+ * layout — the export's header text, the export's date format ("01-10-2025",
+ * "20250114", "2025.01" …), rates as "2.43%", time as "0:01:06", and "-" for
+ * a blank — and handed to the unchanged parser. The column meanings were
+ * checked against the live Sheet before the switch: Oct 2025 Shopee sales,
+ * traffic, the order 260403SKA8RJ5U, Lazada traffic source and product rows
+ * match value for value. USD columns are not in the views and nothing reads
+ * them.
+ *
+ * MARKET_SOURCE=sheet reads the Sheets as before. If BigQuery fails, the
+ * Sheet is read for that request and `market_bigquery_failed_read_sheet` is
+ * logged (ERROR), so a permission slip does not blank the tabs.
+ */
+const MARKET_SOURCE = (process.env.MARKET_SOURCE || "bigquery").toLowerCase();
+const MARKET_DATASET = process.env.MARKET_DATASET || "bhq-income.marketplace";
+const MARKET_TTL_MS = 30 * 60 * 1000;
+let marketSourceUsed = null;
+
+const pad2 = (x) => String(x).padStart(2, "0");
+/** period "2025-10-03" in the export's own format. */
+const MKT_FMT = {
+  dmy: (d) => `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}`,
+  dmySlash: (d) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`,
+  ymd: (d) => d.slice(0, 10),
+  compact: (d) => d.slice(0, 10).replace(/-/g, ""),
+  month: (d) => d.slice(0, 7),
+  monthDot: (d) => d.slice(0, 7).replace("-", "."),
+};
+const MKT_RATE = /(rate|(^|_)ctr$|(^|_)cr$|acos|share|pct)/;
+/**
+ * One spec per Sheet tab: [view, period header, period format, [[header,
+ * column], …]]. Headers are the export's own text, in the export's order.
+ */
+const h = (s) => s.split(";").map((x) => x.split("|"));
+const MARKET_TABS = {
+  [SHOPEE_SHEET_ID]: {
+    "Sales": ["v_shopee_sales_daily", "Date", "dmy", h("Visitors (Visit)|visitors_visit;Buyers (Placed Orders)|buyers_placed_orders;Units (Placed Orders)|units_placed_orders;Orders (Placed Orders)|orders_placed_orders;Sales (Placed Orders) (THB)|sales_placed_orders_thb;Conversion Rate (Visit to Placed)|conversion_rate_visit_to_placed;Buyers (Confirmed Orders)|buyers_confirmed_orders;Units(Confirmed Orders)|units_confirmed_orders;Orders (Confirmed Orders)|orders_confirmed_orders;Sales(Confirmed Orders) (THB)|sales_confirmed_orders_thb;Sales per Buyer (Confirmed Orders) (THB)|sales_per_buyer_confirmed_orders_thb;Conversion Rate|conversion_rate;Conversion Rate (Placed to Confirmed)|conversion_rate_placed_to_confirmed")],
+    "Traffic": ["v_shopee_traffic_daily", "Date", "dmy", h("Page Views|page_views;Avg. Page Views|avg_page_views;Avg. Time Spent|avg_time_spent;Bounce Rate|bounce_rate;Visitors|visitors;New Visitors|new_visitors;Existing Visitors|existing_visitors;New Followers|new_followers")],
+    "Product Views": ["v_shopee_product_views_daily", "Date", "dmy", h("Product Visitors (Visit)|product_visitors_visit;Product Page Views|product_page_views;Items Visited|items_visited;Product Bounce Visitors|product_bounce_visitors;Product Bounce Rate|product_bounce_rate;Search Clicks|search_clicks;Likes|likes;Product Visitors (Add to Cart)|product_visitors_add_to_cart;Units (Add to Cart)|units_add_to_cart;Conversion Rate (Add to Cart)|conversion_rate_add_to_cart;Buyers (Placed Order)|buyers_placed_order;Units (Placed Order)|units_placed_order;Items Placed|items_placed;Sales (Placed Order) (THB)|sales_placed_order_thb;Conversion Rate (Placed Order)|conversion_rate_placed_order;Buyers (Confirmed Order)|buyers_confirmed_order;Units (Confirmed Order)|units_confirmed_order;Items Confirmed|items_confirmed;Sales (Confirmed Order) (THB)|sales_confirmed_order_thb;Conversion Rate (Confirmed Order)|conversion_rate_confirmed_order;Conversion Rate (Placed to Confirmed)|conversion_rate_placed_to_confirmed")],
+    "Off-Platform Traffic": ["v_shopee_offsite_traffic_daily", "Date(DD/MM/YYYY)", "dmySlash", h("Region|region;Shop Name|shop_name;Shop ID|shop_id;Terminal|terminal;Channel Name|channel_name;Campaign Description|campaign_description;Campaign Info In Parameter|campaign_info_in_parameter;Ad Content|ad_content;Visits|visits;Add To Cart Units|add_to_cart_units;Buyers|buyers;Orders|orders;Sales(Local currency)|sales_thb;Item Conversion Rate|item_conversion_rate;Unique Visitors|unique_visitors;New Buyers|new_buyers;Add To Cart Value(Local currency)|add_to_cart_value_thb;Units Sold|units_sold")],
+    "Off-Platform Products By Day": ["v_shopee_offsite_products_daily", "Date", "dmySlash", h("Region|region;Shop Name|shop_name;Shop ID|shop_id;Product Name|product_name;Product ID|product_id;Terminal|terminal;Channel|channel;Campaign Description|campaign_description;Campaign Info In Parameters|campaign_info_in_parameters;Ad Content|ad_content;Gross Units Sold|gross_units_sold;Gross Sales(Local currency)|gross_sales_thb")],
+    "Package Sales": ["v_shopee_package_sales_monthly", "Month", "month", h("Name|name;URL|url;Product ID|product_id;Parent SKU|parent_sku;Region|region;Shop ID|shop_id;Shop name|shop_name;Brand|brand;Category|category;Product Rating|product_rating;Net Units Sold|net_units_sold;Net Orders|net_orders;Net Sales(฿)|net_sales_thb;Net # of Unique Buyers|net_n_of_unique_buyers;Gross Units Sold|gross_units_sold;Gross Orders|gross_orders;Gross Sales(฿)|gross_sales_thb;Gross # of Unique Buyers|gross_n_of_unique_buyers;Product Views|product_views;Product Clicks|product_clicks;Product Visitors|product_visitors;ATC Units|atc_units;Model ATP %|model_atp_pct;Current Stock|current_stock;L30D ADIS|l30d_adis;Stock Coverage in Days|stock_coverage_in_days")],
+    "Package Ads": ["v_shopee_package_ads_monthly", "Month", "month", h("Region|region;Shop Name|shop_name;Shop ID|shop_id;Product Name|product_name;Product ID|product_id;Impressions|impressions;Clicks|clicks;CTR|ctr;Ads Spend(Local currency)|ads_spend_thb;CPC|cpc;# of active keywords|n_of_active_keywords;Orders|orders;Gross Sales(Local currency)|gross_sales_thb;ROAS|roas;Units Sold|units_sold;CR|cr")],
+    "Shopee Ads": ["v_shopee_ads_daily", "Date", "dmySlash", h("Region|region;Shop Name|shop_name;Shop ID|shop_id;Impressions|impressions;Clicks|clicks;CTR|ctr;Orders|orders;Gross Sales(Local currency)|gross_sales_thb;Ads Spend(Local currency)|ads_spend_thb;ROAS|roas;Units Sold|units_sold;CR|cr;CPC|cpc;ACOS|acos")],
+    "Shop Ads": ["v_shopee_shop_ads_daily", "Date", "compact", h("Region|region;Shop Name|shop_name;Shop ID|shop_id;Ads Spend(Local currency)|ads_spend_thb;Impressions|impressions;Clicks|clicks;CTR|ctr;CPC|cpc;Orders|orders;ROAS|roas;Units Sold|units_sold;Gross Sales(Local currency)|gross_sales_thb;CR|cr;ACOS|acos")],
+    "Shop Ads Keywords": ["v_shopee_shop_ads_keywords_monthly", "Month", "month", h("Region|region;Shop Name|shop_name;Shop ID|shop_id;Keyword|keyword;Impressions|impressions;Clicks|clicks;CTR|ctr;Ads Spend(Local currency)|ads_spend_thb;CPC|cpc;Average Rank|average_rank;Orders|orders;Gross Sales(Local currency)|gross_sales_thb;ROAS|roas;Units Sold|units_sold;CR|cr")],
+    "Buyer Gender": ["v_shopee_buyer_gender_monthly", "Date", "monthDot", h("Region|region;Brand Name|brand_name;Shop Name|shop_name;Category|category;Gender|gender;Buyer Filter|buyer_filter;Number of Buyers|number_of_buyers;% of Buyers|pct_of_buyers")],
+    "Buyer Age": ["v_shopee_buyer_age_monthly", "Date", "monthDot", h("Region|region;Brand Name|brand_name;Shop Name|shop_name;Category|category;Age Group|age_group;Buyer Filter|buyer_filter;Number of Buyers|number_of_buyers;% of Buyers|pct_of_buyers")],
+    // The order export: no period column; its Thai headers are what the Voucher reader looks for.
+    "Voucher": ["v_shopee_orders", null, null, h("หมายเลขคำสั่งซื้อ|order_id")
+      .concat([["สถานะการสั่งซื้อ", "order_status"], ["สถานะการคืนเงินหรือคืนสินค้า", "return_status"],
+        ["วันที่ทำการสั่งซื้อ", "order_time"], ["ชื่อสินค้า", "product_name"], ["จำนวน", "qty"],
+        ["ราคาขายสุทธิ", "net_price"], ["โค้ดส่วนลดชำระโดยผู้ขาย", "seller_voucher"],
+        ["โค้ด Coins Cashback ชำระโดยผู้ขาย", "seller_coin_cashback"],
+        ["โค้ดส่วนลดชำระโดย Shopee", "shopee_voucher"], ["โค้ดส่วนลด", "voucher_code"],
+        ["ค่าคอมมิชชั่น", "commission_fee"], ["Transaction Fee", "transaction_fee"],
+        ["ราคาสินค้าที่ชำระโดยผู้ซื้อ (THB)", "buyer_paid_product"]])],
+  },
+  [LAZADA_SHEET_ID]: {
+    "Traffic Source": ["v_lazada_traffic_source_monthly", "month", "month", h("Level 1 - Traffic Source|level_1_traffic_source;Level 2 - Traffic Source|level_2_traffic_source;Level 3 - Traffic Source|level_3_traffic_source;Visitors|visitors;Pageviews|pageviews;Pageview Share|pageview_share;Product Visitors|product_visitors;Product Pageviews|product_pageviews;Add to Cart Units|add_to_cart_units;Add to Cart Users|add_to_cart_users;Add To Cart Conversion Rate|add_to_cart_conversion_rate;Wishlists|wishlists;Wishlist Users|wishlist_users;Buyers|buyers;Conversion Rate|conversion_rate;Order|orders;Revenue|revenue;Revenue Per Buyer|revenue_per_buyer;Visitor Value|visitor_value")],
+    "Product": ["v_lazada_product_monthly", "month", "month", h("Product ID|product_id;Product Name|product_name;URL|url;Seller SKU|seller_sku;SKU ID|sku_id;Product Visitors|product_visitors;Product Pageviews|product_pageviews;Visitor Value|visitor_value;Add to Cart Users|add_to_cart_users;Add to Cart Units|add_to_cart_units;Add to Cart Conversion Rate|add_to_cart_conversion_rate;Wishlist Users|wishlist_users;Wishlists|wishlists;Buyers|buyers;Orders|orders;Units Sold|units_sold;Revenue|revenue;Conversion Rate|conversion_rate;Revenue per Buyer|revenue_per_buyer;Revenue share|revenue_share")],
+    "Key Metrics": ["v_lazada_key_metrics_daily", "Date", "ymd", h("Revenue|revenue;Visitors|visitors;Buyers|buyers;Orders|orders;Pageviews|pageviews;Units Sold|units_sold;Conversion Rate|conversion_rate;Revenue per Buyer|revenue_per_buyer;Visitor Value|visitor_value;Add to Cart Users|add_to_cart_users;Add to Cart Units|add_to_cart_units;Wishlists|wishlists;Wishlist Users|wishlist_users;Average Order Value|average_order_value;Average Basket Size|average_basket_size;Cancelled Amount|cancelled_amount;Return/Refund Amount|return_refund_amount")],
+    "Customer Insight": ["v_lazada_customer_insight_daily", "Date", "ymd", h("New buyers|new_buyers;Conversion Rate|conversion_rate;Orders|orders;Buyers|buyers;Revenue|revenue;Existing buyers|existing_buyers;Average order value|average_order_value;Average basket size|average_basket_size")],
+    "External Daily": ["v_lazada_external_daily", "Date", "compact", h("Visits|visits;Unique Visitors|unique_visitors;PDP PV|pdp_pv;A2C PV|a2c_pv;Item Sold|item_sold;Total Orders|total_orders;Revenue|revenue;CR%|cr_pct")],
+    "External Links": ["v_lazada_external_links_daily", "Date", "compact", h("Campaign ID|campaign_id;Campaign Name|campaign_name;Campaign Type|campaign_type;Original Link Type|original_link_type;Original Link ID|original_link_id;Original Link Name|original_link_name;Channel|channel;Ad Name|ad_name;PDP PV|pdp_pv;Item Sold|item_sold;Revenue|revenue;Total Orders|total_orders;CR%|cr_pct;A2C PV|a2c_pv;Visits|visits;Unique Visitors|unique_visitors")],
+    "External Sold": ["v_lazada_external_sold_daily", "Date", "compact", h("Product ID|product_id;Product Name|product_name;Product Seller ID|product_seller_id;Product Seller Name|product_seller_name;Product Brand ID|product_brand_id;Product Brand Name|product_brand_name;Item Sold|item_sold;Total Orders|total_orders;Revenue|revenue;Avg value per item sold|avg_value_per_item_sold;Campaign ID|campaign_id;Campaign Name|campaign_name;Campaign Type|campaign_type;Channel|channel;Ad Name|ad_name;Clicked Product ID|clicked_product_id;Original URL|original_url")],
+  },
+};
+
+/** One BigQuery value as the Sheet would show it. */
+function mktCell(col, v, blank = "-") {
+  if (v == null || v === "") return blank;
+  if (col === "avg_time_spent") {                 // fraction of a day → 0:01:06
+    const t = Math.round(Number(v) * 86400);
+    return `${Math.floor(t / 3600)}:${pad2(Math.floor((t % 3600) / 60))}:${pad2(t % 60)}`;
+  }
+  if (col === "order_time") return String(v).replace("T", " ").slice(0, 16);
+  if (MKT_RATE.test(col) && Number.isFinite(Number(v))) return `${(Number(v) * 100).toFixed(2)}%`;
+  return String(v);
+}
+
+const marketGridCache = new Map();
+/** A whole tab as the Sheet's 2-D grid (header + rows), cached 30 min. */
+function marketGrid(sheetId, tab) {
+  const spec = (MARKET_TABS[sheetId] || {})[tab];
+  if (!spec) return Promise.resolve(null);
+  const key = `${sheetId}|${tab}`, hit = marketGridCache.get(key);
+  if (hit && Date.now() - hit.at < MARKET_TTL_MS) return hit.p;
+  const [view, perHead, perFmt, cols] = spec;
+  const sel = (perHead ? ["CAST(period AS STRING) AS period"] : []).concat(cols.map(([, c]) => c === "order_time" ? "CAST(order_time AS STRING) AS order_time" : c));
+  const sql = `-- q:market_${view}\nSELECT ${sel.join(", ")} FROM \`${MARKET_DATASET}.${view}\`` +
+    (perHead ? " ORDER BY period" : " ORDER BY order_id");
+  const p = bqRows(sql).then((rows) => [
+    (perHead ? [perHead] : []).concat(cols.map(([hd]) => hd)),
+        // The order export leaves a blank cell blank; the analytics exports write "-".
+    ...rows.map((r) => (perHead ? [MKT_FMT[perFmt](String(r.period))] : []).concat(cols.map(([, c]) => mktCell(c, r[c], perHead ? "-" : "")))),
+  ]);
+  marketGridCache.set(key, { at: Date.now(), p });
+  p.catch(() => marketGridCache.delete(key));
+  return p;
+}
+
+/** "'Tab'!B2:B" / "'Tab'!1:1" / "'Tab'!A1:AF" → the cells of that grid. */
+const colIdx = (l) => [...l].reduce((a, ch) => a * 26 + ch.charCodeAt(0) - 64, 0) - 1;
+function sliceGrid(grid, a1) {
+  let m = a1.match(/^(\d+):(\d+)$/);
+  if (m) return grid.slice(+m[1] - 1, +m[2]);
+  m = a1.match(/^([A-Z]+)(\d+)?:([A-Z]+)(\d+)?$/);
+  if (!m) return grid;
+  const c1 = colIdx(m[1]), c2 = colIdx(m[3]), r1 = m[2] ? +m[2] - 1 : 0, r2 = m[4] ? +m[4] : grid.length;
+  return grid.slice(r1, r2).map((row) => row.slice(c1, c2 + 1));
+}
+
+async function marketBatchGet(sheetId, ranges, opts) {
+  try {
+    const out = [];
+    for (const rg of ranges) {
+      const mm = rg.match(/^'?(.*?)'?!(.+)$/);
+      const grid = mm && await marketGrid(sheetId, mm[1]);
+      if (!grid) throw new Error(`no BigQuery view for "${rg}"`);
+      out.push({ range: rg, values: sliceGrid(grid, mm[2]) });
+    }
+    marketSourceUsed = "bigquery";
+    return out;
+  } catch (err) {
+    logJson("ERROR", "market_bigquery_failed_read_sheet", { error: String(err.message || err), ranges });
+    marketSourceUsed = "sheet (BigQuery failed)";
+    return sheetBatchGet(sheetId, ranges, { ...opts, sheetOnly: true });
+  }
+}
 
 /**
  * TRAFFIC SOURCE — monthly, whole months only (see the block comment above).
@@ -15079,7 +15227,7 @@ app.get("/api/lazada", requireTab("lazada"), async (req, res) => {
   if (!isoDate(from) || !isoDate(to)) return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
   try {
     const out = await cachedLazada(from, to, req.query.refresh === "1");
-    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+    res.json({ ...out.value, source: MARKET_SOURCE === "sheet" ? "sheet" : marketSourceUsed, cached: out.cached, cacheAgeSec: out.ageSec });
   } catch (err) {
     logJson("ERROR", "lazada_failed", { error: String(err.message || err) });
     res.status(err.status || 500).json({ error: err.message || "Lazada report failed" });

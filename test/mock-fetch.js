@@ -1239,6 +1239,109 @@ global.fetch = async (url, opts = {}) => {
       if (start + PAGE < all.length) page.pageToken = String(start + PAGE);
       return jsonRes(page);
     }
+    /**
+     * MARKETPLACE VIEWS (v3.423.0): built FROM THE SHEET FIXTURES, so every
+     * Shopee / Lazada assertion in this suite runs through the BigQuery path
+     * (view rows → rebuilt Sheet grid → unchanged parser) and must give the
+     * same answer as the Sheet did. Each selected column is matched to the
+     * fixture header it came from; cells go back to BigQuery types: numbers,
+     * rates as fractions, time as a fraction of a day, "-" as null.
+     */
+    if (name && name.startsWith("market_")) {
+      if (process.env.MOCK_MARKET_BQ_DOWN === "1") return jsonRes({ error: { message: "mock: marketplace views unavailable" } }, 403);
+      const view = name.slice(7);
+      const TAB = { v_shopee_sales_daily: ["17T21LhWM", "Sales"], v_shopee_traffic_daily: ["17T21LhWM", "Traffic"],
+        v_shopee_product_views_daily: ["17T21LhWM", "Product Views"], v_shopee_offsite_traffic_daily: ["17T21LhWM", "Off-Platform Traffic"],
+        v_shopee_offsite_products_daily: ["17T21LhWM", "Off-Platform Products By Day"], v_shopee_package_sales_monthly: ["17T21LhWM", "Package Sales"],
+        v_shopee_package_ads_monthly: ["17T21LhWM", "Package Ads"], v_shopee_ads_daily: ["17T21LhWM", "Shopee Ads"],
+        v_shopee_shop_ads_daily: ["17T21LhWM", "Shop Ads"], v_shopee_shop_ads_keywords_monthly: ["17T21LhWM", "Shop Ads Keywords"],
+        v_shopee_buyer_gender_monthly: ["17T21LhWM", "Buyer Gender"], v_shopee_buyer_age_monthly: ["17T21LhWM", "Buyer Age"],
+        v_shopee_orders: ["17T21LhWM", "Voucher"],
+        v_lazada_traffic_source_monthly: ["LAZ", "Traffic Source"], v_lazada_product_monthly: ["LAZ", "Product"],
+        v_lazada_key_metrics_daily: ["LAZ", "Key Metrics"], v_lazada_customer_insight_daily: ["LAZ", "Customer Insight"],
+        v_lazada_external_daily: ["LAZ", "External Daily"], v_lazada_external_links_daily: ["LAZ", "External Links"],
+        v_lazada_external_sold_daily: ["LAZ", "External Sold"] }[view];
+      if (!TAB) return jsonRes({ error: { message: "mock: unknown view " + view } }, 404);
+      const sheetId = TAB[0] === "LAZ" ? (process.env.LAZADA_SHEET_ID || "1_WnGf7NOIDOL9xrF5_JTpIBSobgv7SY-CR-wXjCRL8I") : "17T21LhWM-mock";
+      // Ask the Sheet mock exactly as the server would: the five main Shopee tabs come back as one batch.
+      const MAIN = ["Sales", "Traffic", "Product Views", "Off-Platform Traffic", "Off-Platform Products By Day"];
+      const BUY = ["Buyer Gender", "Buyer Age"];
+      const PACK = ["Package Sales", "Package Ads"];
+      const group = TAB[0] === "LAZ" ? null : [MAIN, BUY, PACK].find((g) => g.includes(TAB[1])) || null;
+      const inMain = !!group;
+      const rgs = group ? group.map((t) => `'${t}'!A1:AF`) : [`'${TAB[1]}'!A1:AF`];
+      const r = await global.fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values:batchGet?` + rgs.map((x) => `ranges=${encodeURIComponent(x)}`).join("&"));
+      const vals = (((await r.json()).valueRanges || [])[group ? group.indexOf(TAB[1]) : 0] || {}).values || [];
+      const sel = /SELECT ([\s\S]*?) FROM/.exec(q)[1].split(",").map((x) => x.trim().split(/\s+AS\s+|\s+/i).pop());
+      const norm = (x) => String(x).toLowerCase().replace(/\(local currency\)/g, "thb").replace(/\(\u0e3f\)/g, "thb")
+        .replace(/#/g, "n").replace(/%/g, "pct").replace(/[^a-z0-9]/g, "");
+      const hi = vals.findIndex((row) => row.some((c) => sel.slice(1).some((col) => norm(c) === norm(col))));
+      if (hi < 0 && view !== "v_shopee_orders") return jsonRes({ jobComplete: true, schema: { fields: sel.map((x) => ({ name: x })) }, totalRows: "0", rows: [] });
+      // The order export's headers are Thai: matched by the export header text instead.
+      const VOUCHER = { order_id: "หมายเลขคำสั่งซื้อ", order_status: "สถานะการสั่งซื้อ", return_status: "สถานะการคืนเงินหรือคืนสินค้า",
+        order_time: "วันที่ทำการสั่งซื้อ", product_name: "ชื่อสินค้า", qty: "จำนวน", net_price: "ราคาขายสุทธิ",
+        seller_voucher: "โค้ดส่วนลดชำระโดยผู้ขาย", seller_coin_cashback: "โค้ด Coins Cashback ชำระโดยผู้ขาย",
+        shopee_voucher: "โค้ดส่วนลดชำระโดย Shopee", voucher_code: "โค้ดส่วนลด", commission_fee: "ค่าคอมมิชชั่น",
+        transaction_fee: "Transaction Fee", buyer_paid_product: "ราคาสินค้าที่ชำระโดยผู้ซื้อ (THB)" };
+      if (view === "v_shopee_orders") {
+        // The Voucher fixture serves one column at a time (it refuses wide reads: PII guard).
+        const get = async (a1) => ((((await (await global.fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values:batchGet?ranges=${encodeURIComponent(`'Voucher'!${a1}`)}`)).json()).valueRanges || [])[0] || {}).values || []);
+        const H = (await get("1:1"))[0] || [];
+        const at = (col) => H.findIndex((x) => String(x).trim() === VOUCHER[col] || String(x).startsWith(VOUCHER[col] + " ("));
+        const L = (i) => { let t = ""; for (i++; i > 0; i = Math.floor((i - 1) / 26)) t = String.fromCharCode(65 + ((i - 1) % 26)) + t; return t; };
+        const colsV = {};
+        for (const col of sel) if (at(col) >= 0) colsV[col] = (await get(`${L(at(col))}2:${L(at(col))}`)).map((r) => r[0]);
+        const n = Math.max(0, ...Object.values(colsV).map((c) => c.length));
+        const rows2 = Array.from({ length: n }, (_, k) => ({ f: sel.map((col) => ({ v: colsV[col] ? toBqV(col, colsV[col][k]) : null })) }));
+        return jsonRes({ jobComplete: true, jobReference: { jobId: "mkt" }, schema: { fields: sel.map((x) => ({ name: x })) },
+          totalRows: String(rows2.length), rows: rows2 });
+      }
+      const perFmt = (t) => { t = String(t || "").trim(); let m;
+        if ((m = t.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/))) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+        if ((m = t.match(/^(20\d{2})(\d{2})(\d{2})$/))) return `${m[1]}-${m[2]}-${m[3]}`;
+        if ((m = t.match(/^(20\d{2})[-.](\d{2})$/))) return `${m[1]}-${m[2]}-01`;
+        if ((m = t.match(/^(20\d{2})-(\d{2})-(\d{2})/))) return m[0].slice(0, 10);
+        // Months as the team typed them; BHQ Income stores the 1st of the month.
+        if ((m = t.match(/^(\d{1,2})\/(20\d{2})$/))) return `${m[2]}-${m[1].padStart(2, "0")}-01`;
+        if ((m = t.match(/^([A-Za-z]{3})-(\d{2})$/))) { const mo = "janfebmaraprmayjunjulaugsepoctnovdec".indexOf(m[1].toLowerCase()) / 3 + 1;
+          if (mo >= 1) return `20${m[2]}-${String(mo).padStart(2, "0")}-01`; }
+        if ((m = t.match(/^([A-Za-z]{3})[a-z]* (20\d{2})$/))) { const mo = "janfebmaraprmayjunjulaugsepoctnovdec".indexOf(m[1].toLowerCase()) / 3 + 1;
+          if (mo >= 1) return `${m[2]}-${String(mo).padStart(2, "0")}-01`; }
+        if ((m = t.match(/^(20\d{2})\.(\d{2})$/))) return `${m[1]}-${m[2]}-01`;   // "2026.7" is junk the Sheet reader skips
+        return null; };
+      function toBqV(col, v) { return toBq(col, v); }
+      function toBq(col, v) { const t = String(v == null ? "" : v).trim();
+        if (t === "" || t === "-") return null;
+        if (/^\d+:\d{2}:\d{2}$/.test(t)) { const [a, b, c] = t.split(":").map(Number); return String((a * 3600 + b * 60 + c) / 86400); }
+        if (/^-?[\d,]+(\.\d+)?%$/.test(t)) return String(Number(t.replace(/[,%]/g, "")) / 100);
+        if (/^-?[\d,]+(\.\d+)?$/.test(t) && !/(_id|^id|sku|url|name|code)/.test(col)) return String(Number(t.replace(/,/g, "")));
+        return t; }
+      /**
+       * The Sheet fixtures are pasted exports: several header blocks, a range
+       * row per paste, the same day pasted twice ("later paste wins"). A view
+       * holds the LATEST upload per day, so each block is read under its own
+       * header and the last row per (period + text columns) is kept.
+       */
+      const same = (hd, col) => hd === norm(col) || hd + "s" === norm(col);
+      const isHead = (row) => row.some((c) => sel.slice(1).some((col) => same(norm(c), col))) && !perFmt(row[0]);
+      const keep = new Map();
+      let head = null;
+      for (const row of vals) {
+        if (isHead(row)) { head = row.map(norm); continue; }
+        if (!head || !row.some((c) => String(c).trim() !== "")) continue;
+        const f = sel.map((col) => {
+          if (col === "period") return { v: perFmt(row[0]) };
+          const i = head.findIndex((hd) => same(hd, col));
+          return { v: i < 0 ? null : toBq(col, row[i]) };
+        });
+        if (sel[0] === "period" && !f[0].v) continue;
+        const key = f.map((c, k) => (k === 0 || (c.v != null && isNaN(Number(c.v))) ? String(c.v) : "")).join("|");
+        keep.delete(key); keep.set(key, { f });
+      }
+      const rowsOut = [...keep.values()];
+      return jsonRes({ jobComplete: true, jobReference: { jobId: "mkt" }, schema: { fields: sel.map((x) => ({ name: x })) },
+        totalRows: String(rowsOut.length), rows: rowsOut });
+    }
     const fx = require("./fixtures/bq-better-club.js")[name];
     if (!fx) return jsonRes({ error: { message: `mock: no BigQuery fixture for ${name || "query"}` } }, 400);
     return jsonRes({ jobComplete: true, schema: { fields: [{ name: "j", type: "STRING" }] },

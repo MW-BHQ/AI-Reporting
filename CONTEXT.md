@@ -1,5 +1,24 @@
 ### Recent (November 2026)
 
+**v3.423.0 — Shopee, Lazada and Seller-Voucher read BigQuery** (BHQ Income handover
+`WAR-ROOM-read-from-BigQuery.md`: `bhq-income.marketplace` views, latest published upload per
+day/month; War Room SA has dataViewer). `sheetBatchGet` hands any read of SHOPEE_SHEET_ID /
+LAZADA_SHEET_ID to `marketBatchGet`, which rebuilds each tab from its view in the EXPORT'S OWN
+LAYOUT (`MARKET_TABS`: header text, date format per tab — dd-mm-yyyy, dd/mm/yyyy, yyyymmdd,
+yyyy-mm, yyyy.mm, yyyy-mm-dd — rates "2.43%", avg time "0:01:06" from a day fraction, "-" for
+blanks, "" in the order export) and hands it to the UNCHANGED parsers. Grids cached 30 min.
+- Checked live: Oct 2025 Shopee sales/traffic, order 260403SKA8RJ5U, Lazada traffic source and
+  product rows equal the Sheets value for value. Bugs the check caught: Lazada says "Order" and
+  "Revenue Per Buyer"; off-platform traffic has "Units Sold"; Thai/฿ headers must be literal.
+- `MARKET_SOURCE=sheet` = Sheets. BigQuery failure → Sheet for that read, logged
+  `market_bigquery_failed_read_sheet`. `/api/shopee`, `/api/lazada`, `/api/shopee/voucher`
+  return `source`.
+- Tests: the mock builds every marketplace view FROM the Sheet fixtures (per paste block, latest
+  row per day, typed months normalised as BHQ Income does), and smoke runs a MARKET_SOURCE=sheet
+  server beside the default one: seven Shopee / Voucher / Lazada / marketplace responses must be
+  byte-identical. Plus BigQuery down → Sheet, labelled.
+- Retire SHOPEE_SHEET_ID / LAZADA_SHEET_ID after a month on BigQuery.
+
 **v3.422.0 — E-commerce Overview no longer waits for Shopee/Lazada** (MW: "still takes a very
 long time; are you sure it loads from BQ?"). It did (`source: bigquery`), but `loadEcom` fetched
 `/api/ecommerce/marketplaces` (Shopee + Lazada sheets, Windsor) AFTER the orders and awaited it

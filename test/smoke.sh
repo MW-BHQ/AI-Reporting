@@ -143,8 +143,10 @@ BQDOWN=$(curl -s -H "$ADMIN" "http://localhost:$BPORT/api/better-club?from=$FROM
 ENGDOWN=$(curl -s -o /dev/null -w '%{http_code}' -H "$ADMIN" "http://localhost:$BPORT/api/better-club/engagement?from=$FROM&to=$TO")
 # E-commerce (v3.421.0): BigQuery down + the Sheet still configured = the Sheet is read, and says so.
 ECOMDOWN=$(curl -s -H "$ADMIN" "http://localhost:$BPORT/api/ecommerce?from=2026-07-01&to=2026-07-31" | node -e "let r='';process.stdin.on('data',c=>r+=c).on('end',()=>{const d=JSON.parse(r);console.log(d.source==='sheet (BigQuery failed)'?'ok':'bad '+d.source+' '+(d.error||''))})")
+MKTDOWN=$(curl -s -H "$ADMIN" "http://localhost:$BPORT/api/shopee?from=2026-07-01&to=2026-07-31" | node -e "let r='';process.stdin.on('data',c=>r+=c).on('end',()=>{const d=JSON.parse(r);console.log(d.source==='sheet (BigQuery failed)'&&d.available?'ok':'bad '+d.source)})")
 kill $BSRV 2>/dev/null
 if [ "$BQDOWN" = "ok" ]; then printf '  ok   %-22s %s\n' "bclub roster fallback" ok; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "bclub roster fallback" "$BQDOWN"; fi
+if [ "$MKTDOWN" = "ok" ]; then printf '  ok   %-22s %s\n' "market bq down->sheet" ok; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "market bq down->sheet" "$MKTDOWN"; fi
 if [ "$ECOMDOWN" = "ok" ]; then printf '  ok   %-22s %s\n' "ecom bq down -> sheet" ok; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "ecom bq down -> sheet" "$ECOMDOWN"; fi
 if [ "$ENGDOWN" = "200" ]; then printf '  ok   %-22s %s\n' "engagement degrades" 200; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "engagement degrades" "$ENGDOWN"; fi
 
@@ -155,6 +157,25 @@ SSRV=$!; sleep 2.5
 ESHORT=$(curl -s -H "$ADMIN" "http://localhost:$SPORT/api/ecommerce?from=2026-07-01&to=2026-07-31" | node -e "let r='';process.stdin.on('data',c=>r+=c).on('end',()=>{const d=JSON.parse(r);console.log(/returned 8 of 9 rows/.test(d.error||'')?'ok':'bad '+JSON.stringify(d).slice(0,120))})")
 kill $SSRV 2>/dev/null
 if [ "$ESHORT" = "ok" ]; then printf '  ok   %-22s %s\n' "ecom bq short refused" ok; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "ecom bq short refused" "$ESHORT"; fi
+
+echo "--- Shopee / Lazada from BigQuery = from the Sheets (v3.423.0) ---"
+# The marketplace views in the mock are built from the Sheet fixtures, so the
+# BigQuery path (view rows -> rebuilt Sheet grid -> unchanged parser) must give
+# exactly what the Sheet path gives. Any header, date or rate mapping slip shows.
+QPORT=$((PORT+10))
+MARKET_SOURCE=sheet WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ADMIN_EMAILS=admin@bkh.test ACCESS_BUCKET=mock-bucket PORT=$QPORT node --require ./test/mock-fetch.js server.js >/tmp/smoke-marketsheet.log 2>&1 &
+QSRV=$!; sleep 2.5
+for u in "/api/shopee?from=2026-07-01&to=2026-07-31" "/api/shopee?from=2026-04-01&to=2026-04-30" "/api/shopee/voucher?from=2026-10-01&to=2026-10-31" "/api/shopee/voucher?from=2026-07-01&to=2026-07-31" "/api/lazada?from=2026-07-01&to=2026-07-31" "/api/lazada?from=2025-01-01&to=2026-10-31" "/api/ecommerce/marketplaces?from=2026-07-01&to=2026-07-31"; do
+  SAMEP=$(node -e "
+    const g=(p)=>fetch('http://localhost:'+p+'$u',{headers:{'X-Goog-Authenticated-User-Email':'accounts.google.com:admin@bkh.test'}}).then(r=>r.json());
+    const clean=(d)=>{delete d.cached;delete d.cacheAgeSec;const s=d.source;delete d.source;return [JSON.stringify(d),s];};
+    Promise.all([g($PORT),g($QPORT)]).then(([a,b])=>{const [x,sa]=clean(a),[y,sb]=clean(b);
+      console.log(x===y&&(sb==='sheet'||sb===undefined)&&(sa===undefined||sa==='bigquery')?'ok':'diff '+sa+'/'+sb+' '+x.length+' vs '+y.length)})")
+  if [ "$SAMEP" = "ok" ]; then printf '  ok   %-22s %s\n' "bq = sheet" "$u"; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s %s\n' "bq = sheet" "$u" "$SAMEP"; fi
+done
+kill $QSRV 2>/dev/null
+expect_field "shopee from bigquery" "/api/shopee?from=2026-07-01&to=2026-07-31" "d.source==='bigquery'?'ok':undefined"
+expect_field "lazada from bigquery" "/api/lazada?from=2026-07-01&to=2026-07-31" "d.source==='bigquery'?'ok':undefined"
 
 echo "--- compression (v3.372.0) ---"
 # brotli and gzip must decode to the SAME JSON as the plain response, and the
@@ -1553,7 +1574,7 @@ check "audiences (meta down)" GET "/api/audiences?from=$FROM&to=$TO"
 # SHOPEE SHEET NOT SHARED (403): the reason names the fix rather than zeros.
 kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
 WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ADMIN_EMAILS=admin@bkh.test ECOM_SHEET_ID=mock \
-MOCK_FAIL_CONNECTOR=shopee-sheet PORT=$PORT node --require ./test/mock-fetch.js server.js >>/tmp/smoke.log 2>&1 &
+MARKET_SOURCE=sheet MOCK_FAIL_CONNECTOR=shopee-sheet PORT=$PORT node --require ./test/mock-fetch.js server.js >>/tmp/smoke.log 2>&1 &
 SRV=$!
 sleep 2.5
 check "shopee (sheet 403)" GET "/api/shopee?from=$FROM&to=$TO"
@@ -1563,7 +1584,7 @@ expect_field "sc 403 is named" "/api/shopee?from=$FROM&to=$TO" "d.available===fa
 # ads card says why. One batchGet for all tabs would fail the whole tab here.
 kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
 WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ADMIN_EMAILS=admin@bkh.test ECOM_SHEET_ID=mock \
-MOCK_FAIL_CONNECTOR=shopee-ads PORT=$PORT node --require ./test/mock-fetch.js server.js >>/tmp/smoke.log 2>&1 &
+MARKET_SOURCE=sheet MOCK_FAIL_CONNECTOR=shopee-ads PORT=$PORT node --require ./test/mock-fetch.js server.js >>/tmp/smoke.log 2>&1 &
 SRV=$!
 sleep 2.5
 expect_field "sa missing tab ok" "/api/shopee?from=$FROM&to=$TO" "d.available===true&&d.funnel.sales===32000&&d.shopeeAds.available===false&&/Shopee Ads/.test(d.shopeeAds.reason)?'ok':undefined"
