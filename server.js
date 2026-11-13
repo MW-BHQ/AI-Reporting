@@ -9739,12 +9739,116 @@ app.get("/api/audiences", requireTab("audiences"), async (req, res) => {
 let ecomRowCache = { at: 0, rows: null };
 const ECOM_ROWS_TTL_MS = 5 * 60 * 1000;
 
+/**
+ * E-COMMERCE FROM BIGQUERY (v3.421.0, BHQ Income handover). The monthly load
+ * moved out of the Google Sheet + Apps Script into BHQ Income, which publishes
+ * to `bhq-income.ecommerce.v_orders_published` (published batches only; drafts
+ * never appear). Package / SKU / centre corrections made there show up in the
+ * view at read time, so there is no "Apply Package_Map" step any more.
+ *
+ * Same column names as the Sheet's Orders tab, so the row shape below is
+ * unchanged and every e-commerce view reads it as before. Differences handled:
+ * purchase_date is a DATE (cast to text), money is NUMERIC (the REST API sends
+ * it as a string), is_valid_sale is a BOOL. Runs in this project's location
+ * (asia-southeast1) and is billed here; the War Room's account needs
+ * bigquery.dataViewer on bhq-income:ecommerce.
+ *
+ * The view is partitioned by month, so the query always carries a date filter;
+ * the whole history (~100k rows) is read once and cached, exactly as the Sheet
+ * was, because every view compares against prior and year-ago windows.
+ *
+ * ECOM_SOURCE=sheet reads the old Sheet instead (kept for the one-month
+ * fallback while the Sheet is read-only). If BigQuery fails and the Sheet is
+ * still configured, the Sheet is read and the failure is logged as an ERROR,
+ * so a missing permission does not blank every e-commerce tab on deploy day.
+ */
+const ECOM_SOURCE = (process.env.ECOM_SOURCE || "bigquery").toLowerCase();
+const ECOM_BQ_VIEW = process.env.ECOM_BQ_VIEW || "bhq-income.ecommerce.v_orders_published";
+let ecomSourceUsed = null;
+
 async function ecomRows(force) {
   const fresh = !force && ecomRowCache.rows && (Date.now() - ecomRowCache.at) < ECOM_ROWS_TTL_MS;
   if (fresh) return ecomRowCache.rows;
-  const rows = await fetchEcomRows();
+  let rows;
+  if (ECOM_SOURCE === "sheet") { rows = await fetchEcomRows(); ecomSourceUsed = "sheet"; }
+  else {
+    try { rows = await fetchEcomRowsBq(); ecomSourceUsed = "bigquery"; }
+    catch (err) {
+      if (!ECOM_SHEET_ID) throw err;
+      logJson("ERROR", "ecom_bigquery_failed_read_sheet", { error: String(err.message || err) });
+      rows = await fetchEcomRows(); ecomSourceUsed = "sheet (BigQuery failed)";
+    }
+  }
   ecomRowCache = { at: Date.now(), rows };
   return rows;
+}
+
+const ECOM_BQ_SQL = () => `-- q:ecom_orders
+SELECT CAST(purchase_date AS STRING) AS purchase_date, channel, order_id, package_name, sku, center,
+  english_name, payment_method, CAST(price AS FLOAT64) AS price, CAST(txn_fee_alloc AS FLOAT64) AS txn_fee_alloc,
+  CAST(comm_fee_alloc AS FLOAT64) AS comm_fee_alloc, coupon_status, is_valid_sale, email_key,
+  CAST(full_price AS FLOAT64) AS full_price
+FROM \`${ECOM_BQ_VIEW}\`
+WHERE purchase_date >= DATE '2015-01-01'`;
+
+/** jobs.query with paging: rows come back as {f:[{v}]} in schema order. */
+async function bqRows(sql) {
+  const token = await bqToken();
+  const base = `https://bigquery.googleapis.com/bigquery/v2/projects/${BQ_PROJECT}`;
+  const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+  const fail = async (res) => {
+    const body = await res.text().catch(() => "");
+    let msg = body.slice(0, 300);
+    try { msg = JSON.parse(body).error.message || msg; } catch (_) { /* keep text */ }
+    return new Error(`BigQuery ${res.status}: ${msg}`);
+  };
+  let res = await fetch(`${base}/queries`, { method: "POST", headers,
+    body: JSON.stringify({ query: sql, useLegacySql: false, location: BQ_LOCATION, timeoutMs: 30000, maxResults: 50000 }) });
+  if (!res.ok) throw await fail(res);
+  let j = await res.json();
+  const id = j.jobReference && j.jobReference.jobId;
+  for (let i = 0; !j.jobComplete && id && i < 8; i++) {
+    const r2 = await fetch(`${base}/queries/${id}?location=${BQ_LOCATION}&timeoutMs=20000&maxResults=50000`, { headers });
+    if (!r2.ok) throw await fail(r2);
+    j = await r2.json();
+  }
+  if (!j.jobComplete) throw new Error("BigQuery query did not finish in time, try Refresh");
+  const names = j.schema.fields.map((f) => f.name);
+  const out = [];
+  const take = (page) => { for (const r of page.rows || []) out.push(Object.fromEntries(r.f.map((c, k) => [names[k], c.v]))); };
+  take(j);
+  for (let tok = j.pageToken, guard = 0; tok && guard < 100; guard++) {
+    const r3 = await fetch(`${base}/queries/${id}?location=${BQ_LOCATION}&maxResults=50000&pageToken=${encodeURIComponent(tok)}`, { headers });
+    if (!r3.ok) throw await fail(r3);
+    const p = await r3.json();
+    take(p);
+    tok = p.pageToken;
+  }
+  const total = Number(j.totalRows);
+  if (Number.isFinite(total) && out.length !== total) throw new Error(`BigQuery returned ${out.length} of ${total} rows`);
+  return out;
+}
+
+async function fetchEcomRowsBq() {
+  const rows = await bqRows(ECOM_BQ_SQL());
+  return rows.map((r) => ({
+    date: String(r.purchase_date || "").slice(0, 10),
+    channel: String(r.channel || "").trim() || "(unknown)",
+    orderId: String(r.order_id || ""),
+    pkg: String(r.package_name || ""),
+    sku: String(r.sku || ""),
+    center: String(r.center || ""),
+    english: String(r.english_name || ""),
+    method: String(r.payment_method || ""),
+    price: n(r.price),
+    txn: n(r.txn_fee_alloc),
+    comm: n(r.comm_fee_alloc),
+    couponStatus: String(r.coupon_status || ""),
+    valid: String(r.is_valid_sale).toLowerCase() !== "false",
+    customer: String(r.email_key || ""),
+    fullPrice: n(r.full_price),
+    type: channelType(r.channel),
+  })).filter((r) => r.date);
 }
 
 async function fetchEcomRows() {
@@ -9961,7 +10065,7 @@ app.get("/api/ecommerce", requireTab("ecom"), async (req, res) => {
     const scope = req.query.scope === "all" ? "all" : "online";
     const out = await withCache(`ecom:${scope}:${from}:${to}`, req.query.refresh === "1",
       () => buildEcommerce(from, to, scope));
-    res.json({ ...out.value, cached: out.cached, cacheAgeSec: out.ageSec });
+    res.json({ ...out.value, source: ecomSourceUsed, cached: out.cached, cacheAgeSec: out.ageSec });
   } catch (err) {
     logJson("ERROR", "ecommerce_failed", { error: String(err.message || err) });
     res.status(500).json({ error: err.message || "E-commerce failed" });

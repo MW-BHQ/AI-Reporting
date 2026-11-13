@@ -141,9 +141,20 @@ MOCK_BQ_DOWN=1 WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ECOM_SHEET_ID=mock AD
 BSRV=$!; sleep 2.5
 BQDOWN=$(curl -s -H "$ADMIN" "http://localhost:$BPORT/api/better-club?from=$FROM&to=$TO" | node -e "let r='';process.stdin.on('data',c=>r+=c).on('end',()=>{const d=JSON.parse(r);console.log(d.memberSource==='roster'&&d.memberStats.total===15&&d.memberStats.live===14&&d.memberStats.nationality.notRecorded===1&&d.memberStats.byMonth.find(m=>m.month==='2026-07').joined===9?'ok':'bad '+d.memberSource)})")
 ENGDOWN=$(curl -s -o /dev/null -w '%{http_code}' -H "$ADMIN" "http://localhost:$BPORT/api/better-club/engagement?from=$FROM&to=$TO")
+# E-commerce (v3.421.0): BigQuery down + the Sheet still configured = the Sheet is read, and says so.
+ECOMDOWN=$(curl -s -H "$ADMIN" "http://localhost:$BPORT/api/ecommerce?from=2026-07-01&to=2026-07-31" | node -e "let r='';process.stdin.on('data',c=>r+=c).on('end',()=>{const d=JSON.parse(r);console.log(d.source==='sheet (BigQuery failed)'?'ok':'bad '+d.source+' '+(d.error||''))})")
 kill $BSRV 2>/dev/null
 if [ "$BQDOWN" = "ok" ]; then printf '  ok   %-22s %s\n' "bclub roster fallback" ok; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "bclub roster fallback" "$BQDOWN"; fi
+if [ "$ECOMDOWN" = "ok" ]; then printf '  ok   %-22s %s\n' "ecom bq down -> sheet" ok; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "ecom bq down -> sheet" "$ECOMDOWN"; fi
 if [ "$ENGDOWN" = "200" ]; then printf '  ok   %-22s %s\n' "engagement degrades" 200; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "engagement degrades" "$ENGDOWN"; fi
+
+echo "--- e-commerce BigQuery: a short result is refused (v3.421.0) ---"
+SPORT=$((PORT+9))
+MOCK_ECOM_BQ_SHORT=1 ECOM_SHEET_ID= WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ADMIN_EMAILS=admin@bkh.test ACCESS_BUCKET=mock-bucket PORT=$SPORT node --require ./test/mock-fetch.js server.js >/tmp/smoke-ecomshort.log 2>&1 &
+SSRV=$!; sleep 2.5
+ESHORT=$(curl -s -H "$ADMIN" "http://localhost:$SPORT/api/ecommerce?from=2026-07-01&to=2026-07-31" | node -e "let r='';process.stdin.on('data',c=>r+=c).on('end',()=>{const d=JSON.parse(r);console.log(/returned 8 of 9 rows/.test(d.error||'')?'ok':'bad '+JSON.stringify(d).slice(0,120))})")
+kill $SSRV 2>/dev/null
+if [ "$ESHORT" = "ok" ]; then printf '  ok   %-22s %s\n' "ecom bq short refused" ok; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "ecom bq short refused" "$ESHORT"; fi
 
 echo "--- compression (v3.372.0) ---"
 # brotli and gzip must decode to the SAME JSON as the plain response, and the
@@ -1375,6 +1386,7 @@ ECOM="/api/ecommerce?from=$FROM&to=$TO"
 # package into a row per cycle. A duplicate name in the list means that split
 # has come back.
 expect_field "packages by name"  "$ECOM" "(function(n){return d.packages.every(p=>!n[p.name]&&(n[p.name]=1))?'ok':undefined})({})"
+expect_field "ecom from bigquery" "$ECOM" "d.source==='bigquery'?'ok':undefined"
 expect_field "ecom channels"    "$ECOM" "d.channels.length===2?'2':undefined"
 expect_field "ecom stacked day" "$ECOM" "d.daily[0].byChannel.Shopee===5000?'ok':undefined"
 # Unmapped rows must show up as a visible gap, never be dropped or hidden.

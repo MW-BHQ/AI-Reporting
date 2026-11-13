@@ -1,5 +1,22 @@
 ### Recent (November 2026)
 
+**v3.421.0 — E-commerce reads BigQuery, not the Sheet** (BHQ Income handover,
+`WAR-ROOM-ecommerce-to-BigQuery.md`). The monthly load now runs in BHQ Income → E-commerce and
+publishes to `bhq-income.ecommerce.v_orders_published` (published batches only). `ecomRows()`
+reads it with `bqRows()` (jobs.query + pageToken paging, asia-southeast1, billed in BQ_PROJECT),
+whole history once behind the existing 5-min cache, always with a date filter (partitioned view).
+Same row shape as before; DATE cast to text, NUMERIC → number, BOOL is_valid_sale.
+`english_name` is now actually read (the Sheet path listed it but never indexed it).
+- `ECOM_SOURCE=sheet` = old Sheet path. Default bigquery; if it fails and ECOM_SHEET_ID is set,
+  the Sheet is read and `ecom_bigquery_failed_read_sheet` is logged (ERROR). `/api/ecommerce`
+  returns `source`. Remove the Sheet path after the one-month read-only fallback.
+- Access: War Room SA needs `roles/bigquery.dataViewer` on `bhq-income:ecommerce` (MW, Cloud
+  Shell); jobUser in ai-reporting-503911 it already has (Better Club).
+- The Apps Script normaliser (apps-script/ecommerce-normalise.gs, v2.12.0) is retired with the
+  Sheet; kept in the repo as the record of how the history was produced.
+- Tests: mock serves the view in REST shape, 3 rows per page (first-page-only loses the
+  fixture); short result refused ("returned 8 of 9 rows"); BigQuery down → Sheet, labelled.
+
 **v3.420.0 — E-commerce normaliser moved into the repo, v2.12.0** (MW: Shop_bede_oct_26.xlsx
 "wouldn't ingest campaign name and order time"). The Apps Script that turns the monthly
 `report_order-*.xlsx` into the Orders tab now lives at `apps-script/ecommerce-normalise.gs`;

@@ -1216,6 +1216,29 @@ global.fetch = async (url, opts = {}) => {
     let q = "";
     try { q = JSON.parse(opts.body || "{}").query || ""; } catch (_) { /* no body */ }
     const name = (/^-- q:(\w+)/.exec(q) || [])[1];
+    /**
+     * E-COMMERCE VIEW (v3.421.0): real row results in BigQuery's REST shape —
+     * NUMERIC and BOOL as strings, DATE as "yyyy-mm-dd" — THREE ROWS PER PAGE,
+     * so code that reads only the first page loses most of the fixture and
+     * every e-commerce total in the suite fails. MOCK_ECOM_BQ_SHORT=1 claims
+     * one more row than it sends: the reader must refuse a short result.
+     */
+    const pageM = /\/queries\/(ecomjob)\?.*pageToken=(\d+)/.exec(u);
+    if (name === "ecom_orders" || pageM) {
+      if (name === "ecom_orders" && !/v_orders_published/.test(q)) return jsonRes({ error: { message: "mock: wrong view" } }, 400);
+      if (name === "ecom_orders" && !/WHERE purchase_date >=/.test(q)) return jsonRes({ error: { message: "mock: partition filter required" } }, 400);
+      const cols = ["purchase_date","channel","order_id","package_name","sku","center","english_name","payment_method",
+        "price","txn_fee_alloc","comm_fee_alloc","coupon_status","is_valid_sale","email_key","full_price"];
+      const all = ecomOrderFixture().map((o) => ({ f: cols.map((c) => ({ v: c === "is_valid_sale" ? String(o[c] !== "FALSE").toLowerCase()
+        : (o[c] === undefined || o[c] === "" ? (/price|alloc/.test(c) ? null : null) : String(o[c])) })) }));
+      const start = pageM ? +pageM[2] : 0, PAGE = 3;
+      const page = { jobComplete: true, jobReference: { jobId: "ecomjob" },
+        schema: { fields: cols.map((c) => ({ name: c })) },
+        totalRows: String(all.length + (process.env.MOCK_ECOM_BQ_SHORT === "1" ? 1 : 0)),
+        rows: all.slice(start, start + PAGE) };
+      if (start + PAGE < all.length) page.pageToken = String(start + PAGE);
+      return jsonRes(page);
+    }
     const fx = require("./fixtures/bq-better-club.js")[name];
     if (!fx) return jsonRes({ error: { message: `mock: no BigQuery fixture for ${name || "query"}` } }, 400);
     return jsonRes({ jobComplete: true, schema: { fields: [{ name: "j", type: "STRING" }] },
@@ -1986,36 +2009,7 @@ global.fetch = async (url, opts = {}) => {
        * written. Do not level these prices.
        */
       const mk = (o) => head.map((h) => (o[h] === undefined ? "" : o[h]));
-      return jsonRes({ values: [head,
-        mk({ purchase_date:"2026-07-01", channel:"Shopee", order_id:"A", package_name:"Essence",
-             sku:"HD25-01", center:"Check-Up", price:5000, txn_fee_alloc:100, comm_fee_alloc:250,
-             coupon_status:"ใช้งานแล้ว", is_valid_sale:"TRUE", email_key:"c1", payment_method:"Card" }),
-        mk({ purchase_date:"2026-07-01", channel:"Lazada", order_id:"B", package_name:"Dental",
-             sku:"", center:"", price:3000, txn_fee_alloc:90, comm_fee_alloc:400,
-             coupon_status:"ซื้อคูปอง", is_valid_sale:"TRUE", email_key:"c2", payment_method:"Card" }),
-        mk({ purchase_date:"2026-07-02", channel:"Shopee", order_id:"C", package_name:"Superior",
-             sku:"HD25-02", center:"Check-Up", price:9000, full_price:14000, txn_fee_alloc:140,
-             comm_fee_alloc:350, coupon_status:"ซื้อคูปอง", is_valid_sale:"TRUE", email_key:"c1",
-             payment_method:"Card" }),
-        mk({ purchase_date:"2026-07-02", channel:"Lazada", order_id:"D", package_name:"Heart",
-             sku:"HT25-01", center:"Heart", price:7000, full_price:12000, txn_fee_alloc:180,
-             comm_fee_alloc:900, coupon_status:"ใช้งานแล้ว", is_valid_sale:"TRUE", email_key:"c3",
-             payment_method:"Card" }),
-        // B2B: one huge order that must be excluded from the Online default.
-        mk({ purchase_date:"2026-07-03", channel:"Agent", order_id:"E", package_name:"Bulk",
-             sku:"HD25-01", center:"Check-Up", price:500000, txn_fee_alloc:0, comm_fee_alloc:0,
-             coupon_status:"ซื้อคูปอง", is_valid_sale:"TRUE", email_key:"c9", payment_method:"" }),
-        // c1 starts Online (July) then buys Offline in August: one migration.
-        mk({ purchase_date:"2026-08-05", channel:"เวชระเบียน", order_id:"F", package_name:"Walkin",
-             sku:"HD25-01", center:"Check-Up", price:4000, coupon_status:"ใช้งานแล้ว",
-             is_valid_sale:"TRUE", email_key:"c1", payment_method:"Cash" }),
-        // c2 buys Online twice on different dates: returning but NOT a switcher.
-        mk({ purchase_date:"2026-08-07", channel:"Roadshow 2024", order_id:"H", package_name:"Event",
-             sku:"HD25-01", center:"Check-Up", price:1500, coupon_status:"ซื้อคูปอง",
-             is_valid_sale:"TRUE", email_key:"c7", payment_method:"Cash" }),
-        mk({ purchase_date:"2026-08-06", channel:"Lazada", order_id:"G", package_name:"Dental",
-             sku:"", center:"", price:3200, coupon_status:"ซื้อคูปอง",
-             is_valid_sale:"TRUE", email_key:"c2", payment_method:"Card" })] });
+      return jsonRes({ values: [head, ...ecomOrderFixture().map(mk)] });
     }
     // UTM Builder L:P and Content Plan A:H, in the documented column order.
     const ranges = [...new URL(u).searchParams.getAll("ranges")];
@@ -2114,3 +2108,40 @@ global.fetch = async (url, opts = {}) => {
 
   return realFetch ? realFetch(url, opts) : jsonRes({}, 404);
 };
+
+/**
+ * E-COMMERCE ORDERS (shared, v3.421.0): the same rows feed the Sheet mock
+ * (fallback path) and the BigQuery mock (default path), so every e-commerce
+ * assertion holds on both sources. See the comments inside for the traps.
+ */
+function ecomOrderFixture() {
+  return [({ purchase_date:"2026-07-01", channel:"Shopee", order_id:"A", package_name:"Essence",
+             sku:"HD25-01", center:"Check-Up", price:5000, txn_fee_alloc:100, comm_fee_alloc:250,
+             coupon_status:"ใช้งานแล้ว", is_valid_sale:"TRUE", email_key:"c1", payment_method:"Card" }),
+        ({ purchase_date:"2026-07-01", channel:"Lazada", order_id:"B", package_name:"Dental",
+             sku:"", center:"", price:3000, txn_fee_alloc:90, comm_fee_alloc:400,
+             coupon_status:"ซื้อคูปอง", is_valid_sale:"TRUE", email_key:"c2", payment_method:"Card" }),
+        ({ purchase_date:"2026-07-02", channel:"Shopee", order_id:"C", package_name:"Superior",
+             sku:"HD25-02", center:"Check-Up", price:9000, full_price:14000, txn_fee_alloc:140,
+             comm_fee_alloc:350, coupon_status:"ซื้อคูปอง", is_valid_sale:"TRUE", email_key:"c1",
+             payment_method:"Card" }),
+        ({ purchase_date:"2026-07-02", channel:"Lazada", order_id:"D", package_name:"Heart",
+             sku:"HT25-01", center:"Heart", price:7000, full_price:12000, txn_fee_alloc:180,
+             comm_fee_alloc:900, coupon_status:"ใช้งานแล้ว", is_valid_sale:"TRUE", email_key:"c3",
+             payment_method:"Card" }),
+        // B2B: one huge order that must be excluded from the Online default.
+        ({ purchase_date:"2026-07-03", channel:"Agent", order_id:"E", package_name:"Bulk",
+             sku:"HD25-01", center:"Check-Up", price:500000, txn_fee_alloc:0, comm_fee_alloc:0,
+             coupon_status:"ซื้อคูปอง", is_valid_sale:"TRUE", email_key:"c9", payment_method:"" }),
+        // c1 starts Online (July) then buys Offline in August: one migration.
+        ({ purchase_date:"2026-08-05", channel:"เวชระเบียน", order_id:"F", package_name:"Walkin",
+             sku:"HD25-01", center:"Check-Up", price:4000, coupon_status:"ใช้งานแล้ว",
+             is_valid_sale:"TRUE", email_key:"c1", payment_method:"Cash" }),
+        // c2 buys Online twice on different dates: returning but NOT a switcher.
+        ({ purchase_date:"2026-08-07", channel:"Roadshow 2024", order_id:"H", package_name:"Event",
+             sku:"HD25-01", center:"Check-Up", price:1500, coupon_status:"ซื้อคูปอง",
+             is_valid_sale:"TRUE", email_key:"c7", payment_method:"Cash" }),
+        ({ purchase_date:"2026-08-06", channel:"Lazada", order_id:"G", package_name:"Dental",
+             sku:"", center:"", price:3200, coupon_status:"ซื้อคูปอง",
+             is_valid_sale:"TRUE", email_key:"c2", payment_method:"Card" })];
+}
