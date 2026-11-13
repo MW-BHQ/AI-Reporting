@@ -9737,7 +9737,11 @@ app.get("/api/audiences", requireTab("audiences"), async (req, res) => {
  * the Sheets API enabled on the project.
  */
 let ecomRowCache = { at: 0, rows: null };
-const ECOM_ROWS_TTL_MS = 5 * 60 * 1000;
+/**
+ * 30 minutes (v3.422.0; was 5). BigQuery only changes when someone presses
+ * Publish in BHQ Income, and ?refresh=1 still forces a fresh read.
+ */
+const ECOM_ROWS_TTL_MS = 30 * 60 * 1000;
 
 /**
  * E-COMMERCE FROM BIGQUERY (v3.421.0, BHQ Income handover). The monthly load
@@ -9772,7 +9776,11 @@ async function ecomRows(force) {
   let rows;
   if (ECOM_SOURCE === "sheet") { rows = await fetchEcomRows(); ecomSourceUsed = "sheet"; }
   else {
-    try { rows = await fetchEcomRowsBq(); ecomSourceUsed = "bigquery"; }
+    try {
+      const t0 = Date.now();
+      rows = await fetchEcomRowsBq(); ecomSourceUsed = "bigquery";
+      logJson("INFO", "ecom_bigquery_loaded", { rows: rows.length, ms: Date.now() - t0 });
+    }
     catch (err) {
       if (!ECOM_SHEET_ID) throw err;
       logJson("ERROR", "ecom_bigquery_failed_read_sheet", { error: String(err.message || err) });
@@ -9795,7 +9803,13 @@ WHERE purchase_date >= DATE '2015-01-01'`;
 async function bqRows(sql) {
   const token = await bqToken();
   const base = `https://bigquery.googleapis.com/bigquery/v2/projects/${BQ_PROJECT}`;
-  const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+  /**
+   * GZIP (v3.422.0). Google APIs compress only when asked AND the user agent
+   * contains "gzip". ~100k rows of Thai package names is tens of MB as plain
+   * JSON and a few MB compressed; that transfer was most of the wait.
+   */
+  const headers = { authorization: `Bearer ${token}`, "content-type": "application/json",
+    "accept-encoding": "gzip", "user-agent": "bhq-war-room (gzip)" };
   const fail = async (res) => {
     const body = await res.text().catch(() => "");
     let msg = body.slice(0, 300);
@@ -15271,4 +15285,11 @@ app.use(express.static(path.join(__dirname, "public")));
 app.listen(PORT, () => {
   console.log(`BHQ War Room v${VERSION} listening on :${PORT}`);
   gcpProjectId().then((id) => console.log(`[init] GCP project: ${id}`)).catch(() => {});
+  /**
+   * WARM THE ORDERS (v3.422.0). Cloud Run scales to zero, so the first request
+   * of the day starts a fresh instance with an empty cache. Reading the orders
+   * as the instance boots means they are usually ready by the time someone
+   * clicks into E-commerce. About 5 MB scanned, a fraction of a cent.
+   */
+  if (ECOM_SOURCE !== "sheet") setTimeout(() => ecomRows().catch(() => {}), 500);
 });

@@ -1,5 +1,16 @@
 ### Recent (November 2026)
 
+**v3.422.0 — E-commerce Overview no longer waits for Shopee/Lazada** (MW: "still takes a very
+long time; are you sure it loads from BQ?"). It did (`source: bigquery`), but `loadEcom` fetched
+`/api/ecommerce/marketplaces` (Shopee + Lazada sheets, Windsor) AFTER the orders and awaited it
+before rendering. Now both start together; the page renders on the orders and the marketplace
+card fills in on arrival; the PDF waits for it. Server: BigQuery asked for gzip (Google needs
+"gzip" in the user agent), orders cache 30 min (was 5; data changes only on Publish), warmed on
+boot, load time logged as `ecom_bigquery_loaded`. Every Orders consumer (overview, monthly,
+campaigns, packages, centres, channels, migration, churn, ROAS) goes through `ecomRows()`.
+Still on Sheets by design: Shopee, Lazada, Seller-Voucher (marketplace exports, not in BHQ
+Income). UI copy no longer says "Orders sheet".
+
 **v3.421.0 — E-commerce reads BigQuery, not the Sheet** (BHQ Income handover,
 `WAR-ROOM-ecommerce-to-BigQuery.md`). The monthly load now runs in BHQ Income → E-commerce and
 publishes to `bhq-income.ecommerce.v_orders_published` (published batches only). `ecomRows()`

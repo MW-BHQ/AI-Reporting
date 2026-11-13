@@ -3752,25 +3752,32 @@ async function loadEcomCentres(refresh = false) {
 async function loadEcom(refresh = false) {
   const key = `${$('from').value}|${$('to').value}|${S.ecomScope}`;
   if (!refresh && S.ecomKey === key && S.ecom) return S.ecom;
-  setStatus('busy', 'reading the Orders sheet…');
+  setStatus('busy', 'reading orders…');
+  /**
+   * MARKETPLACES IN PARALLEL (v3.422.0, MW: "the overview still takes a very
+   * long time"). The Shopee + Lazada reports were fetched AFTER the orders and
+   * the page waited for both, so the slow marketplace sheets held up a view
+   * whose orders were ready. Now they start together; the page renders on the
+   * orders and the marketplace card fills in when its reports arrive. The PDF
+   * waits for it (S.ecomMktWait).
+   */
+  const mktUrl = `/api/ecommerce/marketplaces?from=${$('from').value}&to=${$('to').value}${refresh?'&refresh=1':''}`;
+  const mkt = fetch(mktUrl).then((mr) => (mr.ok ? mr.json() : null)).catch(() => null);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 120000);
   let res;
   try {
     res = await fetch(`/api/ecommerce?from=${$('from').value}&to=${$('to').value}&scope=${S.ecomScope}${refresh?'&refresh=1':''}`, { signal: ctrl.signal });
   } catch (e) {
-    throw new Error(e.name === 'AbortError' ? 'The Orders sheet took too long to read. Press Refresh to retry.' : `Network error: ${e.message}`);
+    throw new Error(e.name === 'AbortError' ? 'Orders took too long to read. Press Refresh to retry.' : `Network error: ${e.message}`);
   } finally { clearTimeout(timer); }
   if (!res.ok) throw new Error(`Server ${res.status}: ${(await res.text()).slice(0,220)}`);
   S.ecom = await res.json(); S.ecomKey = key;
-  /**
-   * MARKETPLACES (v3.347.0): the two storefronts' own reports, fetched after
-   * the Orders sheet and never fatal — the Overview renders without them.
-   */
-  try {
-    const mr = await fetch(`/api/ecommerce/marketplaces?from=${$('from').value}&to=${$('to').value}${refresh?'&refresh=1':''}`);
-    S.ecom.marketplaces = mr.ok ? await mr.json() : null;
-  } catch { S.ecom.marketplaces = null; }
+  const mine = S.ecom;
+  S.ecomMktWait = mkt.then((m) => {
+    mine.marketplaces = m;
+    if (S.ecom === mine && S.view === 'ecom') render();
+  });
   setStatus('ok', S.ecom.cached ? `cached ${S.ecom.cacheAgeSec}s ago` : `synced ${new Date().toLocaleTimeString()}`);
   return S.ecom;
 }
@@ -8258,7 +8265,7 @@ const VIEW_LOADERS = {
   overview:      { load: () => loadOverview(true),  err: 'overviewError',  busy: 'overviewLoading',  what: 'the overview' },
   report:        { load: () => loadReport(true),    err: 'reportError',    busy: 'reportLoading',    what: 'the monthly report' },
   audiences:     { load: () => loadAudiences(),     err: 'audiencesError', busy: 'audiencesLoading', what: 'Meta ad sets' },
-  ecom:          { load: () => loadEcom(),          err: 'ecomError',      busy: 'ecomLoading',      what: 'the Orders sheet' },
+  ecom:          { load: () => loadEcom(),          err: 'ecomError',      busy: 'ecomLoading',      what: 'orders' },
   ecomcentre:    { load: () => loadEcomCentres(),   err: 'ecomcError',     busy: 'ecomcLoading',     what: 'sales by center' },
   ecompackages:  { load: () => loadEcomPackages(),  err: 'ecompkgError',   busy: 'ecompkgLoading',   what: 'sales by package' },
   ecomchannels:  { load: () => loadEcomChannels(),  err: 'ecomchError',    busy: 'ecomchLoading',    what: 'channel performance' },
@@ -11448,7 +11455,7 @@ function wirePromoSlot() {
 function renderEcomChurn() {
   const d = S.ecomchurn;
   if (S.ecomchurnError) { const m = S.ecomchurnError; $('viewRoot').innerHTML = errorState(m); S.ecomchurnError = null; return; }
-  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecomchurn', 'Reads the whole Orders sheet to find customers who stopped buying.'); return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecomchurn', 'Reads every order (BigQuery) to find customers who stopped buying.'); return; }
   if (d.empty) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in this range</div></div></div>`; return; }
 
   const t = d.totals;
@@ -11545,7 +11552,7 @@ function renderEcomChurn() {
 function renderEcomMigration() {
   const d = S.ecommig;
   if (S.ecommigError) { const m = S.ecommigError; $('viewRoot').innerHTML = errorState(m); S.ecommigError = null; return; }
-  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecommigration', 'Reads the whole Orders sheet to follow customers between channel types.'); return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecommigration', 'Reads every order (BigQuery) to follow customers between channel types.'); return; }
   if (d.empty) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in this range</div></div></div>`; return; }
 
   const t = d.totals;
@@ -11680,7 +11687,7 @@ function renderEcomMigration() {
 function renderEcomChannels() {
   const d = S.ecomch;
   if (S.ecomchError) { const m = S.ecomchError; $('viewRoot').innerHTML = errorState(m); S.ecomchError = null; return; }
-  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecomchannels', 'Reads the Orders sheet and compares every channel across the selected months.'); return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecomchannels', 'Reads the orders (BigQuery) and compares every channel across the selected months.'); return; }
   if (d.empty) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in this range</div></div></div>`; return; }
 
   const months = d.months, colour = channelColour;
@@ -11813,9 +11820,9 @@ function renderEcomChannels() {
 function renderEcomPackages() {
   const d = S.ecompkg;
   if (S.ecompkgError) { const m = S.ecompkgError; $('viewRoot').innerHTML = errorState(m); S.ecompkgError = null; return; }
-  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecompackages', 'Reads the Orders sheet and groups every sale by package name.'); return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecompackages', 'Reads the orders (BigQuery) and groups every sale by package name.'); return; }
   if (d.empty) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in this range</div>
-    <div style="font-size:var(--text-xs);color:var(--muted);">The Orders sheet holds ${num(d.rangeHas)} row(s).</div></div></div>`; return; }
+    <div style="font-size:var(--text-xs);color:var(--muted);">The orders hold ${num(d.rangeHas)} row(s).</div></div></div>`; return; }
 
   const t = d.totals, list = d.packages;
   const maxRev = Math.max(...list.map(p => p.revenue), 1);
@@ -11860,9 +11867,9 @@ function renderEcomPackages() {
 function renderEcomCentres() {
   const d = S.ecomc;
   if (S.ecomcError) { const m = S.ecomcError; $('viewRoot').innerHTML = errorState(m); S.ecomcError = null; return; }
-  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecomcentre', 'Reads the Orders sheet and groups sales by medical center.'); return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecomcentre', 'Reads the orders (BigQuery) and groups sales by medical center.'); return; }
   if (d.empty) { $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in this range</div>
-    <div style="font-size:var(--text-xs);color:var(--muted);">The Orders sheet holds ${num(d.rangeHas)} row(s).</div></div></div>`; return; }
+    <div style="font-size:var(--text-xs);color:var(--muted);">The orders hold ${num(d.rangeHas)} row(s).</div></div></div>`; return; }
 
   const t = d.totals, list = d.centres;
   const maxRev = Math.max(...list.map(c => c.revenue), 1);
@@ -12001,7 +12008,7 @@ function ecomMarketplaces(d) {
     ['Meta ad spend (THB)', x => nn(x.metaSpend, true)],
     ['Platform ad spend (THB)', x => x.platformSpend != null ? nn(x.platformSpend, true) : '<span class="muted">\u2014 not measured</span>'],
     ['Revenue per ad baht', x => x.adsRoas != null ? `${num(x.adsRoas, { dp: 1 })}\u00d7 <span class="muted">${esc(x.adsRoasParts.join(' + '))}</span>` : '\u2014'],
-    ['Orders sheet revenue (THB)', (x, nm) => { const o = ordersRev(nm); return o == null ? '\u2014'
+    ['Orders revenue (THB)', (x, nm) => { const o = ordersRev(nm); return o == null ? '\u2014'
       : `${nn(o, true)}${x.revenue ? ` <span class="muted">\u00b7 ${pc(o / x.revenue - 1, 0)} vs storefront</span>` : ''}`; }],
   ];
   return `<div class="card" style="margin-bottom:14px;">
@@ -12015,11 +12022,11 @@ function ecomMarketplaces(d) {
 function renderEcom() {
   const d = S.ecom;
   if (S.ecomError) { const m = S.ecomError; $('viewRoot').innerHTML = errorState(m); S.ecomError = null; return; }
-  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecom', 'Reads the normalised Orders sheet — coupon rows from every sales channel — for the selected range.'); return; }
+  if (!d) { $('viewRoot').innerHTML = loadPrompt('ecom', 'Reads the published orders (BigQuery) — coupon rows from every sales channel — for the selected range.'); return; }
   if (d.empty) {
     $('viewRoot').innerHTML = `<div class="card"><div class="state"><div class="big">No sales in this date range</div>
       <div style="font-size:var(--text-xs);color:var(--muted);max-width:460px;">
-      The Orders sheet holds ${num(d.rangeHas)} row(s)${d.first?`, running from <b>${esc(d.first)}</b> to <b>${esc(d.last)}</b>`:''}.
+      The orders hold ${num(d.rangeHas)} row(s)${d.first?`, running from <b>${esc(d.first)}</b> to <b>${esc(d.last)}</b>`:''}.
       Move the date range to cover a month that has been imported.</div></div></div>`;
     return;
   }
@@ -13384,6 +13391,12 @@ $('printBtn').addEventListener('click', () => {
    * were still loading put "Claude is reading the reviews" on two blank pages.
    * Wait for the read (capped at 3 min), then print the filled pages.
    */
+  if (S.view === 'ecom' && S.ecomMktWait && S.ecom && S.ecom.marketplaces === undefined) {
+    setStatus('busy', 'Waiting for the Shopee and Lazada reports\u2026');
+    const cap = new Promise((r) => setTimeout(r, 120000));
+    Promise.race([S.ecomMktWait, cap]).then(() => { setStatus('ok', 'Ready to print'); printWhenImagesReady(); });
+    return;
+  }
   if (S.view === 'gbp' && (S.gbpThemesWait || S.gbpCmpWait)) {
     if ([...Object.values(S.gbpThemes || {}), ...Object.values(S.gbpCmp || {})].some((t) => t && t.loading)) {
       setStatus('busy', 'Waiting for Claude to finish reading the reviews\u2026');
@@ -14413,7 +14426,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.421.0';
+const CLIENT_BUILD = '3.422.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
