@@ -1,5 +1,13 @@
 ### Recent (November 2026)
 
+**v3.424.1 — Production audit of the BigQuery paths** (dev pack: security review, backend
+patterns). `bqRows` calls carry a 60s deadline (a stalled connection held the request with no
+log). ECOM_BQ_VIEW / MARKET_DATASET are spliced into SQL, so they must match
+project.dataset[.table] or the server refuses to boot. BigQuery errors (which name projects,
+tables and the service account) are logged; `/api/ecommerce` shows a plain message. Reviewed and
+left: SQL has no user input (dates filter in JS); grid cache keys are a fixed set; fallbacks call
+the Sheet with `sheetOnly` so they cannot loop; `marketSourceUsed` is last-read and cosmetic.
+
 **v3.424.0 — Accessibility pass (light mode only) + metric dictionary behind an (i)** (MW, after
 the skill-pack update: design data-dashboard / design-qa, data viz + BI packs).
 - `test/a11y.py`: axe-core WCAG 2.1 A/AA over all 32 views, fails on serious/critical (axe from

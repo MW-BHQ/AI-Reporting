@@ -163,7 +163,9 @@ echo "--- e-commerce BigQuery: a short result is refused (v3.421.0) ---"
 SPORT=$((PORT+9))
 MOCK_ECOM_BQ_SHORT=1 ECOM_SHEET_ID= WINDSOR_API_KEY=mock ANTHROPIC_API_KEY=mock ADMIN_EMAILS=admin@bkh.test ACCESS_BUCKET=mock-bucket PORT=$SPORT node --require ./test/mock-fetch.js server.js >/tmp/smoke-ecomshort.log 2>&1 &
 SSRV=$!; sleep 2.5
-ESHORT=$(curl -s -H "$ADMIN" "http://localhost:$SPORT/api/ecommerce?from=2026-07-01&to=2026-07-31" | node -e "let r='';process.stdin.on('data',c=>r+=c).on('end',()=>{const d=JSON.parse(r);console.log(/returned 8 of 9 rows/.test(d.error||'')?'ok':'bad '+JSON.stringify(d).slice(0,120))})")
+ESHORT=$(curl -s -H "$ADMIN" "http://localhost:$SPORT/api/ecommerce?from=2026-07-01&to=2026-07-31" | node -e "let r='';process.stdin.on('data',c=>r+=c).on('end',()=>{const d=JSON.parse(r);console.log(/could not be read from BigQuery/.test(d.error||'')&&!/bhq-income|v_orders/.test(d.error)?'ok':'bad '+JSON.stringify(d).slice(0,120))})")
+# The detail is in the log, not in the response (v3.424.1).
+grep -q "returned 8 of 9 rows" /tmp/smoke-ecomshort.log || ESHORT="bad: detail not logged"
 kill $SSRV 2>/dev/null
 if [ "$ESHORT" = "ok" ]; then printf '  ok   %-22s %s\n' "ecom bq short refused" ok; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "ecom bq short refused" "$ESHORT"; fi
 
@@ -185,6 +187,12 @@ done
 kill $QSRV 2>/dev/null
 expect_field "shopee from bigquery" "/api/shopee?from=2026-07-01&to=2026-07-31" "d.source==='bigquery'?'ok':undefined"
 expect_field "lazada from bigquery" "/api/lazada?from=2026-07-01&to=2026-07-31" "d.source==='bigquery'?'ok':undefined"
+
+echo "--- BigQuery names from env are checked at boot (v3.424.1) ---"
+if ECOM_BQ_VIEW='x.y; DROP TABLE z' PORT=$((PORT+11)) timeout 8 node --require ./test/mock-fetch.js server.js >/tmp/smoke-badname.log 2>&1; then
+  FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "bad bq name refused" "server started"
+elif grep -q "not a BigQuery table name" /tmp/smoke-badname.log; then printf '  ok   %-22s %s\n' "bad bq name refused" ok
+else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "bad bq name refused" "$(tail -c 200 /tmp/smoke-badname.log)"; fi
 
 echo "--- compression (v3.372.0) ---"
 # brotli and gzip must decode to the SAME JSON as the plain response, and the

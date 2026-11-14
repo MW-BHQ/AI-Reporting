@@ -9777,6 +9777,13 @@ const ECOM_ROWS_TTL_MS = 30 * 60 * 1000;
  */
 const ECOM_SOURCE = (process.env.ECOM_SOURCE || "bigquery").toLowerCase();
 const ECOM_BQ_VIEW = process.env.ECOM_BQ_VIEW || "bhq-income.ecommerce.v_orders_published";
+/**
+ * Table names are spliced into SQL, so an env value that is not a plain
+ * project.dataset[.table] name stops the server at boot rather than reaching
+ * a query (v3.424.1, production audit).
+ */
+const BQ_NAME = /^[a-z][a-z0-9-]{4,29}\.[A-Za-z0-9_]{1,1024}(\.[A-Za-z0-9_]{1,1024})?$/;
+if (!BQ_NAME.test(ECOM_BQ_VIEW)) throw new Error(`ECOM_BQ_VIEW is not a BigQuery table name: ${ECOM_BQ_VIEW}`);
 let ecomSourceUsed = null;
 
 async function ecomRows(force) {
@@ -9825,13 +9832,18 @@ async function bqRows(sql) {
     try { msg = JSON.parse(body).error.message || msg; } catch (_) { /* keep text */ }
     return new Error(`BigQuery ${res.status}: ${msg}`);
   };
-  let res = await fetch(`${base}/queries`, { method: "POST", headers,
+  /**
+   * PRODUCTION AUDIT (v3.424.1). Every call has a deadline: a stalled
+   * connection used to hold the request until Cloud Run killed it, with no log.
+   */
+  const T = () => AbortSignal.timeout(60000);
+  let res = await fetch(`${base}/queries`, { method: "POST", headers, signal: T(),
     body: JSON.stringify({ query: sql, useLegacySql: false, location: BQ_LOCATION, timeoutMs: 30000, maxResults: 50000 }) });
   if (!res.ok) throw await fail(res);
   let j = await res.json();
   const id = j.jobReference && j.jobReference.jobId;
   for (let i = 0; !j.jobComplete && id && i < 8; i++) {
-    const r2 = await fetch(`${base}/queries/${id}?location=${BQ_LOCATION}&timeoutMs=20000&maxResults=50000`, { headers });
+    const r2 = await fetch(`${base}/queries/${id}?location=${BQ_LOCATION}&timeoutMs=20000&maxResults=50000`, { headers, signal: T() });
     if (!r2.ok) throw await fail(r2);
     j = await r2.json();
   }
@@ -9841,7 +9853,7 @@ async function bqRows(sql) {
   const take = (page) => { for (const r of page.rows || []) out.push(Object.fromEntries(r.f.map((c, k) => [names[k], c.v]))); };
   take(j);
   for (let tok = j.pageToken, guard = 0; tok && guard < 100; guard++) {
-    const r3 = await fetch(`${base}/queries/${id}?location=${BQ_LOCATION}&maxResults=50000&pageToken=${encodeURIComponent(tok)}`, { headers });
+    const r3 = await fetch(`${base}/queries/${id}?location=${BQ_LOCATION}&maxResults=50000&pageToken=${encodeURIComponent(tok)}`, { headers, signal: T() });
     if (!r3.ok) throw await fail(r3);
     const p = await r3.json();
     take(p);
@@ -10091,7 +10103,8 @@ app.get("/api/ecommerce", requireTab("ecom"), async (req, res) => {
     res.json({ ...out.value, source: ecomSourceUsed, cached: out.cached, cacheAgeSec: out.ageSec });
   } catch (err) {
     logJson("ERROR", "ecommerce_failed", { error: String(err.message || err) });
-    res.status(500).json({ error: err.message || "E-commerce failed" });
+    // BigQuery errors name projects, tables and the service account: logged, not shown.
+    res.status(500).json({ error: /^BigQuery/.test(String(err.message)) ? "The orders could not be read from BigQuery (logged). Press Refresh to retry." : (err.message || "E-commerce failed") });
   }
 });
 
@@ -14816,6 +14829,7 @@ const LAZADA_CUSTOMER_TABS = (process.env.LAZADA_CUSTOMER_TAB || "Customer Insig
  */
 const MARKET_SOURCE = (process.env.MARKET_SOURCE || "bigquery").toLowerCase();
 const MARKET_DATASET = process.env.MARKET_DATASET || "bhq-income.marketplace";
+if (!BQ_NAME.test(MARKET_DATASET)) throw new Error(`MARKET_DATASET is not a BigQuery dataset name: ${MARKET_DATASET}`);
 const MARKET_TTL_MS = 30 * 60 * 1000;
 let marketSourceUsed = null;
 
