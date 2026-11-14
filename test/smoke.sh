@@ -58,6 +58,15 @@ echo
 echo "--- call out (number check, PDF map, docx, client) ---"
 node "$(dirname "$0")/callout.js" || FAIL=$((FAIL+1))
 node "$(dirname "$0")/ecom-normalise.js" || FAIL=$((FAIL+1))
+echo "--- metric dictionary (v3.424.0) ---"
+node "$(dirname "$0")/../scripts/metrics-md.js" --check || FAIL=$((FAIL+1))
+# Every tab in the sidebar except the admin Users tab has an (i) entry with at least one metric.
+MISSING=$(node -e "
+  const fs=require('fs');const h=fs.readFileSync('public/index.html','utf8');const m=JSON.parse(fs.readFileSync('public/metrics.json','utf8'));
+  const views=[...new Set([...h.matchAll(/class=\"nav-item[^\"]*\" data-view=\"([a-z0-9]+)\"/g)].map(x=>x[1]))].filter(v=>v!=='users');
+  const bad=views.filter(v=>!m[v]||!m[v].items||!m[v].items.length||m[v].items.some(i=>i.length!==4||i.some(x=>!String(x).trim())));
+  console.log(bad.join(' '))")
+if [ -z "$MISSING" ]; then printf '  ok   %-22s %s\n' "every tab has (i)" ok; else FAIL=$((FAIL+1)); printf '  FAIL %-22s %s\n' "every tab has (i)" "$MISSING"; fi
 echo
 echo "--- endpoints ---"
 check "version"    GET "/api/version"

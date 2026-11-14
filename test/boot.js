@@ -868,13 +868,14 @@ setTimeout(() => {
        * render never draws it.
        */
       const lineSubs = [
-        ["friends growth reads green", 'style="color:var(--green);">+'],
-        ["new blocks read as alarm", 'style="color:var(--rose);">+'],
+        // v3.424.0: text uses the AA verdict tokens (--good / --bad), not the fill colours.
+        ["friends growth reads green", 'style="color:var(--good);">+'],
+        ["new blocks read as alarm", 'style="color:var(--bad);">+'],
         ["untagged row reads muted", '<tr style="color:var(--muted);">'],
         // Targetable FELL in the fixture, so the card must read the alarm
         // colour with a signed value — green here would mean the sign test
         // inverted, and a reader would see a shrinking audience as growth.
-        ["targetable loss reads alarm", 'color:var(--rose)">-420'],
+        ["targetable loss reads alarm", 'color:var(--bad)">-420'],
       ].filter(([, needle]) => !html.includes(needle)).map(([what]) => what);
       if (lineSubs.length) errors.push(`LINE page: ${lineSubs.join(", ")} missing`);
       errors.length ? fail("report renders", errors.slice(0, 2).join(" | "))

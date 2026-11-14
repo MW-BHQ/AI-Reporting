@@ -62,9 +62,12 @@
     --line:rgba(90,110,160,.14);
     --ink:#1B2340;
     --ink-2:#4C5878;
-    --muted:#8590AC;
-    --faint:#A7B0C7;
-    --violet:#7C6BF5;
+    /* AA TEXT CONTRAST (v3.424.0, axe pass, MW: light mode only). Muted and
+       faint were 3.1 and 2.1 against the cards; violet text 3.97 on white.
+       Each now reads at 4.5:1 or better on every surface it sits on. */
+    --muted:#56607C;
+    --faint:#5F6A85;
+    --violet:#5E4FE6;
     --violet-soft:#EDEAFE;
     --blue:#4B8DF8;
     --teal:#35C3B4;
@@ -73,8 +76,8 @@
     --green:#3BC97F;
     /* House verdict colours (v3.375.0): favourable / unfavourable. CSS uses
        these; canvas code (which cannot read var()) uses HOUSE below. */
-    --good:#2E9E6F;
-    --bad:#D9534F;
+    --good:#1F7A53;
+    --bad:#B83A36;
     --shadow:0 8px 30px rgba(43,60,110,.09);
     --shadow-sm:0 2px 10px rgba(43,60,110,.06);
     --r:18px;
@@ -319,7 +322,7 @@
    */
   .bar span::after{content:"";position:absolute;inset:0 -3px;}
   .bar span:hover{filter:brightness(1.15);}
-  .seg-val{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:var(--text-3xs);font-weight:600;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);pointer-events:none;white-space:nowrap;}
+  .seg-val{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:var(--text-3xs);font-weight:600;color:#fff;pointer-events:none;white-space:nowrap;}
   .stage.minor .seg-val{font-size:var(--text-4xs);right:4px;}
   .stage-note{font-size:var(--text-3xs);color:var(--faint);margin-top:5px;}
   /* Minor stages read as supporting context, not headline numbers. */
@@ -361,9 +364,9 @@
     padding:8px 0 8px 10px;border-bottom:1px solid var(--line);
   }
   tr.tot td{font-weight:600;color:var(--ink);border-top:2px solid var(--line);background:rgba(140,155,190,.05);}
-  td.dim{color:var(--faint);opacity:.5;}
+  td.dim{color:var(--faint);}
   .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:var(--text-3xs);font-weight:500;background:var(--violet-soft);color:var(--violet);}
-  .pill.warn{background:#FFF1E6;color:#D97B1F;}
+  .pill.warn{background:#FFF1E6;color:#9A4C0C;}
   .pill.grey{background:rgba(140,155,190,.14);color:var(--muted);}
   .ihint{display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;margin-left:4px;
     border-radius:50%;background:rgba(140,155,190,.2);color:var(--muted);font-size:var(--text-4xs);font-style:italic;
@@ -480,7 +483,7 @@
     border-top:2.5px solid var(--violet);}
   .mr-kpi:nth-child(2){border-top-color:#4B8DF8;}
   .mr-kpi:nth-child(3){border-top-color:#2FA8A0;}
-  .mr-kpi:nth-child(4){border-top-color:#F2A93B;}
+  .mr-kpi:nth-child(4){border-top-color:#A06208;}
   .mr-kpi-t{font-size:var(--text-3xs);font-weight:600;letter-spacing:.07em;text-transform:uppercase;
     color:var(--muted);margin-bottom:9px;}
   .mr-kpi-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
@@ -741,6 +744,22 @@
   .ra-kpis .v{font-size:17px;font-weight:600;color:var(--ink);margin-top:2px;font-variant-numeric:tabular-nums;}
   /* Default cursor: a chip with no data-tip does nothing, and a hand promises
      an interaction that never happens. Only tipped chips get the hand. */
+  /* METRIC DICTIONARY (v3.424.0, MW): a small (i) beside the tab title opens
+     what each number on that tab means, how it is worked out and its source. */
+  .info-i{width:22px;height:22px;border-radius:50%;border:1px solid var(--line);background:var(--glass);color:var(--violet);
+    font:italic 600 var(--text-xs)/1 Georgia,serif;cursor:pointer;vertical-align:middle;margin-left:8px;padding:0;}
+  .info-i:hover{background:var(--violet-soft);}
+  dialog.metric-dlg{border:none;border-radius:var(--r);padding:0;width:min(760px,92vw);max-height:84vh;box-shadow:var(--shadow);color:var(--ink);}
+  dialog.metric-dlg::backdrop{background:rgba(27,35,64,.35);}
+  .metric-dlg .md-head{display:flex;justify-content:space-between;align-items:center;padding:18px 22px 10px;border-bottom:1px solid var(--line);}
+  .metric-dlg .md-head h2{margin:0;font-size:var(--text-lg);}
+  .metric-dlg .md-body{padding:8px 22px 20px;overflow:auto;max-height:calc(84vh - 70px);}
+  .metric-dlg dl{margin:0;}
+  .metric-dlg dt{font-weight:600;margin-top:14px;}
+  .metric-dlg dd{margin:4px 0 0;color:var(--ink-2);font-size:var(--text-sm);line-height:1.5;}
+  .metric-dlg dd .md-how{display:block;color:var(--muted);font-size:var(--text-xs);margin-top:3px;}
+  /* A visible keyboard focus ring (v3.424.0): reaching a control by Tab must show where you are. */
+  :focus-visible{outline:2px solid var(--violet);outline-offset:2px;border-radius:6px;}
   .dlt{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 5px;border-radius:5px;
     margin-left:5px;white-space:nowrap;}
   .dlt[data-tip]{cursor:pointer;}
@@ -833,7 +852,7 @@
   body.gbp-measure .slide.gs-auto .no-print{display:none!important;}
   .gbp-stars{font-size:.55em;letter-spacing:.06em;vertical-align:.2em;position:relative;display:inline-block;white-space:nowrap;}
   .gbp-stars .gs-base{color:#DCE0EA;}
-  .gbp-stars .gs-fill{position:absolute;left:0;top:0;overflow:hidden;color:#F2A93B;}
+  .gbp-stars .gs-fill{position:absolute;left:0;top:0;overflow:hidden;color:#A06208;}
   .gbp-rv12{display:grid;grid-template-columns:2fr 1fr;gap:24px;align-items:end;}
   /* min-width:0 — a grid column's min-content is the canvas's drawn width, so
      without it the grid blew out at print width and the slide zoomed to ~50%. */
@@ -883,7 +902,7 @@
   .tr-tag{font-size:var(--text-2xs);color:var(--faint);white-space:nowrap;}
   .tr-orig{font-size:var(--text-xs);color:var(--muted);margin-top:4px;}
   .ev{font-size:var(--text-2xs);color:var(--faint);margin-top:4px;}
-  .ev-link{color:var(--blue);text-decoration:none;white-space:nowrap;}
+  .ev-link{color:#2F64C4;text-decoration:none;white-space:nowrap;}
   table.gbp-sticky thead th{position:sticky;top:0;z-index:3;background:var(--card, #FBFCFE);
     box-shadow:inset 0 -1px 0 var(--line);}
   table.sticky-head{table-layout:fixed;}
@@ -906,15 +925,15 @@
   .tag{background:var(--glass);border:1px solid var(--line);color:var(--ink-2);border-radius:20px;padding:6px 13px;font-size:var(--text-xs);cursor:pointer;font-family:inherit;transition:.15s;}
   .tag:hover{border-color:var(--violet);color:var(--violet);}
   .qtag{display:inline-block;background:#fff;border:1px solid var(--line);border-radius:8px;padding:5px 10px;margin:0 6px 6px 0;font-size:var(--text-xs);}
-  .gap-tag{display:inline-block;border:1px dashed var(--rose);color:var(--rose);border-radius:8px;padding:5px 10px;margin:0 6px 6px 0;font-size:var(--text-xs);background:#FFF7F9;}
+  .gap-tag{display:inline-block;border:1px dashed var(--rose);color:var(--bad);border-radius:8px;padding:5px 10px;margin:0 6px 6px 0;font-size:var(--text-xs);background:#FFF7F9;}
   .cluster{background:var(--glass-2);border:1px solid var(--line);border-radius:14px;padding:15px;margin-bottom:12px;}
   .cluster h3{margin:0 0 10px;font-size:13px;color:var(--violet);font-weight:600;}
 
   .state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:64px 20px;gap:9px;text-align:center;color:var(--muted);}
   .state .big{font-size:14px;font-weight:600;color:var(--ink-2);}
-  .state.bad .big{color:var(--rose);}
+  .state.bad .big{color:var(--bad);}
   .note{font-size:var(--text-sm);color:var(--faint);margin-top:12px;padding-top:11px;border-top:1px solid var(--line);}
-  .warnbox{background:#FFF8EC;border:1px solid #FBE3BE;color:#9A6712;border-radius:12px;padding:11px 14px;font-size:12px;margin-bottom:14px;}
+  .warnbox{background:#FFF8EC;border:1px solid #FBE3BE;color:#7A520E;border-radius:12px;padding:11px 14px;font-size:12px;margin-bottom:14px;}
   /* `min-width:0` so a canvas can never hold its grid track open at a width the
      track does not have — see `clearPrintPrep`. */
   .chart-wrap{height:250px;min-width:0;}
@@ -946,7 +965,7 @@
   .acct-tab:hover{border-color:var(--violet);}
   .acct-tab.active{background:#fff;color:var(--violet);font-weight:600;border-color:var(--stroke);box-shadow:var(--shadow-sm);}
   .acct-tab small{font-size:10.5px;color:var(--faint);font-weight:400;}
-  .acct-tab.active small{color:var(--violet);opacity:.75;}
+  .acct-tab.active small{color:var(--violet);}
 
   .print-head{display:none;}
   /* A topic heading that names each printed slide. On screen it reads as a
@@ -2054,7 +2073,7 @@
   .bcq-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
   .bcq-toggle{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;}
   .bcq-toggle button{border:0;background:transparent;padding:6px 14px;font:inherit;font-size:var(--text-xs);color:var(--ink-2);cursor:pointer;}
-  .bcq-toggle button.on{background:var(--blue);color:#fff;font-weight:600;}
+  .bcq-toggle button.on{background:#2F64C4;color:#fff;font-weight:600;}
   .bcq-head{display:flex;gap:10px;align-items:center;font-size:var(--text-xs);color:var(--muted);margin-bottom:6px;}
   .bcq-day{font-weight:600;color:var(--ink-2);}
   .bcq-q{font-weight:600;color:var(--ink);font-size:var(--text-sm);line-height:1.45;margin-bottom:8px;}
@@ -2070,8 +2089,8 @@
   .bce-foot b{color:var(--ink-2);font-weight:600;}
   .stat .bce-foot{margin-top:8px;}
   .bce-dl{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
-  .bce-dl .btn-sm{display:inline-block;padding:6px 12px;border-radius:8px;background:var(--blue);color:#fff;font-size:var(--text-xs);font-weight:600;text-decoration:none;}
-  .bce-dl .btn-sm.ghost{background:transparent;color:var(--blue);border:1px solid var(--blue);}
+  .bce-dl .btn-sm{display:inline-block;padding:6px 12px;border-radius:8px;background:#2F64C4;color:#fff;font-size:var(--text-xs);font-weight:600;text-decoration:none;}
+  .bce-dl .btn-sm.ghost{background:transparent;color:#2F64C4;border:1px solid #2F64C4;}
   @media print{ .bce-dl{display:none;} }
   .bce-list{margin:0;padding-left:18px;font-size:var(--text-xs);color:var(--ink-2);line-height:1.6;} .bce-list li{margin:4px 0;}
   .bc-stage canvas, .bc-hero canvas, .bc-mid canvas { max-width:100%; }
@@ -2535,7 +2554,7 @@
     </div>
     <div class="head">
       <div>
-        <h1 id="viewTitle">Overview <span class="all-four" id="viewScope" hidden></span></h1>
+        <h1 id="viewTitle">Overview <span class="all-four" id="viewScope" hidden></span><button type="button" class="info-i no-print" id="metricInfo" aria-label="What these numbers mean" data-tip="What these numbers mean" hidden>i</button></h1>
         <div class="subtitle" id="viewSub">Impressions → Visits → Key Events across all channels</div>
       </div>
       <div class="toolbar">
@@ -3087,7 +3106,102 @@ const isNA = (v) => v === null || v === undefined;
 // House verdict colours for canvas/Chart.js, which cannot resolve var(--good).
 // Same values as the :root tokens; `colours:house` in the audit keeps them the
 // only two places the hex is written.
-const HOUSE = Object.freeze({ good: '#2E9E6F', bad: '#D9534F' });
+const HOUSE = Object.freeze({ good: '#1F7A53', bad: '#B83A36' });
+/**
+ * TEXT ON A FILLED SHAPE (v3.424.0). White on a light segment or bar (Paid
+ * Search amber, TikTok cyan, the pale funnel steps) measured 1.5-3.2:1. The
+ * label takes whichever of white or ink reads better on that fill.
+ */
+/** Label style on a fill: white or ink, and a dark backing when neither reaches 4.5:1. */
+/**
+ * EVERY CHART NAMED FOR A SCREEN READER (v3.424.0, design pack: data-dashboard
+ * a11y contract). Canvas and inline-SVG charts were unlabelled images. After
+ * each render, any chart without a name gets role="img" and the title of the
+ * card it sits in, so "Spend by month" is read out rather than nothing.
+ * Decorative icons (aria-hidden, inside buttons or the nav) are left alone.
+ */
+function labelCharts(root) {
+  (root || document).querySelectorAll('canvas, svg').forEach((el) => {
+    if (el.hasAttribute('aria-label') || el.hasAttribute('aria-labelledby') || el.getAttribute('aria-hidden') === 'true') return;
+    if (el.closest('button, .nav-item, a, .info-i, .pill, .stat .lab')) return;
+    if (el.tagName === 'svg' && (el.getBoundingClientRect().width < 60 || el.closest('svg') !== el)) return;
+    const card = el.closest('.card, .slide');
+    const t = card && card.querySelector('.card-title, .slide-title');
+    const name = (t ? t.textContent : document.title).replace(/\s+/g, ' ').trim();
+    el.setAttribute('role', 'img');
+    el.setAttribute('aria-label', `${name} chart`);
+  });
+}
+(() => {
+  let q = null;
+  const root = document.getElementById('viewRoot');
+  if (root) new MutationObserver(() => { clearTimeout(q); q = setTimeout(() => labelCharts(root), 120); })
+    .observe(root, { childList: true, subtree: true });
+})();
+
+/** The (i) beside the title: shown only for tabs the dictionary covers. */
+let METRICS = null, METRIC_BTN = null;
+async function metricsLoad() {
+  if (!METRICS) {
+    try { METRICS = await (await fetch('/metrics.json')).json(); } catch { METRICS = {}; }
+  }
+  return METRICS;
+}
+function metricInfoFor(view) {
+  const b = METRIC_BTN || $('metricInfo');
+  if (!b) return;
+  metricsLoad().then((m) => { b.hidden = !(m[view] && m[view].items && m[view].items.length) || S.view !== view; });
+}
+async function metricInfoOpen() {
+  const m = (await metricsLoad())[S.view];
+  if (!m) return;
+  let dlg = $('metricDlg');
+  if (!dlg) {
+    dlg = document.createElement('dialog');
+    dlg.id = 'metricDlg'; dlg.className = 'metric-dlg';
+    dlg.setAttribute('aria-labelledby', 'metricDlgTitle');
+    document.body.appendChild(dlg);
+    dlg.addEventListener('click', (e) => { if (e.target === dlg || e.target.closest('[data-mdclose]')) dlg.close(); });
+  }
+  dlg.innerHTML = `<div class="md-head"><h2 id="metricDlgTitle">${esc(m.title)} \u00b7 what the numbers mean</h2>
+      <button type="button" class="btn btn-ghost" data-mdclose aria-label="Close">\u2715</button></div>
+    <div class="md-body"><dl>${m.items.map(([name, means, how, src]) => `<dt>${esc(name)}</dt>
+      <dd>${esc(means)}<span class="md-how">${esc(how)} \u00b7 Source: ${esc(src)}</span></dd>`).join('')}</dl></div>`;
+  dlg.showModal();
+}
+document.addEventListener('click', (e) => { if (e.target.closest('#metricInfo')) metricInfoOpen(); });
+
+function inkStyle(hex) {
+  const c = inkOn(hex), h = String(hex || '').replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(h) || c !== '#fff') return `color:${c}`;
+  const lin = (x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); };
+  const L = 0.2126 * lin(parseInt(h.slice(0, 2), 16)) + 0.7152 * lin(parseInt(h.slice(2, 4), 16)) + 0.0722 * lin(parseInt(h.slice(4, 6), 16));
+  return 1.05 / (L + 0.05) >= 4.5 ? 'color:#fff' : 'color:#fff;background:rgba(27,35,64,.55);padding:0 4px;border-radius:4px';
+}
+/**
+ * A brand or series colour used AS TEXT (v3.424.0). Chart colours are tuned
+ * for filled shapes; as 11-14px text most measured 2-4:1. Same hue, darkened
+ * until it reads at 4.5:1 on white.
+ */
+function textTone(hex) {
+  const h = String(hex || '').replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(h)) return hex;
+  let [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const lin = (x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); };
+  for (let k = 0; k < 30; k++) {
+    const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    if (1.05 / (L + 0.05) >= 4.6) break;
+    r = Math.round(r * 0.9); g = Math.round(g * 0.9); b = Math.round(b * 0.9);
+  }
+  return '#' + [r, g, b].map((x) => x.toString(16).padStart(2, '0')).join('');
+}
+function inkOn(hex) {
+  const h = String(hex || '').replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(h)) return '#fff';
+  const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const L = 0.2126 * lin(parseInt(h.slice(0, 2), 16)) + 0.7152 * lin(parseInt(h.slice(2, 4), 16)) + 0.0722 * lin(parseInt(h.slice(4, 6), 16));
+  return (1.05 / (L + 0.05)) >= ((L + 0.05) / (0.0739 + 0.05)) ? '#fff' : '#1B2340';
+}
 /**
  * FUNNEL BAR WIDTH (MW: "search bar scale doesn't make sense ... at least make
  * it long, mid, short - not long, short, short").
@@ -3430,6 +3544,18 @@ window.addEventListener('hashchange', () => {
   if (v && v !== S.view && S.me && S.me.tabs.includes(v)) { goTo(v, { push:false }); render(); }
 });
 
+/**
+ * KEYBOARD NAVIGATION (v3.424.0, axe pass). The nav items are <div>s, so they
+ * could not be reached with Tab and the scrolling sidebar held nothing
+ * focusable. Each is now a focusable button: Enter or Space opens the view.
+ */
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.setAttribute('role', 'button');
+  item.tabIndex = 0;
+  item.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); item.click(); }
+  });
+});
 document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => {
     if (!S.me || !S.me.tabs.includes(item.dataset.view)) return;
@@ -3965,12 +4091,15 @@ function render() {
    * tab added later inherits it instead of being forgotten.
    */
   const scopeEl = $('viewScope');
+  const infoEl = METRIC_BTN || (METRIC_BTN = $('metricInfo'));
   $('viewTitle').textContent = t + ' ';
   $('viewTitle').appendChild(scopeEl);
+  if (infoEl) $('viewTitle').appendChild(infoEl);
   const sc = scopeFor(S.view);
   scopeEl.textContent = sc || '';
   scopeEl.hidden = !sc;
   $('viewSub').textContent = s;
+  metricInfoFor(S.view);
   // The benchmark is inherently trailing, so a range picker would only mislead.
   const hideDates = NO_DATE_VIEWS.has(S.view);
   document.querySelector('.dates').classList.toggle('hidden', hideDates);
@@ -4596,7 +4725,7 @@ function renderReport() {
                 <div class="fn-stage">${stage}</div>
                 <div class="fn-lab">${lab}</div>
                 <div class="fn-track">
-                  <div class="fn-bar" style="width:${w}%;background:${bg};color:${fg}">${num(val)}</div>
+                  <div class="fn-bar" style="width:${w}%;background:${bg}"><span style="${inkStyle(bg)}">${num(val)}</span></div>
                 </div>
               </div>`).join('')}
             <div style="border-top:1px solid var(--line);margin:26px 0 0"></div>
@@ -5176,9 +5305,8 @@ function renderReport() {
           return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
             <div style="width:42px;font-size:var(--text-3xs);font-weight:700;color:var(--faint)">${stage}</div>
             <div style="width:120px;font-size:var(--text-2xs);color:var(--ink-2)">${lab}</div>
-            <div style="flex:1;min-width:0"><div style="width:${w}%;min-width:70px;background:${tone};
-              color:${i>2?'#1B2340':'#fff'};border-radius:20px;padding:7px 13px;text-align:right;
-              font-weight:700;font-size:var(--text-sm)">${num(val)}</div></div>
+            <div style="flex:1;min-width:0"><div style="width:${w}%;min-width:70px;background:${tone};border-radius:20px;padding:7px 13px;text-align:right;
+              font-weight:700;font-size:var(--text-sm)"><span style="${inkStyle(tone)}">${num(val)}</span></div></div>
           </div>`;
         }).join('')}
         <div class="card-title" style="margin-top:16px">Actions</div>
@@ -5248,7 +5376,7 @@ function renderReport() {
             <div class="fn-stage">${stage}</div>
             <div class="fn-lab">${lab}</div>
             <div class="fn-track">
-              <div class="fn-bar" style="width:${w}%;background:${bg};color:${fg}">${num(val)}</div>
+              <div class="fn-bar" style="width:${w}%;background:${bg}"><span style="${inkStyle(bg)}">${num(val)}</span></div>
             </div>
           </div>`).join('')}
         <div class="grid g-3" style="margin:14px 0 0">
@@ -5354,9 +5482,9 @@ function renderReport() {
         <div class="stat card"><div class="lab">Targetable</div><div class="val">${Number(f.targetable).toLocaleString()}</div>
           <div class="sub">${f.followers?num(f.targetable/f.followers*100,{dp:1})+'% reachable':'\u2014'}</div></div>
         <div class="stat card"><div class="lab">Friends</div><div class="val">${Number(f.followers).toLocaleString()}</div>
-          <div class="sub">${f.netAdded!=null?`<b style="color:var(--green);">${f.netAdded>0?'+':''}${Number(f.netAdded).toLocaleString()}</b> this period`:'\u2014'}</div></div>
+          <div class="sub">${f.netAdded!=null?`<b style="color:var(--good);">${f.netAdded>0?'+':''}${Number(f.netAdded).toLocaleString()}</b> this period`:'\u2014'}</div></div>
         <div class="stat card"><div class="lab">Blocked</div><div class="val">${Number(f.blocked).toLocaleString()}</div>
-          <div class="sub">${f.blockedAdded!=null?`<b style="color:var(--rose);">${f.blockedAdded>0?'+':''}${Number(f.blockedAdded).toLocaleString()}</b> this period`:(f.followers?num(f.blocked/f.followers*100,{dp:1})+'% of friends':'\u2014')}</div></div>
+          <div class="sub">${f.blockedAdded!=null?`<b style="color:var(--bad);">${f.blockedAdded>0?'+':''}${Number(f.blockedAdded).toLocaleString()}</b> this period`:(f.followers?num(f.blocked/f.followers*100,{dp:1})+'% of friends':'\u2014')}</div></div>
         <!-- TARGETABLE GAIN/LOSE (MW), replacing blocks-per-new-friend. It is the
              figure that decides whether broadcasting still works: friends can
              grow while the reachable audience shrinks, and a new follower who
@@ -5364,7 +5492,7 @@ function renderReport() {
              in practice. Down reads as alarm, up reads as growth, on the same
              colours the cards above use. -->
         <div class="stat card"><div class="lab">Targetable gain/lose</div>
-          <div class="val" style="color:${f.targetableAdded==null?'var(--ink)':(f.targetableAdded<0?'var(--rose)':'var(--green)')}">${
+          <div class="val" style="color:${f.targetableAdded==null?'var(--ink)':(f.targetableAdded<0?'var(--bad)':'var(--good)')}">${
             f.targetableAdded==null?'\u2014':`${f.targetableAdded>0?'+':''}${Number(f.targetableAdded).toLocaleString()}`}</div>
           <div class="sub">${f.targetableAdded!=null&&f.targetableFrom?`${
             f.targetableAdded/f.targetableFrom>0?'+':''}${num(f.targetableAdded/f.targetableFrom*100,{dp:1})}% on the period`:'\u2014'}</div></div>
@@ -5420,8 +5548,8 @@ function renderReport() {
         <div style="width:104px;font-size:var(--text-2xs);color:var(--ink-2)">${esc(lab)}</div>
         <div style="flex:1;min-width:0">
           <div style="width:${Math.max(4, Math.round((val/max)*100))}%;min-width:38px;background:${col};
-                      color:#fff;border-radius:20px;padding:3px 9px;text-align:right;
-                      font-size:var(--text-2xs);font-weight:700">${num(val)}</div>
+                      border-radius:20px;padding:3px 9px;text-align:right;
+                      font-size:var(--text-2xs);font-weight:700"><span style="${inkStyle(col)}">${num(val)}</span></div>
         </div>
       </div>`;
     /**
@@ -5597,7 +5725,7 @@ function renderReport() {
       <div class="fn-stage">${sub}</div>
       <div class="fn-lab">${esc(label)}</div>
       <div class="fn-track">
-        <div class="fn-bar" style="width:${w}%;background:${bg};color:${fg}">${num(val)}</div>
+        <div class="fn-bar" style="width:${w}%;background:${bg}"><span style="${inkStyle(bg)}">${num(val)}</span></div>
       </div></div>`;
     const engage = [
       ['Doctor profiles', T.doctor], ['Centres', T.center], ['Packages', T.pkg],
@@ -6148,7 +6276,7 @@ function funnelCard(d) {
   /** Marketplace segments, in the shops' channel colours (they are channels). */
   const mpSeg = (rows, total) => rows.filter(r => r.v > 0).map(r => {
     const pct = (r.v/total)*100;
-    const label = pct >= 9 ? `<b class="seg-val">${num(r.v)}</b>` : '';
+    const label = pct >= 9 ? `<b class="seg-val" style="${inkStyle(SOURCE_BRAND[r.n] || '#5C6478')}">${num(r.v)}</b>` : '';
     return `<span style="width:${pct}%;background:${SOURCE_BRAND[r.n] || '#5C6478'}" data-tip="${esc(r.n)}: ${num(r.v)}">${label}</span>`;
   }).join('');
 
@@ -6168,7 +6296,7 @@ function funnelCard(d) {
      * here, wired to every `[data-tip]` in the document, and the bars were the
      * one place still using the native one.
      */
-    const label = pct >= 9 ? `<b class="seg-val">${num(v)}</b>` : '';
+    const label = pct >= 9 ? `<b class="seg-val" style="${inkStyle(colorFor(f.indexOf(c), c.channel))}">${num(v)}</b>` : '';
     return `<span style="width:${pct}%;background:${colorFor(f.indexOf(c), c.channel)}" data-tip="${esc(c.channel)}: ${num(v)}">${label}</span>`;
   }).join('');
 
@@ -6184,7 +6312,7 @@ function funnelCard(d) {
   const extraSeg = (rows, total) => rows.filter(r => r.v > 0).map((r,i) => {
     const pct = (r.v/total)*100;
     if (pct <= 0) return '';
-    const label = pct >= 9 ? `<b class="seg-val">${num(r.v)}</b>` : '';
+    const label = pct >= 9 ? `<b class="seg-val" style="${inkStyle(OFFC[i%OFFC.length])}">${num(r.v)}</b>` : '';
     // `data-tip` like every other segment — the native tooltip was slow and
     // rendered in the OS font, and one bar answering differently from the rest
     // is its own small confusion.
@@ -6274,7 +6402,7 @@ function funnelCard(d) {
   const drawn = (rows) => rows.filter(r => r.v > 0);
   const srcSeg = (rows, total, offset = 0) => rows.filter(r => r.v > 0).map((r,i) => {
     const pct = (r.v/total)*100;
-    const label = pct >= 9 ? `<b class="seg-val">${num(r.v)}</b>` : '';
+    const label = pct >= 9 ? `<b class="seg-val" style="${inkStyle(srcColor(r.n))}">${num(r.v)}</b>` : '';
     return `<span style="width:${pct}%;background:${srcColor(r.n)}" data-tip="${esc(r.n)}: ${num(r.v)}">${label}</span>`;
   }).join('');
   const impSources = [
@@ -6772,18 +6900,18 @@ function renderCampaignBody(d) {
       if (q && q.available && q.engagement) {
         const e = q.engagement;
         cards.push(`<div class="stat card"><div class="lab">Engaged page views</div>
-          <div class="val" style="color:${e.ofViews<RED.engagedPageViews?'var(--rose)':'var(--ink)'}">${num(e.events)}</div>
+          <div class="val" style="color:${e.ofViews<RED.engagedPageViews?'var(--bad)':'var(--ink)'}">${num(e.events)}</div>
           <div class="sub">${num(e.ofViews*100,{dp:0})}% of page views</div></div>`);
       } else if (q && q.available && q.scrollDepth != null) {
         const r = q.scrollReach;
         cards.push(`<div class="stat card"><div class="lab">Avg. scroll depth</div>
-          <div class="val" style="color:${q.scrollDepth<RED.scrollDepth?'var(--rose)':'var(--ink)'}">${num(q.scrollDepth,{dp:0})}%</div>
+          <div class="val" style="color:${q.scrollDepth<RED.scrollDepth?'var(--bad)':'var(--ink)'}">${num(q.scrollDepth,{dp:0})}%</div>
           <div class="sub">${r?`${num(r.ofViews*100,{dp:0})}% of page views reached ${num(r.percent)}%`
             :`${num(q.scrollEvents)} scroll events`}</div></div>`);
       } else if (q && q.available && q.scrollReach) {
         const r = q.scrollReach;
         cards.push(`<div class="stat card"><div class="lab">Scrolled ${num(r.percent)}%</div>
-          <div class="val" style="color:${r.ofViews<RED.scrollReach?'var(--rose)':'var(--ink)'}">${num(r.ofViews*100,{dp:0})}%</div>
+          <div class="val" style="color:${r.ofViews<RED.scrollReach?'var(--bad)':'var(--ink)'}">${num(r.ofViews*100,{dp:0})}%</div>
           <div class="sub">of page views \u00b7 ${num(r.events)} reached it</div></div>`);
       }
       /**
@@ -6804,7 +6932,7 @@ function renderCampaignBody(d) {
         const secs = Math.round(q.avgEngagedSec);
         const dur = secs >= 60 ? `${Math.floor(secs/60)}m ${String(secs%60).padStart(2,'0')}s` : `${secs}s`;
         cards.push(`<div class="stat card"><div class="lab">Bounce rate</div>
-          <div class="val" style="color:${q.bounceRate>RED.bounceRate?'var(--rose)':'var(--ink)'}">${num(q.bounceRate*100,{dp:1})}%</div>
+          <div class="val" style="color:${q.bounceRate>RED.bounceRate?'var(--bad)':'var(--ink)'}">${num(q.bounceRate*100,{dp:1})}%</div>
           <div class="sub">${esc(dur)} engaged</div></div>`);
       }
       return `<div class="grid g-${Math.min(6, cards.length)} mt">${cards.join('')}</div>`;
@@ -7144,7 +7272,7 @@ function renderCampaignBody(d) {
         <div class="stat"><div class="lab">Opened</div><div class="val">${num(L.opens)}</div>
           <div class="sub">counted at Interactions, not Visits</div></div>
         <div class="stat"><div class="lab">Open rate</div>
-          <div class="val" style="color:${L.openRate!=null&&L.openRate<RED.lineOpenRate?'var(--rose)':'var(--ink)'}">${L.openRate!=null?num(L.openRate*100,{dp:1})+'%':'\u2014'}</div>
+          <div class="val" style="color:${L.openRate!=null&&L.openRate<RED.lineOpenRate?'var(--bad)':'var(--ink)'}">${L.openRate!=null?num(L.openRate*100,{dp:1})+'%':'\u2014'}</div>
           <div class="sub">opened \u00f7 delivered</div></div>
       </div>`);
     })()}
@@ -7162,7 +7290,7 @@ function renderCampaignBody(d) {
         <div class="stat"><div class="lab">Landing page views</div><div class="val ${isNA(t.landingPageViews)?'na':''}">${num(t.landingPageViews)}</div>
           <div class="sub">${t.costPerLpv!=null?'THB '+num(t.costPerLpv,{money:true,bare:true})+' each':'reported by Meta'}</div></div>
         <div class="stat"><div class="lab">Page view → session</div>
-          <div class="val" style="${t.lpvToVisit!=null&&t.lpvToVisit<RED.landingToVisit?'color:var(--rose)':''}">${t.lpvToVisit!=null?num(t.lpvToVisit,{pct:true,dp:1}):'—'}</div>
+          <div class="val" style="${t.lpvToVisit!=null&&t.lpvToVisit<RED.landingToVisit?'color:var(--bad)':''}">${t.lpvToVisit!=null?num(t.lpvToVisit,{pct:true,dp:1}):'—'}</div>
           <div class="sub">${num(t.visits)} sessions from ${num(t.landingPageViews)} page views</div></div>
       </div>
 
@@ -7176,7 +7304,7 @@ function renderCampaignBody(d) {
           <div class="val ${!t.messages?'na':''}">${t.messages?num(t.messages):'0'}</div>
           <div class="sub">${t.costPerMessage!=null?'THB '+num(t.costPerMessage,{money:true,bare:true})+' each':'none started'}</div></div>
         <div class="stat"><div class="lab">Sessions not recorded</div>
-          <div class="val" style="${t.lpvToVisit!=null&&t.lpvToVisit<RED.landingToVisit?'color:var(--rose)':''}">${t.lostSessions!=null?num(t.lostSessions):'—'}</div>
+          <div class="val" style="${t.lpvToVisit!=null&&t.lpvToVisit<RED.landingToVisit?'color:var(--bad)':''}">${t.lostSessions!=null?num(t.lostSessions):'—'}</div>
           <div class="sub">page views with no tagged session</div></div>
       </div>
 
@@ -7857,7 +7985,7 @@ function renderUsers() {
         <div class="u-count">${num((u.tabs||[]).length)} of ${num(tabs.length)} tabs</div></div>
       <div class="u-act">
         <button class="btn btn-primary" data-save="${esc(u.email)}" style="padding:6px 14px;font-size:var(--text-2xs);">Save</button>
-        <button class="btn btn-ghost" data-del="${esc(u.email)}" style="padding:6px 12px;font-size:var(--text-2xs);color:var(--rose);">Remove</button>
+        <button class="btn btn-ghost" data-del="${esc(u.email)}" style="padding:6px 12px;font-size:var(--text-2xs);color:var(--bad);">Remove</button>
       </div>
     </div>
     ${chips(u)}
@@ -8572,7 +8700,7 @@ function renderGadsBench() {
     const p = cell.deltaPct;
     const good = lowerIsBetter ? p < 0 : p > 0;
     const flat = Math.abs(p) < 2;
-    const col = flat ? 'var(--muted)' : (good ? 'var(--green)' : 'var(--rose)');
+    const col = flat ? 'var(--muted)' : (good ? 'var(--good)' : 'var(--bad)');
     const arrow = flat ? '' : (p > 0 ? '\u25b2' : '\u25bc');
     return `<span style="color:${col};font-weight:600;">${arrow} ${esc(changeText(p / 100, 0) || '\u2014')}</span>`;
   };
@@ -8594,10 +8722,10 @@ function renderGadsBench() {
           <div class="val">${num(sh.impressionShare*100,{dp:1})}%</div>
           <div class="sub">${num(sh.wonImpressions)} won of ${num(sh.eligibleImpressions)} eligible</div></div>
         <div class="stat"><div class="lab">Lost to budget</div>
-          <div class="val" style="color:${sh.budgetLostShare>RED.budgetLostShare?'var(--rose)':'var(--ink)'}">${num(sh.budgetLostShare*100,{dp:1})}%</div>
+          <div class="val" style="color:${sh.budgetLostShare>RED.budgetLostShare?'var(--bad)':'var(--ink)'}">${num(sh.budgetLostShare*100,{dp:1})}%</div>
           <div class="sub">more money would have bought these</div></div>
         <div class="stat"><div class="lab">Lost to ad rank</div>
-          <div class="val" style="color:${sh.rankLostShare>RED.rankLostShare?'var(--rose)':'var(--ink)'}">${num(sh.rankLostShare*100,{dp:1})}%</div>
+          <div class="val" style="color:${sh.rankLostShare>RED.rankLostShare?'var(--bad)':'var(--ink)'}">${num(sh.rankLostShare*100,{dp:1})}%</div>
           <div class="sub">money alone would not</div></div>
       </div>
       ${(() => {
@@ -8631,7 +8759,7 @@ function renderGadsBench() {
         const seg = (frac, bg, label, col) => frac <= 0 ? '' :
           `<div style="width:${widthPct(frac)};background:${bg};display:flex;align-items:center;justify-content:center;color:${col};overflow:hidden;">${frac>0.08?label:''}</div>`;
         return `<div style="display:flex;height:26px;border-radius:6px;overflow:hidden;font-size:var(--text-3xs);font-weight:600;">
-          ${seg(sh.impressionShare,'var(--green)','won','#fff')}
+          ${seg(sh.impressionShare,'var(--good)','won','#fff')}
           ${seg(bud,'#E8A33D','budget','#fff')}
           ${seg(rank,'#C0C7D8','rank','var(--ink-2)')}
         </div>`;
@@ -8663,7 +8791,7 @@ function renderGadsBench() {
         <td class="strong">${esc(x.account)}</td>
         <td class="num">${num(x.spend,{money:true})}</td>
         <td class="num">${x.shareOfSpend!=null?num(x.shareOfSpend*100,{dp:0})+'%':'\u2014'}</td>
-        <td class="num" style="color:var(--rose);font-weight:600;">${num(x.conversions,{dp:2})}</td>
+        <td class="num" style="color:var(--bad);font-weight:600;">${num(x.conversions,{dp:2})}</td>
         <td class="num">${num(x.ga4Visits)}</td>
         <td class="num">${num(x.ga4KeyEvents)}</td>
         <td style="padding-left:16px;">${x.likelyTrackingGap
@@ -8706,7 +8834,7 @@ function renderGadsBench() {
       ${ov.buckets.map(b=>`<tr>
         <td class="strong">${esc(b.label)}</td>
         <td class="num">${num(b.terms)}</td>
-        <td class="num" style="${b.id==='top3'?'font-weight:600;color:var(--rose)':''}">${num(b.spend,{money:true})}</td>
+        <td class="num" style="${b.id==='top3'?'font-weight:600;color:var(--bad)':''}">${num(b.spend,{money:true})}</td>
         <td class="num">${b.shareOfSpend!=null?num(b.shareOfSpend*100,{dp:0})+'%':'\u2014'}</td>
         <td class="num">${num(b.clicks)}</td>
         <td class="num">${num(b.conversions,{dp:2})}</td>
@@ -8736,7 +8864,7 @@ function renderGadsBench() {
         <td class="i18n trunc" title="${esc(t.term)}">${esc(t.term)}${t.campaigns.length?`<div style="font-size:var(--text-3xs);color:var(--faint);">${t.campaigns.map(esc).join(' \u00b7 ')}</div>`:''}</td>
         <td class="num">${num(t.spend,{money:true})}</td>
         <td class="num">${num(t.clicks)}</td>
-        <td class="num" style="font-weight:600;color:${t.organicPosition!=null&&t.organicPosition>RED.organicPosition?'var(--rose)':'var(--ink)'}">${t.organicPosition!=null?num(t.organicPosition,{dp:1}):'\u2014'}</td>
+        <td class="num" style="font-weight:600;color:${t.organicPosition!=null&&t.organicPosition>RED.organicPosition?'var(--bad)':'var(--ink)'}">${t.organicPosition!=null?num(t.organicPosition,{dp:1}):'\u2014'}</td>
         <td class="num">${t.organicClicks!=null?num(t.organicClicks):'\u2014'}</td>
         <td class="num">${num(t.conversions,{dp:2})}</td>
       </tr>`).join('')}
@@ -8862,7 +8990,7 @@ function renderGads() {
 
     <div class="card mt">
       <div class="card-title">Campaigns</div>
-      <div class="tscroll"><table class="roomy sortable">
+      <div class="tscroll" tabindex="0"><table class="roomy sortable">
       <colgroup><col style="width:30%"><col style="width:11%"><col style="width:9%"><col style="width:10%">
         <col style="width:9%"><col style="width:8%"><col style="width:7%"><col style="width:8%"><col style="width:8%"></colgroup>
       <thead><tr>
@@ -9808,10 +9936,10 @@ function renderLine() {
       <div class="stat"><div class="lab">Targetable</div><div class="val">${exact(f.targetable)}</div>
         <div class="sub">${f.followers?num(f.targetable/f.followers*100,{dp:1})+'% of friends can be reached':'\u2014'}</div></div>
       <div class="stat"><div class="lab">Blocked</div>
-        <div class="val" style="color:${f.followers&&f.blocked/f.followers>RED.lineBlockShare?'var(--rose)':'var(--ink)'}">${exact(f.blocked)}</div>
+        <div class="val" style="color:${f.followers&&f.blocked/f.followers>RED.lineBlockShare?'var(--bad)':'var(--ink)'}">${exact(f.blocked)}</div>
         <div class="sub">${f.followers?num(f.blocked/f.followers*100,{dp:1})+'% of friends':'\u2014'}</div></div>
       <div class="stat"><div class="lab">Blocks per new friend</div>
-        <div class="val" style="color:${f.blockShareOfGrowth!=null&&f.blockShareOfGrowth>RED.lineBlockGrowth?'var(--rose)':'var(--ink)'}">${
+        <div class="val" style="color:${f.blockShareOfGrowth!=null&&f.blockShareOfGrowth>RED.lineBlockGrowth?'var(--bad)':'var(--ink)'}">${
           f.blockShareOfGrowth!=null?num(f.blockShareOfGrowth*100,{dp:0})+'%':'\u2014'}</div>
         <div class="sub">${f.blockedAdded!=null?`${exact(f.blockedAdded)} new blocks against ${exact(f.netAdded)} new friends`:'needs two days of data'}</div></div>
     </div>
@@ -9836,7 +9964,7 @@ function renderLine() {
       b.campaign?esc(b.campaign):`<span style="color:var(--faint);">${esc(b.note||'untagged')}</span>`}</td>
     <td class="num">${num(b.delivered)}</td>
     <td class="num">${num(b.opens)}</td>
-    <td class="num"${b.openRate!=null&&b.openRate<RED.lineOpenRate?' style="color:var(--rose)"':''}>${
+    <td class="num"${b.openRate!=null&&b.openRate<RED.lineOpenRate?' style="color:var(--bad)"':''}>${
       b.openRate!=null?num(b.openRate*100,{dp:1})+'%':'\u2014'}</td>
     <td class="num">${b.sessions==null?'\u2014':num(b.sessions)}${
       b.shared?` <span class="pill grey" data-tip="${b.shared} broadcasts carry this campaign code, so GA4 cannot tell which one drove these sessions. The figure is the campaign's, shown on each row — do not add the column up.">shared</span>`:''}</td>
@@ -10028,7 +10156,7 @@ function renderBclub() {
 
   const scoreCard = (title, value, sub, colour, scopeNote, key) => `
     <div class="stat">
-      <div class="lab" style="${colour ? `color:${colour};` : ''}">${esc(title)}${
+      <div class="lab" style="${colour ? `color:${textTone(colour)};` : ''}">${esc(title)}${
         scopeNote ? ` <span class="pill" data-tip="${esc(scopeNote)}">BHQ</span>` : ''}</div>
       <div class="val">${value}</div>
       <div class="sub2">${sub || ''}</div>
@@ -10362,7 +10490,7 @@ function renderBcengage() {
    * comes from (MW, v3.382.0). `foot` is that line.
    */
   const stat = (lab, val, sub, colour, tip, foot) => `<div class="stat"${tip ? ` data-tip="${esc(tip)}"` : ''}>
-    <div class="lab"${colour ? ` style="color:${colour};"` : ''}>${esc(lab)}</div><div class="val">${val}</div><div class="sub2">${sub || ''}</div>${foot ? `<div class="bce-foot">${foot}</div>` : ''}</div>`;
+    <div class="lab"${colour ? ` style="color:${textTone(colour)};"` : ''}>${esc(lab)}</div><div class="val">${val}</div><div class="sub2">${sub || ''}</div>${foot ? `<div class="bce-foot">${foot}</div>` : ''}</div>`;
   const foot = (t) => `<div class="bce-foot">${t}</div>`;
 
   // From the cohort rows, so this card and the cohort table cannot disagree.
@@ -10441,7 +10569,7 @@ function renderBcengage() {
     <div class="card">
       <div class="card-title">What each group did in ${esc(label)}</div>
       <table class="roomy"><thead><tr><th>Members who…</th>
-        ${groups.map(g => `<th class="num" style="color:${BCE_COL[g === 'baseline' ? 'base' : g]};">${gName[g]}<br><span style="color:var(--muted);font-weight:500;">${cnt(seg(g) && seg(g).users)}</span></th>`).join('')}
+        ${groups.map(g => `<th class="num" style="color:${textTone(BCE_COL[g === 'baseline' ? 'base' : g])};">${gName[g]}<br><span style="color:var(--muted);font-weight:500;">${cnt(seg(g) && seg(g).users)}</span></th>`).join('')}
       </tr></thead><tbody>
       ${actRows.map(([k, name]) => `<tr><td class="strong">${esc(name)}</td>
         ${groups.map(g => { const r = seg(g); return `<td class="num"${r ? ` data-tip="${esc(`${pct(share(r[k], r.users))} of ${gName[g].toLowerCase()} members`)}"` : ''}>${r ? cnt(r[k]) : '\u2014'}</td>`; }).join('')}</tr>`).join('')}
@@ -10655,7 +10783,7 @@ function renderBcengage() {
 
   const lever = [];
   const play = (o) => `<div class="card bce-play">
-      <div class="bce-play-n" style="color:${o.colour};">${o.big}</div>
+      <div class="bce-play-n" style="color:${textTone(o.colour)};">${o.big}</div>
       <div class="bce-play-t">${esc(o.title)}</div>
       <div class="bce-play-why">${o.why}</div>
       <div class="bce-play-do"><b>Do:</b> ${o.todo}</div>
@@ -11116,7 +11244,7 @@ function renderEcomRoas() {
         <div><div class="lab">Cost per click</div><div class="v">${a.cpc===null?'—':'฿'+(Math.round(a.cpc*100)/100)}</div></div>
         <div><div class="lab">Cost per 1,000</div><div class="v">${a.impressions>0?'฿'+num(Math.round(a.spend/a.impressions*1000)):'—'}</div></div>
       </div>
-      <div class="tscroll"><table class="roomy sortable">
+      <div class="tscroll" tabindex="0"><table class="roomy sortable">
         <colgroup><col style="width:38%"><col style="width:12%"><col style="width:11%"><col style="width:11%">
           <col style="width:10%"><col style="width:9%"><col style="width:9%"></colgroup>
         <thead><tr>
@@ -11529,14 +11657,14 @@ function renderEcomChurn() {
 
     <div class="card mt">
       <div class="card-title">Channels losing customers</div>
-      <div class="tscroll">${tbl(d.channels, 'Channel', '#E8724F')}</div>
+      <div class="tscroll" tabindex="0">${tbl(d.channels, 'Channel', '#E8724F')}</div>
       <div class="note">Sorted by how many customers were lost. A channel with a high <b>one and done</b> share is bringing in
       people who never come back — that is a targeting or offer question, not a service one.</div>
     </div>
 
     <div class="card mt">
       <div class="card-title">Centers losing customers</div>
-      <div class="tscroll">${tbl(d.centres, 'Center', '#E8724F')}</div>
+      <div class="tscroll" tabindex="0">${tbl(d.centres, 'Center', '#E8724F')}</div>
       <div class="note">Attributed to the centre of the last package bought.${
         d.centres.some(c=>c.name==='Unmapped')
           ? ' Rows whose package has no confirmed SKU appear as <b>unmapped</b> and cannot be assigned to a centre yet.' : ''}</div>
@@ -11750,7 +11878,7 @@ function renderEcomChannels() {
 
     <div class="card mt">
       <div class="card-title">Channel scorecard</div>
-      <div class="tscroll"><table class="roomy sortable">
+      <div class="tscroll" tabindex="0"><table class="roomy sortable">
       <colgroup>
         <col style="width:18%"><col style="width:10%"><col style="width:9%"><col style="width:8%">
         <col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:9%">
@@ -11886,7 +12014,7 @@ function renderEcomCentres() {
         <div class="card-title" style="margin:0;">Centers</div>
         <div class="note" style="margin:0;">${S.ecomScope==='all'?'All channel types':'Online channels only'}</div>
       </div>
-      <div class="tscroll"><table class="sticky-head roomy sortable">
+      <div class="tscroll" tabindex="0"><table class="sticky-head roomy sortable">
       <colgroup>
         <col style="width:13%"><col style="width:12%"><col style="width:6%"><col style="width:7%">
         <col style="width:8%"><col style="width:6%"><col style="width:7%"><col style="width:7%">
@@ -12188,7 +12316,7 @@ function renderAudiences() {
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
         <div class="card-title" style="margin:0;">Audience sets · ${esc(humanDate($('from').value))} → ${esc(humanDate($('to').value))}</div>
-        <select id="audSort" style="font-size:var(--text-xs);padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--glass-2);color:var(--ink);">
+        <select id="audSort" aria-label="Sort audiences" style="font-size:var(--text-xs);padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--glass-2);color:var(--ink);">
           <option value="primary"${S.audienceSort==='primary'?' selected':''}>Cheapest result first</option>
           <option value="spend"${S.audienceSort==='spend'?' selected':''}>Highest spend</option>
           <option value="impressions"${S.audienceSort==='impressions'?' selected':''}>Most impressions</option>
@@ -12535,7 +12663,7 @@ function gbpThemesBody(T, part = 1) {
     </tbody></table>` : `<div class="note" style="margin-top:0">\u2014 The tagged reviews name no specific theme.</div>`;
   const unreplied = T.unrepliedComplaints.length ? `<table><thead><tr><th style="width:52px">Stars</th><th>Review</th>
       <th style="width:150px">About</th><th style="width:92px">Date</th></tr></thead><tbody>
-    ${T.unrepliedComplaints.map(r => `<tr><td class="strong" style="color:${r.star >= 4 ? 'var(--green)' : (r.star === 3 ? 'var(--amber)' : 'var(--rose)')}">${r.star ? r.star + ' \u2605' : '\u2014'}</td>
+    ${T.unrepliedComplaints.map(r => `<tr><td class="strong" style="color:${r.star >= 4 ? 'var(--good)' : (r.star === 3 ? 'var(--amber)' : 'var(--bad)')}">${r.star ? r.star + ' \u2605' : '\u2014'}</td>
       <td class="i18n" style="white-space:normal;font-size:var(--text-sm)">${reviewHtml(r)}${gbpEvidence(r, T.reviewsUrl)}</td>
       <td style="font-size:var(--text-xs)">${esc(r.themes.map(k => label[k] || k).join(', '))}</td>
       <td style="font-size:var(--text-xs);color:var(--muted)">${esc(humanDate(r.at) || r.at)}</td></tr>`).join('')}
@@ -12553,7 +12681,7 @@ function gbpThemesBody(T, part = 1) {
   const D_ = T.disagreeReviews || [];
   const disagree = D_.length ? `<div class="card mt"><div class="card-title">Stars and words disagree</div>
     <table><thead><tr><th style="width:52px">Stars</th><th>Review</th><th style="width:110px">Words read as</th></tr></thead><tbody>
-    ${D_.map(r => `<tr><td class="strong" style="color:${r.star >= 4 ? 'var(--green)' : 'var(--rose)'}">${r.star} \u2605</td>
+    ${D_.map(r => `<tr><td class="strong" style="color:${r.star >= 4 ? 'var(--good)' : 'var(--bad)'}">${r.star} \u2605</td>
       <td class="i18n" style="white-space:normal;font-size:var(--text-sm)">${reviewHtml(r)}${gbpEvidence(r, T.reviewsUrl)}</td>
       <td style="font-size:var(--text-sm);color:${r.sentiment === 'negative' ? 'var(--bad)' : 'var(--good)'}">${esc(r.sentiment)}</td></tr>`).join('')}
     </tbody></table></div>` : '';
@@ -12679,7 +12807,7 @@ function renderGbp() {
         <table><thead><tr><th>Listing</th><th class="num">Rating</th><th class="num">Total</th></tr></thead><tbody>
         ${list.map(l=>`<tr style="${l.key===S.gbpTab?'background:rgba(124,107,245,.05)':''}">
           <td class="strong" style="cursor:pointer" data-gtab2="${esc(l.key)}">${esc(l.key)}<div style="font-size:var(--text-3xs);color:var(--faint);font-weight:400;">${esc(l.title.slice(0,32))}</div></td>
-          <td class="num" style="color:${l.allTimeRating>=4.5?'var(--green)':(l.allTimeRating>=4?'var(--amber)':'var(--rose)')};font-weight:600;">${rateAuto(l.allTimeRating)}</td>
+          <td class="num" style="color:${l.allTimeRating>=4.5?'var(--good)':(l.allTimeRating>=4?'var(--amber)':'var(--bad)')};font-weight:600;">${rateAuto(l.allTimeRating)}</td>
           <td class="num">${num(l.allTimeCount)}</td></tr>`).join('')}
         </tbody></table>
       </div>
@@ -12709,7 +12837,7 @@ function renderGbp() {
           <td style="color:var(--faint);font-size:var(--text-sm);">No review at this rating in the period</td>
           <td></td><td class="no-print"></td></tr>`;
         return `<tr>
-        <td class="strong" style="color:${r.star>=4?'var(--green)':(r.star==3?'var(--amber)':'var(--rose)')};">${r.star?r.star+' ★':'—'}</td>
+        <td class="strong" style="color:${r.star>=4?'var(--good)':(r.star==3?'var(--amber)':'var(--bad)')};">${r.star?r.star+' ★':'—'}</td>
         <td class="i18n" style="white-space:normal;font-size:var(--text-sm);">${r.comment?reviewHtml(r):'<span style="color:var(--faint)">rating only, no comment</span>'}
           ${r.comment ? gbpEvidence({ reviewer: r.reviewer }, L.reviewsUrl) : ''}</td>
         <td style="font-size:var(--text-2xs);color:var(--muted)">${esc(humanDate(String(r.at||'').slice(0,10)))}</td>
@@ -12814,7 +12942,7 @@ function renderBenchmark() {
     const p = cell.deltaPct;
     const good = lowerIsBetter ? p < 0 : p > 0;
     const flat = Math.abs(p) < 2;
-    const col = flat ? 'var(--muted)' : (good ? 'var(--green)' : 'var(--rose)');
+    const col = flat ? 'var(--muted)' : (good ? 'var(--good)' : 'var(--bad)');
     return `<span style="color:${col};font-weight:600;">${flat?'':(p>0?'▲':'▼')} ${Math.abs(p).toFixed(0)}%</span>`;
   };
   const fmt = (v, money) => v == null ? '—' : (money ? num(v,{money:true}) : num(v,{dp:2}));
@@ -12888,7 +13016,7 @@ function renderBenchmark() {
       </tr></thead><tbody>
       ${(a.series||[]).slice().reverse().map(m=>{
         const empty=!m.spend&&!m.visits;
-        return `<tr${empty?' style="opacity:.45"':''}>
+        return `<tr${empty?' style="color:var(--faint)"':''}>
         <td class="strong">${esc(m.label)}${empty?' <span class="pill grey">no data</span>':''}</td>
         <td class="num">${num(m.spend,{money:true})}</td>
         <td class="num">${num(m.impressions)}</td>
@@ -12935,13 +13063,13 @@ function renderAudit() {
   $('viewRoot').innerHTML = `
     <div class="grid g-4">
       <div class="stat card"><div class="lab">Untagged visits</div>
-        <div class="val" style="${shareBad?'color:var(--rose)':''}">${num(tr.untaggedVisits)}</div>
+        <div class="val" style="${shareBad?'color:var(--bad)':''}">${num(tr.untaggedVisits)}</div>
         <div class="sub">${tr.untaggedShare!=null?num(tr.untaggedShare,{pct:true})+' of all campaign traffic':''}</div></div>
       <div class="stat card"><div class="lab">Key events lost to it</div>
         <div class="val">${num(tr.untaggedKeyEvents)}</div>
         <div class="sub">can't be credited to any campaign</div></div>
       <div class="stat card"><div class="lab">Unattributable ad spend</div>
-        <div class="val ${isNA(sp.unmatched)?'na':''}" style="${sp.unmatchedShare>=RED.spendUnmatched?'color:var(--rose)':''}">${num(sp.unmatched,{money:true})}</div>
+        <div class="val ${isNA(sp.unmatched)?'na':''}" style="${sp.unmatchedShare>=RED.spendUnmatched?'color:var(--bad)':''}">${num(sp.unmatched,{money:true})}</div>
         <div class="sub">${sp.unmatchedShare!=null?num(sp.unmatchedShare,{pct:true})+' of '+num(sp.total,{money:true}):''}</div></div>
       <div class="stat card"><div class="lab">Codes tracking properly</div>
         <div class="val">${num(d.taggedCodes)}</div>
@@ -14426,7 +14554,7 @@ if (typeof Chart !== 'undefined') {
  * "cannot read properties of undefined", the nav is in last week's order) and
  * nothing in the UI hints at the cause. Comparing the two makes it obvious.
  */
-const CLIENT_BUILD = '3.423.0';
+const CLIENT_BUILD = '3.424.0';
 
 fetch('/api/version').then(r => r.json()).then(v => {
   /**
